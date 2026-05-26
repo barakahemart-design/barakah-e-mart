@@ -1,0 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800;900&family=Roboto:wght@300;400;500;700;900&family=Lato:wght@300;400;700;900&family=Montserrat:wght@300;400;500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --selected-font: 'Inter', sans-serif;
+  transition: font-size 0.2s ease-in-out;
+}
+
+/* 
+  FONT ZERO SLASH BUG FIX: Force no-slashed-zero glyph behavior globally
+  and fallback to clean sans-serif/system monospace without slashing for all figures.
+*/
+body, html, button, select, input, textarea, span, div, p, h1, h2, h3, h4, h5, h6, code, pre, .font-mono, td, th {
+  font-family: var(--selected-font) !important;
+  font-variant-numeric: no-slashed-zero !important;
+  font-feature-settings: "zero" 0 !important;
+}
+
+/* Unify all texts, including monospaced labels and code, with the clean, beautiful user-selected font */
+code, pre, .font-mono {
+  font-family: var(--selected-font) !important;
+  font-variant-numeric: no-slashed-zero !important;
+  font-feature-settings: "zero" 0 !important;
+}

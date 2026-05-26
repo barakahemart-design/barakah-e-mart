@@ -1,0 +1,6 @@
+{
+  "name": "Barakah Bill Pro",
+  "description": "Enterprise Intelligent Invoicing, Inventory, Sales, and Expense Manager with Offline Core and Cloud Sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
