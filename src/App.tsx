@@ -168,9 +168,9 @@ export default function App() {
         purchases
       });
 
-      // Auto cloud backup with 1.5 seconds debounce for passcode users so no data is ever lost
-      if (activeUser.isPasscodeUser) {
-        const passcode = activeUser.passcode || "1234";
+      // Auto cloud backup with 1.5 seconds debounce for all authenticated users so no data is ever lost
+      if (activeUser && !activeUser.isGuest) {
+        const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
         const delayDebounceFn = setTimeout(async () => {
           try {
             await uploadPasscodeBackup(activeUser.email, passcode, {
@@ -220,12 +220,12 @@ export default function App() {
 
   // Trigger PIN Backup upload
   const triggerCloudBackupSync = async () => {
-    if (!activeUser?.isPasscodeUser) {
-      triggerNotification("Cloud backup is only available for passcode members.", "info");
+    if (!activeUser || activeUser.isGuest) {
+      triggerNotification("Cloud backup is only available for registered store members.", "info");
       return;
     }
     setIsBackingUp(true);
-    const passcode = activeUser.passcode || "1234";
+    const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
     const success = await uploadPasscodeBackup(activeUser.email, passcode, {
       products,
       contacts,
@@ -247,7 +247,21 @@ export default function App() {
     initialLoadedRef.current = false;
     const user = await signUpWithEmail(email, pass);
     setActiveUser(user);
-    triggerNotification("New account created successfully!");
+    
+    // Refresh states
+    const db = loadDB();
+    setProducts(db.products);
+    setContacts(db.contacts);
+    setExpenses(db.expenses);
+    setTransactions(db.transactions);
+    setBusinessInfo(db.businessInfo);
+    setPurchases(db.purchases || []);
+
+    if (user.restored) {
+      triggerNotification("Cloud backup and database restore completed successfully! 🎉");
+    } else {
+      triggerNotification("New account created successfully!");
+    }
     initialLoadedRef.current = true;
   };
 
@@ -256,7 +270,21 @@ export default function App() {
     initialLoadedRef.current = false;
     const user = await signInWithEmail(email, pass);
     setActiveUser(user);
-    triggerNotification("Welcome back to your store terminal logs!");
+
+    // Refresh states
+    const db = loadDB();
+    setProducts(db.products);
+    setContacts(db.contacts);
+    setExpenses(db.expenses);
+    setTransactions(db.transactions);
+    setBusinessInfo(db.businessInfo);
+    setPurchases(db.purchases || []);
+
+    if (user.restored) {
+      triggerNotification("Welcome back! Your store data was seamlessly restored from cloud backup. 🎉");
+    } else {
+      triggerNotification("Welcome back to your store terminal logs!");
+    }
     initialLoadedRef.current = true;
   };
 
@@ -276,7 +304,7 @@ export default function App() {
     setPurchases(db.purchases || []);
 
     if (user.restored) {
-      triggerNotification("Cloud backup and database restore completed successfully!");
+      triggerNotification("Cloud backup and database restore completed successfully! 🎉");
     } else {
       triggerNotification("New security passcode vault ready. Start managing your accounts!");
     }
@@ -286,8 +314,8 @@ export default function App() {
   // User Sign out
   const handleLogOut = async () => {
     initialLoadedRef.current = false;
-    if (activeUser?.isPasscodeUser) {
-      const passcode = activeUser.passcode || "1234";
+    if (activeUser && !activeUser.isGuest) {
+      const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
       // Perform immediate cloud backup before signing out so nothing is ever lost
       try {
         await uploadPasscodeBackup(activeUser.email, passcode, {
@@ -1610,8 +1638,8 @@ export default function App() {
 
           <div className="flex items-center gap-3 shrink-0" id="top-navbar-actions">
             
-            {/* Sync Cloud Button (For pin users) */}
-            {activeUser?.isPasscodeUser && (
+            {/* Sync Cloud Button (For registered users) */}
+            {activeUser && !activeUser.isGuest && (
               <button
                 id="manual-backup-cloud-btn"
                 onClick={triggerCloudBackupSync}
@@ -1627,7 +1655,7 @@ export default function App() {
                 ) : (
                   <>
                     <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
-                    Cloud Sync PIN
+                    {activeUser.isPasscodeUser ? "Cloud Sync PIN" : "Cloud Sync Backup"}
                   </>
                 )}
               </button>

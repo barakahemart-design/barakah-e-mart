@@ -50,6 +50,30 @@ if (cachedUser) {
   }
 }
 
+export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => {
+  const cleanEmail = email.trim().toLowerCase();
+  const syncId = getPasscodeSyncId(cleanEmail, pin);
+  
+  try {
+    const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data) {
+        if (data.products) localStorage.setItem('barakah_products', JSON.stringify(cleanDemoProducts(data.products)));
+        if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
+        if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
+        if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
+        if (data.businessInfo) localStorage.setItem('barakah_business_info', JSON.stringify(data.businessInfo));
+        if (data.purchases) localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(data.purchases)));
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed cloud backup restore:", err);
+  }
+  return false;
+};
+
 export const signUpWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
@@ -61,9 +85,11 @@ export const signUpWithEmail = async (email: string, pass: string) => {
     const result = await response.json();
     if (!response.ok || result.error) throw new Error(result.error);
     if (result.user) {
-      updateCurrentUser(result.user);
-      localStorage.setItem('barakah_local_active_user', JSON.stringify(result.user));
-      return result.user;
+      const restored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
+      const userObj = { ...result.user, email: cleanEmail, id: result.user.id || result.user.uid, restored, isPasscodeUser: false };
+      updateCurrentUser(userObj);
+      localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
+      return userObj;
     }
   } catch (err: any) {
     throw err;
@@ -81,9 +107,11 @@ export const signInWithEmail = async (email: string, pass: string) => {
     const result = await response.json();
     if (!response.ok || result.error) throw new Error(result.error);
     if (result.user) {
-      updateCurrentUser(result.user);
-      localStorage.setItem('barakah_local_active_user', JSON.stringify(result.user));
-      return result.user;
+      const restored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
+      const userObj = { ...result.user, email: cleanEmail, id: result.user.id || result.user.uid, restored, isPasscodeUser: false };
+      updateCurrentUser(userObj);
+      localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
+      return userObj;
     }
   } catch (err: any) {
     throw err;
@@ -122,29 +150,8 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
   
-  try {
-    const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data) {
-        if (data.products) localStorage.setItem('barakah_products', JSON.stringify(cleanDemoProducts(data.products)));
-        if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
-        if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
-        if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
-        if (data.businessInfo) localStorage.setItem('barakah_business_info', JSON.stringify(data.businessInfo));
-        if (data.purchases) localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(data.purchases)));
-        
-        const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: true, passcode: pin };
-        updateCurrentUser(userObj);
-        localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
-        return userObj;
-      }
-    }
-  } catch (err) {
-    console.warn("Failed passcode vault sync check, continuing as default clean instance", err);
-  }
-
-  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false, passcode: pin };
+  const restored = await fetchAndRestoreCloudBackup(cleanEmail, pin);
+  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored, passcode: pin };
   updateCurrentUser(userObj);
   localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
   return userObj;
