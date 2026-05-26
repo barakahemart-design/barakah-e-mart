@@ -1,4 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import { 
+  cleanDemoProducts, 
+  cleanDemoContacts, 
+  cleanDemoExpenses, 
+  cleanDemoPurchases, 
+  cleanDemoTransactions 
+} from './mockDB';
 
 const fallbackUrl = 'https://cmanayslirpenaruncwr.supabase.co';
 const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtYW5heXNsaXJwZW5hcnVuY3dyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTQwNDQsImV4cCI6MjA5NTI5MDA0NH0.f4-DddnnqnknJ_X-4rVjes7a32QlI59cdEW1eyQkads';
@@ -120,13 +127,14 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
     if (response.ok) {
       const data = await response.json();
       if (data) {
-        if (data.products) localStorage.setItem('barakah_products', JSON.stringify(data.products));
-        if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(data.contacts));
-        if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(data.expenses));
-        if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(data.transactions));
+        if (data.products) localStorage.setItem('barakah_products', JSON.stringify(cleanDemoProducts(data.products)));
+        if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
+        if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
+        if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
         if (data.businessInfo) localStorage.setItem('barakah_business_info', JSON.stringify(data.businessInfo));
+        if (data.purchases) localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(data.purchases)));
         
-        const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: true };
+        const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: true, passcode: pin };
         updateCurrentUser(userObj);
         localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
         return userObj;
@@ -136,7 +144,7 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
     console.warn("Failed passcode vault sync check, continuing as default clean instance", err);
   }
 
-  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false };
+  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false, passcode: pin };
   updateCurrentUser(userObj);
   localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
   return userObj;
@@ -148,6 +156,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   expenses: any[];
   transactions: any[];
   businessInfo: any;
+  purchases?: any[];
 }) => {
   const syncId = getPasscodeSyncId(email, pin);
   try {
@@ -163,6 +172,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
           expenses: payload.expenses,
           transactions: payload.transactions,
           businessInfo: payload.businessInfo,
+          purchases: payload.purchases || [],
           updated_at: new Date().toISOString()
         }
       })

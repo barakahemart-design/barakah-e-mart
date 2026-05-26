@@ -92,26 +92,11 @@ export interface BusinessInfo {
   };
 }
 
-export const INITIAL_PRODUCTS: Product[] = [
-  { id: "p1", name: "Samsung Split AC 1.5 Ton", sku: "S-AC-15T", stock: 12, buyPrice: 50000, sellPrice: 55000, category: "Air Conditioners", unit: "unit" },
-  { id: "p2", name: "Walton Refrigerator 220L", sku: "W-REF-220", stock: 8, buyPrice: 32000, sellPrice: 35500, category: "Refrigerators", unit: "unit" },
-  { id: "p3", name: "Sony Bravia 55' 4K OLED", sku: "SNY-55-4K", stock: 5, buyPrice: 95000, sellPrice: 112000, category: "Televisions", unit: "unit" },
-  { id: "p4", name: "Xiaomi Router AX3000", sku: "XI-RT-AX3000", stock: 25, buyPrice: 3500, sellPrice: 4200, category: "Networking", unit: "unit" },
-  { id: "p5", name: "HP EliteBook 840 G8", sku: "HP-EB-840", stock: 0, buyPrice: 62000, sellPrice: 68000, category: "Computers", unit: "unit" }
-];
+export const INITIAL_PRODUCTS: Product[] = [];
 
-export const INITIAL_CONTACTS: Contact[] = [
-  { id: "c1", name: "Al-Amin Electronics", phone: "01822114455", address: "Stadium Market, Dhaka", type: "supplier", created_at: "2026-05-20T10:00:00Z" },
-  { id: "c2", name: "Kazi Shafiqul Islam", phone: "01715998877", address: "Mirpur-1, Dhaka", type: "customer", created_at: "2026-05-18T12:30:00Z" },
-  { id: "c3", name: "Walton Bangladesh Sales Depot", phone: "01911333444", address: "Gazipur, Dhaka", type: "supplier", created_at: "2026-05-21T15:10:00Z" },
-  { id: "c4", name: "Mahmudul Hasan (Sumon)", phone: "01552887766", address: "Uttara Sector 11, Dhaka", type: "customer", created_at: "2026-05-22T09:15:00Z" }
-];
+export const INITIAL_CONTACTS: Contact[] = [];
 
-export const INITIAL_EXPENSES: Expense[] = [
-  { id: "e1", category: "Rent", amount: 18000, description: "Monthly Showroom Rent", date: "2026-05-01" },
-  { id: "e2", category: "Electricity", amount: 4500, description: "DPDC Bill May 2026", date: "2026-05-12" },
-  { id: "e3", category: "Salary", amount: 12000, description: "Showroom Helper Salary", date: "2026-05-15" }
-];
+export const INITIAL_EXPENSES: Expense[] = [];
 
 export const INITIAL_BUSINESS_INFO: BusinessInfo = {
   name: "Barakah Electronics",
@@ -139,10 +124,7 @@ export const INITIAL_BUSINESS_INFO: BusinessInfo = {
   }
 };
 
-export const INITIAL_PURCHASES: Purchase[] = [
-  { id: "pur1", productId: "p1", productName: "Samsung Split AC 1.5 Ton", supplierId: "c1", supplierName: "Al-Amin Electronics", quantity: 10, buyPrice: 50000, totalAmount: 500000, date: "2026-05-10" },
-  { id: "pur2", productId: "p4", productName: "Xiaomi Router AX3000", supplierId: "c3", supplierName: "Walton Bangladesh Sales Depot", quantity: 20, buyPrice: 3500, totalAmount: 70000, date: "2026-05-14" }
-];
+export const INITIAL_PURCHASES: Purchase[] = [];
 
 // Local storage helper keys
 const KEYS = {
@@ -154,22 +136,109 @@ const KEYS = {
   PURCHASES: "barakah_purchases"
 };
 
+// Demo cleaner helpers to ensure old demo entries never persist or load
+export function cleanDemoProducts(arr: any[]): any[] {
+  if (!Array.isArray(arr)) return [];
+  const demoIds = new Set(["p1", "p2", "p3", "p4", "p5"]);
+  const demoNames = new Set([
+    "Samsung Split AC 1.5 Ton", 
+    "Walton Refrigerator 220L", 
+    "Sony Bravia 55' 4K OLED", 
+    "Xiaomi Router AX3000", 
+    "HP EliteBook 840 G8"
+  ]);
+  return arr.filter(p => {
+    if (!p) return false;
+    if (demoIds.has(p.id) || demoNames.has(p.name)) return false;
+    return true;
+  });
+}
+
+export function cleanDemoContacts(arr: any[]): any[] {
+  if (!Array.isArray(arr)) return [];
+  const demoIds = new Set(["c1", "c2", "c3", "c4"]);
+  const demoNames = new Set([
+    "Al-Amin Electronics", 
+    "Kazi Shafiqul Islam", 
+    "Walton Bangladesh Sales Depot", 
+    "Mahmudul Hasan (Sumon)"
+  ]);
+  return arr.filter(c => {
+    if (!c) return false;
+    if (demoIds.has(c.id) || demoNames.has(c.name)) return false;
+    return true;
+  });
+}
+
+export function cleanDemoExpenses(arr: any[]): any[] {
+  if (!Array.isArray(arr)) return [];
+  const demoIds = new Set(["e1", "e2", "e3"]);
+  const demoCategoriesAndAmounts = [
+    { category: "Rent", amount: 18000 },
+    { category: "Electricity", amount: 4500 },
+    { category: "Salary", amount: 12000 }
+  ];
+  return arr.filter(e => {
+    if (!e) return false;
+    if (demoIds.has(e.id)) return false;
+    const isDemo = demoCategoriesAndAmounts.some(x => x.category === e.category && x.amount === e.amount);
+    if (isDemo) return false;
+    return true;
+  });
+}
+
+export function cleanDemoPurchases(arr: any[]): any[] {
+  if (!Array.isArray(arr)) return [];
+  const demoIds = new Set(["pur1", "pur2"]);
+  return arr.filter(pur => pur && !demoIds.has(pur.id));
+}
+
+export function cleanDemoTransactions(arr: any[]): any[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(tx => {
+    if (!tx) return false;
+    const demoItems = tx.items || [];
+    const hasDemoProduct = demoItems.some((item: any) => 
+      item && (
+        item.productId === "p1" || item.productId === "p2" || item.productId === "p3" || item.productId === "p4" || item.productId === "p5" ||
+        item.name === "Samsung Split AC 1.5 Ton" || item.name === "Walton Refrigerator 220L" || item.name === "Sony Bravia 55' 4K OLED" || item.name === "Xiaomi Router AX3000" || item.name === "HP EliteBook 840 G8"
+      )
+    );
+    if (hasDemoProduct) return false;
+    return true;
+  });
+}
+
 export const loadDB = () => {
   try {
-    const products = localStorage.getItem(KEYS.PRODUCTS);
-    const contacts = localStorage.getItem(KEYS.CONTACTS);
-    const expenses = localStorage.getItem(KEYS.EXPENSES);
-    const transactions = localStorage.getItem(KEYS.TRANSACTIONS);
-    const businessInfo = localStorage.getItem(KEYS.BUSINESS_INFO);
-    const purchases = localStorage.getItem(KEYS.PURCHASES);
+    const productsStr = localStorage.getItem(KEYS.PRODUCTS);
+    const contactsStr = localStorage.getItem(KEYS.CONTACTS);
+    const expensesStr = localStorage.getItem(KEYS.EXPENSES);
+    const transactionsStr = localStorage.getItem(KEYS.TRANSACTIONS);
+    const businessInfoStr = localStorage.getItem(KEYS.BUSINESS_INFO);
+    const purchasesStr = localStorage.getItem(KEYS.PURCHASES);
+
+    const productsRaw = productsStr ? JSON.parse(productsStr) : INITIAL_PRODUCTS;
+    const contactsRaw = contactsStr ? JSON.parse(contactsStr) : INITIAL_CONTACTS;
+    const expensesRaw = expensesStr ? JSON.parse(expensesStr) : INITIAL_EXPENSES;
+    const transactionsRaw = transactionsStr ? JSON.parse(transactionsStr) : [];
+    const purchasesRaw = purchasesStr ? JSON.parse(purchasesStr) : INITIAL_PURCHASES;
+
+    const products = cleanDemoProducts(productsRaw);
+    const contacts = cleanDemoContacts(contactsRaw);
+    const expenses = cleanDemoExpenses(expensesRaw);
+    const transactions = cleanDemoTransactions(transactionsRaw);
+    const purchases = cleanDemoPurchases(purchasesRaw);
+
+    const businessInfo = businessInfoStr ? { ...INITIAL_BUSINESS_INFO, ...JSON.parse(businessInfoStr) } : INITIAL_BUSINESS_INFO;
 
     return {
-      products: products ? JSON.parse(products) : INITIAL_PRODUCTS,
-      contacts: contacts ? JSON.parse(contacts) : INITIAL_CONTACTS,
-      expenses: expenses ? JSON.parse(expenses) : INITIAL_EXPENSES,
-      transactions: transactions ? JSON.parse(transactions) : [],
-      businessInfo: businessInfo ? { ...INITIAL_BUSINESS_INFO, ...JSON.parse(businessInfo) } : INITIAL_BUSINESS_INFO,
-      purchases: purchases ? JSON.parse(purchases) : INITIAL_PURCHASES
+      products,
+      contacts,
+      expenses,
+      transactions,
+      businessInfo,
+      purchases
     };
   } catch (e) {
     console.error("Failed to load offline database:", e);

@@ -92,30 +92,15 @@ export default function App() {
   const [activeUser, setActiveUser] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
+  const initialLoadedRef = useRef(false);
+
   // Active Core Database State (Merged loaded state)
-  const [products, setProducts] = useState<Product[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
-    name: "Barakah Electronics",
-    address: "Shop #104, Level-2, Multiplan Computer Center, Elephant Road, Dhaka-1205",
-    phoneNumber: "01700-112233",
-    vatRegNo: "VAT-BG-88449921",
-    currencySymbol: "৳",
-    email: "barakahemart@gmail.com",
-    adminPasscode: "1234",
-    salesPasscode: "5555",
-    companyLogo: "⚡",
-    showLogoInInvoice: true,
-    termsConditions: "1. Warranty claims require original invoice receipt.\n2. Goods sold are not refundable, but replacement is allowed within 7 days if unused.\n3. Damage by physical abuse or power fluctuation voids warranty.",
-    salesmanPermissions: {
-      canEditSales: true,
-      canDeleteSales: true,
-      canOverridePrices: true
-    }
-  });
+  const [products, setProducts] = useState<Product[]>(() => loadDB().products);
+  const [contacts, setContacts] = useState<Contact[]>(() => loadDB().contacts);
+  const [expenses, setExpenses] = useState<Expense[]>(() => loadDB().expenses);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => loadDB().transactions);
+  const [purchases, setPurchases] = useState<Purchase[]>(() => loadDB().purchases || []);
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(() => loadDB().businessInfo);
 
   // Security Locking Roles state
   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
@@ -162,12 +147,17 @@ export default function App() {
       setTransactions(db.transactions);
       setBusinessInfo(db.businessInfo);
       setPurchases(db.purchases || []);
+
+      // Unlock saving/autosync now that the initial offline hydration is complete
+      initialLoadedRef.current = true;
     });
     return () => unsub();
   }, []);
 
-  // Sync state to local storage automatically when changed
+  // Sync state to local storage automatically when changed and auto backup to cloud on changes
   useEffect(() => {
+    if (!initialLoadedRef.current) return;
+
     if (activeUser) {
       saveDB({
         products,
@@ -177,6 +167,26 @@ export default function App() {
         businessInfo,
         purchases
       });
+
+      // Auto cloud backup with 1.5 seconds debounce for passcode users so no data is ever lost
+      if (activeUser.isPasscodeUser) {
+        const passcode = activeUser.passcode || "1234";
+        const delayDebounceFn = setTimeout(async () => {
+          try {
+            await uploadPasscodeBackup(activeUser.email, passcode, {
+              products,
+              contacts,
+              expenses,
+              transactions,
+              businessInfo,
+              purchases
+            });
+          } catch (e) {
+            console.warn("Auto-backup failed silently in background:", e);
+          }
+        }, 1500);
+        return () => clearTimeout(delayDebounceFn);
+      }
     }
   }, [products, contacts, expenses, transactions, businessInfo, purchases, activeUser]);
 
@@ -188,6 +198,7 @@ export default function App() {
 
   // Handler for guest login
   const handleGuestLogin = () => {
+    initialLoadedRef.current = false;
     const dummyUser = {
       email: "guest@barakah.local",
       isPasscodeUser: false,
@@ -203,7 +214,8 @@ export default function App() {
     setTransactions(db.transactions);
     setBusinessInfo(db.businessInfo);
     setPurchases(db.purchases || []);
-     triggerNotification("Guest Mode Activated (Welcome to Sandbox Guest Mode!)", "info");
+    triggerNotification("Guest Mode Activated (Welcome to Sandbox Guest Mode!)", "info");
+    initialLoadedRef.current = true;
   };
 
   // Trigger PIN Backup upload
@@ -213,12 +225,14 @@ export default function App() {
       return;
     }
     setIsBackingUp(true);
-    const success = await uploadPasscodeBackup(activeUser.email, "1234", {
+    const passcode = activeUser.passcode || "1234";
+    const success = await uploadPasscodeBackup(activeUser.email, passcode, {
       products,
       contacts,
       expenses,
       transactions,
-      businessInfo
+      businessInfo,
+      purchases
     });
     setIsBackingUp(false);
     if (success) {
@@ -230,20 +244,25 @@ export default function App() {
 
   // Handler for custom local auth action signup
   const handleSignUp = async (email: string, pass: string) => {
+    initialLoadedRef.current = false;
     const user = await signUpWithEmail(email, pass);
     setActiveUser(user);
     triggerNotification("New account created successfully!");
+    initialLoadedRef.current = true;
   };
 
   // Handler for auth action signin
   const handleSignIn = async (email: string, pass: string) => {
+    initialLoadedRef.current = false;
     const user = await signInWithEmail(email, pass);
     setActiveUser(user);
     triggerNotification("Welcome back to your store terminal logs!");
+    initialLoadedRef.current = true;
   };
 
   // Handler for PIN passcode flow
   const handlePasscodeLogin = async (email: string, pinCode: string) => {
+    initialLoadedRef.current = false;
     const user = await signInOrSignUpWithPasscode(email, pinCode);
     setActiveUser(user);
     
@@ -254,18 +273,38 @@ export default function App() {
     setExpenses(db.expenses);
     setTransactions(db.transactions);
     setBusinessInfo(db.businessInfo);
+    setPurchases(db.purchases || []);
 
     if (user.restored) {
       triggerNotification("Cloud backup and database restore completed successfully!");
     } else {
       triggerNotification("New security passcode vault ready. Start managing your accounts!");
     }
+    initialLoadedRef.current = true;
   };
 
   // User Sign out
   const handleLogOut = async () => {
+    initialLoadedRef.current = false;
+    if (activeUser?.isPasscodeUser) {
+      const passcode = activeUser.passcode || "1234";
+      // Perform immediate cloud backup before signing out so nothing is ever lost
+      try {
+        await uploadPasscodeBackup(activeUser.email, passcode, {
+          products,
+          contacts,
+          expenses,
+          transactions,
+          businessInfo,
+          purchases
+        });
+      } catch (e) {
+        console.warn("Express logout backup sync error:", e);
+      }
+    }
     await signOut();
     setActiveUser(null);
+    setCurrentPanel("none");
     triggerNotification("Logged out from terminal successfully.");
   };
 

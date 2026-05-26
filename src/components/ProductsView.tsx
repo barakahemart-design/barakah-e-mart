@@ -323,7 +323,7 @@ export function ProductsView({
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 col-span-1 md:col-span-2">
                   <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Category Mapped *</label>
                   <input
                     type="text"
@@ -333,6 +333,22 @@ export function ProductsView({
                     onChange={(e) => setNewProdCat(e.target.value)}
                     className="w-full px-3 py-2 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all"
                   />
+                  <div className="flex flex-wrap gap-1 pt-1.5 max-h-[64px] overflow-y-auto custom-scrollbar-thin">
+                    {Array.from(new Set([...products.map(p => p.category), "Electronics", "Mobile Phones", "Laptops", "Air Conditioners", "Smart TV", "Home Appliances"])).filter(Boolean).slice(0, 8).map(cat => (
+                      <button
+                        type="button"
+                        key={cat}
+                        onClick={() => setNewProdCat(cat)}
+                        className={`text-[9px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                          newProdCat === cat 
+                            ? "bg-[#00E676]/10 text-[#00E676] border-[#00E676]/35 font-bold" 
+                            : "bg-[#121214] hover:bg-slate-800 text-slate-400 border-slate-800 hover:text-white"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -701,7 +717,7 @@ export function ProductsView({
               </div>
 
               {/* SKU & Category Mapped */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Category classification *</label>
                   <input
@@ -711,6 +727,22 @@ export function ProductsView({
                     onChange={(e) => setEditCat(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all"
                   />
+                  <div className="flex flex-wrap gap-1 pt-1.5 max-h-[64px] overflow-y-auto custom-scrollbar-thin">
+                    {Array.from(new Set([...products.map(p => p.category), "Electronics", "Mobile Phones", "Laptops", "Air Conditioners", "Smart TV", "Home Appliances"])).filter(Boolean).slice(0, 8).map(cat => (
+                      <button
+                        type="button"
+                        key={cat}
+                        onClick={() => setEditCat(cat)}
+                        className={`text-[9px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                          editCat === cat 
+                            ? "bg-[#00E676]/10 text-[#00E676] border-[#00E676]/35 font-bold" 
+                            : "bg-[#121214] hover:bg-slate-800 text-slate-400 border-slate-800 hover:text-white"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Warehouse SKU Tag</label>
