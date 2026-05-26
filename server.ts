@@ -161,6 +161,29 @@ async function startServer() {
   app.post("/api/passcode_syncs/upsert", async (req: Request, res: Response) => {
     const { payload } = req.body;
     try {
+      if (payload && payload.id) {
+        // Prevent blank/initial states from overwriting populated states in the cloud database
+        const incomingProductsCount = (payload.products || []).length;
+        const incomingTransactionsCount = (payload.transactions || []).length;
+        
+        if (incomingProductsCount === 0 && incomingTransactionsCount === 0) {
+          // Fetch existing backup from the database
+          const { data: existing } = await supabase
+            .from("passcode_syncs")
+            .select("products, transactions")
+            .eq("id", payload.id)
+            .maybeSingle();
+            
+          if (existing) {
+            const existingProductsCount = (existing.products || []).length;
+            const existingTransactionsCount = (existing.transactions || []).length;
+            if (existingProductsCount > 0 || existingTransactionsCount > 0) {
+              console.log(`[Sync Guard] Stopped blank payload override for sync ID: ${payload.id}`);
+              return res.json({ success: true, ignored: true, message: "Protected existing non-empty cloud backup." });
+            }
+          }
+        }
+      }
       const { error } = await supabase.from("passcode_syncs").upsert(payload);
       if (error) return res.status(400).json({ error: error.message });
       res.json({ success: true });

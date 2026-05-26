@@ -36,7 +36,24 @@ supabase.auth.onAuthStateChange((_event, session) => {
   if (session?.user) {
     updateCurrentUser(session.user);
   } else {
-    updateCurrentUser(null);
+    if (_event === 'SIGNED_OUT') {
+      updateCurrentUser(null);
+    } else {
+      // Keep cached user if we have one on app reload to prevent auto-logout
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed) {
+            updateCurrentUser(parsed);
+            return;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      updateCurrentUser(null);
+    }
   }
 });
 
@@ -50,23 +67,45 @@ if (cachedUser) {
   }
 }
 
+export const restoreLocalKeys = (data: any) => {
+  if (!data) return;
+  if (data.products) localStorage.setItem('barakah_products', JSON.stringify(cleanDemoProducts(data.products)));
+  if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
+  if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
+  if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
+  if (data.businessInfo) localStorage.setItem('barakah_business_info', JSON.stringify(data.businessInfo));
+  if (data.purchases) localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(data.purchases)));
+};
+
 export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => {
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
   
   try {
-    const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data) {
-        if (data.products) localStorage.setItem('barakah_products', JSON.stringify(cleanDemoProducts(data.products)));
-        if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
-        if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
-        if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
-        if (data.businessInfo) localStorage.setItem('barakah_business_info', JSON.stringify(data.businessInfo));
-        if (data.purchases) localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(data.purchases)));
-        return true;
-      }
+    // 1. Direct frontend query using the user session token/JWT (bypasses RLS)
+    const { data: directData, error: directError } = await supabase
+      .from("passcode_syncs")
+      .select("*")
+      .eq("id", syncId)
+      .maybeSingle();
+
+    if (directError) {
+      console.warn("Direct supabase query failed, trying Express proxy backup fallback...");
+    }
+
+    const finalData = (!directError && directData) 
+      ? directData 
+      : await (async () => {
+          const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
+          if (response.ok) {
+            return await response.json();
+          }
+          return null;
+        })();
+
+    if (finalData) {
+      restoreLocalKeys(finalData);
+      return true;
     }
   } catch (err) {
     console.warn("Failed cloud backup restore:", err);
@@ -166,23 +205,36 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   purchases?: any[];
 }) => {
   const syncId = getPasscodeSyncId(email, pin);
+  const cleanEmail = email.trim().toLowerCase();
+
+  const body = {
+    id: syncId,
+    linked_email: cleanEmail,
+    products: payload.products,
+    contacts: payload.contacts,
+    expenses: payload.expenses,
+    transactions: payload.transactions,
+    businessInfo: payload.businessInfo,
+    purchases: payload.purchases || [],
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    // 1. Direct frontend Supabase upsert (bypasses Express proxy and applies logged-in user context)
+    const { error: directError } = await supabase.from("passcode_syncs").upsert(body);
+    if (!directError) {
+      return true;
+    }
+    console.warn("Direct supabase upload failed, fallback to Express route...", directError.message);
+  } catch (e) {
+    console.warn("Direct upload error:", e);
+  }
+
   try {
     const response = await fetch("/api/passcode_syncs/upsert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        payload: {
-          id: syncId,
-          linked_email: email.trim().toLowerCase(),
-          products: payload.products,
-          contacts: payload.contacts,
-          expenses: payload.expenses,
-          transactions: payload.transactions,
-          businessInfo: payload.businessInfo,
-          purchases: payload.purchases || [],
-          updated_at: new Date().toISOString()
-        }
-      })
+      body: JSON.stringify({ payload: body })
     });
     return response.ok;
   } catch (err) {

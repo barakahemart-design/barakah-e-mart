@@ -4,15 +4,13 @@ import { KeyRound, ShieldAlert, Sparkles, Building2, Eye, EyeOff, AlertCircle, R
 interface AuthScreenProps {
   onSignUp: (email: string, pass: string) => Promise<any>;
   onSignIn: (email: string, pass: string) => Promise<any>;
-  onPasscodeLogin: (email: string, pin: string) => Promise<any>;
   onGuestLogin?: () => void;
 }
 
-export function AuthScreen({ onSignUp, onSignIn, onPasscodeLogin, onGuestLogin }: AuthScreenProps) {
-  const [authMode, setAuthMode] = useState<"passcode" | "classic-signin" | "classic-signup">("passcode");
+export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps) {
+  const [authMode, setAuthMode] = useState<"classic-signin" | "classic-signup">("classic-signin");
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -23,22 +21,18 @@ export function AuthScreen({ onSignUp, onSignIn, onPasscodeLogin, onGuestLogin }
     setError('');
     
     try {
-      if (!email.includes('@')) {
+      const cleanEmail = email.trim();
+      if (!cleanEmail.includes('@')) {
         throw new Error("Please enter a valid email address.");
       }
 
-      if (authMode === "passcode") {
-        if (pin.length < 4) {
-          throw new Error("Passcode must be at least 4 digits.");
-        }
-        await onPasscodeLogin(email, pin);
-      } else if (authMode === "classic-signup") {
+      if (authMode === "classic-signup") {
         if (password.length < 6) {
           throw new Error("Password must be at least 6 characters.");
         }
-        await onSignUp(email, password);
+        await onSignUp(cleanEmail, password);
       } else {
-        await onSignIn(email, password);
+        await onSignIn(cleanEmail, password);
       }
     } catch (err: any) {
       setError(err?.message || "An error occurred. Try again.");
@@ -73,42 +67,35 @@ export function AuthScreen({ onSignUp, onSignIn, onPasscodeLogin, onGuestLogin }
         <div className="flex bg-[#050912] p-1 rounded-xl border border-slate-800/60" id="auth-tabs">
           <button 
             type="button"
-            onClick={() => { setAuthMode("passcode"); setError(''); }} 
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 ${authMode === 'passcode' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+            onClick={() => { setAuthMode("classic-signin"); setError(''); }} 
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all duration-150 ${authMode === 'classic-signin' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
           >
-            Passcode Cloud Sync
+            Login / লগইন করুন
           </button>
           
           <button 
             type="button"
-            onClick={() => { setAuthMode("classic-signin"); setError(''); }} 
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 ${authMode !== 'passcode' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}
+            onClick={() => { setAuthMode("classic-signup"); setError(''); }} 
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all duration-150 ${authMode === 'classic-signup' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
           >
-            Classic Account
+            Signup / সাইনআপ করুন
           </button>
         </div>
 
         {/* Dynamic Mode Explanations */}
         <div className="bg-[#050912]/80 border border-slate-800/40 p-3.5 rounded-xl space-y-1 text-center" id="mode-tip">
-          {authMode === "passcode" ? (
+          {authMode === "classic-signin" ? (
             <>
-              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">✨ Easy PIN Access</p>
+              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">🔐 Store Sign In / লগইন</p>
               <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
-                Enter your email and 4-digit secret PIN. Your previous transactions, stock, and settings will automatically synchronize from cloud backup.
-              </p>
-            </>
-          ) : authMode === "classic-signin" ? (
-            <>
-              <p className="text-[11px] text-sky-400/90 font-medium font-sans">🔐 Classic Account Sign In</p>
-              <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
-                Enter your registered email address and password to log in to your shop portal.
+                আপনার জি-মেইল এড্রেস এবং পাসওয়ার্ড দিয়ে আপনার স্টোর একাউন্টে লগইন করুন। ক্লাউড ব্যাকআপ তথ্য স্বয়ংক্রিয়ভাবে রিস্টোর হবে।
               </p>
             </>
           ) : (
             <>
-              <p className="text-[11px] text-purple-400/90 font-medium font-sans">💼 Create a New Shop</p>
+              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">💼 Create a New Shop / নতুন দোকান তৈরি</p>
               <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
-                Create your shop account today using any active email address. Unlimited product catalogs and POS invoice generation are fully free.
+                যেকোনো সচল জি-মেইল এড্রেস এবং নিরাপদ গোপন পাসওয়ার্ড দিয়ে আজই আপনার শপ একাউন্ট তৈরি করুন।
               </p>
             </>
           )}
@@ -117,7 +104,7 @@ export function AuthScreen({ onSignUp, onSignIn, onPasscodeLogin, onGuestLogin }
         {/* Main Authentication Form */}
         <form onSubmit={handleAction} className="space-y-4" id="auth-form">
           <div className="space-y-1.5" id="form-group-email">
-            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Gmail Address</label>
+            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Gmail Address / জিমেইল</label>
             <input 
               type="email" 
               required
@@ -129,57 +116,39 @@ export function AuthScreen({ onSignUp, onSignIn, onPasscodeLogin, onGuestLogin }
             />
           </div>
 
-          {authMode === "passcode" ? (
-            <div className="space-y-1.5" id="form-group-pin">
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">4-Digit PIN Access</label>
+          <div className="space-y-1.5 relative" id="form-group-password">
+            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Password / পাসওয়ার্ড</label>
+            <div className="relative">
               <input 
-                type="password" 
-                maxLength={4}
+                type={showPassword ? "text" : "password"} 
                 required
-                placeholder="••••" 
-                value={pin} 
-                onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ""))} 
+                placeholder="******" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
                 disabled={loading}
-                className="w-full px-4 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-center font-mono text-xl tracking-widest outline-none focus:border-emerald-500/80 focus:ring-1 focus:ring-emerald-500/20 transition-colors" 
+                className="w-full px-4 py-3 pr-10 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500/80 focus:ring-1 focus:ring-emerald-500/20 font-mono transition-colors" 
               />
-            </div>
-          ) : (
-            <div className="space-y-1.5 relative" id="form-group-password">
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Password</label>
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  required
-                  placeholder="******" 
-                  value={password} 
-                  onChange={e => setPassword(e.target.value)} 
-                  disabled={loading}
-                  className="w-full px-4 py-3 pr-10 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/20 font-mono transition-colors" 
-                />
-                <button
-                  type="button"
-                  id="toggle-pass-visibility"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Action toggle for classic */}
-          {authMode !== "passcode" && (
-            <div className="text-right" id="auth-mode-toggle">
-              <button 
+              <button
                 type="button"
-                onClick={() => setAuthMode(authMode === "classic-signin" ? "classic-signup" : "classic-signin")}
-                className="text-xs text-sky-400 hover:underline hover:text-sky-300 font-medium bg-none border-none cursor-pointer"
+                id="toggle-pass-visibility"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
               >
-                {authMode === "classic-signin" ? "Create a New Store Account" : "Already have an account? Sign In"}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          )}
+          </div>
+
+          {/* Action toggle for classic */}
+          <div className="text-right" id="auth-mode-toggle">
+            <button 
+              type="button"
+              onClick={() => setAuthMode(authMode === "classic-signin" ? "classic-signup" : "classic-signin")}
+              className="text-xs text-sky-400 hover:underline hover:text-sky-300 font-medium bg-none border-none cursor-pointer"
+            >
+              {authMode === "classic-signin" ? "নতুন অ্যাকাউন্ট তৈরি করতে চান? সাইনআপ করুন" : "ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন"}
+            </button>
+          </div>
 
           {/* Error Message Box */}
           {error && (
@@ -200,12 +169,10 @@ export function AuthScreen({ onSignUp, onSignIn, onPasscodeLogin, onGuestLogin }
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 Loading Store...
               </>
-            ) : authMode === "passcode" ? (
-              "Load Shop & Cloud Sync"
             ) : authMode === "classic-signup" ? (
-              "Register New Shop Account"
+              "Register New Shop Account / সাইনআপ করুন"
             ) : (
-              "Login to Store Account"
+              "Login to Store Account / লগইন করুন"
             )}
           </button>
         </form>

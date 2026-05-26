@@ -1337,7 +1337,6 @@ export default function App() {
       <AuthScreen 
         onSignUp={handleSignUp} 
         onSignIn={handleSignIn} 
-        onPasscodeLogin={handlePasscodeLogin} 
         onGuestLogin={handleGuestLogin}
       />
     );
