@@ -41,6 +41,7 @@ interface DashboardViewProps {
   totalExpensesTk: number;
   totalOutstandingDueTk: number;
   totalPurchasesTk: number;
+  totalUnitsSold: number;
   netProfitAmt: number;
   onNavigate: (tab: any) => void;
 }
@@ -61,6 +62,7 @@ export function DashboardView({
   totalExpensesTk,
   totalOutstandingDueTk,
   totalPurchasesTk,
+  totalUnitsSold,
   netProfitAmt,
   onNavigate
 }: DashboardViewProps) {
@@ -165,16 +167,16 @@ export function DashboardView({
           <div className="absolute -bottom-2 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
         </div>
 
-        {/* Metric 2: Total Purchases */}
+        {/* Metric 2: Total Units Sold */}
         <div className="bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between shadow-sm relative overflow-hidden">
           <div className="space-y-1">
-            <span className="text-[10px] uppercase tracking-wider font-mono text-slate-400 font-bold">Total Purchases</span>
+            <span className="text-[10px] uppercase tracking-wider font-mono text-slate-400 font-bold">Total Units Sold</span>
             <p className="text-2xl font-black font-num text-sky-600">
-              {businessInfo.currencySymbol} {(totalPurchasesTk ?? 0).toLocaleString()}
+              {(totalUnitsSold ?? 0).toLocaleString()} <span className="text-xs font-semibold text-slate-500">units</span>
             </p>
-            <span className="text-[10px] text-sky-600 font-medium block">{purchases.length} stock-in lots</span>
+            <span className="text-[10px] text-sky-600 font-medium block">Sold in active period</span>
           </div>
-          <div className="p-3 bg-sky-55 text-sky-600 border border-sky-100 rounded-xl">
+          <div className="p-3 bg-sky-50 text-sky-600 border border-sky-100 rounded-xl">
             <ShoppingBag className="w-5 h-5" />
           </div>
           <div className="absolute -bottom-2 right-0 w-24 h-24 bg-sky-500/5 rounded-full blur-xl pointer-events-none" />
@@ -189,7 +191,7 @@ export function DashboardView({
             </p>
             <span className="text-[10px] text-rose-600 font-medium block">Operations & Bills</span>
           </div>
-          <div className="p-3 bg-rose-55 text-rose-600 border border-rose-100 rounded-xl">
+          <div className="p-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl">
             <TrendingDown className="w-5 h-5" />
           </div>
           <div className="absolute -bottom-2 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-xl pointer-events-none" />
@@ -213,7 +215,7 @@ export function DashboardView({
       </section>
 
       {/* Charts Visualization Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-graphics">
+      <div className="hidden md:grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-graphics">
         
         {/* Bar/Area Trend Chart (8 Cols) */}
         <div className="col-span-1 lg:col-span-8 bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm" id="sales-trends-panel">
@@ -309,7 +311,7 @@ export function DashboardView({
       </div>
 
       {/* Alarms and Operations Overview Block */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" id="critical-alarms-panel">
+      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-6" id="critical-alarms-panel">
         
         {/* Low Stock Watchlist */}
         <div className="col-span-1 bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm">

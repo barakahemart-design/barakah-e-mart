@@ -42,7 +42,9 @@ import {
   History,
   Calendar,
   DollarSign,
-  Check
+  Check,
+  Menu,
+  LayoutDashboard
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format } from "date-fns";
@@ -118,6 +120,7 @@ export default function App() {
   // Cloud backup sync indicator active states
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Custom dialog state overrides for iframe friendliness
   const [activeConfirm, setActiveConfirm] = useState<{
@@ -255,7 +258,7 @@ export default function App() {
     }
 
     const confirmRestore = window.confirm(
-      "আপনি কি ক্লাউড ব্যাকআপ রিস্টোর করতে চান? এটি আপনার বর্তমান লোকাল তথ্য পরিবর্তন করে ক্লাউডের সর্বশেষ ব্যাকআপ ডাটা রিস্টোর করবে।"
+      "Are you sure you want to restore your database from the cloud? This will overwrite your current local device data with the latest cloud-synchronized state."
     );
     if (!confirmRestore) return;
 
@@ -1303,6 +1306,12 @@ export default function App() {
   const totalExpensesTk = filteredDashboardExpenses.reduce((sum, e) => sum + e.amount, 0);
   const totalPurchasesTk = filteredDashboardPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
   
+  // Calculate total individual units of products sold
+  const totalUnitsSold = filteredDashboardTx.reduce((sum, t) => {
+    const itemQty = t.items ? t.items.reduce((innerSum, item) => innerSum + Number(item.quantity ?? 0), 0) : 0;
+    return sum + itemQty;
+  }, 0);
+  
   // Calculate total costs of items checkout to plot pure visual profit margins
   const totalDuesActiveState = totalOutstandingDueTk;
   const netEarningsReceived = totalSalesTk - totalOutstandingDueTk;
@@ -1407,12 +1416,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#121214] text-white font-sans flex flex-col md:flex-row" id="terminal-layout">
+    <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#121214] text-white font-sans flex flex-col md:flex-row" id="terminal-layout">
       
       {/* -------------------- SIDE NAVIGATION RAIL -------------------- */}
-      <aside className="w-full md:w-64 bg-[#1E1E24] border-b md:border-b-0 md:border-r border-[#2A2A32] p-5 flex flex-col justify-between shrink-0 shadow-xl" id="sidebar">
+      <aside className="hidden md:flex md:w-64 md:h-screen md:sticky md:top-0 bg-[#1E1E24] border-r border-[#2A2A32] p-5 flex flex-col justify-between shrink-0 shadow-xl z-30" id="sidebar">
         
-        <div className="space-y-6" id="sidebar-top-container">
+        <div className="flex-1 overflow-y-auto pr-1 space-y-6" id="sidebar-top-container" style={{ scrollbarWidth: "thin" }}>
           {/* Main Logo Card */}
           <div className="flex items-center gap-3 pb-4 border-b border-[#2D2D35]" id="sidebar-logo">
             <div className="w-10 h-10 flex items-center justify-center bg-[#00E676]/10 rounded-xl text-[#00E676] border border-[#00E676]/20 overflow-hidden shrink-0">
@@ -1644,66 +1653,63 @@ export default function App() {
       </aside>
 
       {/* -------------------- MAIN WORKSPACE VIEWPORT -------------------- */}
-      <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col" id="viewport-workspace">
+      <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col md:h-screen md:overflow-hidden pb-20 md:pb-0" id="viewport-workspace">
         
-        {/* TOP STATUS BAR BAR */}
-        <header className="bg-[#0a101f]/80 backdrop-blur border-b border-slate-800/80 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 z-40 sticky top-0" id="top-navbar">
+        {/* TOP STATUS BAR */}
+        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex flex-row items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
           
-          <div id="active-tab-title-display">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
-              <h1 className="text-lg font-bold text-white tracking-wide font-display">
-                {activeTab === 'dashboard' && `${businessInfo.name} - Dashboard & Financial Overview`}
-                {activeTab === 'reports' && 'Elite Business Reports Dashboard'}
-                {activeTab === 'products' && 'Product Catalog & Pricing Settings'}
-                {activeTab === 'negative-sales' && 'Negative Stock Log & Reconciliation'}
-                {activeTab === 'purchases' && 'Purchases Ledger & Reorder lots'}
-                {activeTab === "pos" && "Counter Cash Memo (Terminal Point-of-Sale)"}
-                {activeTab === 'inventory' && 'Shop Inventory & Stock Status'}
-                {activeTab === 'ledger' && 'Invoices Registry & Account Ledger'}
-                {activeTab === "insights" && "Generative AI Business Consultant (Intelligent AI Assistant)"}
-                {activeTab === 'expenses' && 'Business Overheads & Outgoings'}
-                {activeTab === 'contacts' && 'Consumer Profile & Supplier Directory'}
-                {activeTab === 'settings' && 'Business details & Billing Settings'}
+          <div id="active-tab-title-display" className="min-w-0">
+            <div className="flex items-center gap-1.5 md:gap-2">
+              <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
+              <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
+                {activeTab === 'dashboard' && `${businessInfo.name} - Dashboard`}
+                {activeTab === 'reports' && 'Reports Dashboard'}
+                {activeTab === 'products' && 'Product Settings'}
+                {activeTab === 'negative-sales' && 'Negative Stock Log'}
+                {activeTab === 'purchases' && 'Purchases Ledger'}
+                {activeTab === "pos" && "Counter Cash Memo"}
+                {activeTab === 'inventory' && 'Shop Inventory'}
+                {activeTab === 'ledger' && 'Account Ledger'}
+                {activeTab === "insights" && "AI Assistant"}
+                {activeTab === 'expenses' && 'Expenses Ledger'}
+                {activeTab === 'contacts' && 'Customers Directory'}
+                {activeTab === 'settings' && 'System Settings'}
               </h1>
             </div>
-            <p className="text-xs text-slate-400 pl-4.5 mt-0.5">
+            <p className="hidden md:block text-xs text-slate-400 pl-4.5 mt-0.5 max-w-xl truncate">
               {activeTab === 'dashboard' && 'Real-time profit margins, revenue trackers and diagnostic charts.'}
               {activeTab === 'reports' && 'P&L, Gross Margin and comprehensive financial ledger.'}
-              {activeTab === 'products' && 'Configure unit prices and options. Cost parameters are locked during staff panel operations.'}
+              {activeTab === 'products' && 'Configure unit prices and options. Cost parameters are locked.'}
               {activeTab === 'negative-sales' && 'Adjust purchase rate on negative quantity sales to reflect correct net income metrics.'}
-              {activeTab === 'purchases' && 'Log fresh supplier purchases, add bulk stocks, and assign actual purchase values.'}
-              {activeTab === "pos" && "Point-of-Sale Checkout terminal. Easily add items to cart and print receipt cash memo."}
+              {activeTab === 'purchases' && 'Log fresh supplier purchases, add bulk stocks, and assign actual values.'}
+              {activeTab === "pos" && "Point-of-Sale Checkout terminal. Easily add items to cart and print receipt."}
               {activeTab === 'inventory' && 'Monitor overall physical inventory items, remaining thresholds and unit metrics.'}
               {activeTab === 'ledger' && 'Acknowledge transactions, review accounts receivable and enter payments due.'}
-              {activeTab === 'insights' && 'Securely inspects ledger records using Google Gemini to construct actionable strategies.'}
-              {activeTab === 'expenses' && 'Record administrative costs, electricity bills, showroom rent, and monthly outlays.'}
-              {activeTab === 'contacts' && 'CRM and suppliers contact list with outstanding credit records.'}
-              {activeTab === "settings" && "Configure printed receipt company address, contact phone, and other static variables."}
+              {activeTab === 'insights' && 'Securely inspects ledger records using Google Gemini.'}
+              {activeTab === 'expenses' && 'Record administrative costs, electricity bills, and monthly outlays.'}
+              {activeTab === 'contacts' && 'CRM and suppliers contact list.'}
+              {activeTab === 'settings' && 'Configure printed receipt company address, contact phone, and variables.'}
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0" id="top-navbar-actions">
+          <div className="flex items-center gap-2 md:gap-3 shrink-0" id="top-navbar-actions">
             
              {/* Sync Cloud Button (For registered users) */}
              {activeUser && !activeUser.isGuest && (
-               <div className="flex gap-2">
+               <div className="flex gap-1 bg-[#121214]/60 p-1 border border-slate-800/80 rounded-xl">
                  <button
                    id="manual-backup-cloud-btn"
                    onClick={triggerCloudBackupSync}
                    disabled={isBackingUp || isRestoring}
-                   className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:bg-slate-900 border border-emerald-500/20 rounded-xl text-xs font-mono font-medium tracking-wide transition-colors cursor-pointer"
-                   title="Save backup of all transactions to cloud"
+                   className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:bg-slate-900 rounded-lg text-[10px] md:text-xs font-mono font-bold tracking-wide transition-colors cursor-pointer"
+                   title="Sync local data up to cloud"
                  >
                    {isBackingUp ? (
-                     <>
-                       <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                       Syncing...
-                     </>
+                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                    ) : (
                      <>
                        <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
-                       {activeUser.isPasscodeUser ? "Cloud Sync PIN" : "Cloud Sync Backup"}
+                       <span className="hidden lg:inline">{activeUser.isPasscodeUser ? "Sync PIN" : "Sync Cloud"}</span>
                      </>
                    )}
                  </button>
@@ -1712,18 +1718,15 @@ export default function App() {
                    id="manual-restore-cloud-btn"
                    onClick={triggerCloudBackupRestore}
                    disabled={isBackingUp || isRestoring}
-                   className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 disabled:bg-slate-900 border border-sky-500/20 rounded-xl text-xs font-mono font-medium tracking-wide transition-colors cursor-pointer"
-                   title="Restore and pull latest backup from cloud"
+                   className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 disabled:bg-slate-900 rounded-lg text-[10px] md:text-xs font-mono font-bold tracking-wide transition-colors cursor-pointer"
+                   title="Restore backup down from cloud"
                  >
                    {isRestoring ? (
-                     <>
-                       <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                       Restoring...
-                     </>
+                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
                    ) : (
                      <>
                        <CloudDownload className="w-3.5 h-3.5 text-sky-400" />
-                       {activeUser.isPasscodeUser ? "Restore PIN Data" : "Restore Data"}
+                       <span className="hidden lg:inline">{activeUser.isPasscodeUser ? "Restore PIN" : "Restore Cloud"}</span>
                      </>
                    )}
                  </button>
@@ -1731,9 +1734,10 @@ export default function App() {
              )}
 
             {/* Offline Engine status dot indicator */}
-            <div className="bg-[#050912]/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 font-mono text-[10px]" id="engine-status">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-slate-400 font-mono">OFFLINE CACHE ENGINE : OK</span>
+            <div className="bg-[#050912]/80 border border-slate-800 rounded-xl px-2 py-1 flex items-center gap-1.5 font-mono text-[9px] md:text-[10px]" id="engine-status">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-slate-400 font-mono hidden md:inline">OFFLINE CORE: OK</span>
+              <span className="text-emerald-400 font-mono md:hidden font-bold">OK</span>
             </div>
 
           </div>
@@ -1780,6 +1784,7 @@ export default function App() {
               totalExpensesTk={totalExpensesTk}
               totalOutstandingDueTk={totalOutstandingDueTk}
               totalPurchasesTk={totalPurchasesTk}
+              totalUnitsSold={totalUnitsSold}
               netProfitAmt={netProfitAmt}
               onNavigate={(tab) => {
                 setActiveTab(tab);
@@ -4565,6 +4570,369 @@ export default function App() {
                 Abort Action
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1E1E24]/95 backdrop-blur-md border-t border-[#2A2A32] pb-safe flex items-center justify-around h-16 shadow-2xl" id="mobile-bottom-navbar">
+        {/* POS Button */}
+        <button
+          onClick={() => {
+            setActiveTab("pos");
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
+            activeTab === "pos" ? "text-[#00E676] font-bold" : "text-[#A0A0A5] hover:text-white"
+          }`}
+        >
+          <ShoppingCart className="w-5 h-5 mb-1" />
+          <span className="text-[10px] font-medium">POS / Sales</span>
+        </button>
+
+        {/* Dashboard Button */}
+        <button
+          onClick={() => {
+            if (currentPanel === "admin") {
+              setActiveTab("dashboard");
+            } else {
+              triggerNotification("Please log in as Admin to see dashboard", "info");
+            }
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
+            activeTab === "dashboard" ? "text-[#00E676] font-bold" : "text-[#A0A0A5] hover:text-white"
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-1" />
+          <span className="text-[10px] font-medium font-sans">Dashboard</span>
+        </button>
+
+        {/* Transactions & Ledger */}
+        <button
+          onClick={() => {
+            if (currentPanel === "admin") {
+              setActiveTab("ledger");
+            } else {
+              triggerNotification("Please log in as Admin to see Ledger", "info");
+            }
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
+            activeTab === "ledger" ? "text-[#00E676] font-bold" : "text-[#A0A0A5] hover:text-white"
+          }`}
+        >
+          <FileText className="w-5 h-5 mb-1" />
+          <span className="text-[10px] font-medium font-sans">Transactions</span>
+        </button>
+
+        {/* AI Insights */}
+        {currentPanel === "admin" && (
+          <button
+            onClick={() => {
+              setActiveTab("insights");
+              setIsMobileMenuOpen(false);
+            }}
+            className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
+              activeTab === "insights" ? "text-amber-400 font-bold" : "text-[#A0A0A5] hover:text-white"
+            }`}
+          >
+            <Sparkle className="w-5 h-5 mb-1 animate-pulse" />
+            <span className="text-[10px] font-medium">AI Insights</span>
+          </button>
+        )}
+
+        {/* Menu Button */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
+            isMobileMenuOpen ? "text-[#00E676]" : "text-[#A0A0A5] hover:text-white"
+          }`}
+        >
+          <Menu className="w-5 h-5 mb-1" />
+          <span className="text-[10px] font-medium font-sans">More</span>
+        </button>
+      </nav>
+
+      {/* -------------------- MOBILE DRAWER OVERLAY -------------------- */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex animate-fadeIn" id="mobile-drawer-container">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity" 
+            onClick={() => setIsMobileMenuOpen(false)}
+            id="mobile-drawer-backdrop"
+          />
+
+          {/* Side Drawer Body */}
+          <div 
+            className="relative ml-auto w-72 max-w-[85vw] h-full bg-[#1E1E24] shadow-2xl flex flex-col justify-between border-l border-[#2A2A32] z-50 transition-all duration-300"
+            id="mobile-drawer-panel"
+          >
+            
+            {/* Top Header of Drawer */}
+            <div className="p-4 border-b border-[#2D2D35] flex items-center justify-between" id="mobile-drawer-header">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 flex items-center justify-center bg-[#00E676]/10 rounded-lg text-[#00E676] border border-[#00E676]/20 overflow-hidden shrink-0">
+                  {businessInfo.companyLogo && (businessInfo.companyLogo.startsWith("data:") || businessInfo.companyLogo.startsWith("http")) ? (
+                    <img src={businessInfo.companyLogo} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="font-extrabold text-[10px] truncate">{businessInfo.companyLogo || "⚡"}</span>
+                  )}
+                </div>
+                <span className="font-extrabold text-xs text-white uppercase tracking-wide font-display truncate max-w-[150px]">
+                  {businessInfo.name}
+                </span>
+              </div>
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)} 
+                className="p-1.5 hover:bg-white/5 rounded-lg text-slate-400 cursor-pointer"
+                id="close-mobile-drawer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Main Drawer Links (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#17171d]" id="mobile-drawer-scroll-body">
+              <p className="text-[10px] uppercase font-mono tracking-widest text-[#00E676] pl-1 font-bold mb-3">
+                {currentPanel === "admin" ? "⚡ Administrator Controls" : "🛒 Cashier Controls"}
+              </p>
+
+              <div className="space-y-4">
+                {currentPanel === "admin" ? (
+                  <>
+                    {/* Category 1: Core Operations */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Core Operations</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "pos", label: "Cashier POS", desc: "Checkout desk", Icon: ShoppingCart },
+                          { id: "dashboard", label: "Dashboard", desc: "Live report stats", Icon: LayoutDashboard },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4 mb-1 text-[#00E676]" />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category 2: Stocks & Catalog */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Stocks & Catalog</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "products", label: "Products", desc: "Current stock", Icon: Package },
+                          { id: "purchases", label: "Log Purchase", desc: "Supplier lot", Icon: PlusCircle },
+                          { id: "inventory", label: "Alarms", desc: "Below threshold", Icon: Bookmark },
+                          { id: "negative-sales", label: "Neg Stocks", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? item.activeBg ? item.activeBg : 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className={`w-4 h-4 mb-1 ${item.color || 'text-slate-300'}`} />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category 3: Financial Ledger */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Ledgers & Accounts</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "ledger", label: "Ledger", desc: "All cashflows", Icon: FileText },
+                          { id: "expenses", label: "Expenses", desc: "Bills & costs", Icon: PiggyBank },
+                          { id: "contacts", label: "Customers", desc: "CRM profiles", Icon: Users },
+                          { id: "reports", label: "P&L Reports", desc: "Daily statement", Icon: BarChart3 },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4 mb-1 text-[#00E676]" />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category 4: AI & Settings */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35]">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">A.I. & Diagnostics</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "insights", label: "AI Advisor", desc: "Expert tips", Icon: Sparkle, pulse: true },
+                          { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : item.id === "insights" ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className={`w-4 h-4 mb-1 ${item.pulse ? 'animate-pulse text-amber-400' : 'text-[#00E676]'}`} />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {[
+                      { id: "pos", label: "Sales POS Screen", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
+                      { id: "contacts", label: "Add Customer CRM", desc: "Due balances & contact logs", Icon: Users },
+                      { id: "products", label: "Live Inventory List", desc: "Real-time standard stock index", Icon: Package },
+                    ].map((item) => {
+                      const Icon = item.Icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer bg-[#212127] ${
+                            isActive 
+                              ? 'text-[#00E676] border-[#00E676]/40 shadow-sm font-bold' 
+                              : 'text-slate-300 border-[#2b2b35] hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className={`p-1.5 rounded-lg shrink-0 ${isActive ? 'bg-[#00E676]/20' : 'bg-[#131317]'}`}>
+                            <Icon className="w-4 h-4 text-[#00E676]" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black block leading-tight">{item.label}</span>
+                            <span className="text-[9px] text-slate-400 font-normal mt-0.5 block">{item.desc}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Drawer Bottom Actions Footer */}
+            <div className="p-4 border-t border-[#2D2D35] bg-[#16161C] space-y-3" id="mobile-drawer-footer">
+              {/* User Info */}
+              <div className="bg-[#121214] border border-[#2D2D35] p-2.5 rounded-xl text-center flex flex-col items-center">
+                <span className="text-[9px] uppercase tracking-wider font-mono text-[#A0A0A5] font-bold block">Terminal Profile</span>
+                {activeUser?.isGuest ? (
+                  <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-sans">
+                    Guest Mode
+                  </span>
+                ) : (
+                  <div className="space-y-0.5">
+                    <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/10 font-bold font-sans">
+                      Active Staff Member
+                    </span>
+                    <span className="text-[10px] text-[#A0A0A5] font-mono block truncate max-w-[200px]" title={activeUser?.email}>
+                      {activeUser?.email}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Access panel switch buttons */}
+              {currentPanel === "admin" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPanel("sales");
+                    setActiveTab("pos");
+                    setIsMobileMenuOpen(false);
+                    triggerNotification("Switched to Sales Panel", "info");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 cursor-pointer transition-colors"
+                >
+                  Go to Sales Terminal &rarr;
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPanel("none");
+                    setIsMobileMenuOpen(false);
+                    triggerNotification("Enter passcode to unlock admin controls", "info");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/20 border border-[#00E676]/20 cursor-pointer transition-colors"
+                >
+                  &larr; Admin Access
+                </button>
+              )}
+
+              {/* Logout */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleLogOut();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 cursor-pointer transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
+                Logout From Store
+              </button>
+            </div>
+
           </div>
         </div>
       )}

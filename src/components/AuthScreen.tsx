@@ -70,7 +70,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
             onClick={() => { setAuthMode("classic-signin"); setError(''); }} 
             className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all duration-150 ${authMode === 'classic-signin' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
           >
-            Login / লগইন করুন
+            Login
           </button>
           
           <button 
@@ -78,7 +78,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
             onClick={() => { setAuthMode("classic-signup"); setError(''); }} 
             className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all duration-150 ${authMode === 'classic-signup' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
           >
-            Signup / সাইনআপ করুন
+            Signup
           </button>
         </div>
 
@@ -86,16 +86,16 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
         <div className="bg-[#050912]/80 border border-slate-800/40 p-3.5 rounded-xl space-y-1 text-center" id="mode-tip">
           {authMode === "classic-signin" ? (
             <>
-              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">🔐 Store Sign In / লগইন</p>
+              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">🔐 Store Sign In</p>
               <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
-                আপনার জি-মেইল এড্রেস এবং পাসওয়ার্ড দিয়ে আপনার স্টোর একাউন্টে লগইন করুন। ক্লাউড ব্যাকআপ তথ্য স্বয়ংক্রিয়ভাবে রিস্টোর হবে।
+                Sign in to your store account using your Gmail address and password. Cloud backup data will synchronize automatically.
               </p>
             </>
           ) : (
             <>
-              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">💼 Create a New Shop / নতুন দোকান তৈরি</p>
+              <p className="text-[11px] text-emerald-400/90 font-medium font-sans">💼 Create a New Shop</p>
               <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
-                যেকোনো সচল জি-মেইল এড্রেস এবং নিরাপদ গোপন পাসওয়ার্ড দিয়ে আজই আপনার শপ একাউন্ট তৈরি করুন।
+                Register today with any active Gmail address and a secure, private password to set up your shop.
               </p>
             </>
           )}
@@ -104,7 +104,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
         {/* Main Authentication Form */}
         <form onSubmit={handleAction} className="space-y-4" id="auth-form">
           <div className="space-y-1.5" id="form-group-email">
-            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Gmail Address / জিমেইল</label>
+            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Gmail Address</label>
             <input 
               type="email" 
               required
@@ -117,7 +117,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
           </div>
 
           <div className="space-y-1.5 relative" id="form-group-password">
-            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Password / পাসওয়ার্ড</label>
+            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400 pl-1">Password</label>
             <div className="relative">
               <input 
                 type={showPassword ? "text" : "password"} 
@@ -146,7 +146,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
               onClick={() => setAuthMode(authMode === "classic-signin" ? "classic-signup" : "classic-signin")}
               className="text-xs text-sky-400 hover:underline hover:text-sky-300 font-medium bg-none border-none cursor-pointer"
             >
-              {authMode === "classic-signin" ? "নতুন অ্যাকাউন্ট তৈরি করতে চান? সাইনআপ করুন" : "ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন"}
+              {authMode === "classic-signin" ? "Need a new account? Sign up here" : "Already have an account? Sign in here"}
             </button>
           </div>
 
@@ -170,9 +170,9 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin }: AuthScreenProps
                 Loading Store...
               </>
             ) : authMode === "classic-signup" ? (
-              "Register New Shop Account / সাইনআপ করুন"
+              "Register New Shop Account"
             ) : (
-              "Login to Store Account / লগইন করুন"
+              "Login to Store Account"
             )}
           </button>
         </form>

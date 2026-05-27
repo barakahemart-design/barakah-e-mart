@@ -173,10 +173,10 @@ export const signUpWithEmail = async (email: string, pass: string) => {
     if (!user) {
       // If direct signup failed, parse and throw local friendly errors manually
       if (authError && (authError.message.includes("weak") || authError.message.includes("at least 6"))) {
-        throw new Error("পাসওয়ার্ডটি কমপক্ষে ৬ অক্ষরের হতে হবে!");
+        throw new Error("Password must be at least 6 characters long!");
       }
       if (authError && authError.message.includes("already registered")) {
-        throw new Error("এই ইমেইল দিয়ে ইতঃপূর্বেই অ্যাকাউন্ট তৈরি করা হয়েছে! অনুগ্রহ করে লগইন করুন।");
+        throw new Error("This email is already registered! Please log in instead.");
       }
 
       // Try backend Express server proxy
@@ -236,9 +236,9 @@ export const signInWithEmail = async (email: string, pass: string) => {
       // If direct login failed, parse and throw translation
       if (authError) {
         if (authError.message === "Invalid login credentials") {
-          throw new Error("ভুল পাসওয়ার্ড বা জিমেইল! অনুগ্রহ করে পুনরায় চেক করুন অথবা 'Signup' করুন!");
+          throw new Error("Invalid email or password! Please check your credentials and try again.");
         } else if (authError.message === "Email not confirmed") {
-          throw new Error("আপনার ইমেইল ভেরিফিকেশন সম্পন্ন হয়নি। দয়া করে ইনবক্স চেক করুন!");
+          throw new Error("Your email address has not been verified yet. Please click the verification link in your inbox!");
         }
       }
 
