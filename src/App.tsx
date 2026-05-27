@@ -149,7 +149,9 @@ export default function App() {
       setPurchases(db.purchases || []);
 
       // Unlock saving/autosync now that the initial offline hydration is complete
-      initialLoadedRef.current = true;
+      setTimeout(() => {
+        initialLoadedRef.current = true;
+      }, 500);
     });
     return () => unsub();
   }, []);
@@ -262,7 +264,9 @@ export default function App() {
     } else {
       triggerNotification("New account created successfully!");
     }
-    initialLoadedRef.current = true;
+    setTimeout(() => {
+      initialLoadedRef.current = true;
+    }, 500);
   };
 
   // Handler for auth action signin
@@ -285,7 +289,9 @@ export default function App() {
     } else {
       triggerNotification("Welcome back to your store terminal logs!");
     }
-    initialLoadedRef.current = true;
+    setTimeout(() => {
+      initialLoadedRef.current = true;
+    }, 500);
   };
 
   // Handler for PIN passcode flow
@@ -308,7 +314,9 @@ export default function App() {
     } else {
       triggerNotification("New security passcode vault ready. Start managing your accounts!");
     }
-    initialLoadedRef.current = true;
+    setTimeout(() => {
+      initialLoadedRef.current = true;
+    }, 500);
   };
 
   // User Sign out

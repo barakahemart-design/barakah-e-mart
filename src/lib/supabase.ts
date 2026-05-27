@@ -90,15 +90,22 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
       .maybeSingle();
 
     if (directError) {
-      console.warn("Direct supabase query failed, trying Express proxy backup fallback...");
+      console.warn("Direct supabase query failed, trying Express proxy backup fallback...", directError.message);
     }
 
     const finalData = (!directError && directData) 
       ? directData 
       : await (async () => {
-          const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
-          if (response.ok) {
-            return await response.json();
+          try {
+            const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
+            if (response.ok) {
+              const contentType = response.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                return await response.json();
+              }
+            }
+          } catch (e) {
+            console.warn("Express fallback fetch failed:", e);
           }
           return null;
         })();
@@ -116,16 +123,56 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
 export const signUpWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
-    const response = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail, password: pass })
-    });
-    const result = await response.json();
-    if (!response.ok || result.error) throw new Error(result.error);
-    if (result.user) {
+    let user: any = null;
+    let authError: any = null;
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: pass,
+      });
+      if (error) {
+        authError = error;
+      } else {
+        user = data.user;
+      }
+    } catch (directErr) {
+      console.warn("Direct signup call error, falling back to server route...", directErr);
+    }
+
+    if (!user) {
+      // If direct signup failed, parse and throw local friendly errors manually
+      if (authError && (authError.message.includes("weak") || authError.message.includes("at least 6"))) {
+        throw new Error("পাসওয়ার্ডটি কমপক্ষে ৬ অক্ষরের হতে হবে!");
+      }
+      if (authError && authError.message.includes("already registered")) {
+        throw new Error("এই ইমেইল দিয়ে ইতঃপূর্বেই অ্যাকাউন্ট তৈরি করা হয়েছে! অনুগ্রহ করে লগইন করুন।");
+      }
+
+      // Try backend Express server proxy
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: pass })
+      });
+      
+      const contentType = response.headers.get("content-type");
+      if (response.ok && contentType && contentType.includes("application/json")) {
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+        user = result.user;
+      } else {
+        if (authError) {
+          throw authError;
+        } else {
+          throw new Error("Registration failed. Please try a different email or connection.");
+        }
+      }
+    }
+
+    if (user) {
       const restored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
-      const userObj = { ...result.user, email: cleanEmail, id: result.user.id || result.user.uid, restored, isPasscodeUser: false };
+      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored, isPasscodeUser: false };
       updateCurrentUser(userObj);
       localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
       return userObj;
@@ -138,16 +185,57 @@ export const signUpWithEmail = async (email: string, pass: string) => {
 export const signInWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
-    const response = await fetch('/api/auth/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail, password: pass })
-    });
-    const result = await response.json();
-    if (!response.ok || result.error) throw new Error(result.error);
-    if (result.user) {
+    let user: any = null;
+    let authError: any = null;
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+      if (error) {
+        authError = error;
+      } else {
+        user = data.user;
+      }
+    } catch (directErr) {
+      console.warn("Direct signin call error, falling back to server route...", directErr);
+    }
+
+    if (!user) {
+      // If direct login failed, parse and throw translation
+      if (authError) {
+        if (authError.message === "Invalid login credentials") {
+          throw new Error("ভুল পাসওয়ার্ড বা জিমেইল! অনুগ্রহ করে পুনরায় চেক করুন অথবা 'Signup' করুন!");
+        } else if (authError.message === "Email not confirmed") {
+          throw new Error("আপনার ইমেইল ভেরিফিকেশন সম্পন্ন হয়নি। দয়া করে ইনবক্স চেক করুন!");
+        }
+      }
+
+      // Try backend Express server proxy fallback
+      const response = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: pass })
+      });
+      
+      const contentType = response.headers.get("content-type");
+      if (response.ok && contentType && contentType.includes("application/json")) {
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+        user = result.user;
+      } else {
+        if (authError) {
+          throw authError;
+        } else {
+          throw new Error("Invalid signin credentials or server timeout.");
+        }
+      }
+    }
+
+    if (user) {
       const restored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
-      const userObj = { ...result.user, email: cleanEmail, id: result.user.id || result.user.uid, restored, isPasscodeUser: false };
+      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored, isPasscodeUser: false };
       updateCurrentUser(userObj);
       localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
       return userObj;
