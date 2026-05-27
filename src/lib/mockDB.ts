@@ -138,75 +138,23 @@ const KEYS = {
 
 // Demo cleaner helpers to ensure old demo entries never persist or load
 export function cleanDemoProducts(arr: any[]): any[] {
-  if (!Array.isArray(arr)) return [];
-  const demoIds = new Set(["p1", "p2", "p3", "p4", "p5"]);
-  const demoNames = new Set([
-    "Samsung Split AC 1.5 Ton", 
-    "Walton Refrigerator 220L", 
-    "Sony Bravia 55' 4K OLED", 
-    "Xiaomi Router AX3000", 
-    "HP EliteBook 840 G8"
-  ]);
-  return arr.filter(p => {
-    if (!p) return false;
-    if (demoIds.has(p.id) || demoNames.has(p.name)) return false;
-    return true;
-  });
+  return Array.isArray(arr) ? arr : [];
 }
 
 export function cleanDemoContacts(arr: any[]): any[] {
-  if (!Array.isArray(arr)) return [];
-  const demoIds = new Set(["c1", "c2", "c3", "c4"]);
-  const demoNames = new Set([
-    "Al-Amin Electronics", 
-    "Kazi Shafiqul Islam", 
-    "Walton Bangladesh Sales Depot", 
-    "Mahmudul Hasan (Sumon)"
-  ]);
-  return arr.filter(c => {
-    if (!c) return false;
-    if (demoIds.has(c.id) || demoNames.has(c.name)) return false;
-    return true;
-  });
+  return Array.isArray(arr) ? arr : [];
 }
 
 export function cleanDemoExpenses(arr: any[]): any[] {
-  if (!Array.isArray(arr)) return [];
-  const demoIds = new Set(["e1", "e2", "e3"]);
-  const demoCategoriesAndAmounts = [
-    { category: "Rent", amount: 18000 },
-    { category: "Electricity", amount: 4500 },
-    { category: "Salary", amount: 12000 }
-  ];
-  return arr.filter(e => {
-    if (!e) return false;
-    if (demoIds.has(e.id)) return false;
-    const isDemo = demoCategoriesAndAmounts.some(x => x.category === e.category && x.amount === e.amount);
-    if (isDemo) return false;
-    return true;
-  });
+  return Array.isArray(arr) ? arr : [];
 }
 
 export function cleanDemoPurchases(arr: any[]): any[] {
-  if (!Array.isArray(arr)) return [];
-  const demoIds = new Set(["pur1", "pur2"]);
-  return arr.filter(pur => pur && !demoIds.has(pur.id));
+  return Array.isArray(arr) ? arr : [];
 }
 
 export function cleanDemoTransactions(arr: any[]): any[] {
-  if (!Array.isArray(arr)) return [];
-  return arr.filter(tx => {
-    if (!tx) return false;
-    const demoItems = tx.items || [];
-    const hasDemoProduct = demoItems.some((item: any) => 
-      item && (
-        item.productId === "p1" || item.productId === "p2" || item.productId === "p3" || item.productId === "p4" || item.productId === "p5" ||
-        item.name === "Samsung Split AC 1.5 Ton" || item.name === "Walton Refrigerator 220L" || item.name === "Sony Bravia 55' 4K OLED" || item.name === "Xiaomi Router AX3000" || item.name === "HP EliteBook 840 G8"
-      )
-    );
-    if (hasDemoProduct) return false;
-    return true;
-  });
+  return Array.isArray(arr) ? arr : [];
 }
 
 export const loadDB = () => {
