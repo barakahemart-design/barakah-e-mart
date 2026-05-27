@@ -24,6 +24,7 @@ import {
   LogOut, 
   CloudLightning, 
   CloudUpload, 
+  CloudDownload, 
   TrendingDown, 
   PlusCircle, 
   PenTool, 
@@ -73,6 +74,7 @@ import {
   subscribeToAuthChanges, 
   signOut, 
   uploadPasscodeBackup, 
+  fetchAndRestoreCloudBackup,
   signInOrSignUpWithPasscode,
   signUpWithEmail,
   signInWithEmail
@@ -115,6 +117,7 @@ export default function App() {
 
   // Cloud backup sync indicator active states
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Custom dialog state overrides for iframe friendliness
   const [activeConfirm, setActiveConfirm] = useState<{
@@ -241,6 +244,43 @@ export default function App() {
       triggerNotification("Cloud backup successfully synchronized!", "success");
     } else {
       triggerNotification("Cloud backup failed. Please try again later.", "error");
+    }
+  };
+
+  // Trigger PIN Backup restore/pull
+  const triggerCloudBackupRestore = async () => {
+    if (!activeUser || activeUser.isGuest) {
+      triggerNotification("Cloud restore is only available for registered store members.", "info");
+      return;
+    }
+
+    const confirmRestore = window.confirm(
+      "আপনি কি ক্লাউড ব্যাকআপ রিস্টোর করতে চান? এটি আপনার বর্তমান লোকাল তথ্য পরিবর্তন করে ক্লাউডের সর্বশেষ ব্যাকআপ ডাটা রিস্টোর করবে।"
+    );
+    if (!confirmRestore) return;
+
+    setIsRestoring(true);
+    const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+    try {
+      const restored = await fetchAndRestoreCloudBackup(activeUser.email, passcode);
+      if (restored) {
+        // Reload states
+        const db = loadDB();
+        setProducts(db.products);
+        setContacts(db.contacts);
+        setExpenses(db.expenses);
+        setTransactions(db.transactions);
+        setBusinessInfo(db.businessInfo);
+        setPurchases(db.purchases || []);
+
+        triggerNotification("Cloud backup restored and synchronized successfully! 🎉", "success");
+      } else {
+        triggerNotification("No cloud backup found or restore failed.", "error");
+      }
+    } catch (e: any) {
+      triggerNotification("Error restoring cloud backup: " + e.message, "error");
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -1645,28 +1685,50 @@ export default function App() {
 
           <div className="flex items-center gap-3 shrink-0" id="top-navbar-actions">
             
-            {/* Sync Cloud Button (For registered users) */}
-            {activeUser && !activeUser.isGuest && (
-              <button
-                id="manual-backup-cloud-btn"
-                onClick={triggerCloudBackupSync}
-                disabled={isBackingUp}
-                className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:bg-slate-900 border border-emerald-500/20 rounded-xl text-xs font-mono font-medium tracking-wide transition-colors cursor-pointer"
-                title="Save backup of all transactions to cloud"
-              >
-                {isBackingUp ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
-                    {activeUser.isPasscodeUser ? "Cloud Sync PIN" : "Cloud Sync Backup"}
-                  </>
-                )}
-              </button>
-            )}
+             {/* Sync Cloud Button (For registered users) */}
+             {activeUser && !activeUser.isGuest && (
+               <div className="flex gap-2">
+                 <button
+                   id="manual-backup-cloud-btn"
+                   onClick={triggerCloudBackupSync}
+                   disabled={isBackingUp || isRestoring}
+                   className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:bg-slate-900 border border-emerald-500/20 rounded-xl text-xs font-mono font-medium tracking-wide transition-colors cursor-pointer"
+                   title="Save backup of all transactions to cloud"
+                 >
+                   {isBackingUp ? (
+                     <>
+                       <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                       Syncing...
+                     </>
+                   ) : (
+                     <>
+                       <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
+                       {activeUser.isPasscodeUser ? "Cloud Sync PIN" : "Cloud Sync Backup"}
+                     </>
+                   )}
+                 </button>
+
+                 <button
+                   id="manual-restore-cloud-btn"
+                   onClick={triggerCloudBackupRestore}
+                   disabled={isBackingUp || isRestoring}
+                   className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 disabled:bg-slate-900 border border-sky-500/20 rounded-xl text-xs font-mono font-medium tracking-wide transition-colors cursor-pointer"
+                   title="Restore and pull latest backup from cloud"
+                 >
+                   {isRestoring ? (
+                     <>
+                       <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                       Restoring...
+                     </>
+                   ) : (
+                     <>
+                       <CloudDownload className="w-3.5 h-3.5 text-sky-400" />
+                       {activeUser.isPasscodeUser ? "Restore PIN Data" : "Restore Data"}
+                     </>
+                   )}
+                 </button>
+               </div>
+             )}
 
             {/* Offline Engine status dot indicator */}
             <div className="bg-[#050912]/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 font-mono text-[10px]" id="engine-status">

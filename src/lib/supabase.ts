@@ -73,8 +73,17 @@ export const restoreLocalKeys = (data: any) => {
   if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
   if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
   if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
-  if (data.businessInfo) localStorage.setItem('barakah_business_info', JSON.stringify(data.businessInfo));
-  if (data.purchases) localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(data.purchases)));
+  
+  let p = data.purchases;
+  if (!p && data.businessInfo && data.businessInfo.purchases) {
+    p = data.businessInfo.purchases;
+  }
+  localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(p || [])));
+
+  if (data.businessInfo) {
+    const { purchases: ignore, ...cleanInfo } = data.businessInfo;
+    localStorage.setItem('barakah_business_info', JSON.stringify(cleanInfo));
+  }
 };
 
 export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => {
@@ -343,6 +352,11 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     }
   }
 
+  const serializedBusinessInfo = {
+    ...(payload.businessInfo || {}),
+    purchases: payload.purchases || []
+  };
+
   const body = {
     id: syncId,
     linked_email: cleanEmail,
@@ -350,8 +364,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     contacts: payload.contacts,
     expenses: payload.expenses,
     transactions: payload.transactions,
-    businessInfo: payload.businessInfo,
-    purchases: payload.purchases || [],
+    businessInfo: serializedBusinessInfo,
     updated_at: new Date().toISOString()
   };
 
