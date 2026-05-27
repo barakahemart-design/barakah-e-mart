@@ -215,7 +215,7 @@ export function DashboardView({
       </section>
 
       {/* Charts Visualization Section */}
-      <div className="hidden md:grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-graphics">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-graphics">
         
         {/* Bar/Area Trend Chart (8 Cols) */}
         <div className="col-span-1 lg:col-span-8 bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm" id="sales-trends-panel">
@@ -311,7 +311,7 @@ export function DashboardView({
       </div>
 
       {/* Alarms and Operations Overview Block */}
-      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-6" id="critical-alarms-panel">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" id="critical-alarms-panel">
         
         {/* Low Stock Watchlist */}
         <div className="col-span-1 bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm">

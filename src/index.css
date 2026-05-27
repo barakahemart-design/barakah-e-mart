@@ -9,7 +9,14 @@
 /* 
   FONT ZERO SLASH BUG FIX: Force no-slashed-zero glyph behavior globally
   and fallback to clean sans-serif/system monospace without slashing for all figures.
-*/
+ */
+body, html {
+  touch-action: pan-x pan-y !important; /* Disable double-tap/pinch zoom gestures on mobile APK */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-text-size-adjust: 100%;
+}
+
 body, html, button, select, input, textarea, span, div, p, h1, h2, h3, h4, h5, h6, code, pre, .font-mono, td, th {
   font-family: var(--selected-font) !important;
   font-variant-numeric: no-slashed-zero !important;
@@ -22,3 +29,176 @@ code, pre, .font-mono {
   font-variant-numeric: no-slashed-zero !important;
   font-feature-settings: "zero" 0 !important;
 }
+
+/* GLOBAL LIGHT/DARK THEME CSS VARIABLES & BRIDGE MAPPINGS */
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dark mode mappings (when .light is NOT on the html element) */
+html:not(.light) {
+  --color-workspace-bg: #070b13;
+  --color-header-bg: rgba(10, 16, 31, 0.9);
+  --color-layout-bg: #121214;
+  --color-card-bg: #1e1e24;
+  --color-card-nested-bg: #212127;
+  --color-nested-inner-bg: #131117;
+  --color-input-bg: #050912;
+  --color-modal-bg: #0d1527;
+  --color-text-main: #ffffff;
+  --color-text-muted: #a0a0a5;
+  --color-text-dimmed: #64748b;
+  --color-border-main: #1f2937;
+}
+
+/* Adaptive styles for originally light elements (like Dashboard) in Dark mode */
+html:not(.light) .bg-white {
+  background-color: var(--color-card-bg) !important;
+}
+html:not(.light) .border-slate-200,
+html:not(.light) .border-slate-100,
+html:not(.light) .border-amber-200 {
+  border-color: var(--color-border-main) !important;
+}
+html:not(.light) .text-slate-900,
+html:not(.light) .text-slate-800,
+html:not(.light) .text-slate-700,
+html:not(.light) .text-slate-600 {
+  color: var(--color-text-main) !important;
+}
+html:not(.light) .text-slate-500 {
+  color: var(--color-text-muted) !important;
+}
+html:not(.light) .bg-slate-50,
+html:not(.light) .bg-slate-100 {
+  background-color: var(--color-card-nested-bg) !important;
+  color: var(--color-text-main) !important;
+}
+html:not(.light) .bg-emerald-50,
+html:not(.light) .bg-sky-50,
+html:not(.light) .bg-rose-50,
+html:not(.light) .bg-amber-50 {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+html:not(.light) .text-emerald-650,
+html:not(.light) .text-emerald-600 {
+  color: #10b981 !important;
+}
+html:not(.light) .text-sky-600 {
+  color: #0ea5e9 !important;
+}
+html:not(.light) .text-rose-600,
+html:not(.light) .text-rose-650 {
+  color: #ef4444 !important;
+}
+
+/* Light mode overrides (when .light is active class) */
+html.light {
+  --color-workspace-bg: #f8fafc;
+  --color-header-bg: rgba(255, 255, 255, 0.95);
+  --color-layout-bg: #f1f5f9;
+  --color-card-bg: #ffffff;
+  --color-card-nested-bg: #f8fafc;
+  --color-nested-inner-bg: #ffffff;
+  --color-input-bg: #f8fafc;
+  --color-modal-bg: #ffffff;
+  --color-text-main: #0f172a;
+  --color-text-muted: #334155;
+  --color-text-dimmed: #64748b;
+  --color-border-main: #cbd5e1;
+}
+
+/* Layout container overrides in Light mode */
+html.light body {
+  background-color: var(--color-layout-bg) !important;
+}
+html.light .bg-\[\#070b13\] {
+  background-color: var(--color-workspace-bg) !important;
+}
+html.light .bg-\[\#0a101f\]\/90 {
+  background-color: var(--color-header-bg) !important;
+  backdrop-filter: blur(8px);
+  border-bottom-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#121214\] {
+  background-color: var(--color-layout-bg) !important;
+}
+html.light .bg-\[\#1E1E24\] {
+  background-color: var(--color-card-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#1E1E24\]\/95 {
+  background-color: var(--color-card-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#1E1E24\]\/40 {
+  background-color: var(--color-layout-bg) !important;
+}
+html.light .bg-\[\#212127\] {
+  background-color: var(--color-card-nested-bg) !important;
+}
+html.light .bg-\[\#131117\] {
+  background-color: var(--color-nested-inner-bg) !important;
+}
+html.light .bg-\[\#050912\] {
+  background-color: var(--color-input-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#050912\]\/80 {
+  background-color: var(--color-input-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#0d1527\]\/90 {
+  background-color: var(--color-modal-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#0d1527\]\/95 {
+  background-color: var(--color-modal-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+html.light .bg-\[\#121214\]\/60 {
+  background-color: var(--color-input-bg) !important;
+  border-color: var(--color-border-main) !important;
+}
+
+/* Content specific styles in Light mode */
+html.light .text-white {
+  color: var(--color-text-main) !important;
+}
+html.light .text-slate-100 {
+  color: var(--color-text-main) !important;
+}
+html.light .text-slate-200 {
+  color: var(--color-text-main) !important;
+}
+html.light .text-slate-300 {
+  color: var(--color-text-muted) !important;
+}
+html.light .text-slate-400 {
+  color: var(--color-text-dimmed) !important;
+}
+html.light .text-slate-500 {
+  color: var(--color-text-dimmed) !important;
+}
+html.light .text-\[\#A0A0A5\] {
+  color: var(--color-text-muted) !important;
+}
+html.light .border-slate-850,
+html.light .border-slate-800,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/60,
+html.light .border-slate-800\/40,
+html.light .border-\[\#2A2A32\],
+html.light .border-\[\#2D2D35\],
+html.light .border-\[\#2b2b35\] {
+  border-color: var(--color-border-main) !important;
+}
+
+/* Light Mode POS / Active list backgrounds */
+html.light .bg-slate-950\/80 {
+  background-color: var(--color-card-nested-bg) !important;
+}
+html.light .text-[#00E676] {
+  color: #10b981 !important;
+}
+

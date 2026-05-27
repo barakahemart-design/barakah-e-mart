@@ -201,10 +201,19 @@ export const signUpWithEmail = async (email: string, pass: string) => {
     }
 
     if (user) {
-      const restored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
-      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored, isPasscodeUser: false };
+      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored: false, isPasscodeUser: false };
       updateCurrentUser(userObj);
       localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
+      
+      // Fetch cloud sync database in the background asynchronously
+      fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure").then((wasRestored) => {
+        if (wasRestored) {
+          const updatedUser = { ...userObj, restored: true };
+          localStorage.setItem('barakah_local_active_user', JSON.stringify(updatedUser));
+          updateCurrentUser(updatedUser);
+        }
+      }).catch(err => console.warn("Background restore info:", err));
+      
       return userObj;
     }
   } catch (err: any) {
@@ -264,10 +273,19 @@ export const signInWithEmail = async (email: string, pass: string) => {
     }
 
     if (user) {
-      const restored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
-      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored, isPasscodeUser: false };
+      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored: false, isPasscodeUser: false };
       updateCurrentUser(userObj);
       localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
+      
+      // Fetch cloud database restore in the background asynchronously to give a ultra smooth 0ms transition!
+      fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure").then((wasRestored) => {
+        if (wasRestored) {
+          const updatedUser = { ...userObj, restored: true };
+          localStorage.setItem('barakah_local_active_user', JSON.stringify(updatedUser));
+          updateCurrentUser(updatedUser);
+        }
+      }).catch(err => console.warn("Background restore info:", err));
+
       return userObj;
     }
   } catch (err: any) {
@@ -307,10 +325,19 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
   
-  const restored = await fetchAndRestoreCloudBackup(cleanEmail, pin);
-  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored, passcode: pin };
+  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false, passcode: pin };
   updateCurrentUser(userObj);
   localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
+  
+  // Asynchronously restore in background to avoid freezing the terminal transition!
+  fetchAndRestoreCloudBackup(cleanEmail, pin).then((wasRestored) => {
+    if (wasRestored) {
+      const updatedUser = { ...userObj, restored: true };
+      localStorage.setItem('barakah_local_active_user', JSON.stringify(updatedUser));
+      updateCurrentUser(updatedUser);
+    }
+  }).catch(err => console.warn("Background restore info:", err));
+  
   return userObj;
 };
 

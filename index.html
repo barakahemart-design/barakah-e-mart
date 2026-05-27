@@ -2,8 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>My Google AI Studio App</title>
+    <script>
+      // STRICT ZOOM PREVENTION FOR ANDROID/IOS APK WRAPPERS
+      document.addEventListener('touchstart', function (event) {
+        if (event.touches.length > 1) {
+          event.preventDefault(); // Prevent pinch-to-zoom
+        }
+      }, { passive: false });
+
+      let lastTouchEnd = 0;
+      document.addEventListener('touchend', function (event) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+          event.preventDefault(); // Prevent double-tap zoom
+        }
+        lastTouchEnd = now;
+      }, { passive: false });
+
+      document.addEventListener('gesturestart', function (event) {
+        event.preventDefault(); // Prevent gesture pinching
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

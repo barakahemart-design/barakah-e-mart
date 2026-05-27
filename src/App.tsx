@@ -44,7 +44,9 @@ import {
   DollarSign,
   Check,
   Menu,
-  LayoutDashboard
+  LayoutDashboard,
+  Sun,
+  Moon
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format } from "date-fns";
@@ -116,6 +118,23 @@ export default function App() {
 
   // Notifications State
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+  // Global theme dark/light mode state
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem("barakah_billing_dark_theme");
+    return saved !== null ? saved === "true" : true; // Default is true (dark mode)
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.remove("light");
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.add("light");
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("barakah_billing_dark_theme", String(isDarkMode));
+  }, [isDarkMode]);
 
   // Cloud backup sync indicator active states
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -1395,6 +1414,7 @@ export default function App() {
         onSignUp={handleSignUp} 
         onSignIn={handleSignIn} 
         onGuestLogin={handleGuestLogin}
+        isDarkMode={isDarkMode}
       />
     );
   }
@@ -1405,6 +1425,7 @@ export default function App() {
         adminPasscode={businessInfo.adminPasscode || "1234"}
         salesPasscode={businessInfo.salesPasscode || "5555"}
         isGuest={!!activeUser?.isGuest}
+        isDarkMode={isDarkMode}
         onUnlock={(panel) => {
           setCurrentPanel(panel);
           setActiveTab(panel === "sales" ? "pos" : "dashboard");
@@ -1734,6 +1755,21 @@ export default function App() {
              )}
 
             {/* Offline Engine status dot indicator */}
+            {/* Global theme dark/light toggle button */}
+            <button
+              id="global-theme-toggle"
+              type="button"
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="flex items-center justify-center p-2.5 bg-[#050912]/80 hover:bg-slate-800/80 text-white rounded-xl border border-slate-800 hover:border-slate-700 hover:text-emerald-400 transition-all cursor-pointer shadow-sm h-8.5 w-8.5"
+              title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {isDarkMode ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-[#00E676]" />
+              )}
+            </button>
+
             <div className="bg-[#050912]/80 border border-slate-800 rounded-xl px-2 py-1 flex items-center gap-1.5 font-mono text-[9px] md:text-[10px]" id="engine-status">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-slate-400 font-mono hidden md:inline">OFFLINE CORE: OK</span>
@@ -3218,35 +3254,14 @@ export default function App() {
                             </td>
                             <td className="py-3 px-4 text-right text-rose-400 font-bold font-mono">{businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}</td>
                             <td className="py-3 px-4 text-center">
-                              {deleteExpenseId === e.id ? (
-                                <div className="flex items-center gap-1.5 justify-center">
-                                  <button
-                                    onClick={() => {
-                                      setExpenses(expenses.filter(item => item.id !== e.id));
-                                      triggerNotification("Voucher entry discarded.");
-                                      setDeleteExpenseId(null);
-                                    }}
-                                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold p-1 px-2 rounded text-[10px] cursor-pointer transition-colors"
-                                  >
-                                    Yes
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteExpenseId(null)}
-                                    className="bg-slate-700 hover:bg-slate-600 text-slate-105 hover:text-white p-1 px-2 rounded text-[10px] cursor-pointer transition-colors"
-                                  >
-                                    No
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  id={`delete-expense-${e.id}`}
-                                  onClick={() => setDeleteExpenseId(e.id)}
-                                  className="p-1 hover:bg-slate-900 rounded group transition-all text-slate-500 hover:text-rose-400 cursor-pointer"
-                                  title="Delete expense"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                              <button
+                                id={`delete-expense-${e.id}`}
+                                onClick={() => setDeleteExpenseId(e.id)}
+                                className="p-1.5 hover:bg-rose-500/10 rounded-lg group transition-all text-slate-500 hover:text-rose-400 cursor-pointer"
+                                title="Delete expense"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -4508,6 +4523,75 @@ export default function App() {
         </div>
       )}
 
+      {(() => {
+        const expenseToDelete = deleteExpenseId ? expenses.find(e => e.id === deleteExpenseId) : null;
+        if (!expenseToDelete) return null;
+        return (
+          <div className="fixed inset-0 z-50 bg-[#0c0c0e]/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-md w-full p-6 space-y-4 text-slate-200 animate-scaleIn" id="modal-delete-expense">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 className="text-xs font-extrabold uppercase text-[#FF5252] flex items-center gap-2 font-display">
+                  <AlertTriangle className="w-5 h-5 text-rose-500 animate-pulse" />
+                  Confirm Expense Deletion
+                </h3>
+                <button 
+                  onClick={() => setDeleteExpenseId(null)} 
+                  className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs leading-relaxed">
+                <p className="font-sans text-slate-300">
+                  Are you sure you want to delete this expense entry? This action is permanent and cannot be undone.
+                </p>
+
+                <div className="bg-[#121214] p-4 rounded-xl border border-slate-800 space-y-2 font-mono">
+                  <div className="flex justify-between border-b border-slate-800/40 pb-1.5">
+                    <span className="text-[10px] text-slate-400">Date</span>
+                    <span className="text-slate-200 text-right">{expenseToDelete.date}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800/40 pb-1.5">
+                    <span className="text-[10px] text-slate-400">Description</span>
+                    <span className="text-slate-200 font-sans font-semibold text-right break-words max-w-[200px]">{expenseToDelete.description}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800/40 pb-1.5">
+                    <span className="text-[10px] text-slate-400">Category</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#050912] border border-slate-800 text-purple-400 inline-block text-right">
+                      {expenseToDelete.category}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-0.5">
+                    <span className="text-[10px] text-slate-400">Amount</span>
+                    <span className="text-rose-400 font-bold">{businessInfo.currencySymbol} {(expenseToDelete.amount ?? 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-3 font-sans">
+                <button
+                  onClick={() => {
+                    setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
+                    triggerNotification("Voucher entry discarded.", "success");
+                    setDeleteExpenseId(null);
+                  }}
+                  className="flex-1 py-1 px-4 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-rose-600/10 text-center uppercase tracking-wider"
+                >
+                  Yes, Delete Entry
+                </button>
+                <button
+                  onClick={() => setDeleteExpenseId(null)}
+                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+                >
+                  No, Keep It
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {dangerAction && (
         <div className="fixed inset-0 z-50 bg-[#0c0c0e]/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#1E1E24] rounded-2xl border-2 border-rose-500/30 shadow-2xl overflow-hidden max-w-md w-full p-6 space-y-4 text-slate-200 animate-scaleIn">
@@ -4587,7 +4671,7 @@ export default function App() {
           }`}
         >
           <ShoppingCart className="w-5 h-5 mb-1" />
-          <span className="text-[10px] font-medium">POS / Sales</span>
+          <span className="text-[10px] font-medium">Sales / POS</span>
         </button>
 
         {/* Dashboard Button */}
@@ -4623,7 +4707,7 @@ export default function App() {
           }`}
         >
           <FileText className="w-5 h-5 mb-1" />
-          <span className="text-[10px] font-medium font-sans">Transactions</span>
+          <span className="text-[10px] font-medium font-sans">Transactions & Ledger</span>
         </button>
 
         {/* AI Insights */}
@@ -4707,7 +4791,7 @@ export default function App() {
                       <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Core Operations</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "pos", label: "Cashier POS", desc: "Checkout desk", Icon: ShoppingCart },
+                          { id: "pos", label: "Sales / POS", desc: "Checkout desk", Icon: ShoppingCart },
                           { id: "dashboard", label: "Dashboard", desc: "Live report stats", Icon: LayoutDashboard },
                         ].map((item) => {
                           const Icon = item.Icon;
@@ -4740,9 +4824,9 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2">
                         {[
                           { id: "products", label: "Products", desc: "Current stock", Icon: Package },
-                          { id: "purchases", label: "Log Purchase", desc: "Supplier lot", Icon: PlusCircle },
-                          { id: "inventory", label: "Alarms", desc: "Below threshold", Icon: Bookmark },
-                          { id: "negative-sales", label: "Neg Stocks", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
+                          { id: "purchases", label: "Purchases", desc: "Supplier lot", Icon: PlusCircle },
+                          { id: "inventory", label: "Inventory", desc: "Below threshold", Icon: Bookmark },
+                          { id: "negative-sales", label: "Negative Stock Log", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
                         ].map((item) => {
                           const Icon = item.Icon;
                           const isActive = activeTab === item.id;
@@ -4773,10 +4857,10 @@ export default function App() {
                       <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Ledgers & Accounts</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "ledger", label: "Ledger", desc: "All cashflows", Icon: FileText },
-                          { id: "expenses", label: "Expenses", desc: "Bills & costs", Icon: PiggyBank },
-                          { id: "contacts", label: "Customers", desc: "CRM profiles", Icon: Users },
-                          { id: "reports", label: "P&L Reports", desc: "Daily statement", Icon: BarChart3 },
+                          { id: "ledger", label: "Transactions & Ledger", desc: "All cashflows", Icon: FileText },
+                          { id: "expenses", label: "Expenses Ledger", desc: "Bills & costs", Icon: PiggyBank },
+                          { id: "contacts", label: "Customers & CRM", desc: "CRM profiles", Icon: Users },
+                          { id: "reports", label: "Reports Dashboard", desc: "Daily statement", Icon: BarChart3 },
                         ].map((item) => {
                           const Icon = item.Icon;
                           const isActive = activeTab === item.id;
@@ -4807,7 +4891,7 @@ export default function App() {
                       <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">A.I. & Diagnostics</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "insights", label: "AI Advisor", desc: "Expert tips", Icon: Sparkle, pulse: true },
+                          { id: "insights", label: "AI Insights", desc: "Expert tips", Icon: Sparkle, pulse: true },
                           { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
                         ].map((item) => {
                           const Icon = item.Icon;
@@ -4837,9 +4921,9 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-1 gap-2.5">
                     {[
-                      { id: "pos", label: "Sales POS Screen", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
-                      { id: "contacts", label: "Add Customer CRM", desc: "Due balances & contact logs", Icon: Users },
-                      { id: "products", label: "Live Inventory List", desc: "Real-time standard stock index", Icon: Package },
+                      { id: "pos", label: "Sales / POS", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
+                      { id: "contacts", label: "Customers & CRM", desc: "Due balances & contact logs", Icon: Users },
+                      { id: "products", label: "Products", desc: "Real-time standard stock index", Icon: Package },
                     ].map((item) => {
                       const Icon = item.Icon;
                       const isActive = activeTab === item.id;
