@@ -82,33 +82,54 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
   const syncId = getPasscodeSyncId(cleanEmail, pin);
   
   try {
-    // 1. Direct frontend query using the user session token/JWT (bypasses RLS)
-    const { data: directData, error: directError } = await supabase
+    let finalData = null;
+
+    // 1. Smart direct query: retrieve ALL backups created under this email to find the latest active database row
+    const { data: directList, error: directError } = await supabase
       .from("passcode_syncs")
       .select("*")
-      .eq("id", syncId)
-      .maybeSingle();
+      .eq("linked_email", cleanEmail);
 
-    if (directError) {
-      console.warn("Direct supabase query failed, trying Express proxy backup fallback...", directError.message);
+    if (!directError && directList && directList.length > 0) {
+      // Sort by updated_at descending to grab the freshest backup
+      directList.sort((a: any, b: any) => {
+        const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return t2 - t1;
+      });
+      finalData = directList[0];
+    } else {
+      if (directError) {
+        console.warn("Direct linked_email query failed, trying ID query...", directError.message);
+      }
+      // Fallback: Query directly using the specific syncId in case linked_email isn't mapped
+      const { data: idData, error: idError } = await supabase
+        .from("passcode_syncs")
+        .select("*")
+        .eq("id", syncId)
+        .maybeSingle();
+      if (!idError && idData) {
+        finalData = idData;
+      }
     }
 
-    const finalData = (!directError && directData) 
-      ? directData 
-      : await (async () => {
-          try {
-            const response = await fetch(`/api/passcode_syncs/get?id=${encodeURIComponent(syncId)}`);
-            if (response.ok) {
-              const contentType = response.headers.get("content-type");
-              if (contentType && contentType.includes("application/json")) {
-                return await response.json();
-              }
+    // 2. Express fallback query: ask the proxy server for the latest backup by email or ID
+    if (!finalData) {
+      finalData = await (async () => {
+        try {
+          const response = await fetch(`/api/passcode_syncs/get?email=${encodeURIComponent(cleanEmail)}&id=${encodeURIComponent(syncId)}`);
+          if (response.ok) {
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              return await response.json();
             }
-          } catch (e) {
-            console.warn("Express fallback fetch failed:", e);
           }
-          return null;
-        })();
+        } catch (e) {
+          console.warn("Express fallback fetch by email/id failed:", e);
+        }
+        return null;
+      })();
+    }
 
     if (finalData) {
       restoreLocalKeys(finalData);
@@ -294,6 +315,33 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
 }) => {
   const syncId = getPasscodeSyncId(email, pin);
   const cleanEmail = email.trim().toLowerCase();
+
+  // Safeguard Protection: Prevent completely blank states from overwriting non-empty states in the cloud database
+  const incomingProductsLength = (payload.products || []).length;
+  const incomingTransactionsLength = (payload.transactions || []).length;
+  
+  if (incomingProductsLength === 0 && incomingTransactionsLength === 0) {
+    try {
+      // Fetch any existing records under this email to ensure we don't overwrite real data
+      const { data: existingRows } = await supabase
+        .from("passcode_syncs")
+        .select("products, transactions")
+        .eq("linked_email", cleanEmail);
+        
+      if (existingRows && existingRows.length > 0) {
+        const hasPopulatedData = existingRows.some(row => 
+          (row.products && row.products.length > 0) || 
+          (row.transactions && row.transactions.length > 0)
+        );
+        if (hasPopulatedData) {
+          console.log("[Sync Guard] Aborted direct blank backup payload payload upload to protect existing non-empty database.");
+          return true; // Return true to keep front-end state healthy without spamming errors
+        }
+      }
+    } catch (e) {
+      console.warn("[Sync Guard] Couldn't fetch existing backup records details:", e);
+    }
+  }
 
   const body = {
     id: syncId,

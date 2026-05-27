@@ -144,8 +144,32 @@ async function startServer() {
   });
 
   app.get("/api/passcode_syncs/get", async (req: Request, res: Response) => {
-    const { id } = req.query;
+    const { id, email } = req.query;
     try {
+      if (email) {
+        const { data, error } = await supabase
+          .from("passcode_syncs")
+          .select("*")
+          .eq("linked_email", String(email).trim().toLowerCase());
+          
+        if (error) return res.status(400).json({ error: error.message });
+        
+        if (data && data.length > 0) {
+          // Sort descending by updated_at to ensure the latest backup gets restored
+          data.sort((a: any, b: any) => {
+            const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+            const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+            return t2 - t1;
+          });
+          return res.json(data[0]);
+        }
+        return res.json(null);
+      }
+
+      if (!id) {
+        return res.status(400).json({ error: "Missing id or email parameter" });
+      }
+
       const { data, error } = await supabase
         .from("passcode_syncs")
         .select("*")
