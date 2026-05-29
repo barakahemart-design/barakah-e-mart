@@ -99,7 +99,7 @@ export const INITIAL_CONTACTS: Contact[] = [];
 export const INITIAL_EXPENSES: Expense[] = [];
 
 export const INITIAL_BUSINESS_INFO: BusinessInfo = {
-  name: "Barakah Electronics",
+  name: "Barakah E-Mart",
   address: "Shop #104, Level-2, Multiplan Computer Center, Elephant Road, Dhaka-1205",
   phoneNumber: "01700-112233",
   vatRegNo: "VAT-BG-88449921",

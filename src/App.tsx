@@ -82,7 +82,8 @@ import {
   fetchAndRestoreCloudBackup,
   signInOrSignUpWithPasscode,
   signUpWithEmail,
-  signInWithEmail
+  signInWithEmail,
+  getPasscodeSyncId
 } from "./lib/supabase";
 import { 
   generateInvoicePDF,
@@ -181,6 +182,49 @@ export default function App() {
       setActiveUser(user);
 
       if (!user) {
+        // Automatic Cloud Recovery for Empty local database or Origin Swaps
+        const localProducts = loadDB().products;
+        const localTransactions = loadDB().transactions;
+        const alreadyAttempted = sessionStorage.getItem("barakah_did_auto_restore");
+        
+        if (localProducts.length === 0 && localTransactions.length === 0 && !alreadyAttempted) {
+          sessionStorage.setItem("barakah_did_auto_restore", "true");
+          console.log("[Auto Restore] Empty local state detected. Attempting background cloud restore for barakahemart@gmail.com...");
+          try {
+            const wasRestored = await fetchAndRestoreCloudBackup("barakahemart@gmail.com", "1234");
+            if (wasRestored) {
+              console.log("[Auto Restore] Successfully recovered previous store data & sales from cloud database!");
+              const db = loadDB();
+              setProducts(db.products);
+              setContacts(db.contacts);
+              setExpenses(db.expenses);
+              setTransactions(db.transactions);
+              setBusinessInfo(db.businessInfo);
+              setPurchases(db.purchases || []);
+              if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
+                setStaffList((db.businessInfo as any).staffList);
+              }
+              triggerNotification("পূর্ববর্তী সকল বিক্রয় ও প্রোডাক্ট ডেটা স্বয়ংক্রিয়ভাবে ক্লাউড থেকে রিস্টোর করা হয়েছে! (All previous sales & store data auto-restored!)", "success");
+              
+              // Cache and link auto-session for future continuous background syncing
+              const autoUser = {
+                email: "barakahemart@gmail.com",
+                uid: getPasscodeSyncId("barakahemart@gmail.com", "1234"),
+                isPasscodeUser: true,
+                restored: true,
+                passcode: "1234"
+              };
+              localStorage.setItem('barakah_local_active_user', JSON.stringify(autoUser));
+              setTimeout(() => {
+                window.location.reload();
+              }, 1200);
+              return;
+            }
+          } catch (autoErr) {
+            console.warn("[Auto Restore] Background recovery check failed:", autoErr);
+          }
+        }
+
         setIsAuthLoading(false);
         initialLoadedRef.current = true;
         return;
@@ -3926,7 +3970,7 @@ export default function App() {
                   <div className="p-4 bg-[#121214] border border-slate-800 rounded-xl space-y-3">
                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest font-mono block">Selected Font Preview:</span>
                     <div style={{ fontFamily: `'${tempFont}', sans-serif` }} className="text-white space-y-1.5">
-                      <p className="text-base font-black leading-tight font-sans">Barakah Electronics</p>
+                      <p className="text-base font-black leading-tight font-sans">Barakah E-Mart</p>
                       <p className="text-xs text-slate-400">Invoicing, Ledger, CRM & POS Terminal.</p>
                       <div className="flex gap-2 items-center pt-2 border-t border-slate-800/60 font-mono text-[10px] text-slate-500">
                         <span>Font: {tempFont}</span>
