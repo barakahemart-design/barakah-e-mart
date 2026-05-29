@@ -173,11 +173,35 @@ export default function App() {
   const [contactSearchQuery, setContactSearchQuery] = useState("");
   const [contactTypeFilter, setContactTypeFilter] = useState<"all" | "customer" | "supplier">("all");
 
-  // Load Offline initial database state
+  const hasSyncedOnMountRef = useRef(false);
+
+  // Load Offline initial database state and sync latest from cloud safely
   useEffect(() => {
-    const unsub = subscribeToAuthChanges((user) => {
+    const unsub = subscribeToAuthChanges(async (user) => {
       setActiveUser(user);
-      setIsAuthLoading(false);
+
+      if (!user) {
+        setIsAuthLoading(false);
+        initialLoadedRef.current = true;
+        return;
+      }
+
+      // Perform cloud pull on startup if registered and not synced yet in this tab session
+      if (!user.isGuest && !hasSyncedOnMountRef.current) {
+        hasSyncedOnMountRef.current = true;
+        setIsAuthLoading(true);
+        initialLoadedRef.current = false;
+
+        try {
+          const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
+          const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode);
+          if (wasRestored) {
+            console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount.");
+          }
+        } catch (e) {
+          console.error("[Sync on Mount] Startup cloud synchronization failed:", e);
+        }
+      }
 
       // Reload database from custom localStorage storage corresponding to the session mode
       const db = loadDB();
@@ -196,7 +220,8 @@ export default function App() {
         } catch (_) {}
       }
 
-      // Unlock saving/autosync now that the initial offline hydration is complete
+      setIsAuthLoading(false);
+      // Unlock saving/autosync safely now that validation is fully robust!
       setTimeout(() => {
         initialLoadedRef.current = true;
       }, 500);
