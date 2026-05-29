@@ -149,7 +149,7 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let infoX = hasLogoDrawn ? brandX + logoWidth + 6 : brandX;
   doc.setFont(pdfFontName, "bold");
   
-  const singleLineTitle = businessInfo.name.toUpperCase();
+  const singleLineTitle = (businessInfo?.name || "BARAKAH ELECTRONICS").toUpperCase();
   const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
   let titleFontSize = 20 * sizeFactor;
   
@@ -614,7 +614,7 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.setFont(pdfFontName, "normal");
   doc.setFontSize(7 * sizeFactor);
   doc.setTextColor(148, 163, 184); // slate-400
-  doc.text(`Electronic audit record. Generated instantly by ${businessInfo.name}. All rights reserved.`, 105, 288, { align: "center" });
+  doc.text(`Electronic audit record. Generated instantly by ${businessInfo?.name || "Barakah Electronics"}. All rights reserved.`, 105, 288, { align: "center" });
 
   doc.save(`${transaction.invoiceNo}_Showroom_Invoice.pdf`);
 }
@@ -703,7 +703,7 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   let infoX = hasLogoDrawn ? brandX + logoWidth + 6 : brandX;
   doc.setFont(pdfFontName, "bold");
   
-  const singleLineTitle = businessInfo.name.toUpperCase();
+  const singleLineTitle = (businessInfo?.name || "BARAKAH ELECTRONICS").toUpperCase();
   const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
   let titleFontSize = 18 * sizeFactor;
   
@@ -960,7 +960,7 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   doc.setFont(pdfFontName, "normal");
   doc.setFontSize(7 * sizeFactor);
   doc.setTextColor(148, 163, 184);
-  doc.text(`Official Delivery Challan file. Printed by ${businessInfo.name}.`, 105, 288, { align: "center" });
+  doc.text(`Official Delivery Challan file. Printed by ${businessInfo?.name || "Barakah Electronics"}.`, 105, 288, { align: "center" });
 
   doc.save(`CHALLAN_${transaction.invoiceNo}_Showroom.pdf`);
 }

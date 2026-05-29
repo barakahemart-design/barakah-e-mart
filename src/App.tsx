@@ -706,8 +706,9 @@ export default function App() {
 
     // DYNAMIC UNIQUE INVOICE SERIAL NUMBER SYSTEM
     const startNum = businessInfo.startingInvoiceNumber || 1001;
-    const numbers = transactions.map(t => {
-      const match = t.invoiceNo.match(/\d+/);
+    const numbers = (transactions || []).map(t => {
+      if (!t || !t.invoiceNo) return 0;
+      const match = String(t.invoiceNo).match(/\d+/);
       return match ? parseInt(match[0], 10) : 0;
     });
     const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
@@ -764,8 +765,16 @@ export default function App() {
 
     // Export PDF and Delivery Challan on successful checkout
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
-    generateInvoicePDF(newTransaction, pairedContact, businessInfo);
-    generateDeliveryChallanPDF(newTransaction, pairedContact, businessInfo);
+    try {
+      generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
+        console.error("Async error in generateInvoicePDF:", err);
+      });
+      generateDeliveryChallanPDF(newTransaction, pairedContact, businessInfo).catch(err => {
+        console.error("Async error in generateDeliveryChallanPDF:", err);
+      });
+    } catch (pdfErr) {
+      console.error("Error triggering PDF creation:", pdfErr);
+    }
 
     // Clean Workspace states
     setPosCart([]);
