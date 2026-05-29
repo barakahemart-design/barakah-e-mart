@@ -112,7 +112,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   const showLogoSetting = businessInfo.showLogoInInvoice !== false;
   const companyLogoStr = businessInfo.companyLogo;
   const hasLogoImg = showLogoSetting && companyLogoStr && (companyLogoStr.startsWith("data:") || companyLogoStr.startsWith("http"));
-  const hasLogoTextSymbol = showLogoSetting && companyLogoStr && !hasLogoImg;
+  const hasLogoTextSymbol = showLogoSetting && companyLogoStr && !hasLogoImg && companyLogoStr.trim().length <= 3;
+  const hasLogoLongText = showLogoSetting && companyLogoStr && !hasLogoImg && companyLogoStr.trim().length > 3;
 
   // Render Left Column: Showroom Identity Info & Prominent Branding Logo
   let brandX = 15;
@@ -149,7 +150,20 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let infoX = hasLogoDrawn ? brandX + logoWidth + 6 : brandX;
   doc.setFont(pdfFontName, "bold");
   
-  const singleLineTitle = (businessInfo?.name || "BARAKAH E-MART").toUpperCase();
+  const normLogo = hasLogoLongText ? (companyLogoStr || "").trim().toUpperCase() : "";
+  const normBiz = (businessInfo?.name || "BARAKAH E-MART").trim().toUpperCase();
+  const isSimilar = normLogo === normBiz || (normLogo && normBiz && (normLogo.startsWith(normBiz.substring(0, 6)) || normBiz.startsWith(normLogo.substring(0, 6))));
+
+  let singleLineTitle = normBiz;
+  if (hasLogoLongText) {
+    if (isSimilar) {
+      // If titles are similar, prioritize the user-specified custom logo name directly to avoid duplication.
+      singleLineTitle = normLogo;
+    } else {
+      // If titles are completely different, place them neatly in line in a single coherent flow
+      singleLineTitle = `${normLogo} | ${normBiz}`;
+    }
+  }
   const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
   let titleFontSize = 20 * sizeFactor;
   
@@ -643,7 +657,8 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   const showLogoSetting = businessInfo.showLogoInInvoice !== false;
   const companyLogoStr = businessInfo.companyLogo;
   const hasLogoImg = showLogoSetting && companyLogoStr && (companyLogoStr.startsWith("data:") || companyLogoStr.startsWith("http"));
-  const hasLogoTextSymbol = showLogoSetting && companyLogoStr && !hasLogoImg;
+  const hasLogoTextSymbol = showLogoSetting && companyLogoStr && !hasLogoImg && companyLogoStr.trim().length <= 3;
+  const hasLogoLongText = showLogoSetting && companyLogoStr && !hasLogoImg && companyLogoStr.trim().length > 3;
 
   // Render Left Column: Showroom Identity Info & Prominent Branding Logo
   let brandX = 15;
@@ -680,7 +695,20 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   let infoX = hasLogoDrawn ? brandX + logoWidth + 6 : brandX;
   doc.setFont(pdfFontName, "bold");
   
-  const singleLineTitle = (businessInfo?.name || "BARAKAH E-MART").toUpperCase();
+  const normLogo = hasLogoLongText ? (companyLogoStr || "").trim().toUpperCase() : "";
+  const normBiz = (businessInfo?.name || "BARAKAH E-MART").trim().toUpperCase();
+  const isSimilar = normLogo === normBiz || (normLogo && normBiz && (normLogo.startsWith(normBiz.substring(0, 6)) || normBiz.startsWith(normLogo.substring(0, 6))));
+
+  let singleLineTitle = normBiz;
+  if (hasLogoLongText) {
+    if (isSimilar) {
+      // If titles are similar, prioritize the user-specified custom logo name directly to avoid duplication.
+      singleLineTitle = normLogo;
+    } else {
+      // If titles are completely different, place them neatly in line in a single coherent flow
+      singleLineTitle = `${normLogo} | ${normBiz}`;
+    }
+  }
   const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
   let titleFontSize = 18 * sizeFactor;
   
