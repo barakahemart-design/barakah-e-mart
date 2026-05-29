@@ -89,29 +89,24 @@ export function DashboardView({
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 
-  // Identify low stock products
-  const lowStockThreshold = 5;
-  const lowStockItems = products.filter(p => p.stock <= lowStockThreshold);
+  // Identify pending negative sales (products with negative stock or hasNegativeSale that are not yet marked as updated)
+  const pendingNegativeSales = products.filter(p => (p.stock < 0 || p.hasNegativeSale) && !p.negativeSaleUpdated);
 
   return (
     <div className="space-y-6 text-slate-700 font-sans" id="dashboard-view">
       
       {/* Date Filters Header Section */}
-      <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm relative overflow-hidden" id="dashboard-filter-bar">
-        <div className="space-y-1">
-          <h2 className="text-sm font-extrabold text-slate-800 tracking-wide uppercase flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-emerald-500" />
-            Financial Period Filter
-          </h2>
-          <p className="text-xs text-slate-500">Dashboard metrics and reports update in real-time according to the selected filter.</p>
-        </div>
-
-        <div className="flex flex-wrap gap-2 items-center" id="filter-presets">
+      <div className="bg-white dark:bg-[#0f121d] border border-slate-200 dark:border-slate-850 p-4 rounded-2xl flex items-center justify-center gap-4 shadow-sm relative overflow-hidden" id="dashboard-filter-bar">
+        <div className="flex flex-wrap gap-2 justify-center items-center" id="filter-presets">
           {(["all", "today", "weekly", "monthly", "yearly", "custom"] as const).map(preset => (
             <button
               key={preset}
               onClick={() => setDashboardFilter(preset)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${dashboardFilter === preset ? "bg-emerald-500 text-slate-950 border-emerald-400 shadow-md scale-102" : "bg-slate-50 text-slate-600 hover:text-slate-800 border-slate-200 hover:bg-slate-100"}`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                dashboardFilter === preset 
+                  ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-500 dark:border-blue-600 shadow-md scale-105 font-black ring-2 ring-blue-500/45" 
+                  : "bg-slate-50 dark:bg-[#121824]/60 text-slate-600 dark:text-slate-450 hover:text-slate-800 dark:hover:text-slate-205 border-slate-200 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
             >
               {preset === "all" && "All Time"}
               {preset === "today" && "Today"}
@@ -215,7 +210,7 @@ export function DashboardView({
       </section>
 
       {/* Charts Visualization Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-graphics">
+      <div className="hidden md:grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-graphics">
         
         {/* Bar/Area Trend Chart (8 Cols) */}
         <div className="col-span-1 lg:col-span-8 bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm" id="sales-trends-panel">
@@ -311,76 +306,67 @@ export function DashboardView({
       </div>
 
       {/* Alarms and Operations Overview Block */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" id="critical-alarms-panel">
+      <div className="hidden md:block space-y-6" id="critical-alarms-panel">
         
-        {/* Low Stock Watchlist */}
-        <div className="col-span-1 bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm">
-          <div className="flex items-center justify-between text-rose-500">
+        {/* Pending Negative Stock Overdraft Alerts */}
+        <div className="bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm" id="negative-stock-dashboard-alert">
+          <div className="flex items-center justify-between text-rose-600 flex-wrap gap-2">
             <div className="space-y-0.5">
-              <h3 className="text-xs font-black tracking-wider uppercase text-slate-700">Low Stock Alerts</h3>
-              <p className="text-[10px] text-slate-450">Products with stock levels below threshold ({lowStockThreshold} units):</p>
+              <h3 className="text-xs font-black tracking-wider uppercase text-slate-800 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse inline-block" />
+                Negative Stock Overdraft Alerts
+              </h3>
+              <p className="text-[10px] text-slate-500">
+                Pending negative inventory sales awaiting administrative price adjustments and stock reconciliation.
+              </p>
             </div>
-            <span className="text-xs font-bold text-rose-605 bg-rose-50 px-2.5 py-1 rounded-xl font-mono">{lowStockItems.length} ITEMS</span>
+            <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-xl font-mono">
+              {pendingNegativeSales.length} DEVIATING ITEMS
+            </span>
           </div>
 
-          <div className="space-y-2 max-h-56 overflow-y-auto" id="low-stock-items-scroll">
-            {lowStockItems.length === 0 ? (
-              <div className="text-emerald-600 bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center text-xs">
-                🎉 Excellent! All products are stocked safely above thresholds.
+          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1" id="negative-stock-items-scroll">
+            {pendingNegativeSales.length === 0 ? (
+              <div className="text-emerald-700 bg-emerald-50/50 border border-emerald-100 p-5 rounded-2xl text-center text-xs font-medium flex items-center justify-center gap-2">
+                <span>🎉 Excellent! No pending negative stock items. All sales balances are reconciled.</span>
               </div>
             ) : (
-              lowStockItems.map((prod) => (
-                <div key={prod.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-800 font-sans">{prod.name}</p>
-                    <span className="text-[10px] text-slate-500 font-mono">Category: {prod.category} | SKU: {prod.sku}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {pendingNegativeSales.map((prod) => (
+                  <div key={prod.id} className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 flex items-center justify-between hover:bg-slate-100/50 transition-colors">
+                    <div className="space-y-1 flex-1 min-w-0 pr-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-rose-100 text-rose-700 uppercase leading-none font-sans">
+                          Pending
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-mono truncate">
+                        Category: {prod.category} | SKU: {prod.sku}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className="inline-block px-2.5 py-1 text-[10px] font-bold font-mono bg-rose-50 text-rose-600 border border-rose-100 rounded-lg">
+                          {prod.stock} {prod.unit}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate("negative-sales")}
+                        className="p-1.5 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 rounded-lg border border-transparent hover:border-emerald-200 transition-all cursor-pointer"
+                        title="Reconcile Product Price & Buy Rates"
+                      >
+                        <ArrowUpRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="inline-block px-2.5 py-1 text-[10px] font-bold font-mono bg-rose-50 text-rose-650 border border-rose-100 rounded-lg">
-                      {prod.stock} {prod.unit}
-                    </span>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
-
-        {/* Business AI Diagnostic Tips */}
-        <div className="bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm">
-          <div className="flex items-center justify-between text-teal-600">
-            <div className="space-y-0.5">
-              <h3 className="text-xs font-black tracking-wider uppercase text-slate-700">Quick Actions</h3>
-              <p className="text-[10px] text-slate-450">Accelerate your workflow with these quick shortcuts:</p>
-            </div>
-            <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
-          </div>
-
-          <div className="grid grid-cols-1 gap-2.5">
-            <button
-              onClick={() => onNavigate("pos")}
-              className="w-full text-left bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-100 p-3.5 rounded-xl flex items-center justify-between group transition-all cursor-pointer"
-            >
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-slate-800">New Sale POS</p>
-                <p className="text-[10px] text-slate-500 font-sans">Instantly open terminal registry, add items & print receipt.</p>
-              </div>
-              <PlusCircle className="w-4 h-4 text-emerald-600 shrink-0 group-hover:translate-x-1 transition-transform" />
-            </button>
-
-            <button
-              onClick={() => onNavigate("purchases")}
-              className="w-full text-left bg-sky-50 hover:bg-sky-100/70 border border-sky-100 p-3.5 rounded-xl flex items-center justify-between group transition-all cursor-pointer"
-            >
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-slate-800">Add Purchase Record</p>
-                <p className="text-[10px] text-slate-500 font-sans">Log incoming stock sheets and update inventory cost prices.</p>
-              </div>
-              <PlusCircle className="w-4 h-4 text-sky-600 shrink-0 group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
-        </div>
-
+        
       </div>
 
     </div>

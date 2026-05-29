@@ -37,18 +37,18 @@ html {
 
 /* Dark mode mappings (when .light is NOT on the html element) */
 html:not(.light) {
-  --color-workspace-bg: #070b13;
-  --color-header-bg: rgba(10, 16, 31, 0.9);
-  --color-layout-bg: #121214;
-  --color-card-bg: #1e1e24;
-  --color-card-nested-bg: #212127;
-  --color-nested-inner-bg: #131117;
-  --color-input-bg: #050912;
-  --color-modal-bg: #0d1527;
-  --color-text-main: #ffffff;
-  --color-text-muted: #a0a0a5;
-  --color-text-dimmed: #64748b;
-  --color-border-main: #1f2937;
+  --color-workspace-bg: #040508;
+  --color-header-bg: rgba(9, 11, 18, 0.96);
+  --color-layout-bg: #06080e;
+  --color-card-bg: #0f121d;
+  --color-card-nested-bg: #131826;
+  --color-nested-inner-bg: #080a11;
+  --color-input-bg: #080a11;
+  --color-modal-bg: #0c0f18;
+  --color-text-main: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-text-dimmed: #475569;
+  --color-border-main: #1e293b;
 }
 
 /* Adaptive styles for originally light elements (like Dashboard) in Dark mode */
@@ -78,14 +78,14 @@ html:not(.light) .bg-emerald-50,
 html:not(.light) .bg-sky-50,
 html:not(.light) .bg-rose-50,
 html:not(.light) .bg-amber-50 {
-  background-color: rgba(16, 185, 129, 0.08) !important;
+  background-color: rgba(37, 99, 235, 0.08) !important;
 }
 html:not(.light) .text-emerald-650,
 html:not(.light) .text-emerald-600 {
-  color: #10b981 !important;
+  color: #3b82f6 !important;
 }
 html:not(.light) .text-sky-600 {
-  color: #0ea5e9 !important;
+  color: #3b82f6 !important;
 }
 html:not(.light) .text-rose-600,
 html:not(.light) .text-rose-650 {
@@ -100,12 +100,12 @@ html.light {
   --color-card-bg: #ffffff;
   --color-card-nested-bg: #f8fafc;
   --color-nested-inner-bg: #ffffff;
-  --color-input-bg: #f8fafc;
+  --color-input-bg: #f1f5f9;
   --color-modal-bg: #ffffff;
   --color-text-main: #0f172a;
   --color-text-muted: #334155;
   --color-text-dimmed: #64748b;
-  --color-border-main: #cbd5e1;
+  --color-border-main: #e2e8f0;
 }
 
 /* Layout container overrides in Light mode */
@@ -115,18 +115,31 @@ html.light body {
 html.light .bg-\[\#070b13\] {
   background-color: var(--color-workspace-bg) !important;
 }
-html.light .bg-\[\#0a101f\]\/90 {
-  background-color: var(--color-header-bg) !important;
-  backdrop-filter: blur(8px);
-  border-bottom-color: var(--color-border-main) !important;
+html.light .bg-\[\#0a101f\]\/80,
+html.light .bg-\[\#0a101f\]\/90,
+html.light .bg-\[\#0a101f\],
+html.light .bg-\[\#070b16\],
+html.light .bg-\[\#0c0c0e\],
+html.light .bg-\[\#0c0c0e\]\/80,
+html.light .bg-\[\#050912\],
+html.light .bg-\[\#050912\]\/80,
+html.light .bg-\[\#0c0c0e\]\/85,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/25,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950 {
+  background-color: var(--color-card-nested-bg) !important;
+  border-color: var(--color-border-main) !important;
 }
 html.light .bg-\[\#121214\] {
   background-color: var(--color-layout-bg) !important;
 }
+html.light .bg-\[\#1e1e24\],
 html.light .bg-\[\#1E1E24\] {
   background-color: var(--color-card-bg) !important;
   border-color: var(--color-border-main) !important;
 }
+html.light .bg-\[\#1e1e24\]\/95,
 html.light .bg-\[\#1E1E24\]\/95 {
   background-color: var(--color-card-bg) !important;
   border-color: var(--color-border-main) !important;
@@ -140,14 +153,6 @@ html.light .bg-\[\#212127\] {
 html.light .bg-\[\#131117\] {
   background-color: var(--color-nested-inner-bg) !important;
 }
-html.light .bg-\[\#050912\] {
-  background-color: var(--color-input-bg) !important;
-  border-color: var(--color-border-main) !important;
-}
-html.light .bg-\[\#050912\]\/80 {
-  background-color: var(--color-input-bg) !important;
-  border-color: var(--color-border-main) !important;
-}
 html.light .bg-\[\#0d1527\]\/90 {
   background-color: var(--color-modal-bg) !important;
   border-color: var(--color-border-main) !important;
@@ -159,6 +164,20 @@ html.light .bg-\[\#0d1527\]\/95 {
 html.light .bg-\[\#121214\]\/60 {
   background-color: var(--color-input-bg) !important;
   border-color: var(--color-border-main) !important;
+}
+
+/* Adaptive overrides for row alerts in light mode */
+html.light .bg-emerald-950\/10 {
+  background-color: #f0fdf4 !important; /* bg-emerald-50 */
+}
+html.light .bg-rose-950\/10 {
+  background-color: #fff1f2 !important; /* bg-rose-50 */
+}
+html.light .bg-emerald-950\/20 {
+  background-color: #dcfce7 !important; /* bg-emerald-100 */
+}
+html.light .bg-rose-950\/15 {
+  background-color: #ffe4e6 !important; /* bg-rose-100 */
 }
 
 /* Content specific styles in Light mode */
@@ -198,7 +217,402 @@ html.light .border-\[\#2b2b35\] {
 html.light .bg-slate-950\/80 {
   background-color: var(--color-card-nested-bg) !important;
 }
-html.light .text-[#00E676] {
-  color: #10b981 !important;
+html.light .text-\[\#00E676\] {
+  color: #1e40af !important;
+}
+html.light .text-\[\#10B981\] {
+  color: #1e40af !important;
+}
+
+/* 
+  PRO-ACTIVE FIX: Fix all transparent/gradient text issues in Light Mode.
+  By unsetting bg-clip-text on light mode cards & containers, we transform unreadable white-to-blue text 
+  gradients into crisp, beautifully readable, highest contrast solid Slate & Cobalt Navy typography.
+*/
+html.light .bg-clip-text {
+  background-clip: unset !important;
+  -webkit-background-clip: unset !important;
+  color: var(--color-text-main) !important;
+  background-image: none !important;
+}
+html.light span.text-transparent,
+html.light h1.text-transparent,
+html.light h2.text-transparent,
+html.light h3.text-transparent {
+  color: var(--color-text-main) !important;
+}
+
+/* Ensure buttons with solid colorful high-contrast backgrounds have clean, crisp, accessible white text in Light Mode */
+html.light button[class*="bg-[#00E676]"],
+html.light button.bg-emerald-500,
+html.light button.bg-emerald-600,
+html.light div[class*="bg-[#00E676]"],
+html.light div.bg-emerald-500,
+html.light .bg-emerald-600,
+html.light .bg-[#2563EB],
+html.light [class*="bg-emerald-600"],
+html.light [class*="bg-emerald-500"] {
+  color: #ffffff !important;
+}
+html.light button[class*="bg-[#00E676]"] *,
+html.light button.bg-emerald-500 *,
+html.light button.bg-emerald-600 *,
+html.light div[class*="bg-[#00E676]"] *,
+html.light .bg-emerald-600 *,
+html.light .bg-[#2563EB] * {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+/* 
+  ======================================================================
+  PREMIUM COBALT & DEEP IRIS SAAS THEME REMAPPING (CLEAN & MODERN)
+  ======================================================================
+  Transforms original green [#00E676] selectors and ALL emerald-based
+  tailwind tokens into an ultra-polished, extremely clean, premium
+  Royal Blue & Iris Violet SaaS design. Resolves all contrast, gradient,
+  element misalignment, or color inconsistency issues.
+*/
+
+/* --- 1. DARK MODE ACCENTS (Minimalist, elegant high-contrast Indigo & Royal Blue) --- */
+html:not(.light) [class*="text-[#00E676]"],
+html:not(.light) [class*="text-emerald-450"],
+html:not(.light) [class*="text-emerald-400"] {
+  color: #60a5fa !important;
+}
+html:not(.light) [class*="text-emerald-300"] {
+  color: #93c5fd !important;
+}
+html:not(.light) [class*="text-emerald-500"] {
+  color: #60a5fa !important;
+}
+html:not(.light) [class*="text-emerald-600"] {
+  color: #3b82f6 !important;
+}
+html:not(.light) [class*="text-[#00E676]/70"] {
+  color: rgba(96, 165, 250, 0.72) !important;
+}
+html:not(.light) [class*="text-[#00E676]/90"] {
+  color: rgba(96, 165, 250, 0.9) !important;
+}
+
+html:not(.light) [class*="bg-[#00E676]"]:not([class*="/"]):not([class*="-50"]) {
+  background-color: #1a56db !important; /* Premium Dark Navy/Royal Blue */
+  background-image: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(30, 64, 175, 0.25) !important;
+}
+html:not(.light) [class*="bg-[#00E676]"]:not([class*="/"]):not([class*="-50"]) * {
+  color: #ffffff !important;
+}
+html:not(.light) [class*="bg-[#00E676]/10"],
+html:not(.light) [class*="bg-emerald-500/10"],
+html:not(.light) [class*="bg-emerald-500/15"] {
+  background-color: rgba(30, 64, 175, 0.08) !important;
+  border-color: rgba(30, 64, 175, 0.18) !important;
+}
+html:not(.light) [class*="bg-[#00E676]/20"],
+html:not(.light) [class*="bg-emerald-500/20"] {
+  background-color: rgba(30, 64, 175, 0.16) !important;
+  border-color: rgba(30, 64, 175, 0.25) !important;
+}
+html:not(.light) [class*="bg-[#00E676]/25"],
+html:not(.light) [class*="bg-emerald-500/25"],
+html:not(.light) [class*="bg-emerald-500/30"],
+html:not(.light) [class*="selection:bg-emerald-500/30"] {
+  background-color: rgba(30, 64, 175, 0.22) !important;
+}
+
+html:not(.light) [class*="bg-emerald-"]:not([class*="/"]):not([class*="-55"]):not([class*="-50"]):not([class*="-950"]) {
+  background-color: #1e40af !important; /* Rich Dark Royal Blue */
+  background-image: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  color: #ffffff !important;
+}
+html:not(.light) [class*="bg-emerald-950/10"] {
+  background-color: rgba(30, 64, 175, 0.05) !important;
+}
+html:not(.light) [class*="bg-emerald-950/20"] {
+  background-color: rgba(30, 64, 175, 0.08) !important;
+}
+
+html:not(.light) [class*="border-[#00E676]"],
+html:not(.light) [class*="border-emerald-"] {
+  border-color: rgba(30, 64, 175, 0.4) !important;
+}
+html:not(.light) [class*="border-emerald-500"] {
+  border-color: #1e40af !important;
+}
+html:not(.light) [class*="border-[#00E676]/10"],
+html:not(.light) [class*="border-emerald-500/10"] {
+  border-color: rgba(30, 64, 175, 0.15) !important;
+}
+html:not(.light) [class*="border-[#00E676]/20"],
+html:not(.light) [class*="border-emerald-500/20"] {
+  border-color: rgba(30, 64, 175, 0.24) !important;
+}
+html:not(.light) [class*="border-[#00E676]/25"],
+html:not(.light) [class*="border-emerald-500/25"] {
+  border-color: rgba(30, 64, 175, 0.28) !important;
+}
+html:not(.light) [class*="border-[#00E676]/30"],
+html:not(.light) [class*="border-emerald-500/30"] {
+  border-color: rgba(30, 64, 175, 0.35) !important;
+}
+html:not(.light) [class*="border-[#00E676]/40"],
+html:not(.light) [class*="border-emerald-500/40"] {
+  border-color: rgba(30, 64, 175, 0.45) !important;
+}
+
+/* Beautiful dynamic modern gradient button mappings */
+html:not(.light) [class*="from-[#00E676]"],
+html:not(.light) [class*="from-emerald-"] {
+  --tw-gradient-from: #1e40af !important;
+  --tw-gradient-to: #1e3a8a !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+html:not(.light) [class*="to-[#00B0FF]"],
+html:not(.light) [class*="to-[#00D0FF]"],
+html:not(.light) [class*="to-emerald-"] {
+  --tw-gradient-to: #1e3a8a !important;
+}
+html:not(.light) [class*="hover:bg-[#00D065]"]:hover,
+html:not(.light) [class*="hover:bg-emerald-"]:hover {
+  background-color: #1d4ed8 !important;
+  background-image: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%) !important;
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3) !important;
+}
+html:not(.light) [class*="hover:from-[#00FF85]"]:hover {
+  --tw-gradient-from: #2563eb !important;
+}
+
+html:not(.light) .text-emerald-500,
+html:not(.light) .text-emerald-600 {
+  color: #60a5fa !important;
+}
+html:not(.light) .bg-emerald-505,
+html:not(.light) .bg-emerald-500,
+html:not(.light) .bg-emerald-600 {
+  background-color: #1e40af !important;
+  background-image: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+}
+html:not(.light) .bg-emerald-50 {
+  background-color: rgba(30, 64, 175, 0.08) !important;
+}
+html:not(.light) .border-emerald-500,
+html:not(.light) .border-emerald-600 {
+  border-color: #1e40af !important;
+}
+html:not(.light) [class*="focus:border-emerald-500"],
+html:not(.light) [class*="focus-within:border-emerald-500"] {
+  border-color: #1e40af !important;
+}
+html:not(.light) [class*="peer-checked:bg-emerald-500"] {
+  --tw-bg-opacity: 1 !important;
+  background-color: #1e40af !important;
+}
+
+/* Force clean crisp white text & icons inside solid dark blue elements */
+html:not(.light) [class*="bg-[#00E676]"]:not([class*="/"]) *,
+html:not(.light) [class*="bg-emerald-"]:not([class*="/"]):not([class*="-50"]):not([class*="-950"]) *,
+html:not(.light) .bg-emerald-500 *,
+html:not(.light) .bg-emerald-600 * {
+  color: #ffffff !important;
+}
+html:not(.light) [class*="bg-[#00E676]"]:not([class*="/"]) [class*="text-"],
+html:not(.light) [class*="bg-emerald-"]:not([class*="/"]):not([class*="-50"]):not([class*="-950"]) [class*="text-"],
+html:not(.light) .bg-emerald-500 [class*="text-"],
+html:not(.light) .bg-emerald-600 [class*="text-"] {
+  color: #ffffff !important;
+}
+
+
+/* --- 2. LIGHT MODE ACCENTS (Crisp, premium high-contrast Cobalt Navy) --- */
+html.light [class*="text-[#00E676]"],
+html.light [class*="text-emerald-450"],
+html.light [class*="text-emerald-400"] {
+  color: #2563eb !important; /* Premium Blue link */
+}
+html.light [class*="text-emerald-300"] {
+  color: #1d4ed8 !important;
+}
+html.light [class*="text-emerald-550"],
+html.light [class*="text-emerald-500"] {
+  color: #2563eb !important;
+}
+html.light [class*="text-emerald-600"] {
+  color: #1e40af !important;
+}
+html.light [class*="text-[#00E676]/70"] {
+  color: rgba(37, 99, 235, 0.75) !important;
+}
+html.light [class*="text-[#00E676]/90"] {
+  color: rgba(37, 99, 235, 0.9) !important;
+}
+
+html.light [class*="bg-[#00E676]"]:not([class*="/"]):not([class*="-50"]) {
+  background-color: #1a56db !important;
+  background-image: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  color: #ffffff !important;
+}
+html.light [class*="bg-[#00E676]/10"],
+html.light [class*="bg-emerald-500/10"],
+html.light [class*="bg-emerald-500/15"] {
+  background-color: rgba(30, 64, 175, 0.05) !important;
+  border-color: rgba(30, 64, 175, 0.12) !important;
+}
+html.light [class*="bg-[#00E676]/20"],
+html.light [class*="bg-emerald-500/20"] {
+  background-color: rgba(30, 64, 175, 0.1) !important;
+  border-color: rgba(30, 64, 175, 0.18) !important;
+}
+html.light [class*="bg-[#00E676]/25"],
+html.light [class*="bg-emerald-500/25"],
+html.light [class*="bg-emerald-500/30"] {
+  background-color: rgba(30, 64, 175, 0.14) !important;
+}
+
+html.light [class*="bg-emerald-"]:not([class*="/"]):not([class*="-55"]):not([class*="-50"]):not([class*="-950"]) {
+  background-color: #1e40af !important;
+  background-image: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  color: #ffffff !important;
+}
+html.light [class*="bg-emerald-950/10"] {
+  background-color: rgba(30, 64, 175, 0.04) !important;
+}
+html.light [class*="bg-emerald-950/20"] {
+  background-color: rgba(30, 64, 175, 0.08) !important;
+}
+
+html.light [class*="border-[#00E676]"],
+html.light [class*="border-emerald-"] {
+  border-color: rgba(30, 64, 175, 0.25) !important;
+}
+html.light [class*="border-emerald-500"] {
+  border-color: #1e40af !important;
+}
+html.light [class*="border-[#00E676]/10"],
+html.light [class*="border-emerald-500/10"] {
+  border-color: rgba(30, 64, 175, 0.1) !important;
+}
+html.light [class*="border-[#00E676]/20"],
+html.light [class*="border-emerald-500/20"] {
+  border-color: rgba(30, 64, 175, 0.15) !important;
+}
+html.light [class*="border-[#00E676]/25"],
+html.light [class*="border-emerald-500/25"] {
+  border-color: rgba(30, 64, 175, 0.18) !important;
+}
+html.light [class*="border-[#00E676]/30"],
+html.light [class*="border-emerald-500/30"] {
+  border-color: rgba(30, 64, 175, 0.22) !important;
+}
+html.light [class*="border-[#00E676]/40"],
+html.light [class*="border-emerald-500/40"] {
+  border-color: rgba(30, 64, 175, 0.3) !important;
+}
+
+html.light [class*="from-[#00E676]"],
+html.light [class*="from-emerald-"] {
+  --tw-gradient-from: #1e40af !important;
+  --tw-gradient-to: #1e3a8a !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+html.light [class*="to-[#00E676]"],
+html.light [class*="to-emerald-"] {
+  --tw-gradient-to: #1e3a8a !important;
+}
+html.light [class*="hover:bg-[#00D065]"]:hover,
+html.light [class*="hover:bg-emerald-"]:hover {
+  background-color: #1d4ed8 !important;
+  background-image: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%) !important;
+}
+html.light [class*="hover:from-[#00FF85]"]:hover {
+  --tw-gradient-from: #2563eb !important;
+}
+
+html.light .text-emerald-500,
+html.light .text-emerald-600 {
+  color: #1e40af !important;
+}
+html.light .bg-emerald-500,
+html.light .bg-emerald-600 {
+  background-color: #1e40af !important;
+  background-image: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+}
+html.light .bg-emerald-50 {
+  background-color: rgba(30, 64, 175, 0.05) !important;
+}
+html.light .border-emerald-500,
+html.light .border-emerald-600 {
+  border-color: #1e40af !important;
+}
+html.light [class*="focus:border-emerald-505"],
+html.light [class*="focus:border-emerald-500"],
+html.light [class*="focus-within:border-emerald-500"] {
+  border-color: #1e40af !important;
+}
+html.light [class*="peer-checked:bg-emerald-500"] {
+  background-color: #1e40af !important;
+}
+
+/* Force clean crisp white text & icons inside solid light mode blue elements */
+html.light [class*="bg-[#00E676]"]:not([class*="/"]) *,
+html.light [class*="bg-emerald-"]:not([class*="/"]):not([class*="-50"]):not([class*="-950"]) *,
+html.light .bg-emerald-500 *,
+html.light .bg-emerald-600 * {
+  color: #ffffff !important;
+}
+html.light [class*="bg-[#00E676]"]:not([class*="/"]) [class*="text-"],
+html.light [class*="bg-emerald-"]:not([class*="/"]):not([class*="-50"]):not([class*="-950"]) [class*="text-"],
+html.light .bg-emerald-500 [class*="text-"],
+html.light .bg-emerald-600 [class*="text-"] {
+  color: #ffffff !important;
+}
+
+/* Override any dark text colors like text-slate-950, text-gray-900, etc. directly on the elements themselves */
+[class*="bg-[#00E676]"],
+[class*="bg-emerald-"]:not([class*="/"]):not([class*="-50"]):not([class*="-950"]),
+[class*="from-[#00E676]"],
+[class*="from-emerald-"]:not([class*="/"]):not([class*="-50"]):not([class*="-950"]),
+.bg-emerald-505,
+.bg-emerald-500,
+.bg-emerald-600 {
+  color: #ffffff !important;
+}
+
+/* Base interactive transitions */
+button, a {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleUpCard {
+  0% { transform: scale(0.85); opacity: 0; }
+  70% { transform: scale(1.05); opacity: 0.95; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes shrinkTimerBar {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+@keyframes successPulseEffect {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  100% { box-shadow: 0 0 0 16px rgba(16, 185, 129, 0); }
+}
+
+.animate-fade-in {
+  animation: fadeInOverlay 0.18s ease-out forwards;
+}
+.animate-scale-up-bounce {
+  animation: scaleUpCard 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.animate-shrink-bar {
+  animation: shrinkTimerBar 1600ms linear forwards;
+}
+.animate-ping-once {
+  animation: successPulseEffect 1.2s ease-out infinite;
 }
 

@@ -58,6 +58,7 @@ import { ReportsView } from "./components/ReportsView";
 import { ProductsView } from "./components/ProductsView";
 import { NegativeSalesView } from "./components/NegativeSalesView";
 import { PurchasesView } from "./components/PurchasesView";
+import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { 
   Product, 
   Expense, 
@@ -113,8 +114,22 @@ export default function App() {
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
-    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "ledger" | "insights" | "expenses" | "settings"
+    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "ledger" | "insights" | "expenses" | "reports" | "staff" | "settings"
   >("dashboard");
+
+  // Staff members state
+  const [staffList, setStaffList] = useState<Staff[]>(() => {
+    try {
+      const db = loadDB();
+      if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
+        return (db.businessInfo as any).staffList;
+      }
+      const savedStr = localStorage.getItem("barakah_staff_list");
+      return savedStr ? JSON.parse(savedStr) : [];
+    } catch (_) {
+      return [];
+    }
+  });
 
   // Notifications State
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -172,6 +187,14 @@ export default function App() {
       setTransactions(db.transactions);
       setBusinessInfo(db.businessInfo);
       setPurchases(db.purchases || []);
+      if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
+        setStaffList((db.businessInfo as any).staffList);
+      } else {
+        try {
+          const lstr = localStorage.getItem("barakah_staff_list");
+          if (lstr) setStaffList(JSON.parse(lstr));
+        } catch (_) {}
+      }
 
       // Unlock saving/autosync now that the initial offline hydration is complete
       setTimeout(() => {
@@ -186,14 +209,22 @@ export default function App() {
     if (!initialLoadedRef.current) return;
 
     if (activeUser) {
+      const compiledBusinessInfo = {
+        ...businessInfo,
+        staffList
+      };
+
       saveDB({
         products,
         contacts,
         expenses,
         transactions,
-        businessInfo,
+        businessInfo: compiledBusinessInfo,
         purchases
       });
+
+      // Also persist separately in localStorage just in case
+      localStorage.setItem("barakah_staff_list", JSON.stringify(staffList));
 
       // Auto cloud backup with 1.5 seconds debounce for all authenticated users so no data is ever lost
       if (activeUser && !activeUser.isGuest) {
@@ -205,7 +236,7 @@ export default function App() {
               contacts,
               expenses,
               transactions,
-              businessInfo,
+              businessInfo: compiledBusinessInfo,
               purchases
             });
           } catch (e) {
@@ -215,11 +246,24 @@ export default function App() {
         return () => clearTimeout(delayDebounceFn);
       }
     }
-  }, [products, contacts, expenses, transactions, businessInfo, purchases, activeUser]);
+  }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser]);
+
+  // Synchronize staff list on cloud restore or config resets
+  useEffect(() => {
+    if (businessInfo && (businessInfo as any).staffList && Array.isArray((businessInfo as any).staffList)) {
+      setStaffList((businessInfo as any).staffList);
+    }
+  }, [businessInfo]);
+
+  const [successTriggerMsg, setSuccessTriggerMsg] = useState<string | null>(null);
 
   // Show customized temporal workspace notification
   const triggerNotification = (message: string, type: "success" | "error" | "info" = "success") => {
     setNotification({ message, type });
+    if (type === "success") {
+      setSuccessTriggerMsg(message);
+      setTimeout(() => setSuccessTriggerMsg(null), 1600);
+    }
     setTimeout(() => setNotification(null), 4000);
   };
 
@@ -676,7 +720,16 @@ export default function App() {
     const updatedProducts = products.map((p) => {
       const soldItem = posCart.find(cartItem => cartItem.product.id === p.id);
       if (soldItem) {
-        return { ...p, stock: p.stock - soldItem.quantity };
+        const nextStock = p.stock - soldItem.quantity;
+        if (nextStock < 0) {
+          return {
+            ...p,
+            stock: nextStock,
+            hasNegativeSale: true,
+            negativeSaleUpdated: false
+          };
+        }
+        return { ...p, stock: nextStock };
       }
       return p;
     });
@@ -930,12 +983,28 @@ export default function App() {
           ...p,
           buyPrice,
           sellPrice,
-          stock: p.stock + (addStock || 0)
+          stock: p.stock + (addStock || 0),
+          hasNegativeSale: true,
+          negativeSaleUpdated: true
         };
       }
       return p;
     }));
     triggerNotification("Product stock and price configurations successfully updated.");
+  };
+
+  const handleMarkNegativeSaleUpdated = (id: string, updated: boolean) => {
+    setProducts(prev => prev.map(p => {
+      if (p.id === id) {
+        return {
+          ...p,
+          hasNegativeSale: true,
+          negativeSaleUpdated: updated
+        };
+      }
+      return p;
+    }));
+    triggerNotification(updated ? "Product negative stock marked as green / updated! 🟢" : "Product negative stock reset to red.", "success");
   };
 
   const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number) => {
@@ -1278,9 +1347,33 @@ export default function App() {
   // -----------------------------------------------------------------
   // DATE RANGE FILTER ENGINE
   // -----------------------------------------------------------------
-  const [dashboardFilter, setDashboardFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">("all");
-  const [customStart, setCustomStart] = useState<string>("2026-05-01");
-  const [customEnd, setCustomEnd] = useState<string>("2026-05-31");
+  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+    const saved = localStorage.getItem("barakah_dashboard_filter");
+    if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+      return saved as any;
+    }
+    return "all";
+  });
+  const setDashboardFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+    _setDashboardFilter(val);
+    localStorage.setItem("barakah_dashboard_filter", val);
+  };
+
+  const [customStart, _setCustomStart] = useState<string>(() => {
+    return localStorage.getItem("barakah_custom_start") || "2026-05-01";
+  });
+  const setCustomStart = (val: string) => {
+    _setCustomStart(val);
+    localStorage.setItem("barakah_custom_start", val);
+  };
+
+  const [customEnd, _setCustomEnd] = useState<string>(() => {
+    return localStorage.getItem("barakah_custom_end") || "2026-05-31";
+  });
+  const setCustomEnd = (val: string) => {
+    _setCustomEnd(val);
+    localStorage.setItem("barakah_custom_end", val);
+  };
 
   const checkDateInFilter = (dateStr: string) => {
     try {
@@ -1568,6 +1661,15 @@ export default function App() {
                   Reports Dashboard
                 </button>
 
+                <button
+                  id="tab-staff-btn"
+                  onClick={() => setActiveTab("staff")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'staff' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  Staff Management
+                </button>
+
                 <p className="text-[10px] uppercase font-mono tracking-widest text-[#A0A0A5] pl-1.5 mt-4 mb-2 font-bold">Configs</p>
 
                 <button
@@ -1644,7 +1746,7 @@ export default function App() {
                 setActiveTab("pos");
                 triggerNotification("Switched to Sales Panel", "info");
               }}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 cursor-pointer transition-all"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-750 dark:bg-blue-700 hover:bg-blue-800 dark:hover:bg-blue-605 border border-blue-600 dark:border-blue-600 cursor-pointer transition-all shadow-sm"
             >
               Go to Sales Terminal &rarr;
             </button>
@@ -1677,7 +1779,7 @@ export default function App() {
       <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col md:h-screen md:overflow-hidden pb-20 md:pb-0" id="viewport-workspace">
         
         {/* TOP STATUS BAR */}
-        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex flex-row items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
+        <header className={`bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex-row items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn ${activeTab === 'dashboard' ? 'hidden md:flex' : 'flex'}`} id="top-navbar">
           
           <div id="active-tab-title-display" className="min-w-0">
             <div className="flex items-center gap-1.5 md:gap-2">
@@ -1782,6 +1884,31 @@ export default function App() {
 
         {/* -------------------- MAIN SCROLLABLE VIEWPORT CONTENT -------------------- */}
         <div className="flex-1 p-6 overflow-y-auto space-y-6" id="scrollable-content-area">
+
+          {/* DYNAMIC SUCCESS POPUP ANIMATION OVERLAY */}
+          {successTriggerMsg && (
+            <div 
+              className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[99999] flex items-center justify-center animate-fade-in"
+              id="success-pulse-overlay"
+            >
+              <div className="bg-slate-900 border border-emerald-500/30 rounded-3xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl shadow-emerald-500/15 transform animate-scale-up-bounce" id="success-pulse-card">
+                <div className="w-16 h-16 bg-emerald-500/10 border-2 border-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 relative animate-ping-once">
+                  <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-base font-extrabold text-white tracking-tight mb-1">
+                  Saved Successfully!
+                </h3>
+                <p className="text-[11px] text-slate-300 bg-slate-950/50 py-2 px-3.5 rounded-xl font-medium max-w-xs mx-auto border border-slate-800/80">
+                  {successTriggerMsg}
+                </p>
+                <div className="w-full bg-slate-950 h-1 rounded-full overflow-hidden mt-5">
+                  <div className="bg-emerald-500 h-full w-full rounded-full animate-shrink-bar" style={{ animationDuration: "1600ms" }} />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* DYNAMIC GENERAL TEMPORAL NOTIFICATION */}
           {notification && (
@@ -2294,6 +2421,7 @@ export default function App() {
             <NegativeSalesView
               products={products}
               onUpdatePricing={handleUpdatePricing}
+              onMarkUpdated={handleMarkNegativeSaleUpdated}
               currencySymbol={businessInfo.currencySymbol}
               transactions={transactions || []}
               contacts={contacts || []}
@@ -3569,6 +3697,35 @@ export default function App() {
               </div>
             );
           })()}
+
+          {/* -----------------------------------------------------------------
+              VIEW: STAFF & STORE PAYROLL MANAGEMENT
+              ----------------------------------------------------------------- */}
+          {activeTab === "staff" && (
+            <div className="animate-fadeIn max-w-7xl mx-auto space-y-6" id="view-staff-container">
+              <StaffManagementView
+                staffList={staffList}
+                onAddStaff={(newStaff) => {
+                  const item: Staff = {
+                    ...newStaff,
+                    id: "staff_" + Date.now(),
+                    salaryPayments: []
+                  };
+                  setStaffList((prev) => [...prev, item]);
+                  triggerNotification("Enlisted new staff member successfully", "success");
+                }}
+                onUpdateStaff={(updated) => {
+                  setStaffList((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+                }}
+                onDeleteStaff={(id, name) => {
+                  setStaffList((prev) => prev.filter((item) => item.id !== id));
+                }}
+                currencySymbol={businessInfo.currencySymbol || "৳"}
+                businessInfo={businessInfo}
+                triggerNotification={triggerNotification}
+              />
+            </div>
+          )}
 
           {/* -----------------------------------------------------------------
               VIEW 7: GENERAL BUSINESS SETUP & BILLING RULES
@@ -4892,6 +5049,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2">
                         {[
                           { id: "insights", label: "AI Insights", desc: "Expert tips", Icon: Sparkle, pulse: true },
+                          { id: "staff", label: "Staff Management", desc: "Salary sheets", Icon: UserCheck },
                           { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
                         ].map((item) => {
                           const Icon = item.Icon;
@@ -4986,7 +5144,7 @@ export default function App() {
                     setIsMobileMenuOpen(false);
                     triggerNotification("Switched to Sales Panel", "info");
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 cursor-pointer transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white bg-blue-750 dark:bg-blue-700 hover:bg-blue-800 dark:hover:bg-blue-605 border border-blue-600 dark:border-blue-600 cursor-pointer transition-colors shadow-sm"
                 >
                   Go to Sales Terminal &rarr;
                 </button>
