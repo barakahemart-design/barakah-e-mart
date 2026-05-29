@@ -813,14 +813,11 @@ export default function App() {
     setProducts(updatedProducts);
     setTransactions([newTransaction, ...transactions]);
 
-    // Export PDF and Delivery Challan on successful checkout
+    // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
     try {
       generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
-      });
-      generateDeliveryChallanPDF(newTransaction, pairedContact, businessInfo).catch(err => {
-        console.error("Async error in generateDeliveryChallanPDF:", err);
       });
     } catch (pdfErr) {
       console.error("Error triggering PDF creation:", pdfErr);

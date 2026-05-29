@@ -205,7 +205,7 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let brandYEnd = Math.max(textY, identityY + logoHeight + 4);
 
   // Render Right Column: Invoice Metadata (Invoice No, Date, Salesperson, Payment Status)
-  let rightY = metaY + 5.5 - (3.2 * sizeFactor); // Aligns perfectly on the horizontal axis with Showroom Title top edge
+  let rightY = identityY + 5.5; // Aligns perfectly on the horizontal axis with Showroom Title top edge
 
   // Invoice Number (Significantly Larger & Bold)
   doc.setFont(pdfFontName, "bold");
@@ -772,7 +772,7 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   let brandYEnd = Math.max(textY, identityY + logoHeight + 4);
 
   // Render Right Column: Challan Metadata
-  let rightY = metaY + 5.5 - (2.1 * sizeFactor); // Aligns perfectly on the horizontal axis with Showroom Title top edge
+  let rightY = identityY + 5.5; // Aligns perfectly on the horizontal axis with Showroom Title top edge
 
   // Challan Number (Unique reference)
   doc.setFont(pdfFontName, "bold");
