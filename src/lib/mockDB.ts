@@ -166,17 +166,48 @@ export const loadDB = () => {
     const businessInfoStr = localStorage.getItem(KEYS.BUSINESS_INFO);
     const purchasesStr = localStorage.getItem(KEYS.PURCHASES);
 
-    const productsRaw = productsStr ? JSON.parse(productsStr) : INITIAL_PRODUCTS;
-    const contactsRaw = contactsStr ? JSON.parse(contactsStr) : INITIAL_CONTACTS;
-    const expensesRaw = expensesStr ? JSON.parse(expensesStr) : INITIAL_EXPENSES;
-    const transactionsRaw = transactionsStr ? JSON.parse(transactionsStr) : [];
-    const purchasesRaw = purchasesStr ? JSON.parse(purchasesStr) : INITIAL_PURCHASES;
+    let productsRaw = productsStr ? JSON.parse(productsStr) : null;
+    let contactsRaw = contactsStr ? JSON.parse(contactsStr) : null;
+    let expensesRaw = expensesStr ? JSON.parse(expensesStr) : null;
+    let transactionsRaw = transactionsStr ? JSON.parse(transactionsStr) : null;
+    let purchasesRaw = purchasesStr ? JSON.parse(purchasesStr) : null;
 
-    const products = cleanDemoProducts(productsRaw);
-    const contacts = cleanDemoContacts(contactsRaw);
-    const expenses = cleanDemoExpenses(expensesRaw);
-    const transactions = cleanDemoTransactions(transactionsRaw);
-    const purchases = cleanDemoPurchases(purchasesRaw);
+    // Local Fail-safe backup check: if all data arrays are empty, but we have a non-empty fail-safe copy, load from the fail-safe!
+    const localProductsCount = Array.isArray(productsRaw) ? productsRaw.length : 0;
+    const localTransactionsCount = Array.isArray(transactionsRaw) ? transactionsRaw.length : 0;
+    const localTotal = localProductsCount + localTransactionsCount;
+
+    if (localTotal === 0) {
+      const failSafeStr = localStorage.getItem("barakah_fail_safe_backup");
+      if (failSafeStr) {
+        try {
+          const fs = JSON.parse(failSafeStr);
+          if (fs && ((Array.isArray(fs.products) && fs.products.length > 0) || (Array.isArray(fs.transactions) && fs.transactions.length > 0))) {
+            console.log("[Fail-safe Recovery] Standard database keys are empty, self-healing from local fail-safe copy...");
+            productsRaw = fs.products || [];
+            contactsRaw = fs.contacts || [];
+            expensesRaw = fs.expenses || [];
+            transactionsRaw = fs.transactions || [];
+            purchasesRaw = fs.purchases || [];
+            
+            // Re-write back to standards instantly to stabilize system
+            localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(productsRaw));
+            localStorage.setItem(KEYS.CONTACTS, JSON.stringify(contactsRaw));
+            localStorage.setItem(KEYS.EXPENSES, JSON.stringify(expensesRaw));
+            localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactionsRaw));
+            if (purchasesRaw) localStorage.setItem(KEYS.PURCHASES, JSON.stringify(purchasesRaw));
+          }
+        } catch (err) {
+          console.warn("[Fail-safe Recovery] Error loading from local fail-safe backup copy:", err);
+        }
+      }
+    }
+
+    const products = cleanDemoProducts(productsRaw || INITIAL_PRODUCTS);
+    const contacts = cleanDemoContacts(contactsRaw || INITIAL_CONTACTS);
+    const expenses = cleanDemoExpenses(expensesRaw || INITIAL_EXPENSES);
+    const transactions = cleanDemoTransactions(transactionsRaw || []);
+    const purchases = cleanDemoPurchases(purchasesRaw || INITIAL_PURCHASES);
 
     const businessInfo = businessInfoStr ? { ...INITIAL_BUSINESS_INFO, ...JSON.parse(businessInfoStr) } : INITIAL_BUSINESS_INFO;
 
@@ -216,6 +247,18 @@ export const saveDB = (data: {
     localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(data.transactions));
     localStorage.setItem(KEYS.BUSINESS_INFO, JSON.stringify(data.businessInfo));
     localStorage.setItem(KEYS.PURCHASES, JSON.stringify(data.purchases));
+
+    // Update the local fail-safe backup key only if the data has actual items, to prevent overwriting with blank states
+    const totalItems = data.products.length + data.transactions.length;
+    if (totalItems > 0) {
+      localStorage.setItem("barakah_fail_safe_backup", JSON.stringify({
+        products: data.products,
+        contacts: data.contacts,
+        expenses: data.expenses,
+        transactions: data.transactions,
+        purchases: data.purchases
+      }));
+    }
   } catch (e) {
     console.error("Failed to save database to localStorage:", e);
   }

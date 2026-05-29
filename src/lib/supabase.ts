@@ -348,37 +348,45 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   const syncId = getPasscodeSyncId(email, pin);
   const cleanEmail = email.trim().toLowerCase();
 
-  // Bulletproof Safeguard Protection: Prevent completely blank states from overwriting non-empty states in the cloud database
+  // Bulletproof Safeguard Protection: Prevent completely blank or degraded states from overwriting non-empty states in the cloud database
   const incomingProductsLength = (payload.products || []).length;
   const incomingTransactionsLength = (payload.transactions || []).length;
-  
-  if (incomingProductsLength === 0 && incomingTransactionsLength === 0) {
-    try {
-      // Fetch existing backup from the database to ensure we don't overwrite real data
-      const { data: existingSync, error: checkError } = await supabase
-        .from("passcode_syncs")
-        .select("products, transactions")
-        .eq("id", syncId)
-        .maybeSingle();
-        
-      if (checkError) {
-        console.warn("[Sync Guard] Direct check failed with error, aborting blank upload to preserve safety of existing backup:", checkError.message);
-        return true; // Avoid pushing blank state in case of any database check error
-      }
+  const incomingTotal = incomingProductsLength + incomingTransactionsLength;
+  const isExplicitReset = payload.businessInfo?.isExplicitReset === true;
+
+  try {
+    // Fetch existing backup from the database to ensure we don't overwrite real data
+    const { data: existingSync, error: checkError } = await supabase
+      .from("passcode_syncs")
+      .select("products, transactions")
+      .eq("id", syncId)
+      .maybeSingle();
       
-      if (existingSync) {
-        const existingProductsCount = (existingSync.products || []).length;
-        const existingTransactionsCount = (existingSync.transactions || []).length;
-        
-        if (existingProductsCount > 0 || existingTransactionsCount > 0) {
-          console.warn("[Sync Guard] Aborted empty database upload payload to protect non-empty existing cloud backup:", syncId);
-          return true; // Return true to keep front-end state healthy without spamming errors
+    if (!checkError && existingSync && !isExplicitReset) {
+      const existingProductsCount = (existingSync.products || []).length;
+      const existingTransactionsCount = (existingSync.transactions || []).length;
+      const existingTotal = existingProductsCount + existingTransactionsCount;
+      
+      if (existingTotal > 0) {
+        if (incomingTotal === 0) {
+          console.warn(`[Sync Guard] Aborted EMPTY database upload payload to protect non-empty existing cloud backup (${existingTotal} items):`, syncId);
+          return true; // Return true to keep frontend healthy without overwriting cloud backup
+        }
+
+        // Critical defense: If local state has less data than cloud, check if it's a dramatic reduction (more than 3 items lost and < 90% of existing)
+        const itemLoss = existingTotal - incomingTotal;
+        if (itemLoss > 3 && incomingTotal < existingTotal * 0.9) {
+          console.warn(`[Sync Guard] CRITICAL OVERWRITE PREVENTED! Local state has ${incomingTotal} items, but cloud backup has ${existingTotal} items. Aborted auto-backup to protect the master database from accidental overwrites.`);
+          return true; // Prevents data loss by keeping original high value data
         }
       }
-    } catch (e) {
-      console.warn("[Sync Guard] Error during check, aborting blank upload list to be safe:", e);
-      return true; // Safely abort empty database backup on error
+    } else if (checkError) {
+      console.warn("[Sync Guard] Cloud check failed, aborting upload to preserve safety of existing backup:", checkError.message);
+      return true; // Avoid pushing degraded state in case of any query error
     }
+  } catch (e) {
+    console.warn("[Sync Guard] Error during cloud check, aborting upload list to be safe:", e);
+    return true; // Safely abort empty database backup on error
   }
 
   const serializedBusinessInfo = {
@@ -397,6 +405,19 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     business_info: serializedBusinessInfo, // provide snake_case version for Postgres to handle case-folding automatically
     updated_at: new Date().toISOString()
   };
+
+  // For supreme safety, we also save a daily historical copy
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const historyBody = {
+      ...body,
+      id: `${syncId}_history_${todayStr}`,
+      updated_at: new Date().toISOString()
+    };
+    supabase.from("passcode_syncs").upsert(historyBody).then(({ error }) => {
+      if (error) console.warn("Failed to write daily history backup copy:", error.message);
+    });
+  } catch (_) {}
 
   try {
     // 1. Direct frontend Supabase upsert (bypasses Express proxy and applies logged-in user context)
