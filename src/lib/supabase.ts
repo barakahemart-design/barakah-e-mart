@@ -74,14 +74,16 @@ export const restoreLocalKeys = (data: any) => {
   if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
   if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
   
+  const bizData = data.businessInfo || data.business_info || data.businessinfo;
+  
   let p = data.purchases;
-  if (!p && data.businessInfo && data.businessInfo.purchases) {
-    p = data.businessInfo.purchases;
+  if (!p && bizData && bizData.purchases) {
+    p = bizData.purchases;
   }
   localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(p || [])));
 
-  if (data.businessInfo) {
-    const { purchases: ignore, ...cleanInfo } = data.businessInfo;
+  if (bizData) {
+    const { purchases: ignore, ...cleanInfo } = bizData;
     localStorage.setItem('barakah_business_info', JSON.stringify(cleanInfo));
   }
 };
@@ -386,6 +388,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     expenses: payload.expenses,
     transactions: payload.transactions,
     businessInfo: serializedBusinessInfo,
+    business_info: serializedBusinessInfo, // provide snake_case version for Postgres to handle case-folding automatically
     updated_at: new Date().toISOString()
   };
 
