@@ -664,67 +664,7 @@ export function ReportsView({
 
       </div>
 
-      {/* Advanced Tax Ledger and VAT collection tool */}
-      <div className="bg-[#1E1E24] rounded-2xl border border-[#2D2D35] overflow-hidden shadow-lg animate-fade-in" id="taxation-vat-ledger">
-        <div className="p-5 border-b border-[#2D2D35] bg-[#121214]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <h3 className="text-xs font-bold text-white uppercase tracking-widest font-mono flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-[#00E676]" />
-              VAT & Sales Tax Ledger
-            </h3>
-            <p className="text-[10px] text-slate-400">Auditable breakdown of taxes collected from sales within the filter range.</p>
-          </div>
-          <div className="bg-[#121214] px-4 py-2 border border-slate-800 rounded-xl text-xs font-mono">
-            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Accumulated VAT Collected:</span>
-            <span className="text-[#00E676] font-bold ml-2 text-sm">{currencySymbol}{stats.salesTax.toLocaleString()}</span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs font-sans">
-            <thead>
-              <tr className="bg-[#050912] border-b border-[#2D2D35] text-[10px] font-mono text-[#A0A0A5] pl-2 font-semibold uppercase tracking-wider">
-                <th className="p-4 pl-5">Invoice No</th>
-                <th className="p-4">Date</th>
-                <th className="p-4">Net Value</th>
-                <th className="p-4">Discount Given</th>
-                <th className="p-4">VAT Surcharge</th>
-                <th className="p-4 pr-5 text-right">Invoice Grand Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/20 text-slate-300">
-              {filteredTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-10 text-center text-[#A0A0A5] italic">
-                    No matching invoices recorded or registered in this filter range.
-                  </td>
-                </tr>
-              ) : (
-                filteredTransactions.slice(0, 8).map((t, idx) => (
-                  <tr key={idx} className="hover:bg-[#121214]/20 transition-colors">
-                    <td className="p-4 pl-5 font-bold font-mono text-white">{t.invoiceNo}</td>
-                    <td className="p-4 text-[11px] font-mono text-[#A0A0A5]">
-                      {format(parseISO(t.date), "dd MMM yyyy HH:mm")}
-                    </td>
-                    <td className="p-4 font-mono">
-                      {currencySymbol}{(t.subtotal || 0).toLocaleString()}
-                    </td>
-                    <td className="p-4 font-mono text-rose-400/80">
-                      -{currencySymbol}{(t.discount || 0).toLocaleString()}
-                    </td>
-                    <td className="p-4 font-mono text-emerald-400/80">
-                      +{currencySymbol}{(t.tax || 0).toLocaleString()}
-                    </td>
-                    <td className="p-4 pr-5 text-right font-extrabold text-white font-mono">
-                      {currencySymbol}{(t.total || 0).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* VAT & Sales Tax Ledger removed per user request (kono lenden % thakbe na) */}
 
     </div>
   );

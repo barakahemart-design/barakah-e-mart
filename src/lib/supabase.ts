@@ -348,30 +348,36 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   const syncId = getPasscodeSyncId(email, pin);
   const cleanEmail = email.trim().toLowerCase();
 
-  // Safeguard Protection: Prevent completely blank states from overwriting non-empty states in the cloud database
+  // Bulletproof Safeguard Protection: Prevent completely blank states from overwriting non-empty states in the cloud database
   const incomingProductsLength = (payload.products || []).length;
   const incomingTransactionsLength = (payload.transactions || []).length;
   
   if (incomingProductsLength === 0 && incomingTransactionsLength === 0) {
     try {
-      // Fetch any existing records under this email to ensure we don't overwrite real data
-      const { data: existingRows } = await supabase
+      // Fetch existing backup from the database to ensure we don't overwrite real data
+      const { data: existingSync, error: checkError } = await supabase
         .from("passcode_syncs")
         .select("products, transactions")
-        .eq("linked_email", cleanEmail);
+        .eq("id", syncId)
+        .maybeSingle();
         
-      if (existingRows && existingRows.length > 0) {
-        const hasPopulatedData = existingRows.some(row => 
-          (row.products && row.products.length > 0) || 
-          (row.transactions && row.transactions.length > 0)
-        );
-        if (hasPopulatedData) {
-          console.log("[Sync Guard] Aborted direct blank backup payload payload upload to protect existing non-empty database.");
+      if (checkError) {
+        console.warn("[Sync Guard] Direct check failed with error, aborting blank upload to preserve safety of existing backup:", checkError.message);
+        return true; // Avoid pushing blank state in case of any database check error
+      }
+      
+      if (existingSync) {
+        const existingProductsCount = (existingSync.products || []).length;
+        const existingTransactionsCount = (existingSync.transactions || []).length;
+        
+        if (existingProductsCount > 0 || existingTransactionsCount > 0) {
+          console.warn("[Sync Guard] Aborted empty database upload payload to protect non-empty existing cloud backup:", syncId);
           return true; // Return true to keep front-end state healthy without spamming errors
         }
       }
     } catch (e) {
-      console.warn("[Sync Guard] Couldn't fetch existing backup records details:", e);
+      console.warn("[Sync Guard] Error during check, aborting blank upload list to be safe:", e);
+      return true; // Safely abort empty database backup on error
     }
   }
 

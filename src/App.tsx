@@ -297,6 +297,12 @@ export default function App() {
 
       // Auto cloud backup with 1.5 seconds debounce for all authenticated users so no data is ever lost
       if (activeUser && !activeUser.isGuest) {
+        // Bulletproof sync guard: never auto-backup a completely blank database to the cloud
+        if (products.length === 0 && transactions.length === 0) {
+          console.warn("[Auto Backup Guard] Local database is completely empty. Skipping background auto-backup to protect the cloud database from accidental overwrites.");
+          return;
+        }
+
         const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
         const delayDebounceFn = setTimeout(async () => {
           try {
@@ -527,7 +533,7 @@ export default function App() {
   const [cartItemQty, setCartItemQty] = useState<number>(1);
   const [cartItemPrice, setCartItemPrice] = useState<string>("");
   const [customerDiscount, setCustomerDiscount] = useState<number>(0);
-  const [invoiceTaxRate, setInvoiceTaxRate] = useState<number>(5); // default VAT %
+  const [invoiceTaxRate, setInvoiceTaxRate] = useState<number>(0); // default VAT % is now 0
   const [posSelectedContactId, setPosSelectedContactId] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash");
   const [amountPaidPaid, setAmountPaidPaid] = useState<string>("");
@@ -2367,22 +2373,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* VAT Slider */}
-                      <div className="space-y-1 rounded-xl bg-[#121214] p-3 border border-[#2D2D35]/50" id="pos-vat-link">
-                        <div className="flex justify-between items-center text-[10px] font-bold uppercase font-mono text-[#A0A0A5]">
-                          <span>Government Tax Factor</span>
-                          <span className="text-[#00E676] font-extrabold">{invoiceTaxRate}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={20}
-                          id="pos-vat-slider"
-                          value={invoiceTaxRate}
-                          onChange={(e) => setInvoiceTaxRate(parseInt(e.target.value) || 0)}
-                          className="w-full py-1.5 accent-[#00E676] scale-y-105"
-                        />
-                      </div>
+                      {/* VAT percentage slider removed per user request (kono lenden % thakbe na) */}
 
                       {/* Interactive digital Signature Board */}
                       <div className="border border-[#2D2D35] rounded-xl p-3 bg-[#121214] font-mono space-y-2 relative" id="signature-canvas-container">
@@ -2427,10 +2418,12 @@ export default function App() {
                       <span className="text-white font-bold">{businessInfo.currencySymbol} {(cartSubtotal ?? 0).toLocaleString()}</span>
                     </div>
 
-                    <div className="flex justify-between items-center">
-                      <span>Vat Tax Liability:</span>
-                      <span className="text-[#00B0FF]">+{businessInfo.currencySymbol} {calculatedTaxAmount}</span>
-                    </div>
+                    {invoiceTaxRate > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span>Vat Tax Liability:</span>
+                        <span className="text-[#00B0FF]">+{businessInfo.currencySymbol} {calculatedTaxAmount}</span>
+                      </div>
+                    )}
 
                     <div className="flex justify-between items-center">
                       <span>Subtotal Rebates:</span>
