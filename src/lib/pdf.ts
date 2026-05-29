@@ -259,15 +259,16 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
 
   // Bil-To Box Panel
   doc.setFillColor(248, 250, 252); // slate-50
-  doc.roundedRect(15, currentY, 180, 18, 1.5, 1.5, 'F');
+  doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.3);
-  doc.roundedRect(15, currentY, 180, 18, 1.5, 1.5, 'S');
+  doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'S');
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(7.5 * sizeFactor);
   doc.setTextColor(148, 163, 184); // slate-400
-  doc.text("CUSTOMER IDENTITY & SHIPPING ADDRESS", 20, currentY + 5.5);
+  doc.text("CUSTOMER IDENTITY DETAILS", 20, currentY + 5.5);
+  doc.text("CONTACT DETAILS & SHIPPING ADDRESS", 105, currentY + 5.5);
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(9 * sizeFactor);
@@ -280,10 +281,16 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.setTextColor(71, 85, 105); // slate-600
   const cPhone = contact ? `Phone: ${contact.phone}` : "Phone: Over-the-counter Transaction";
   const cAddr = contact ? `Address: ${contact.address}` : "Address: Dhaka, Bangladesh";
-  doc.text(cPhone, 105, currentY + 8.5);
-  doc.text(cAddr, 105, currentY + 13.5);
+  const emailStr = (contact as any)?.email ? `Email: ${(contact as any).email}` : "Email: walkin-cashier@barakah.local";
+  
+  doc.text(cPhone, 105, currentY + 11.5); // Perfectly aligned level horizontally with Customer Name
+  
+  doc.setFont(pdfFontName, "normal");
+  doc.setFontSize(8 * sizeFactor);
+  doc.text(emailStr, 20, currentY + 17.5);
+  doc.text(cAddr, 105, currentY + 17.5); // Perfectly aligned level horizontally with Client Email
 
-  currentY += 24;
+  currentY += 29;
 
   // Main Itemized Table mapping
   const tableHeaders = [['SL', 'Item Model / Specification / SKU', 'Qty', 'Unit Rate', 'Total Amount']];
@@ -404,6 +411,24 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.setFillColor(241, 245, 249); // clean slate-100 neutral gray block
   doc.rect(rightX - 1.6, summaryY + 17.5, 61.2, 18.0, 'F');
 
+  const excess = transaction.paidAmount - transaction.total;
+  const hasDue = transaction.dueBalance > 0;
+
+  // 🌟 High-contrast Highlighter Blocks for key figures to maximize visual focus
+  doc.setFillColor(209, 250, 229); // emerald-100 high-focus highlighter for Cash Received
+  doc.rect(rightX - 1.2, summaryY + 24.2, 60.4, 4.8, 'F');
+
+  if (excess > 0) {
+    doc.setFillColor(207, 250, 254); // cyan-100 high-focus highlighter for Change
+    doc.rect(rightX - 1.2, summaryY + 29.2, 60.4, 4.8, 'F');
+  } else if (hasDue) {
+    doc.setFillColor(254, 226, 226); // red-100 intense warning highlighter for Dues Outstanding
+    doc.rect(rightX - 1.2, summaryY + 29.2, 60.4, 4.8, 'F');
+  } else {
+    doc.setFillColor(209, 250, 229); // emerald-100 highlighter for fully settled accounts
+    doc.rect(rightX - 1.2, summaryY + 29.2, 60.4, 4.8, 'F');
+  }
+
   // Grand Total details on top of the solid background plate
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(9.5 * sizeFactor);
@@ -411,29 +436,26 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.text("GRAND BILL TOTAL:", rightX, summaryY + 22.5);
   doc.text(`${devCurrencySymbol} ${transaction.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 22.5, { align: "right" });
 
-  const excess = transaction.paidAmount - transaction.total;
-  const hasDue = transaction.dueBalance > 0;
-
   // Cash Received
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(51, 65, 85); // slate-700
+  doc.setTextColor(16, 124, 65); // High-contrast green text representing cash received on top of highlighter
   doc.text("Total Cash Received:", rightX, summaryY + 27.5);
   doc.text(`${devCurrencySymbol} ${transaction.paidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 27.5, { align: "right" });
 
   // Change or Due Balance details
   if (excess > 0) {
     doc.setFont(pdfFontName, "bold");
-    doc.setTextColor(14, 116, 144); // high contrast deep teal representing change returned
+    doc.setTextColor(14, 116, 144); // high contrast deep teal representing change returned on cyan
     doc.text("Change Returned:", rightX, summaryY + 32.5);
     doc.text(`${devCurrencySymbol} ${excess.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 32.5, { align: "right" });
   } else {
     if (hasDue) {
       doc.setFont(pdfFontName, "bold");
-      doc.setTextColor(153, 27, 27); // high contrast deep red-900 for due balance
+      doc.setTextColor(153, 27, 27); // high contrast deep warning red on red background
     } else {
-      doc.setFont(pdfFontName, "normal");
-      doc.setTextColor(71, 85, 105); // standard slate-600
+      doc.setFont(pdfFontName, "bold");
+      doc.setTextColor(16, 124, 65); // high contrast green on emerald background
     }
     doc.text("Dues Outstanding:", rightX, summaryY + 32.5);
     doc.text(`${devCurrencySymbol} ${transaction.dueBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 32.5, { align: "right" });
@@ -787,15 +809,16 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
 
   // Beneficiary Customer Segment
   doc.setFillColor(248, 250, 252); // slate-50
-  doc.roundedRect(15, currentY, 180, 18, 1.5, 1.5, 'F');
+  doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.3);
-  doc.roundedRect(15, currentY, 180, 18, 1.5, 1.5, 'S');
+  doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'S');
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(7.5 * sizeFactor);
   doc.setTextColor(148, 163, 184); // slate-400
   doc.text("DELIVERY TO / CUSTOMER IDENTITY DETAILS", 20, currentY + 5.5);
+  doc.text("CONTACT DETAILS & DELIVERY ADDRESS", 105, currentY + 5.5);
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(9 * sizeFactor);
@@ -808,10 +831,16 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   doc.setTextColor(71, 85, 105); // slate-600
   const cPhone = contact ? `Phone: ${contact.phone}` : "Phone: Over-the-counter Transaction";
   const cAddr = contact ? `Address: ${contact.address}` : "Address: Dhaka, Bangladesh";
-  doc.text(cPhone, 105, currentY + 8.5);
-  doc.text(cAddr, 105, currentY + 13.5);
+  const emailStr = (contact as any)?.email ? `Email: ${(contact as any).email}` : "Email: walkin-cashier@barakah.local";
+  
+  doc.text(cPhone, 105, currentY + 11.5); // Level with Customer Name
+  
+  doc.setFont(pdfFontName, "normal");
+  doc.setFontSize(8 * sizeFactor);
+  doc.text(emailStr, 20, currentY + 17.5);
+  doc.text(cAddr, 105, currentY + 17.5); // Level with Email
 
-  currentY += 24;
+  currentY += 29;
 
   // Main Delivered Items Table
   const tableHeaders = [['SL', 'Purchased Item Model / Specification / SKU', 'Ordered Qty', 'Unit of Delivery', 'Dispatch Status']];
