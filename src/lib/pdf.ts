@@ -191,7 +191,7 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let brandYEnd = Math.max(textY, identityY + logoHeight + 4);
 
   // Render Right Column: Invoice Metadata (Invoice No, Date, Salesperson, Payment Status)
-  let rightY = metaY + 5.5; // Aligns perfectly on the horizontal axis with Showroom Title Y position
+  let rightY = metaY + 5.5 - (3.2 * sizeFactor); // Aligns perfectly on the horizontal axis with Showroom Title top edge
 
   // Invoice Number (Significantly Larger & Bold)
   doc.setFont(pdfFontName, "bold");
@@ -364,12 +364,12 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let rightX = 135;
   let summaryY = finalY;
 
-  // Card background
+  // Modern clean flat totals card with sharp corners (no rounded corners, no cluttered accents)
   doc.setFillColor(250, 250, 250);
-  doc.roundedRect(rightX - 2, summaryY - 2, 62, 38, 2, 2, 'F');
-  doc.setDrawColor(15, 23, 42); // slate-900 border
-  doc.setLineWidth(0.4);
-  doc.roundedRect(rightX - 2, summaryY - 2, 62, 38, 2, 2, 'S');
+  doc.rect(rightX - 2, summaryY - 2, 62, 38, 'F');
+  doc.setDrawColor(15, 23, 42); // bold black border line
+  doc.setLineWidth(0.45);
+  doc.rect(rightX - 2, summaryY - 2, 62, 38, 'S');
 
   // Print summary elements
   doc.setFont(pdfFontName, "normal");
@@ -381,63 +381,48 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.text("VAT Surcharges:", rightX, summaryY + 9);
   doc.text(`+${devCurrencySymbol} ${transaction.tax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 9, { align: "right" });
 
-  doc.setTextColor(239, 68, 68);
+  doc.setTextColor(239, 68, 68); // soft red text for discounts
   doc.text("Special Discount:", rightX, summaryY + 14);
   doc.text(`-${devCurrencySymbol} ${transaction.discount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 14, { align: "right" });
 
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.2);
-  doc.line(rightX, summaryY + 17.5, 190, summaryY + 17.5);
+  // Draw flat solid background strip for key total parameters (Grand Total, Cash Received, Outstanding/Change)
+  // Clean flat design with 100% sharp-cornered solid plate and absolute high-contrast text on top (no dual multi-color background pills)
+  doc.setFillColor(241, 245, 249); // clean slate-100 neutral gray block
+  doc.rect(rightX - 1.6, summaryY + 17.5, 61.2, 18.0, 'F');
 
-  // Grand Total
+  // Grand Total details on top of the solid background plate
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(9.5 * sizeFactor);
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(15, 23, 42); // slate-900 black
   doc.text("GRAND BILL TOTAL:", rightX, summaryY + 22.5);
   doc.text(`${devCurrencySymbol} ${transaction.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 22.5, { align: "right" });
 
-  // ----------------- HIGHLIGHTER DECORATIONS -----------------
   const excess = transaction.paidAmount - transaction.total;
   const hasDue = transaction.dueBalance > 0;
 
-  if (hasDue) {
-    // Ultra clean flat single-color soft pink background with absolutely no multi-color border or accent block lines
-    doc.setFillColor(254, 242, 242); // soft red-50 background only
-    doc.roundedRect(rightX - 1.5, summaryY + 29.5, 61, 5.8, 1, 1, 'F');
-  } else {
-    // Ultra clean flat single-color soft emerald background with absolutely no multi-color border or accent block lines
-    doc.setFillColor(240, 253, 244); // soft green-50 background only
-    doc.roundedRect(rightX - 1.5, summaryY + 24.5, 61, 5.8, 1, 1, 'F');
-  }
-
-  // Cash Paid
-  if (!hasDue) {
-    doc.setFont(pdfFontName, "bold");
-    doc.setTextColor(15, 23, 42); // deep readable high-contrast dark text
-  } else {
-    doc.setFont(pdfFontName, "normal");
-    doc.setTextColor(71, 85, 105); // standard slate-600
-  }
+  // Cash Received
+  doc.setFont(pdfFontName, "bold");
   doc.setFontSize(8 * sizeFactor);
-  doc.text("Total Cash Received:", !hasDue ? rightX + 2.5 : rightX, summaryY + 28);
-  doc.text(`${devCurrencySymbol} ${transaction.paidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189.5, summaryY + 28, { align: "right" });
+  doc.setTextColor(51, 65, 85); // slate-700
+  doc.text("Total Cash Received:", rightX, summaryY + 27.5);
+  doc.text(`${devCurrencySymbol} ${transaction.paidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 27.5, { align: "right" });
 
-  // Change or Due Balance
+  // Change or Due Balance details
   if (excess > 0) {
-    doc.setFont(pdfFontName, "normal");
-    doc.setTextColor(14, 116, 144); // cyn-750 representing change
-    doc.text("Change Returned:", rightX, summaryY + 33);
-    doc.text(`${devCurrencySymbol} ${excess.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189.5, summaryY + 33, { align: "right" });
+    doc.setFont(pdfFontName, "bold");
+    doc.setTextColor(14, 116, 144); // high contrast deep teal representing change returned
+    doc.text("Change Returned:", rightX, summaryY + 32.5);
+    doc.text(`${devCurrencySymbol} ${excess.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 32.5, { align: "right" });
   } else {
     if (hasDue) {
       doc.setFont(pdfFontName, "bold");
-      doc.setTextColor(153, 27, 27); // high contrast deep dark red-900 text for maximum legibility
+      doc.setTextColor(153, 27, 27); // high contrast deep red-900 for due balance
     } else {
       doc.setFont(pdfFontName, "normal");
-      doc.setTextColor(71, 85, 105);
+      doc.setTextColor(71, 85, 105); // standard slate-600
     }
-    doc.text("Dues Outstanding:", hasDue ? rightX + 2.5 : rightX, summaryY + 33);
-    doc.text(`${devCurrencySymbol} ${transaction.dueBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189.5, summaryY + 33, { align: "right" });
+    doc.text("Dues Outstanding:", rightX, summaryY + 32.5);
+    doc.text(`${devCurrencySymbol} ${transaction.dueBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 32.5, { align: "right" });
   }
 
   // SIGNATURES ROW
@@ -515,21 +500,17 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
       // Draw custom uploads and preset badge marks
       let index = 0;
       
-      // 1. Draw custom base64 logos (each within a custom black outlined container with a nice black shadow)
+      // 1. Draw custom base64 logos (each within an ultra-clean container with a subtle, thin outline and no shadow)
       allCustoms.forEach((logoB64) => {
         const itemCenterX = pageMarginLeft + (index * colWidth) + (colWidth / 2);
         const boxW = Math.max(16, Math.min(26, colWidth - 2.5));
         const boxH = 8.5;
         const leftX = itemCenterX - (boxW / 2);
         
-        // Solid black offset shadow behind the badge
-        doc.setFillColor(15, 23, 42); // Black shadow
-        doc.roundedRect(leftX + 0.8, drawY + 0.8, boxW, boxH, 1, 1, 'F');
-
-        // Top white container card with thick black outline borders
+        // Top container card with clean subtle border (No heavy black shadows or thick blocks)
         doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(15, 23, 42); // Black border outline
-        doc.setLineWidth(0.45);
+        doc.setDrawColor(203, 213, 225); // Slate-300 thin border outline
+        doc.setLineWidth(0.3);
         doc.roundedRect(leftX, drawY, boxW, boxH, 1, 1, 'FD');
         
         try {
@@ -572,21 +553,17 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
         index++;
       });
       
-      // 2. Draw preset text badges
+      // 2. Draw preset text badges (each within an ultra-clean container with a subtle, thin outline and no shadow)
       allPresets.forEach((name) => {
         const itemCenterX = pageMarginLeft + (index * colWidth) + (colWidth / 2);
         const boxW = Math.max(16, Math.min(26, colWidth - 2.5));
         const boxH = 8.5;
         const leftX = itemCenterX - (boxW / 2);
         
-        // Solid black offset shadow behind the badge
-        doc.setFillColor(15, 23, 42); // Black shadow
-        doc.roundedRect(leftX + 0.8, drawY + 0.8, boxW, boxH, 1, 1, 'F');
-
-        // Top white container card with thick black outline borders
+        // Top container card with clean subtle border (No heavy black shadows or thick blocks)
         doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(15, 23, 42); // Black border outline
-        doc.setLineWidth(0.45);
+        doc.setDrawColor(203, 213, 225); // Slate-300 thin border outline
+        doc.setLineWidth(0.3);
         doc.roundedRect(leftX, drawY, boxW, boxH, 1, 1, 'FD');
         
         // Draw Brand Name Centered inside the box (Name is also bold black)
@@ -745,7 +722,7 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   let brandYEnd = Math.max(textY, identityY + logoHeight + 4);
 
   // Render Right Column: Challan Metadata
-  let rightY = metaY + 5.5;
+  let rightY = metaY + 5.5 - (2.1 * sizeFactor); // Aligns perfectly on the horizontal axis with Showroom Title top edge
 
   // Challan Number (Unique reference)
   doc.setFont(pdfFontName, "bold");
