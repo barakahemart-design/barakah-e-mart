@@ -71,18 +71,78 @@ if (cachedUser) {
 export const restoreLocalKeys = (data: any) => {
   if (!data) return;
 
+  const email = (data.linked_email || data.linkedEmail || currentSupabaseUser?.email || "").trim().toLowerCase();
+
+  // Helper to safely convert IDs and foreign key links using user email salt
+  const normalizeProduct = (p: any): any => {
+    if (!p) return p;
+    return {
+      ...p,
+      id: toUUID(p.id, email)
+    };
+  };
+
+  const normalizeContact = (c: any): any => {
+    if (!c) return c;
+    return {
+      ...c,
+      id: toUUID(c.id, email)
+    };
+  };
+
+  const normalizeExpense = (e: any): any => {
+    if (!e) return e;
+    return {
+      ...e,
+      id: toUUID(e.id, email)
+    };
+  };
+
+  const normalizePurchase = (pur: any): any => {
+    if (!pur) return pur;
+    return {
+      ...pur,
+      id: toUUID(pur.id, email),
+      productId: pur.productId ? toUUID(pur.productId, email) : undefined
+    };
+  };
+
+  const normalizeTransaction = (t: any): any => {
+    if (!t) return t;
+    return {
+      ...t,
+      id: toUUID(t.id, email),
+      contactId: t.contactId ? toUUID(t.contactId, email) : undefined,
+      items: (t.items || []).map((item: any) => ({
+        ...item,
+        id: item.id ? toUUID(item.id, email) : toUUID(`${t.id}_item_${item.productId || Math.random()}`, email),
+        productId: item.productId ? toUUID(item.productId, email) : undefined
+      }))
+    };
+  };
+
   // 1. MERGE PRODUCTS
   if (data.products) {
     const rawLocalProducts = localStorage.getItem('barakah_products');
     let localProducts = [];
     if (rawLocalProducts) {
-      try { localProducts = JSON.parse(rawLocalProducts); } catch (e) {}
+      try {
+        localProducts = JSON.parse(rawLocalProducts);
+        if (!Array.isArray(localProducts)) localProducts = [];
+      } catch (e) {}
     }
-    const cleanCloudProducts = cleanDemoProducts(data.products);
+    const cleanCloudProducts = cleanDemoProducts(data.products).map(p => normalizeProduct(p));
+    const normalizedLocalProducts = localProducts.map(p => normalizeProduct(p));
+    
     const mergedProducts = [...cleanCloudProducts];
-    if (Array.isArray(localProducts)) {
-      for (const lp of localProducts) {
-        if (!mergedProducts.some(p => p.id === lp.id)) {
+    if (Array.isArray(normalizedLocalProducts)) {
+      for (const lp of normalizedLocalProducts) {
+        const alreadyExists = mergedProducts.some(p => 
+          p.id === lp.id || 
+          (lp.sku && p.sku && lp.sku.trim() === p.sku.trim()) ||
+          (lp.name && p.name && lp.name.trim().toLowerCase() === p.name.trim().toLowerCase())
+        );
+        if (!alreadyExists) {
           mergedProducts.push(lp);
         }
       }
@@ -100,13 +160,23 @@ export const restoreLocalKeys = (data: any) => {
     const rawLocalContacts = localStorage.getItem('barakah_contacts');
     let localContacts = [];
     if (rawLocalContacts) {
-      try { localContacts = JSON.parse(rawLocalContacts); } catch (e) {}
+      try {
+        localContacts = JSON.parse(rawLocalContacts);
+        if (!Array.isArray(localContacts)) localContacts = [];
+      } catch (e) {}
     }
-    const cleanCloudContacts = cleanDemoContacts(data.contacts);
+    const cleanCloudContacts = cleanDemoContacts(data.contacts).map(c => normalizeContact(c));
+    const normalizedLocalContacts = localContacts.map(c => normalizeContact(c));
+    
     const mergedContacts = [...cleanCloudContacts];
-    if (Array.isArray(localContacts)) {
-      for (const lc of localContacts) {
-        if (!mergedContacts.some(c => c.id === lc.id)) {
+    if (Array.isArray(normalizedLocalContacts)) {
+      for (const lc of normalizedLocalContacts) {
+        const alreadyExists = mergedContacts.some(c => 
+          c.id === lc.id ||
+          (lc.phone && c.phone && lc.phone.trim() === c.phone.trim()) ||
+          (lc.name && c.name && lc.name.trim().toLowerCase() === c.name.trim().toLowerCase())
+        );
+        if (!alreadyExists) {
           mergedContacts.push(lc);
         }
       }
@@ -124,13 +194,22 @@ export const restoreLocalKeys = (data: any) => {
     const rawLocalExpenses = localStorage.getItem('barakah_expenses');
     let localExpenses = [];
     if (rawLocalExpenses) {
-      try { localExpenses = JSON.parse(rawLocalExpenses); } catch (e) {}
+      try {
+        localExpenses = JSON.parse(rawLocalExpenses);
+        if (!Array.isArray(localExpenses)) localExpenses = [];
+      } catch (e) {}
     }
-    const cleanCloudExpenses = cleanDemoExpenses(data.expenses);
+    const cleanCloudExpenses = cleanDemoExpenses(data.expenses).map(e => normalizeExpense(e));
+    const normalizedLocalExpenses = localExpenses.map(e => normalizeExpense(e));
+    
     const mergedExpenses = [...cleanCloudExpenses];
-    if (Array.isArray(localExpenses)) {
-      for (const le of localExpenses) {
-        if (!mergedExpenses.some(ex => ex.id === le.id)) {
+    if (Array.isArray(normalizedLocalExpenses)) {
+      for (const le of normalizedLocalExpenses) {
+        const alreadyExists = mergedExpenses.some(ex => 
+          ex.id === le.id ||
+          (ex.description && le.description && ex.description.trim().toLowerCase() === le.description.trim().toLowerCase() && Math.abs(ex.amount - le.amount) < 0.01 && ex.date === le.date)
+        );
+        if (!alreadyExists) {
           mergedExpenses.push(le);
         }
       }
@@ -148,13 +227,21 @@ export const restoreLocalKeys = (data: any) => {
     const rawLocalTransactions = localStorage.getItem('barakah_transactions');
     let localTransactions = [];
     if (rawLocalTransactions) {
-      try { localTransactions = JSON.parse(rawLocalTransactions); } catch (e) {}
+      try {
+        localTransactions = JSON.parse(rawLocalTransactions);
+        if (!Array.isArray(localTransactions)) localTransactions = [];
+      } catch (e) {}
     }
-    const cleanCloudTransactions = cleanDemoTransactions(data.transactions);
+    const cleanCloudTransactions = cleanDemoTransactions(data.transactions).map(t => normalizeTransaction(t));
+    const normalizedLocalTransactions = localTransactions.map(t => normalizeTransaction(t));
+    
     const mergedTransactions = [...cleanCloudTransactions];
-    if (Array.isArray(localTransactions)) {
-      for (const lt of localTransactions) {
-        const alreadyExists = mergedTransactions.some(t => t.id === lt.id || (lt.invoiceNo && t.invoiceNo === lt.invoiceNo));
+    if (Array.isArray(normalizedLocalTransactions)) {
+      for (const lt of normalizedLocalTransactions) {
+        const alreadyExists = mergedTransactions.some(t => 
+          t.id === lt.id || 
+          (lt.invoiceNo && t.invoiceNo && lt.invoiceNo.trim() === t.invoiceNo.trim())
+        );
         if (!alreadyExists) {
           mergedTransactions.push(lt);
         }
@@ -181,13 +268,22 @@ export const restoreLocalKeys = (data: any) => {
     const rawLocalPurchases = localStorage.getItem('barakah_purchases');
     let localPurchases = [];
     if (rawLocalPurchases) {
-      try { localPurchases = JSON.parse(rawLocalPurchases); } catch (e) {}
+      try {
+        localPurchases = JSON.parse(rawLocalPurchases);
+        if (!Array.isArray(localPurchases)) localPurchases = [];
+      } catch (e) {}
     }
-    const cleanCloudPurchases = cleanDemoPurchases(p);
+    const cleanCloudPurchases = cleanDemoPurchases(p).map(pur => normalizePurchase(pur));
+    const normalizedLocalPurchases = localPurchases.map(pur => normalizePurchase(pur));
+    
     const mergedPurchases = [...cleanCloudPurchases];
-    if (Array.isArray(localPurchases)) {
-      for (const lp of localPurchases) {
-        if (!mergedPurchases.some(pur => pur.id === lp.id)) {
+    if (Array.isArray(normalizedLocalPurchases)) {
+      for (const lp of normalizedLocalPurchases) {
+        const alreadyExists = mergedPurchases.some(pur => 
+          pur.id === lp.id ||
+          (pur.productId === lp.productId && pur.quantity === lp.quantity && pur.buyPrice === lp.buyPrice && pur.invoiceNo === lp.invoiceNo && pur.date === lp.date)
+        );
+        if (!alreadyExists) {
           mergedPurchases.push(lp);
         }
       }
@@ -215,7 +311,7 @@ export const restoreLocalKeys = (data: any) => {
   }
 };
 
-function toUUID(str: string): string {
+export function toUUID(str: string, email: string = ""): string {
   if (!str) {
     return "00000000-0000-0000-0000-000000000000";
   }
@@ -223,9 +319,11 @@ function toUUID(str: string): string {
   if (uuidRegex.test(str)) {
     return str;
   }
+  const cleanEmail = email ? email.trim().toLowerCase() : "";
+  const saltedStr = cleanEmail ? `${cleanEmail}_${str}` : str;
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
+  for (let i = 0; i < saltedStr.length; i++) {
+    hash = (hash << 5) - hash + saltedStr.charCodeAt(i);
     hash |= 0;
   }
   const absHash = Math.abs(hash).toString(16).padStart(8, "0");
@@ -235,8 +333,8 @@ function toUUID(str: string): string {
   const part4 = absHash.substring(4, 8).padStart(4, "0");
   
   let hash2 = 1729;
-  for (let i = str.length - 1; i >= 0; i--) {
-    hash2 = (hash2 << 5) - hash2 + str.charCodeAt(i);
+  for (let i = saltedStr.length - 1; i >= 0; i--) {
+    hash2 = (hash2 << 5) - hash2 + saltedStr.charCodeAt(i);
     hash2 |= 0;
   }
   const absHash2 = Math.abs(hash2).toString(16).padStart(12, "1");
@@ -449,37 +547,37 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
       if (finalData.products) {
         finalData.products = finalData.products.map((p: any) => ({
           ...p,
-          id: toUUID(p.id)
+          id: toUUID(p.id, cleanEmail)
         }));
       }
       if (finalData.contacts) {
         finalData.contacts = finalData.contacts.map((c: any) => ({
           ...c,
-          id: toUUID(c.id)
+          id: toUUID(c.id, cleanEmail)
         }));
       }
       if (finalData.expenses) {
         finalData.expenses = finalData.expenses.map((e: any) => ({
           ...e,
-          id: toUUID(e.id)
+          id: toUUID(e.id, cleanEmail)
         }));
       }
       if (finalData.purchases) {
         finalData.purchases = finalData.purchases.map((pur: any) => ({
           ...pur,
-          id: toUUID(pur.id),
-          productId: toUUID(pur.productId)
+          id: toUUID(pur.id, cleanEmail),
+          productId: toUUID(pur.productId, cleanEmail)
         }));
       }
       if (finalData.transactions) {
         finalData.transactions = finalData.transactions.map((t: any) => ({
           ...t,
-          id: toUUID(t.id),
-          contactId: t.contactId ? toUUID(t.contactId) : undefined,
+          id: toUUID(t.id, cleanEmail),
+          contactId: t.contactId ? toUUID(t.contactId, cleanEmail) : undefined,
           items: (t.items || []).map((item: any) => ({
             ...item,
-            id: toUUID(item.id),
-            productId: item.productId ? toUUID(item.productId) : undefined
+            id: toUUID(item.id, cleanEmail),
+            productId: item.productId ? toUUID(item.productId, cleanEmail) : undefined
           }))
         }));
       }
@@ -858,7 +956,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       console.log(`[Direct Sync Engine] Authenticated session validated. Up-syncing individual tables for User: ${activeUserId}`);
       
       const productsToUpsert = (payload.products || []).map(p => ({
-        id: toUUID(p.id),
+        id: toUUID(p.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
         name: p.name,
@@ -873,7 +971,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       }));
 
       const contactsToUpsert = (payload.contacts || []).map(c => ({
-        id: toUUID(c.id),
+        id: toUUID(c.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
         name: c.name,
@@ -883,7 +981,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       }));
 
       const expensesToUpsert = (payload.expenses || []).map(e => ({
-        id: toUUID(e.id),
+        id: toUUID(e.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
         description: e.description || "",
@@ -897,8 +995,8 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       const transactionItemsToUpsert: any[] = [];
 
       (payload.transactions || []).forEach(t => {
-        const txUUID = toUUID(t.id);
-        const customerUUID = t.contactId ? toUUID(t.contactId) : null;
+        const txUUID = toUUID(t.id, cleanEmail);
+        const customerUUID = t.contactId ? toUUID(t.contactId, cleanEmail) : null;
         
         transactionsToUpsert.push({
           id: txUUID,
@@ -917,8 +1015,8 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         });
 
         (t.items || []).forEach((item: any, idx: number) => {
-          const itemUUID = toUUID(item.id || `${t.id}_item_${idx}`);
-          const productUUID = item.productId ? toUUID(item.productId) : null;
+          const itemUUID = toUUID(item.id || `${t.id}_item_${idx}`, cleanEmail);
+          const productUUID = item.productId ? toUUID(item.productId, cleanEmail) : null;
           
           transactionItemsToUpsert.push({
             id: itemUUID,
@@ -935,11 +1033,11 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       });
 
       const purchasesToUpsert = (payload.purchases || []).map(pur => ({
-        id: toUUID(pur.id),
+        id: toUUID(pur.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
         invoice_no: pur.invoiceNo || "PUR-000",
-        product_id: toUUID(pur.productId),
+        product_id: toUUID(pur.productId, cleanEmail),
         quantity: pur.quantity || 0.0,
         buy_price: pur.buyPrice || 0.0,
         created_at: pur.date || new Date().toISOString(),
@@ -983,18 +1081,18 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     console.warn("[Sync Engine] Failed writing to relational database tables:", syncErr);
   }
 
-  const normalizedProducts = (payload.products || []).map(p => ({ ...p, id: toUUID(p.id) }));
-  const normalizedContacts = (payload.contacts || []).map(c => ({ ...c, id: toUUID(c.id) }));
-  const normalizedExpenses = (payload.expenses || []).map(e => ({ ...e, id: toUUID(e.id) }));
-  const normalizedPurchases = (payload.purchases || []).map(pur => ({ ...pur, id: toUUID(pur.id), productId: toUUID(pur.productId) }));
+  const normalizedProducts = (payload.products || []).map(p => ({ ...p, id: toUUID(p.id, cleanEmail) }));
+  const normalizedContacts = (payload.contacts || []).map(c => ({ ...c, id: toUUID(c.id, cleanEmail) }));
+  const normalizedExpenses = (payload.expenses || []).map(e => ({ ...e, id: toUUID(e.id, cleanEmail) }));
+  const normalizedPurchases = (payload.purchases || []).map(pur => ({ ...pur, id: toUUID(pur.id, cleanEmail), productId: toUUID(pur.productId, cleanEmail) }));
   const normalizedTransactions = (payload.transactions || []).map(t => ({
     ...t,
-    id: toUUID(t.id),
-    contactId: t.contactId ? toUUID(t.contactId) : undefined,
+    id: toUUID(t.id, cleanEmail),
+    contactId: t.contactId ? toUUID(t.contactId, cleanEmail) : undefined,
     items: (t.items || []).map((item: any) => ({
       ...item,
-      id: toUUID(item.id),
-      productId: item.productId ? toUUID(item.productId) : undefined
+      id: toUUID(item.id, cleanEmail),
+      productId: item.productId ? toUUID(item.productId, cleanEmail) : undefined
     }))
   }));
 

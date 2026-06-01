@@ -1080,12 +1080,14 @@ export default function App() {
 
     setProducts(products.map(p => {
       if (p.id === id) {
+        const nextStock = p.stock + (addStock || 0);
+        const isStillNegative = nextStock < 0;
         return {
           ...p,
           buyPrice,
           sellPrice,
-          stock: p.stock + (addStock || 0),
-          hasNegativeSale: true,
+          stock: nextStock,
+          hasNegativeSale: isStillNegative,
           negativeSaleUpdated: true
         };
       }
