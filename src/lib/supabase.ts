@@ -215,12 +215,68 @@ export const restoreLocalKeys = (data: any) => {
   }
 };
 
+function toUUID(str: string): string {
+  if (!str) {
+    return "00000000-0000-0000-0000-000000000000";
+  }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(str)) {
+    return str;
+  }
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const absHash = Math.abs(hash).toString(16).padStart(8, "0");
+  const part1 = absHash.substring(0, 8);
+  const part2 = "4000";
+  const part3 = "8000";
+  const part4 = absHash.substring(4, 8).padStart(4, "0");
+  
+  let hash2 = 1729;
+  for (let i = str.length - 1; i >= 0; i--) {
+    hash2 = (hash2 << 5) - hash2 + str.charCodeAt(i);
+    hash2 |= 0;
+  }
+  const absHash2 = Math.abs(hash2).toString(16).padStart(12, "1");
+  const part5 = absHash2.substring(0, 12);
+  
+  return `${part1}-${part2}-${part3}-${part4}-${part5}`;
+}
+
+function mergeListsById(listA: any[], listB: any[]) {
+  const merged = [...listA];
+  for (const b of listB) {
+    const idx = merged.findIndex(a => a.id === b.id);
+    if (idx >= 0) {
+      merged[idx] = { ...merged[idx], ...b };
+    } else {
+      merged.push(b);
+    }
+  }
+  return merged;
+}
+
+function mergeTransactionsLists(listA: any[], listB: any[]) {
+  const merged = [...listA];
+  for (const b of listB) {
+    const idx = merged.findIndex(a => a.id === b.id || (a.invoiceNo && b.invoiceNo && a.invoiceNo === b.invoiceNo));
+    if (idx >= 0) {
+      merged[idx] = { ...merged[idx], ...b };
+    } else {
+      merged.push(b);
+    }
+  }
+  return merged;
+}
+
 export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => {
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
   
   try {
-    let finalData = null;
+    let finalData: any = null;
 
     // 1. Smart direct query: retrieve ALL backups created under this email to find the latest active database row
     const { data: directList, error: directError } = await supabase
@@ -267,6 +323,125 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
         }
         return null;
       })();
+    }
+
+    // 3. Replicate direct table records back to laptop to ensure any sync additions on mobile appear on laptop too
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", cleanEmail)
+        .maybeSingle();
+
+      const activeUserId = profile?.id;
+      if (activeUserId) {
+        console.log(`[Direct Sync Engine] Replicating direct table records on restore for profile: ${activeUserId}`);
+
+        const [productsRes, customersRes, expensesRes, transactionsRes, detailRes] = await Promise.all([
+          supabase.from("products").select("*").eq("user_id", activeUserId),
+          supabase.from("customers").select("*").eq("user_id", activeUserId),
+          supabase.from("expenses").select("*").eq("user_id", activeUserId),
+          supabase.from("transactions").select("*").eq("user_id", activeUserId).order('created_at', { ascending: false }),
+          supabase.from("purchases").select("*").eq("user_id", activeUserId)
+        ]);
+
+        if (productsRes.data && productsRes.data.length > 0) {
+          const sqlProducts = productsRes.data.map(p => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku || "",
+            stock: Number(p.stock) || 0,
+            buyPrice: Number(p.buy_price) || 0,
+            sellPrice: Number(p.sell_price) || 0,
+            category: p.category || "Electronics",
+            unit: p.unit || "piece",
+            imageUrl: p.image_url || undefined
+          }));
+          if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
+          finalData.products = mergeListsById(finalData.products || [], sqlProducts);
+        }
+
+        if (customersRes.data && customersRes.data.length > 0) {
+          const sqlCustomers = customersRes.data.map(c => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            address: c.address || "",
+            type: "customer",
+            created_at: c.created_at || new Date().toISOString()
+          }));
+          if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
+          finalData.contacts = mergeListsById(finalData.contacts || [], sqlCustomers);
+        }
+
+        if (expensesRes.data && expensesRes.data.length > 0) {
+          const sqlExpenses = expensesRes.data.map(e => ({
+            id: e.id,
+            category: e.category || "Others",
+            amount: Number(e.amount) || 0,
+            description: e.description || "",
+            date: e.created_at || new Date().toISOString()
+          }));
+          if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
+          finalData.expenses = mergeListsById(finalData.expenses || [], sqlExpenses);
+        }
+
+        if (transactionsRes.data && transactionsRes.data.length > 0) {
+          const { data: itemRows } = await supabase
+            .from("transaction_items")
+            .select("*")
+            .eq("user_id", activeUserId);
+
+          const sqlTransactions = transactionsRes.data.map(t => {
+            const relatedItems = (itemRows || []).filter((item: any) => item.transaction_id === t.id);
+            const mappedItems = relatedItems.map((item: any) => ({
+              id: item.id,
+              name: item.product_id ? "Product Item" : "Standard Item",
+              quantity: Number(item.quantity) || 0,
+              price: Number(item.sell_price) || 0,
+              total: Number(item.quantity * item.sell_price) || 0,
+              productId: item.product_id || undefined
+            }));
+
+            return {
+              id: t.id,
+              invoiceNo: t.invoice_no,
+              date: t.created_at || new Date().toISOString(),
+              items: mappedItems,
+              subtotal: Number(t.total_amount) || 0,
+              tax: t.vat_rate ? Number(((t.total_amount * t.vat_rate) / 100).toFixed(2)) : 0,
+              discount: Number(t.discount) || 0,
+              total: Number(t.total_amount) || 0,
+              paymentMethod: t.payment_method || "Cash",
+              status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
+              paidAmount: Number(t.paid_amount) || 0,
+              dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
+              contactId: t.customer_id || undefined,
+              customerSignature: t.signature_svg || undefined
+            };
+          });
+          if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
+          finalData.transactions = mergeTransactionsLists(finalData.transactions || [], sqlTransactions);
+        }
+
+        if (detailRes.data && detailRes.data.length > 0) {
+          const sqlPurchases = detailRes.data.map(p => ({
+            id: p.id,
+            productId: p.product_id,
+            productName: "Purchase Item",
+            supplierId: "",
+            supplierName: "Main Depot",
+            quantity: Number(p.quantity) || 0,
+            buyPrice: Number(p.buy_price) || 0,
+            totalAmount: Number(p.quantity * p.buy_price) || 0,
+            date: p.created_at || new Date().toISOString()
+          }));
+          if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
+          finalData.purchases = mergeListsById(finalData.purchases || [], sqlPurchases);
+        }
+      }
+    } catch (tblErr) {
+      console.warn("[Direct Sync Engine] Background tables load failed:", tblErr);
     }
 
     if (finalData) {
@@ -540,6 +715,151 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   } catch (e) {
     console.warn("[Sync Guard] Error during cloud check, aborting upload list to be safe:", e);
     return true; // Safely abort empty database backup on error
+  }
+
+  // --- Real-time Bidirectional Postgres Tables Synchronizer ---
+  try {
+    const sessionRes = await supabase.auth.getSession();
+    let activeUserId = sessionRes?.data?.session?.user?.id || currentSupabaseUser?.id;
+    if (!activeUserId) {
+      // Find the user ID based on email address
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", cleanEmail)
+        .maybeSingle();
+      if (profile && profile.id) {
+        activeUserId = profile.id;
+      }
+    }
+
+    if (activeUserId) {
+      console.log(`[Direct Sync Engine] Upserting individual tables in background for User: ${activeUserId}`);
+      
+      const productsToUpsert = (payload.products || []).map(p => ({
+        id: toUUID(p.id),
+        owner_id: activeUserId,
+        user_id: activeUserId,
+        name: p.name,
+        sku: p.sku || null,
+        category: p.category || "Electronics",
+        buy_price: p.buyPrice || 0.0,
+        sell_price: p.sellPrice || 0.0,
+        stock: p.stock || 0.0,
+        unit: p.unit || "piece",
+        image_url: p.imageUrl || null,
+        updated_at: new Date().toISOString()
+      }));
+
+      const contactsToUpsert = (payload.contacts || []).map(c => ({
+        id: toUUID(c.id),
+        owner_id: activeUserId,
+        user_id: activeUserId,
+        name: c.name,
+        phone: c.phone || "",
+        address: c.address || null,
+        updated_at: new Date().toISOString()
+      }));
+
+      const expensesToUpsert = (payload.expenses || []).map(e => ({
+        id: toUUID(e.id),
+        owner_id: activeUserId,
+        user_id: activeUserId,
+        description: e.description || "",
+        category: e.category || "Others",
+        amount: e.amount || 0.0,
+        created_at: e.date || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      const transactionsToUpsert: any[] = [];
+      const transactionItemsToUpsert: any[] = [];
+
+      (payload.transactions || []).forEach(t => {
+        const txUUID = toUUID(t.id);
+        const customerUUID = t.contactId ? toUUID(t.contactId) : null;
+        
+        transactionsToUpsert.push({
+          id: txUUID,
+          owner_id: activeUserId,
+          user_id: activeUserId,
+          invoice_no: t.invoiceNo,
+          customer_id: customerUUID,
+          total_amount: t.total || 0.0,
+          discount: t.discount || 0.0,
+          vat_rate: t.tax && t.subtotal ? Number(((t.tax / t.subtotal) * 100).toFixed(2)) : 0.0,
+          paid_amount: t.paidAmount || 0.0,
+          payment_method: t.paymentMethod || "Cash",
+          signature_svg: t.customerSignature || null,
+          created_at: t.date || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+        (t.items || []).forEach((item: any, idx: number) => {
+          const itemUUID = toUUID(item.id || `${t.id}_item_${idx}`);
+          const productUUID = item.productId ? toUUID(item.productId) : null;
+          
+          transactionItemsToUpsert.push({
+            id: itemUUID,
+            owner_id: activeUserId,
+            user_id: activeUserId,
+            transaction_id: txUUID,
+            product_id: productUUID,
+            quantity: item.quantity || 0.0,
+            sell_price: item.price || 0.0,
+            cost_price: item.buyPrice || item.price || 0.0,
+            is_negative_sale: item.isNegativeSale || false
+          });
+        });
+      });
+
+      const purchasesToUpsert = (payload.purchases || []).map(pur => ({
+        id: toUUID(pur.id),
+        owner_id: activeUserId,
+        user_id: activeUserId,
+        invoice_no: pur.invoiceNo || "PUR-000",
+        product_id: toUUID(pur.productId),
+        quantity: pur.quantity || 0.0,
+        buy_price: pur.buyPrice || 0.0,
+        created_at: pur.date || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      // Concurrent non-blocking requests to optimize response latencies
+      if (productsToUpsert.length > 0) {
+        supabase.from("products").upsert(productsToUpsert).then(({ error }) => {
+          if (error) console.error("[Sync Engine] Products upsert failure:", error.message);
+        });
+      }
+      if (contactsToUpsert.length > 0) {
+        supabase.from("customers").upsert(contactsToUpsert).then(({ error }) => {
+          if (error) console.error("[Sync Engine] Customers upsert failure:", error.message);
+        });
+      }
+      if (expensesToUpsert.length > 0) {
+        supabase.from("expenses").upsert(expensesToUpsert).then(({ error }) => {
+          if (error) console.error("[Sync Engine] Expenses upsert failure:", error.message);
+        });
+      }
+      if (transactionsToUpsert.length > 0) {
+        supabase.from("transactions").upsert(transactionsToUpsert).then(({ error }) => {
+          if (error) {
+            console.error("[Sync Engine] Transactions upsert failure:", error.message);
+          } else if (transactionItemsToUpsert.length > 0) {
+            supabase.from("transaction_items").upsert(transactionItemsToUpsert).then(({ error: tiErr }) => {
+              if (tiErr) console.error("[Sync Engine] Transaction items upsert failure:", tiErr.message);
+            });
+          }
+        });
+      }
+      if (purchasesToUpsert.length > 0) {
+        supabase.from("purchases").upsert(purchasesToUpsert).then(({ error }) => {
+          if (error) console.error("[Sync Engine] Purchases upsert failure:", error.message);
+        });
+      }
+    }
+  } catch (syncErr) {
+    console.warn("[Sync Engine] Failed writing to relational database tables:", syncErr);
   }
 
   const serializedBusinessInfo = {
