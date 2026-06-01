@@ -84,7 +84,8 @@ import {
   signUpWithEmail,
   signInWithEmail,
   getPasscodeSyncId,
-  selfHealDatabase
+  selfHealDatabase,
+  toUUID
 } from "./lib/supabase";
 import { 
   generateInvoicePDF,
@@ -770,16 +771,19 @@ export default function App() {
     const nextNum = Math.max(startNum, maxNumber + 1);
     const uniqueInvoiceNo = `INV-${nextNum}`;
 
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+    const uniqueTxId = toUUID(`t_${Date.now()}`, cleanEmail);
+
     const newTransaction: Transaction = {
-      id: `t_${Date.now()}`,
+      id: uniqueTxId,
       invoiceNo: uniqueInvoiceNo,
       date: new Date().toISOString(),
       items: posCart.map((cartItem, idx) => {
         const itemPrice = cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice;
         return {
-          id: `ti_${idx}_${Date.now()}`,
+          id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
           name: cartItem.product.name,
-          productId: cartItem.product.id,
+          productId: toUUID(cartItem.product.id, cleanEmail),
           quantity: cartItem.quantity,
           price: itemPrice,
           total: itemPrice * cartItem.quantity,
@@ -795,7 +799,7 @@ export default function App() {
       status: paymentStatus,
       paidAmount: Math.min(invoiceGrandTotal, numericalPaid),
       dueBalance: computedInvoiceDueBalance,
-      contactId: posSelectedContactId || undefined,
+      contactId: posSelectedContactId ? toUUID(posSelectedContactId, cleanEmail) : undefined,
       customerSignature: signatureStr
     };
 
@@ -857,9 +861,10 @@ export default function App() {
     if (!newProdName) return;
 
     const generatedSKU = newProdSKU.trim() || `SKU-${Math.random().toString(36).substring(3, 8).toUpperCase()}`;
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
 
     const parsedProduct: Product = {
-      id: `p_${Date.now()}`,
+      id: toUUID(`p_${Date.now()}`, cleanEmail),
       name: newProdName,
       sku: generatedSKU,
       category: newProdCategory,
@@ -1066,11 +1071,13 @@ export default function App() {
 
   const handleUpdatePricing = (id: string, buyPrice: number, sellPrice: number, addStock?: number) => {
     const matchedProd = products.find(p => p.id === id);
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+
     if (addStock && addStock > 0) {
       const invoiceNo = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
       const newPurchase = {
-        id: `pur_${Date.now()}`,
-        productId: id,
+        id: toUUID(`pur_${Date.now()}`, cleanEmail),
+        productId: toUUID(id, cleanEmail),
         productName: matchedProd ? matchedProd.name : "Reconciled Item",
         supplierId: "",
         supplierName: "Manual Adjustment",
@@ -1152,9 +1159,11 @@ export default function App() {
   };
 
   const handleAddPurchase = (pur: any) => {
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const newPur: Purchase = {
-      id: `pur_${Date.now()}`,
-      ...pur
+      ...pur,
+      id: toUUID(`pur_${Date.now()}`, cleanEmail),
+      productId: pur.productId ? toUUID(pur.productId, cleanEmail) : ""
     };
     setPurchases([newPur, ...purchases]);
     setProducts(products.map(p => {
@@ -1369,8 +1378,9 @@ export default function App() {
       categoryToUse = "Others";
     }
 
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const newExp: Expense = {
-      id: `e_${Date.now()}`,
+      id: toUUID(`e_${Date.now()}`, cleanEmail),
       category: categoryToUse || "Others",
       amount: Number(expenseAmount) || 0,
       description: expenseDesc,
@@ -1385,8 +1395,10 @@ export default function App() {
   };
 
   const handlePurchaseAddSupplier = (supplier: { name: string; phone: string; address: string }) => {
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+    const newId = toUUID(`c_${Date.now()}`, cleanEmail);
     const newContact: Contact = {
-      id: `c_${Date.now()}`,
+      id: newId,
       name: supplier.name,
       phone: supplier.phone,
       address: supplier.address || "Dhaka, Bangladesh",
@@ -1395,7 +1407,7 @@ export default function App() {
     };
     setContacts(prev => [newContact, ...prev]);
     triggerNotification(`Supplier [${supplier.name}] added successfully!`, "success");
-    return newContact.id;
+    return newId;
   };
 
   // -----------------------------------------------------------------
@@ -1410,8 +1422,9 @@ export default function App() {
     e.preventDefault();
     if (!cName || !cPhone) return;
 
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const newContact: Contact = {
-      id: `c_${Date.now()}`,
+      id: toUUID(`c_${Date.now()}`, cleanEmail),
       name: cName,
       phone: cPhone,
       address: cAddress || "Dhaka, Bangladesh",
@@ -2494,8 +2507,9 @@ export default function App() {
             <ProductsView
               products={products}
               onAddProduct={(prod) => {
+                const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
                 const parsedProduct: Product = {
-                  id: `p_${Date.now()}`,
+                  id: toUUID(`p_${Date.now()}`, cleanEmail),
                   ...prod
                 };
                 setProducts([...products, parsedProduct]);
