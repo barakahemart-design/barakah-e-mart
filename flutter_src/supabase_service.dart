@@ -395,4 +395,70 @@ class SupabaseService {
       return {'sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
     }
   }
+
+  // -------------------------------------------------------------
+  // 7. REAL-TIME STREAMING INTEGRATION (Real-time Stream Engine)
+  // -------------------------------------------------------------
+
+  /// Stream of Products (Inventory) - Realtime enabled
+  Stream<List<Product>> productsStream() {
+    return _client
+        .from('products')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', currentUser!.id)
+        .map((records) => records.map((json) => Product.fromJson(json)).toList());
+  }
+
+  /// Stream of Purchases
+  Stream<List<Purchase>> purchasesStream() {
+    return _client
+        .from('purchases')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', currentUser!.id)
+        .map((records) => records.map((json) => Purchase.fromJson(json)).toList());
+  }
+
+  /// Stream of Customers
+  Stream<List<Customer>> customersStream() {
+    return _client
+        .from('customers')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', currentUser!.id)
+        .map((records) => records.map((json) => Customer.fromJson(json)).toList());
+  }
+
+  /// Stream of Expenses
+  Stream<List<Expense>> expensesStream() {
+    return _client
+        .from('expenses')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', currentUser!.id)
+        .map((records) => records.map((json) => Expense.fromJson(json)).toList());
+  }
+
+  /// Stream of Order Transactions (representing dynamic sales)
+  /// Asynchronously joins transaction line items to build fully hydrated OrderTransaction models
+  Stream<List<OrderTransaction>> transactionsStream() {
+    return _client
+        .from('transactions')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', currentUser!.id)
+        .asyncMap((invoices) async {
+          final List<OrderTransaction> result = [];
+          for (var inv in invoices) {
+            try {
+              final List<dynamic> lineItems = await _client
+                  .from('transaction_items')
+                  .select()
+                  .eq('transaction_id', inv['id']);
+              final items = lineItems.map((e) => TransactionItem.fromJson(e)).toList();
+              result.add(OrderTransaction.fromJson(inv, items));
+            } catch (_) {
+              result.add(OrderTransaction.fromJson(inv, []));
+            }
+          }
+          result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return result;
+        });
+  }
 }

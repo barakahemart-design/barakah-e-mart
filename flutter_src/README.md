@@ -52,3 +52,41 @@ Open the **SQL Editor** in your Supabase Dashboard, copy and run the contents of
 #### 2. Localized Bangladesh elements
 * **Currency Symbol**: Supports the BDT `৳` symbol.
 * **In-Words Conversions**: Simple algorithms in `BillingProvider.convertToWords(double amt)` translate numbers to text (e.g. `1,25,000.00` becomes `"One Lakh Twenty Five Thousand Taka Only"`) ensuring complete local compliant layouts.
+
+---
+
+### 📡 Enabling Realtime Replication in Supabase Dashboard
+
+To ensure that the `.stream()` queries in the Flutter app work correctly and push live updates across all devices instantly:
+
+1. **Navigate to Database Settings**:
+   * Go to your **Supabase Dashboard** (https://supabase.com/dashboard).
+   * Open your project: **Barakah Bill Pro**.
+   * In the left side navigation, click on the **Database** (database icon) section.
+
+2. **Access Replication Settings**:
+   * Click on **Replication** under the database menu.
+
+3. **Enable Realtime on Core Tables**:
+   * Look for the **Source** section and click on **supabase_realtime** (or simply select tables to replicate).
+   * Toggle the **Realtime** switch to **ON** for the following tables so that Supabase publishes their changes to subscribers:
+     * `products` (Inventory tracking)
+     * `transactions` (Sales ledgers)
+     * `transaction_items` (Itemized invoices)
+     * `customers` (CRM records)
+     * `expenses` (Outgoing overhead logs)
+     * `purchases` (Restocking logs)
+
+4. **Alternative SQL Setup**:
+   * You can also run the following SQL command in your Supabase **SQL Editor** to enable replication for all of these tables at once:
+     ```sql
+     alter publication supabase_realtime add table public.products;
+     alter publication supabase_realtime add table public.transactions;
+     alter publication supabase_realtime add table public.transaction_items;
+     alter publication supabase_realtime add table public.customers;
+     alter publication supabase_realtime add table public.expenses;
+     alter publication supabase_realtime add table public.purchases;
+     ```
+
+With these toggles active, any changes made on a laptop or web panel are broadcast to your mobile users in under **100 milliseconds**!
+

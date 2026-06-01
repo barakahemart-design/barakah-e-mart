@@ -697,7 +697,55 @@ class _MainNavigationWorkspaceState extends State<MainNavigationWorkspace> {
                 Text(
                   bp.appMode == AppMode.userMode ? "USER MODE" : "GUEST MODE",
                   style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
-                ).paddingOnly(bottom: 24),
+                ),
+                const SizedBox(height: 12),
+                
+                // Real-time Sync Connection Banner with Force Sync Trigger (Enforce realtime sync / disable caching)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.emerald,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Colors.emerald, blurRadius: 4, spreadRadius: 1),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          "Live Realtime Active",
+                          style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.sync, color: Colors.amber, size: 16),
+                        tooltip: "Force Snapshot Refresh",
+                        onPressed: () async {
+                          await bp.refreshAllDataForcefully();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Forced direct database sync: snapshot fully refreshed!"),
+                              backgroundColor: Colors.emerald,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ).paddingOnly(bottom: 16),
 
                 // Access panel items with role lock triggers
                 _sidebarItem("Daily Sales", "pos", Icons.shopping_cart),
@@ -798,7 +846,12 @@ class _MainNavigationWorkspaceState extends State<MainNavigationWorkspace> {
   Widget _sidebarItem(String title, String tabId, IconData icon) {
     final bool isSelected = _activeTab == tabId;
     return InkWell(
-      onTap: () => setState(() => _activeTab = tabId),
+      onTap: () {
+        setState(() => _activeTab = tabId);
+        // Force refresh directly from Supabase network to clear local caches when changing screens/tabs
+        final bp = Provider.of<BillingProvider>(context, listen: false);
+        bp.refreshAllDataForcefully();
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(

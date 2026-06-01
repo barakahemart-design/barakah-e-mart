@@ -3,6 +3,7 @@
 // Direct state management bindings for checkout calculations & UI alerts.
 // =========================================================================
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'models.dart';
 import 'supabase_service.dart';
@@ -12,6 +13,13 @@ enum DateRangeFilter { daily, weekly, monthly, yearly, custom }
 
 class BillingProvider with ChangeNotifier {
   final SupabaseService _db = SupabaseService();
+
+  // Real-Time Stream Subscriptions
+  StreamSubscription<List<Product>>? _productsSubscription;
+  StreamSubscription<List<Customer>>? _customersSubscription;
+  StreamSubscription<List<Purchase>>? _purchasesSubscription;
+  StreamSubscription<List<Expense>>? _expensesSubscription;
+  StreamSubscription<List<OrderTransaction>>? _transactionsSubscription;
 
   // Primary System State
   bool _isLoading = false;
@@ -282,7 +290,64 @@ class BillingProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void cancelAllSubscriptions() {
+    _productsSubscription?.cancel();
+    _customersSubscription?.cancel();
+    _purchasesSubscription?.cancel();
+    _expensesSubscription?.cancel();
+    _transactionsSubscription?.cancel();
+
+    _productsSubscription = null;
+    _customersSubscription = null;
+    _purchasesSubscription = null;
+    _expensesSubscription = null;
+    _transactionsSubscription = null;
+  }
+
+  void startRealtimeStreaming() {
+    if (_appMode == AppMode.guestMode) return;
+
+    // Concurrently cancel existing listener loops to keep connections lean and fresh
+    cancelAllSubscriptions();
+
+    _productsSubscription = _db.productsStream().listen((data) {
+      _products = data;
+      notifyListeners();
+    }, onError: (err) {
+      debugPrint("Products stream error: $err");
+    });
+
+    _customersSubscription = _db.customersStream().listen((data) {
+      _customers = data;
+      notifyListeners();
+    }, onError: (err) {
+      debugPrint("Customers stream error: $err");
+    });
+
+    _purchasesSubscription = _db.purchasesStream().listen((data) {
+      _purchases = data;
+      notifyListeners();
+    }, onError: (err) {
+      debugPrint("Purchases stream error: $err");
+    });
+
+    _expensesSubscription = _db.expensesStream().listen((data) {
+      _expenses = data;
+      notifyListeners();
+    }, onError: (err) {
+      debugPrint("Expenses stream error: $err");
+    });
+
+    _transactionsSubscription = _db.transactionsStream().listen((data) {
+      _salesLedger = data;
+      notifyListeners();
+    }, onError: (err) {
+      debugPrint("Transactions stream error: $err");
+    });
+  }
+
   Future<void> logOut() async {
+    cancelAllSubscriptions();
     _profile = null;
     _currentPanel = 'none';
     _isScreenLocked = true;
@@ -305,6 +370,34 @@ class BillingProvider with ChangeNotifier {
   // 2. BACKEND REMOTE INTEGRATION FETCHES
   // -----------------------------------------------------------------
 
+  /// Force fetch snapshot directly from Supabase API, completely bypassing any stale local caches
+  Future<void> refreshAllDataForcefully() async {
+    if (_appMode == AppMode.guestMode) return;
+    _setLoading(true);
+    try {
+      final results = await Future.wait([
+        _db.fetchProducts(),
+        _db.fetchCustomers(),
+        _db.fetchPurchases(),
+        _db.fetchExpenses(),
+        _db.fetchSalesLedger(),
+      ]);
+
+      _products = results[0] as List<Product>;
+      _customers = results[1] as List<Customer>;
+      _purchases = results[2] as List<Purchase>;
+      _expenses = results[3] as List<Expense>;
+      _salesLedger = results[4] as List<OrderTransaction>;
+
+      // Auto-restart active stream subscriptions with clean states
+      startRealtimeStreaming();
+    } catch (e) {
+      debugPrint("Force snapshot sync failed: $e");
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> syncAllData() async {
     if (_appMode == AppMode.guestMode) return;
     _setLoading(true);
@@ -314,6 +407,9 @@ class BillingProvider with ChangeNotifier {
       _purchases = await _db.fetchPurchases();
       _expenses = await _db.fetchExpenses();
       _salesLedger = await _db.fetchSalesLedger();
+      
+      // Auto-initialize real-time dynamic streaming alongside snapshots
+      startRealtimeStreaming();
     } catch (e) {
       // Offline fallback handling gracefully
     } finally {
