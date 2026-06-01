@@ -83,7 +83,8 @@ import {
   signInOrSignUpWithPasscode,
   signUpWithEmail,
   signInWithEmail,
-  getPasscodeSyncId
+  getPasscodeSyncId,
+  selfHealDatabase
 } from "./lib/supabase";
 import { 
   generateInvoicePDF,
@@ -178,6 +179,10 @@ export default function App() {
 
   // Load Offline initial database state and sync latest from cloud safely
   useEffect(() => {
+    try {
+      selfHealDatabase();
+    } catch (_) {}
+
     const unsub = subscribeToAuthChanges(async (user) => {
       setActiveUser(user);
 

@@ -68,6 +68,273 @@ if (cachedUser) {
   }
 }
 
+export function deduplicateProducts(products: any[]): any[] {
+  if (!Array.isArray(products)) return [];
+  const uniqueList: any[] = [];
+  for (const p of products) {
+    if (!p) continue;
+    const cleanId = (p.id || "").trim();
+    const cleanSku = (p.sku || "").trim().toLowerCase();
+    const cleanName = (p.name || "").trim().toLowerCase();
+
+    let matchedIdx = -1;
+    if (cleanId) {
+      matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
+    }
+    if (matchedIdx === -1 && cleanSku) {
+      matchedIdx = uniqueList.findIndex(x => (x.sku || "").trim().toLowerCase() === cleanSku);
+    }
+    if (matchedIdx === -1 && cleanName) {
+      matchedIdx = uniqueList.findIndex(x => (x.name || "").trim().toLowerCase() === cleanName);
+    }
+
+    if (matchedIdx >= 0) {
+      const existing = uniqueList[matchedIdx];
+      uniqueList[matchedIdx] = {
+        ...existing,
+        ...p,
+        stock: Math.max(existing.stock || 0, p.stock || 0),
+        buyPrice: p.buyPrice || existing.buyPrice || 0,
+        sellPrice: p.sellPrice || existing.sellPrice || 0,
+        id: existing.id || p.id,
+      };
+    } else {
+      uniqueList.push({ ...p });
+    }
+  }
+  return uniqueList;
+}
+
+export function deduplicateContacts(contacts: any[]): any[] {
+  if (!Array.isArray(contacts)) return [];
+  const uniqueList: any[] = [];
+  for (const c of contacts) {
+    if (!c) continue;
+    const cleanId = (c.id || "").trim();
+    const cleanPhone = (c.phone || "").trim().toLowerCase().replace(/[-()\s]/g, "");
+    const cleanName = (c.name || "").trim().toLowerCase();
+
+    let matchedIdx = -1;
+    if (cleanId) {
+      matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
+    }
+    if (matchedIdx === -1 && cleanPhone && cleanPhone.length > 5) {
+      matchedIdx = uniqueList.findIndex(x => (x.phone || "").trim().toLowerCase().replace(/[-()\s]/g, "") === cleanPhone);
+    }
+    if (matchedIdx === -1 && cleanName) {
+      matchedIdx = uniqueList.findIndex(x => (x.name || "").trim().toLowerCase() === cleanName);
+    }
+
+    if (matchedIdx >= 0) {
+      uniqueList[matchedIdx] = {
+        ...uniqueList[matchedIdx],
+        ...c,
+        id: uniqueList[matchedIdx].id || c.id
+      };
+    } else {
+      uniqueList.push({ ...c });
+    }
+  }
+  return uniqueList;
+}
+
+export function deduplicateExpenses(expenses: any[]): any[] {
+  if (!Array.isArray(expenses)) return [];
+  const uniqueList: any[] = [];
+  for (const e of expenses) {
+    if (!e) continue;
+    const cleanId = (e.id || "").trim();
+    const cleanDesc = (e.description || "").trim().toLowerCase();
+    const amount = Number(e.amount) || 0;
+    const dateStr = (e.date || "").substring(0, 10);
+
+    let matchedIdx = -1;
+    if (cleanId) {
+      matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
+    }
+    if (matchedIdx === -1 && cleanDesc) {
+      matchedIdx = uniqueList.findIndex(x => 
+        (x.description || "").trim().toLowerCase() === cleanDesc &&
+        Math.abs((Number(x.amount) || 0) - amount) < 0.01 &&
+        (x.date || "").substring(0, 10) === dateStr
+      );
+    }
+
+    if (matchedIdx >= 0) {
+      uniqueList[matchedIdx] = {
+        ...uniqueList[matchedIdx],
+        ...e,
+        id: uniqueList[matchedIdx].id || e.id
+      };
+    } else {
+      uniqueList.push({ ...e });
+    }
+  }
+  return uniqueList;
+}
+
+export function deduplicatePurchases(purchases: any[]): any[] {
+  if (!Array.isArray(purchases)) return [];
+  const uniqueList: any[] = [];
+  for (const pur of purchases) {
+    if (!pur) continue;
+    const cleanId = (pur.id || "").trim();
+    const productId = (pur.productId || "").trim();
+    const invNo = (pur.invoiceNo || "").trim().toLowerCase();
+    const qty = Number(pur.quantity) || 0;
+    const dateStr = (pur.date || "").substring(0, 10);
+
+    let matchedIdx = -1;
+    if (cleanId) {
+      matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
+    }
+    if (matchedIdx === -1 && productId && invNo) {
+      matchedIdx = uniqueList.findIndex(x => 
+        (x.productId || "").trim() === productId &&
+        (x.invoiceNo || "").trim().toLowerCase() === invNo &&
+        Math.abs((Number(x.quantity) || 0) - qty) < 0.001 &&
+        (x.date || "").substring(0, 10) === dateStr
+      );
+    }
+
+    if (matchedIdx >= 0) {
+      uniqueList[matchedIdx] = {
+        ...uniqueList[matchedIdx],
+        ...pur,
+        id: uniqueList[matchedIdx].id || pur.id
+      };
+    } else {
+      uniqueList.push({ ...pur });
+    }
+  }
+  return uniqueList;
+}
+
+export function deduplicateTransactions(transactions: any[]): any[] {
+  if (!Array.isArray(transactions)) return [];
+  const uniqueList: any[] = [];
+  for (const t of transactions) {
+    if (!t) continue;
+    const cleanId = (t.id || "").trim();
+    const invNo = (t.invoiceNo || "").trim().toLowerCase();
+
+    let matchedIdx = -1;
+    if (cleanId) {
+      matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
+    }
+    if (matchedIdx === -1 && invNo) {
+      matchedIdx = uniqueList.findIndex(x => (x.invoiceNo || "").trim().toLowerCase() === invNo);
+    }
+
+    if (matchedIdx >= 0) {
+      uniqueList[matchedIdx] = {
+        ...uniqueList[matchedIdx],
+        ...t,
+        id: uniqueList[matchedIdx].id || t.id
+      };
+    } else {
+      uniqueList.push({ ...t });
+    }
+  }
+  return uniqueList;
+}
+
+export const selfHealDatabase = (customEmail?: string) => {
+  const cached = localStorage.getItem('barakah_local_active_user');
+  let email = (customEmail || "").trim().toLowerCase();
+  if (!email && cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.email) {
+        email = parsed.email.trim().toLowerCase();
+      }
+    } catch (_) {}
+  }
+  if (!email && currentSupabaseUser?.email) {
+    email = currentSupabaseUser.email.trim().toLowerCase();
+  }
+
+  const normalizeWithEmail = (id: string) => toUUID(id, email);
+
+  // 1. PRODUCTS DEDUPLICATE
+  const rawProducts = localStorage.getItem('barakah_products');
+  if (rawProducts) {
+    try {
+      const products = JSON.parse(rawProducts);
+      if (Array.isArray(products)) {
+        const normalized = products.map((p: any) => ({ ...p, id: normalizeWithEmail(p.id) }));
+        const cleaned = deduplicateProducts(normalized);
+        localStorage.setItem('barakah_products', JSON.stringify(cleaned));
+      }
+    } catch (_) {}
+  }
+
+  // 2. CONTACTS DEDUPLICATE
+  const rawContacts = localStorage.getItem('barakah_contacts');
+  if (rawContacts) {
+    try {
+      const contacts = JSON.parse(rawContacts);
+      if (Array.isArray(contacts)) {
+        const normalized = contacts.map((c: any) => ({ ...c, id: normalizeWithEmail(c.id) }));
+        const cleaned = deduplicateContacts(normalized);
+        localStorage.setItem('barakah_contacts', JSON.stringify(cleaned));
+      }
+    } catch (_) {}
+  }
+
+  // 3. EXPENSES DEDUPLICATE
+  const rawExpenses = localStorage.getItem('barakah_expenses');
+  if (rawExpenses) {
+    try {
+      const expenses = JSON.parse(rawExpenses);
+      if (Array.isArray(expenses)) {
+        const normalized = expenses.map((e: any) => ({ ...e, id: normalizeWithEmail(e.id) }));
+        const cleaned = deduplicateExpenses(normalized);
+        localStorage.setItem('barakah_expenses', JSON.stringify(cleaned));
+      }
+    } catch (_) {}
+  }
+
+  // 4. PURCHASES DEDUPLICATE
+  const rawPurchases = localStorage.getItem('barakah_purchases');
+  if (rawPurchases) {
+    try {
+      const purchases = JSON.parse(rawPurchases);
+      if (Array.isArray(purchases)) {
+        const normalized = purchases.map((pur: any) => ({
+          ...pur,
+          id: normalizeWithEmail(pur.id),
+          productId: pur.productId ? normalizeWithEmail(pur.productId) : ""
+        }));
+        const cleaned = deduplicatePurchases(normalized);
+        localStorage.setItem('barakah_purchases', JSON.stringify(cleaned));
+      }
+    } catch (_) {}
+  }
+
+  // 5. TRANSACTIONS DEDUPLICATE
+  const rawTransactions = localStorage.getItem('barakah_transactions');
+  if (rawTransactions) {
+    try {
+      const transactions = JSON.parse(rawTransactions);
+      if (Array.isArray(transactions)) {
+        const normalized = transactions.map((t: any) => ({
+          ...t,
+          id: normalizeWithEmail(t.id),
+          contactId: t.contactId ? normalizeWithEmail(t.contactId) : undefined,
+          items: (t.items || []).map((item: any) => ({
+            ...item,
+            id: item.id ? normalizeWithEmail(item.id) : normalizeWithEmail(`${t.id}_item_${item.productId || Math.random()}`),
+            productId: item.productId ? normalizeWithEmail(item.productId) : undefined
+          }))
+        }));
+        const cleaned = deduplicateTransactions(normalized);
+        localStorage.setItem('barakah_transactions', JSON.stringify(cleaned));
+      }
+    } catch (_) {}
+  }
+};
+
 export const restoreLocalKeys = (data: any) => {
   if (!data) return;
 
@@ -133,20 +400,7 @@ export const restoreLocalKeys = (data: any) => {
     }
     const cleanCloudProducts = cleanDemoProducts(data.products).map(p => normalizeProduct(p));
     const normalizedLocalProducts = localProducts.map(p => normalizeProduct(p));
-    
-    const mergedProducts = [...cleanCloudProducts];
-    if (Array.isArray(normalizedLocalProducts)) {
-      for (const lp of normalizedLocalProducts) {
-        const alreadyExists = mergedProducts.some(p => 
-          p.id === lp.id || 
-          (lp.sku && p.sku && lp.sku.trim() === p.sku.trim()) ||
-          (lp.name && p.name && lp.name.trim().toLowerCase() === p.name.trim().toLowerCase())
-        );
-        if (!alreadyExists) {
-          mergedProducts.push(lp);
-        }
-      }
-    }
+    const mergedProducts = deduplicateProducts([...cleanCloudProducts, ...normalizedLocalProducts]);
     localStorage.setItem('barakah_products', JSON.stringify(mergedProducts));
   } else {
     const rawLocalProducts = localStorage.getItem('barakah_products');
@@ -167,20 +421,7 @@ export const restoreLocalKeys = (data: any) => {
     }
     const cleanCloudContacts = cleanDemoContacts(data.contacts).map(c => normalizeContact(c));
     const normalizedLocalContacts = localContacts.map(c => normalizeContact(c));
-    
-    const mergedContacts = [...cleanCloudContacts];
-    if (Array.isArray(normalizedLocalContacts)) {
-      for (const lc of normalizedLocalContacts) {
-        const alreadyExists = mergedContacts.some(c => 
-          c.id === lc.id ||
-          (lc.phone && c.phone && lc.phone.trim() === c.phone.trim()) ||
-          (lc.name && c.name && lc.name.trim().toLowerCase() === c.name.trim().toLowerCase())
-        );
-        if (!alreadyExists) {
-          mergedContacts.push(lc);
-        }
-      }
-    }
+    const mergedContacts = deduplicateContacts([...cleanCloudContacts, ...normalizedLocalContacts]);
     localStorage.setItem('barakah_contacts', JSON.stringify(mergedContacts));
   } else {
     const rawLocalContacts = localStorage.getItem('barakah_contacts');
@@ -201,19 +442,7 @@ export const restoreLocalKeys = (data: any) => {
     }
     const cleanCloudExpenses = cleanDemoExpenses(data.expenses).map(e => normalizeExpense(e));
     const normalizedLocalExpenses = localExpenses.map(e => normalizeExpense(e));
-    
-    const mergedExpenses = [...cleanCloudExpenses];
-    if (Array.isArray(normalizedLocalExpenses)) {
-      for (const le of normalizedLocalExpenses) {
-        const alreadyExists = mergedExpenses.some(ex => 
-          ex.id === le.id ||
-          (ex.description && le.description && ex.description.trim().toLowerCase() === le.description.trim().toLowerCase() && Math.abs(ex.amount - le.amount) < 0.01 && ex.date === le.date)
-        );
-        if (!alreadyExists) {
-          mergedExpenses.push(le);
-        }
-      }
-    }
+    const mergedExpenses = deduplicateExpenses([...cleanCloudExpenses, ...normalizedLocalExpenses]);
     localStorage.setItem('barakah_expenses', JSON.stringify(mergedExpenses));
   } else {
     const rawLocalExpenses = localStorage.getItem('barakah_expenses');
@@ -222,7 +451,7 @@ export const restoreLocalKeys = (data: any) => {
     }
   }
 
-  // 4. MERGE TRANSACTIONS (CRITICAL - UNION BY ID AND INVOICENO)
+  // 4. MERGE TRANSACTIONS
   if (data.transactions) {
     const rawLocalTransactions = localStorage.getItem('barakah_transactions');
     let localTransactions = [];
@@ -234,20 +463,7 @@ export const restoreLocalKeys = (data: any) => {
     }
     const cleanCloudTransactions = cleanDemoTransactions(data.transactions).map(t => normalizeTransaction(t));
     const normalizedLocalTransactions = localTransactions.map(t => normalizeTransaction(t));
-    
-    const mergedTransactions = [...cleanCloudTransactions];
-    if (Array.isArray(normalizedLocalTransactions)) {
-      for (const lt of normalizedLocalTransactions) {
-        const alreadyExists = mergedTransactions.some(t => 
-          t.id === lt.id || 
-          (lt.invoiceNo && t.invoiceNo && lt.invoiceNo.trim() === t.invoiceNo.trim())
-        );
-        if (!alreadyExists) {
-          mergedTransactions.push(lt);
-        }
-      }
-    }
-    // Sort transactions by date descending so the newest are first
+    const mergedTransactions = deduplicateTransactions([...cleanCloudTransactions, ...normalizedLocalTransactions]);
     mergedTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
     localStorage.setItem('barakah_transactions', JSON.stringify(mergedTransactions));
   } else {
@@ -275,19 +491,7 @@ export const restoreLocalKeys = (data: any) => {
     }
     const cleanCloudPurchases = cleanDemoPurchases(p).map(pur => normalizePurchase(pur));
     const normalizedLocalPurchases = localPurchases.map(pur => normalizePurchase(pur));
-    
-    const mergedPurchases = [...cleanCloudPurchases];
-    if (Array.isArray(normalizedLocalPurchases)) {
-      for (const lp of normalizedLocalPurchases) {
-        const alreadyExists = mergedPurchases.some(pur => 
-          pur.id === lp.id ||
-          (pur.productId === lp.productId && pur.quantity === lp.quantity && pur.buyPrice === lp.buyPrice && pur.invoiceNo === lp.invoiceNo && pur.date === lp.date)
-        );
-        if (!alreadyExists) {
-          mergedPurchases.push(lp);
-        }
-      }
-    }
+    const mergedPurchases = deduplicatePurchases([...cleanCloudPurchases, ...normalizedLocalPurchases]);
     localStorage.setItem('barakah_purchases', JSON.stringify(mergedPurchases));
   } else {
     const rawLocalPurchases = localStorage.getItem('barakah_purchases');
@@ -309,6 +513,10 @@ export const restoreLocalKeys = (data: any) => {
     }
     localStorage.setItem('barakah_business_info', JSON.stringify(mergedBiz));
   }
+
+  try {
+    selfHealDatabase(email);
+  } catch (_) {}
 };
 
 export function toUUID(str: string, email: string = ""): string {
@@ -434,6 +642,34 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
       const activeUserId = profile?.id;
       if (activeUserId) {
         console.log(`[Direct Sync Engine] Replicating direct table records on restore for profile: ${activeUserId}`);
+
+        // Normalize loaded JSON columns to salted UUID format first, so there is never ID mismatch during SQL table merges
+        if (finalData) {
+          if (finalData.products) {
+            finalData.products = finalData.products.map((p: any) => ({ ...p, id: toUUID(p.id, cleanEmail) }));
+          }
+          if (finalData.contacts) {
+            finalData.contacts = finalData.contacts.map((c: any) => ({ ...c, id: toUUID(c.id, cleanEmail) }));
+          }
+          if (finalData.expenses) {
+            finalData.expenses = finalData.expenses.map((e: any) => ({ ...e, id: toUUID(e.id, cleanEmail) }));
+          }
+          if (finalData.purchases) {
+            finalData.purchases = finalData.purchases.map((pur: any) => ({ ...pur, id: toUUID(pur.id, cleanEmail), productId: toUUID(pur.productId, cleanEmail) }));
+          }
+          if (finalData.transactions) {
+            finalData.transactions = finalData.transactions.map((t: any) => ({
+              ...t,
+              id: toUUID(t.id, cleanEmail),
+              contactId: t.contactId ? toUUID(t.contactId, cleanEmail) : undefined,
+              items: (t.items || []).map((item: any) => ({
+                ...item,
+                id: toUUID(item.id, cleanEmail),
+                productId: item.productId ? toUUID(item.productId, cleanEmail) : undefined
+              }))
+            }));
+          }
+        }
 
         const [productsRes, customersRes, expensesRes, transactionsRes, detailRes] = await Promise.all([
           supabase.from("products").select("*").eq("user_id", activeUserId),
