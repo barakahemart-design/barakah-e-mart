@@ -46,6 +46,8 @@ export interface TransactionItem {
   price: number;
   total: number;
   productId?: string;
+  buyPrice?: number;
+  isNegativeSale?: boolean;
 }
 
 export interface Transaction {

@@ -777,7 +777,9 @@ export default function App() {
           productId: cartItem.product.id,
           quantity: cartItem.quantity,
           price: itemPrice,
-          total: itemPrice * cartItem.quantity
+          total: itemPrice * cartItem.quantity,
+          buyPrice: cartItem.product.buyPrice || 0,
+          isNegativeSale: cartItem.product.stock < cartItem.quantity
         };
       }),
       subtotal: cartSubtotal,
@@ -1058,6 +1060,24 @@ export default function App() {
   };
 
   const handleUpdatePricing = (id: string, buyPrice: number, sellPrice: number, addStock?: number) => {
+    const matchedProd = products.find(p => p.id === id);
+    if (addStock && addStock > 0) {
+      const invoiceNo = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newPurchase = {
+        id: `pur_${Date.now()}`,
+        productId: id,
+        productName: matchedProd ? matchedProd.name : "Reconciled Item",
+        supplierId: "",
+        supplierName: "Manual Adjustment",
+        quantity: addStock,
+        buyPrice: buyPrice,
+        totalAmount: addStock * buyPrice,
+        invoiceNo: invoiceNo,
+        date: new Date().toISOString()
+      };
+      setPurchases(prev => [newPurchase, ...prev]);
+    }
+
     setProducts(products.map(p => {
       if (p.id === id) {
         return {

@@ -445,6 +445,45 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
     }
 
     if (finalData) {
+      // Normalize all client IDs in finalData to clean deterministic UUID format to perfectly match SQL relational tables 
+      if (finalData.products) {
+        finalData.products = finalData.products.map((p: any) => ({
+          ...p,
+          id: toUUID(p.id)
+        }));
+      }
+      if (finalData.contacts) {
+        finalData.contacts = finalData.contacts.map((c: any) => ({
+          ...c,
+          id: toUUID(c.id)
+        }));
+      }
+      if (finalData.expenses) {
+        finalData.expenses = finalData.expenses.map((e: any) => ({
+          ...e,
+          id: toUUID(e.id)
+        }));
+      }
+      if (finalData.purchases) {
+        finalData.purchases = finalData.purchases.map((pur: any) => ({
+          ...pur,
+          id: toUUID(pur.id),
+          productId: toUUID(pur.productId)
+        }));
+      }
+      if (finalData.transactions) {
+        finalData.transactions = finalData.transactions.map((t: any) => ({
+          ...t,
+          id: toUUID(t.id),
+          contactId: t.contactId ? toUUID(t.contactId) : undefined,
+          items: (t.items || []).map((item: any) => ({
+            ...item,
+            id: toUUID(item.id),
+            productId: item.productId ? toUUID(item.productId) : undefined
+          }))
+        }));
+      }
+
       restoreLocalKeys(finalData);
       return true;
     }
@@ -506,6 +545,25 @@ export const signUpWithEmail = async (email: string, pass: string) => {
 
     if (user) {
       const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored: false, isPasscodeUser: false };
+      
+      // Ensure profile exists in 'profiles' table so mobile apps can log in and reference ID
+      try {
+        const uId = user.id || user.uid;
+        if (uId) {
+          const profileData = {
+            id: uId,
+            email: cleanEmail,
+            shop_name: "Barakah Electronics",
+            shop_address: "Dhaka, Bangladesh",
+            support_phone: "01700-000000",
+            vat_reg_id: "VAT-884499"
+          };
+          await supabase.from("profiles").upsert(profileData);
+          console.log("[Auth Engine] Automatically ensured profile row is active in PostgreSQL on signup.");
+        }
+      } catch (profErr: any) {
+        console.warn("[Auth Engine] Profiles table registration warning from signup:", profErr.message);
+      }
       
       try {
         const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
@@ -577,6 +635,25 @@ export const signInWithEmail = async (email: string, pass: string) => {
     if (user) {
       const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored: false, isPasscodeUser: false };
       
+      // Ensure profile exists in 'profiles' table so mobile apps can log in and reference ID
+      try {
+        const uId = user.id || user.uid;
+        if (uId) {
+          const profileData = {
+            id: uId,
+            email: cleanEmail,
+            shop_name: "Barakah Electronics",
+            shop_address: "Dhaka, Bangladesh",
+            support_phone: "01700-000000",
+            vat_reg_id: "VAT-884499"
+          };
+          await supabase.from("profiles").upsert(profileData);
+          console.log("[Auth Engine] Automatically ensured profile row is active in PostgreSQL on signin.");
+        }
+      } catch (profErr: any) {
+        console.warn("[Auth Engine] Profiles table registration warning from signin:", profErr.message);
+      }
+      
       try {
         const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
         userObj.restored = wasRestored;
@@ -645,8 +722,46 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
   
-  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false, passcode: pin };
+  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false, passcode: pin, id: syncId };
   
+  // Attempt background real user authentication inside Supabase Auth to enable RLS-bypassed table sync
+  const bgPassword = `PasscodeSecure_${pin}_Barakah_77`;
+  try {
+    const { data: signInRes, error: signInErr } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: bgPassword
+    });
+    if (signInErr) {
+      if (signInErr.message !== "Invalid login credentials") {
+        console.log("[Background Auth] Trying signup for clean credentials...", signInErr.message);
+      }
+      // If sign in fails, try signing up
+      const { data: signUpRes, error: signUpErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: bgPassword
+      });
+      if (!signUpErr && signUpRes.user) {
+        userObj.id = signUpRes.user.id;
+        userObj.uid = signUpRes.user.id;
+        // Make sure a profile row is written for them too
+        const profileData = {
+          id: signUpRes.user.id,
+          email: cleanEmail,
+          shop_name: "Barakah Electronics",
+          shop_address: "Dhaka, Bangladesh",
+          support_phone: "01700-000000",
+          vat_reg_id: "VAT-884499"
+        };
+        await supabase.from("profiles").upsert(profileData);
+      }
+    } else if (signInRes.user) {
+      userObj.id = signInRes.user.id;
+      userObj.uid = signInRes.user.id;
+    }
+  } catch (authErr) {
+    console.warn("Background auto auth failed for passcode user:", authErr);
+  }
+
   try {
     const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, pin);
     userObj.restored = wasRestored;
@@ -720,7 +835,8 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   // --- Real-time Bidirectional Postgres Tables Synchronizer ---
   try {
     const sessionRes = await supabase.auth.getSession();
-    let activeUserId = sessionRes?.data?.session?.user?.id || currentSupabaseUser?.id;
+    const sessionUser = sessionRes?.data?.session?.user;
+    let activeUserId = sessionUser?.id || currentSupabaseUser?.id;
     if (!activeUserId) {
       // Find the user ID based on email address
       const { data: profile } = await supabase
@@ -733,8 +849,13 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       }
     }
 
-    if (activeUserId) {
-      console.log(`[Direct Sync Engine] Upserting individual tables in background for User: ${activeUserId}`);
+    // We only perform background individual table sync if we have a valid, active authenticated session matching activeUserId.
+    // If the browser client is unauthenticated (e.g., using an offline-first passcode with no matching database session),
+    // any client-side direct table writes will trigger a Row-Level Security (RLS) violation in Postgres.
+    // In that case, we skip direct table upsert and rely purely on the `passcode_syncs` JSON backups, which bypass RLS.
+    const isSessionReady = !!(sessionUser && sessionUser.id && activeUserId === sessionUser.id);
+    if (isSessionReady && activeUserId) {
+      console.log(`[Direct Sync Engine] Authenticated session validated. Up-syncing individual tables for User: ${activeUserId}`);
       
       const productsToUpsert = (payload.products || []).map(p => ({
         id: toUUID(p.id),
@@ -862,22 +983,54 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     console.warn("[Sync Engine] Failed writing to relational database tables:", syncErr);
   }
 
+  const normalizedProducts = (payload.products || []).map(p => ({ ...p, id: toUUID(p.id) }));
+  const normalizedContacts = (payload.contacts || []).map(c => ({ ...c, id: toUUID(c.id) }));
+  const normalizedExpenses = (payload.expenses || []).map(e => ({ ...e, id: toUUID(e.id) }));
+  const normalizedPurchases = (payload.purchases || []).map(pur => ({ ...pur, id: toUUID(pur.id), productId: toUUID(pur.productId) }));
+  const normalizedTransactions = (payload.transactions || []).map(t => ({
+    ...t,
+    id: toUUID(t.id),
+    contactId: t.contactId ? toUUID(t.contactId) : undefined,
+    items: (t.items || []).map((item: any) => ({
+      ...item,
+      id: toUUID(item.id),
+      productId: item.productId ? toUUID(item.productId) : undefined
+    }))
+  }));
+
   const serializedBusinessInfo = {
     ...(payload.businessInfo || {}),
-    purchases: payload.purchases || []
+    purchases: normalizedPurchases
   };
 
   const body = {
     id: syncId,
     linked_email: cleanEmail,
-    products: payload.products,
-    contacts: payload.contacts,
-    expenses: payload.expenses,
-    transactions: payload.transactions,
+    products: normalizedProducts,
+    contacts: normalizedContacts,
+    expenses: normalizedExpenses,
+    transactions: normalizedTransactions,
     businessInfo: serializedBusinessInfo,
     business_info: serializedBusinessInfo, // provide snake_case version for Postgres to handle case-folding automatically
     updated_at: new Date().toISOString()
   };
+
+  try {
+    // Elevate local state seamlessly in real-time with clean UUID keys 
+    const backupObj = {
+      id: syncId,
+      linked_email: cleanEmail,
+      products: normalizedProducts,
+      contacts: normalizedContacts,
+      expenses: normalizedExpenses,
+      transactions: normalizedTransactions,
+      businessInfo: serializedBusinessInfo,
+      purchases: normalizedPurchases
+    };
+    restoreLocalKeys(backupObj);
+  } catch (err) {
+    console.warn("Instant local keys conversion failed:", err);
+  }
 
   // For supreme safety, we also save a daily historical copy
   try {
