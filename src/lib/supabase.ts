@@ -437,7 +437,27 @@ export const auth = {
 
 export function getPasscodeSyncId(email: string, pin: string): string {
   const cleanEmail = email.trim().toLowerCase();
-  const rawKey = `${cleanEmail}_${pin.trim()}_smart_v1`;
+  let resolvedPin = pin.trim();
+
+  if (resolvedPin === "classic_account_secure") {
+    // Attempt to read custom admin passcode from local business settings
+    try {
+      const bizInfoStr = localStorage.getItem("barakah_business_info");
+      if (bizInfoStr) {
+        const bizInfo = JSON.parse(bizInfoStr);
+        if (bizInfo && bizInfo.adminPasscode) {
+          resolvedPin = String(bizInfo.adminPasscode).trim();
+        }
+      }
+    } catch (_) {}
+
+    // Default fallback to "1234" if no custom passcode is configured
+    if (resolvedPin === "classic_account_secure") {
+      resolvedPin = "1234";
+    }
+  }
+
+  const rawKey = `${cleanEmail}_${resolvedPin}_smart_v1`;
   let hash = 2166136261;
   for (let i = 0; i < rawKey.length; i++) {
     hash ^= rawKey.charCodeAt(i);
