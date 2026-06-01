@@ -4,7 +4,8 @@ import {
   cleanDemoContacts, 
   cleanDemoExpenses, 
   cleanDemoPurchases, 
-  cleanDemoTransactions 
+  cleanDemoTransactions,
+  INITIAL_BUSINESS_INFO
 } from './mockDB';
 
 const fallbackUrl = 'https://cmanayslirpenaruncwr.supabase.co';
@@ -69,22 +70,148 @@ if (cachedUser) {
 
 export const restoreLocalKeys = (data: any) => {
   if (!data) return;
-  if (data.products) localStorage.setItem('barakah_products', JSON.stringify(cleanDemoProducts(data.products)));
-  if (data.contacts) localStorage.setItem('barakah_contacts', JSON.stringify(cleanDemoContacts(data.contacts)));
-  if (data.expenses) localStorage.setItem('barakah_expenses', JSON.stringify(cleanDemoExpenses(data.expenses)));
-  if (data.transactions) localStorage.setItem('barakah_transactions', JSON.stringify(cleanDemoTransactions(data.transactions)));
+
+  // 1. MERGE PRODUCTS
+  if (data.products) {
+    const rawLocalProducts = localStorage.getItem('barakah_products');
+    let localProducts = [];
+    if (rawLocalProducts) {
+      try { localProducts = JSON.parse(rawLocalProducts); } catch (e) {}
+    }
+    const cleanCloudProducts = cleanDemoProducts(data.products);
+    const mergedProducts = [...cleanCloudProducts];
+    if (Array.isArray(localProducts)) {
+      for (const lp of localProducts) {
+        if (!mergedProducts.some(p => p.id === lp.id)) {
+          mergedProducts.push(lp);
+        }
+      }
+    }
+    localStorage.setItem('barakah_products', JSON.stringify(mergedProducts));
+  } else {
+    const rawLocalProducts = localStorage.getItem('barakah_products');
+    if (!rawLocalProducts) {
+      localStorage.setItem('barakah_products', JSON.stringify([]));
+    }
+  }
+
+  // 2. MERGE CONTACTS
+  if (data.contacts) {
+    const rawLocalContacts = localStorage.getItem('barakah_contacts');
+    let localContacts = [];
+    if (rawLocalContacts) {
+      try { localContacts = JSON.parse(rawLocalContacts); } catch (e) {}
+    }
+    const cleanCloudContacts = cleanDemoContacts(data.contacts);
+    const mergedContacts = [...cleanCloudContacts];
+    if (Array.isArray(localContacts)) {
+      for (const lc of localContacts) {
+        if (!mergedContacts.some(c => c.id === lc.id)) {
+          mergedContacts.push(lc);
+        }
+      }
+    }
+    localStorage.setItem('barakah_contacts', JSON.stringify(mergedContacts));
+  } else {
+    const rawLocalContacts = localStorage.getItem('barakah_contacts');
+    if (!rawLocalContacts) {
+      localStorage.setItem('barakah_contacts', JSON.stringify([]));
+    }
+  }
+
+  // 3. MERGE EXPENSES
+  if (data.expenses) {
+    const rawLocalExpenses = localStorage.getItem('barakah_expenses');
+    let localExpenses = [];
+    if (rawLocalExpenses) {
+      try { localExpenses = JSON.parse(rawLocalExpenses); } catch (e) {}
+    }
+    const cleanCloudExpenses = cleanDemoExpenses(data.expenses);
+    const mergedExpenses = [...cleanCloudExpenses];
+    if (Array.isArray(localExpenses)) {
+      for (const le of localExpenses) {
+        if (!mergedExpenses.some(ex => ex.id === le.id)) {
+          mergedExpenses.push(le);
+        }
+      }
+    }
+    localStorage.setItem('barakah_expenses', JSON.stringify(mergedExpenses));
+  } else {
+    const rawLocalExpenses = localStorage.getItem('barakah_expenses');
+    if (!rawLocalExpenses) {
+      localStorage.setItem('barakah_expenses', JSON.stringify([]));
+    }
+  }
+
+  // 4. MERGE TRANSACTIONS (CRITICAL - UNION BY ID AND INVOICENO)
+  if (data.transactions) {
+    const rawLocalTransactions = localStorage.getItem('barakah_transactions');
+    let localTransactions = [];
+    if (rawLocalTransactions) {
+      try { localTransactions = JSON.parse(rawLocalTransactions); } catch (e) {}
+    }
+    const cleanCloudTransactions = cleanDemoTransactions(data.transactions);
+    const mergedTransactions = [...cleanCloudTransactions];
+    if (Array.isArray(localTransactions)) {
+      for (const lt of localTransactions) {
+        const alreadyExists = mergedTransactions.some(t => t.id === lt.id || (lt.invoiceNo && t.invoiceNo === lt.invoiceNo));
+        if (!alreadyExists) {
+          mergedTransactions.push(lt);
+        }
+      }
+    }
+    // Sort transactions by date descending so the newest are first
+    mergedTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    localStorage.setItem('barakah_transactions', JSON.stringify(mergedTransactions));
+  } else {
+    const rawLocalTransactions = localStorage.getItem('barakah_transactions');
+    if (!rawLocalTransactions) {
+      localStorage.setItem('barakah_transactions', JSON.stringify([]));
+    }
+  }
   
   const bizData = data.businessInfo || data.business_info || data.businessinfo;
   
+  // 5. MERGE PURCHASES
   let p = data.purchases;
   if (!p && bizData && bizData.purchases) {
     p = bizData.purchases;
   }
-  localStorage.setItem('barakah_purchases', JSON.stringify(cleanDemoPurchases(p || [])));
+  if (p) {
+    const rawLocalPurchases = localStorage.getItem('barakah_purchases');
+    let localPurchases = [];
+    if (rawLocalPurchases) {
+      try { localPurchases = JSON.parse(rawLocalPurchases); } catch (e) {}
+    }
+    const cleanCloudPurchases = cleanDemoPurchases(p);
+    const mergedPurchases = [...cleanCloudPurchases];
+    if (Array.isArray(localPurchases)) {
+      for (const lp of localPurchases) {
+        if (!mergedPurchases.some(pur => pur.id === lp.id)) {
+          mergedPurchases.push(lp);
+        }
+      }
+    }
+    localStorage.setItem('barakah_purchases', JSON.stringify(mergedPurchases));
+  } else {
+    const rawLocalPurchases = localStorage.getItem('barakah_purchases');
+    if (!rawLocalPurchases) {
+      localStorage.setItem('barakah_purchases', JSON.stringify([]));
+    }
+  }
 
+  // 6. BUSINESS SETTINGS MERGE
   if (bizData) {
     const { purchases: ignore, ...cleanInfo } = bizData;
-    localStorage.setItem('barakah_business_info', JSON.stringify(cleanInfo));
+    const rawLocalBiz = localStorage.getItem('barakah_business_info');
+    let mergedBiz = { ...INITIAL_BUSINESS_INFO, ...cleanInfo };
+    if (rawLocalBiz) {
+      try {
+        const localBiz = JSON.parse(rawLocalBiz);
+        mergedBiz = { ...localBiz, ...cleanInfo };
+      } catch (e) {}
+    }
+    localStorage.setItem('barakah_business_info', JSON.stringify(mergedBiz));
   }
 };
 
@@ -373,7 +500,13 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
           return true; // Return true to keep frontend healthy without overwriting cloud backup
         }
 
-        // Critical defense: If local state has less data than cloud, check if it's a dramatic reduction (more than 3 items lost and < 90% of existing)
+        // Critical defense 1: If local transactions are fewer than cloud transactions, it means device is out of sync. Preserve cloud!
+        if (existingTransactionsCount > incomingTransactionsLength) {
+          console.warn(`[Sync Guard] Out of sync transactions detected! Cloud has ${existingTransactionsCount} transactions but incoming has ${incomingTransactionsLength}. Aborted upload to protect transactions.`);
+          return true;
+        }
+
+        // Critical defense 2: If local state has less data than cloud, check if it's a dramatic reduction (more than 3 items lost and < 90% of existing)
         const itemLoss = existingTotal - incomingTotal;
         if (itemLoss > 3 && incomingTotal < existingTotal * 0.9) {
           console.warn(`[Sync Guard] CRITICAL OVERWRITE PREVENTED! Local state has ${incomingTotal} items, but cloud backup has ${existingTotal} items. Aborted auto-backup to protect the master database from accidental overwrites.`);
