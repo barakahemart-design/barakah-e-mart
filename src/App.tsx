@@ -1037,13 +1037,39 @@ export default function App() {
       setContacts(contacts.filter(c => c.type !== "customer"));
       triggerNotification("Customer profiles database has been completely cleared.", "success");
     } else if (dangerAction === "reset_app") {
+      const resetBusiness = {
+        ...INITIAL_BUSINESS_INFO,
+        isExplicitReset: true
+      };
       setProducts(INITIAL_PRODUCTS);
       setContacts(INITIAL_CONTACTS);
       setExpenses(INITIAL_EXPENSES);
       setPurchases(INITIAL_PURCHASES);
       setTransactions([]);
-      setBusinessInfo(INITIAL_BUSINESS_INFO);
-      triggerNotification("System reset successful. Restored defaults completely.", "success");
+      setBusinessInfo(resetBusiness);
+
+      if (activeUser && !activeUser.isGuest) {
+        const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+        triggerNotification("Invalidating database structures. Performing full secure cloud wipe...", "info");
+        uploadPasscodeBackup(activeUser.email, passcode, {
+          products: INITIAL_PRODUCTS,
+          contacts: INITIAL_CONTACTS,
+          expenses: INITIAL_EXPENSES,
+          transactions: [],
+          businessInfo: resetBusiness,
+          purchases: INITIAL_PURCHASES
+        }).then(() => {
+          setTimeout(() => {
+            setBusinessInfo(INITIAL_BUSINESS_INFO);
+          }, 4000);
+          triggerNotification("System database and all paired devices successfully reset! 🟢", "success");
+        }).catch(e => {
+          console.error("Cloud reset failed:", e);
+          triggerNotification("Local database reset, but cloud sync encountered an issue.", "error");
+        });
+      } else {
+        triggerNotification("System reset successful. Restored defaults completely.", "success");
+      }
     } else if (dangerAction === "delete_account") {
       localStorage.clear();
       setProducts(INITIAL_PRODUCTS);

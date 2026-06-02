@@ -1322,6 +1322,33 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       try {
         const upsertPromises: Promise<void>[] = [];
 
+        if (isExplicitReset) {
+          console.log("[Direct Sync Engine] Explicit Reset Triggered! Wiping individual firestore tables first...");
+          try {
+            const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes, itemsRes] = await Promise.all([
+              getDocs(query(collection(db, "products"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "purchases"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)))
+            ]);
+
+            const deletePromises: Promise<void>[] = [];
+            productsRes.docs.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "products", docSnap.id))));
+            customersRes.docs.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "customers", docSnap.id))));
+            expensesRes.docs.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "expenses", docSnap.id))));
+            transactionsRes.docs.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "transactions", docSnap.id))));
+            purchasesRes.docs.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "purchases", docSnap.id))));
+            itemsRes.docs.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "transaction_items", docSnap.id))));
+
+            await Promise.all(deletePromises);
+            console.log("[Direct Sync Engine] Cloud tables wiped successfully.");
+          } catch (wipeErr) {
+            console.warn("Direct collections wipe exception:", wipeErr);
+          }
+        }
+
         productsToUpsert.forEach(p => {
           upsertPromises.push(setDoc(doc(db, "products", p.id), p));
         });
