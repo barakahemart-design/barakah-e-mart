@@ -1,37 +1,126 @@
 // =========================================================================
-// SUPABASE CLIENT SERVICE MODULE FOR FLUTTER
-// Manages complete transaction execution pipelines, profiles, and queries.
+// FIREBASE / EXPRESS REST PROXY SERVICE FOR FLUTTER
+// Replaces Supabase pipelines to speak directly to the central Express DB server.
+// Ensures 100% data parity between the laptop site and mobile phones.
 // =========================================================================
 
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import 'models.dart';
 
+class MockUser {
+  final String id;
+  final String email;
+  MockUser({required this.id, required this.email});
+}
+
 class SupabaseService {
-  final SupabaseClient _client = Supabase.instance.client;
+  // Central Web Application Cloud Run Server Endpoint
+  static final String _baseUrl = 'https://ais-pre-vddidihjmg7vkby5tsftb7-628989971621.asia-southeast1.run.app';
+  static Map<String, dynamic>? _cachedSession;
 
-  // -------------------------------------------------------------
-  // 1. AUTHENTICATION (Login, Register & Profiles)
-  // -------------------------------------------------------------
+  static Future<File> get _sessionFile async {
+    final tempDir = Directory.systemTemp;
+    return File('${tempDir.path}/barakah_session_firebase_v2.json');
+  }
 
-  User? get currentUser => _client.auth.currentUser;
-
-  /// Fetch profile for currently logged-in user, if any
-  Future<UserProfile?> fetchCurrentUserProfile() async {
-    final user = currentUser;
-    if (user == null) return null;
+  static Future<void> _saveSession(String id, String email) async {
+    _cachedSession = {'id': id, 'email': email};
     try {
-      final Map<String, dynamic> rawProfile = await _client
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .single();
-      return UserProfile.fromJson(rawProfile);
-    } catch (_) {
-      return null;
+      final file = await _sessionFile;
+      await file.writeAsString(json.encode(_cachedSession));
+    } catch (_) {}
+  }
+
+  static Future<void> _loadSession() async {
+    if (_cachedSession != null) return;
+    try {
+      final file = await _sessionFile;
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        _cachedSession = json.decode(content);
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> _clearSession() async {
+    _cachedSession = null;
+    try {
+      final file = await _sessionFile;
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
+  }
+
+  MockUser? get currentUser {
+    if (_cachedSession != null) {
+      return MockUser(
+        id: _cachedSession!['id'] ?? '',
+        email: _cachedSession!['email'] ?? '',
+      );
+    }
+    return null;
+  }
+
+  // Generic Rest HTTP Connection client request tunnel
+  Future<dynamic> _makeRequest(String method, String path, {Map<String, dynamic>? body}) async {
+    final client = HttpClient();
+    client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
+    
+    try {
+      final uri = Uri.parse('$_baseUrl$path');
+      HttpClientRequest request;
+      if (method == 'POST') {
+        request = await client.postUrl(uri);
+        request.headers.set('content-type', 'application/json; charset=utf-8');
+        if (body != null) {
+          request.add(utf8.encode(json.encode(body)));
+        }
+      } else {
+        request = await client.getUrl(uri);
+      }
+      
+      final response = await request.close();
+      final responseBody = await response.transform(utf8.decoder).join();
+      
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (responseBody.isEmpty) return null;
+        return json.decode(responseBody);
+      } else {
+        String errorMsg = 'HTTP ${response.statusCode} Error';
+        try {
+          final errorData = json.decode(responseBody);
+          if (errorData is Map && errorData.containsKey('error')) {
+            errorMsg = errorData['error'];
+          }
+        } catch (_) {}
+        throw Exception(errorMsg);
+      }
+    } finally {
+      client.close();
     }
   }
 
-  /// Register user and automatically set defaults
+  // -------------------------------------------------------------
+  // 1. AUTHENTICATION & PROFILE CONTROL
+  // -------------------------------------------------------------
+
+  Future<UserProfile?> fetchCurrentUserProfile() async {
+    await _loadSession();
+    if (_cachedSession == null) return null;
+    
+    final userId = _cachedSession!['id'];
+    try {
+      final profilesList = await _makeRequest('GET', '/api/db/fetch?table=profiles&owner_email=$userId');
+      if (profilesList != null && (profilesList as List).isNotEmpty) {
+        return UserProfile.fromJson(Map<String, dynamic>.from(profilesList.first));
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<UserProfile> registerUser({
     required String email,
     required String password,
@@ -39,21 +128,19 @@ class SupabaseService {
     required String adminPasscode,
     required String salesPasscode,
   }) async {
-    final String cleanEmail = email.trim().toLowerCase();
-    final String cleanPassword = password.trim();
-
-    final AuthResponse res = await _client.auth.signUp(
-      email: cleanEmail,
-      password: cleanPassword,
-    );
-
-    if (res.user == null) {
-      throw Exception("Registration failed. Could not provision credentials.");
+    final cleanEmail = email.trim().toLowerCase();
+    
+    final res = await _makeRequest('POST', '/api/auth/signup', body: {
+      'email': cleanEmail,
+      'password': password,
+    });
+    
+    if (res == null || res['user'] == null) {
+      throw Exception("Registration failed. Please try again.");
     }
-
-    final String userId = res.user!.id;
-
-    // Create a corresponding client profile in Supabase
+    
+    final String userId = res['user']['id'] ?? res['user']['uid'] ?? 'gen_${DateTime.now().millisecondsSinceEpoch}';
+    
     final profile = {
       'id': userId,
       'email': cleanEmail,
@@ -64,97 +151,143 @@ class SupabaseService {
       'terms_conditions': '1. Warranty require original invoice.\n2. Replacement allowed within 7 days if unused.',
       'show_logo_in_invoice': true,
     };
-
-    await _client.from('profiles').upsert(profile);
-
+    
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'profiles',
+      'id': userId,
+      'data': profile,
+    });
+    
+    await _saveSession(userId, cleanEmail);
     return UserProfile.fromJson(profile);
   }
 
-  /// Sign in via Email and Password
   Future<UserProfile> loginWithEmail({
     required String email,
     required String password,
   }) async {
-    final String cleanEmail = email.trim().toLowerCase();
-    final String cleanPassword = password.trim();
-
-    final AuthResponse res = await _client.auth.signInWithPassword(
-      email: cleanEmail,
-      password: cleanPassword,
-    );
-
-    if (res.user == null) {
+    final cleanEmail = email.trim().toLowerCase();
+    
+    final res = await _makeRequest('POST', '/api/auth/signin', body: {
+      'email': cleanEmail,
+      'password': password,
+    });
+    
+    if (res == null || res['user'] == null) {
       throw Exception("Could not verify your credential profile.");
     }
-
-    final Map<String, dynamic> rawProfile = await _client
-        .from('profiles')
-        .select()
-        .eq('id', res.user!.id)
-        .single();
-
+    
+    final String userId = res['user']['id'] ?? res['user']['uid'] ?? '';
+    
+    final profilesList = await _makeRequest('GET', '/api/db/fetch?table=profiles&owner_email=$userId');
+    
+    Map<String, dynamic> rawProfile;
+    if (profilesList != null && (profilesList as List).isNotEmpty) {
+      rawProfile = Map<String, dynamic>.from(profilesList.first);
+    } else {
+      rawProfile = {
+        'id': userId,
+        'email': cleanEmail,
+        'shop_name': 'Barakah Electronics',
+        'admin_passcode_hash': '1234',
+        'sales_passcode_hash': '5555',
+        'currency_symbol': '৳',
+        'terms_conditions': '1. Warranty require original invoice.\n2. Replacement allowed within 7 days if unused.',
+        'show_logo_in_invoice': true,
+      };
+      await _makeRequest('POST', '/api/db/upsert', body: {
+        'table': 'profiles',
+        'id': userId,
+        'data': rawProfile,
+      });
+    }
+    
+    await _saveSession(userId, cleanEmail);
     return UserProfile.fromJson(rawProfile);
   }
 
-  /// Save dynamic invoice layout or shop info
   Future<void> saveUserProfile(UserProfile profile) async {
-    await _client.from('profiles').update(profile.toJson()).eq('id', profile.id);
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'profiles',
+      'id': profile.id,
+      'data': profile.toJson(),
+    });
   }
 
-  /// Sign out currently active session
   Future<void> signOut() async {
-    await _client.auth.signOut();
+    await _clearSession();
   }
 
-  /// Reset account or clean historical datasets
   Future<void> purgeUserData(String userId, {required bool deleteAccount}) async {
     if (deleteAccount) {
-      // In production, deleting would invoke Supabase CLI Auth Admin deletion
-      await _client.from('profiles').delete().eq('id', userId);
-      await _client.auth.signOut();
+      await _makeRequest('POST', '/api/db/delete', body: {
+        'table': 'profiles',
+        'id': userId,
+      });
+      await signOut();
     } else {
-      // Clear data tables using the isolated user_id column
-      await _client.from('expenses').delete().eq('user_id', userId);
-      await _client.from('transaction_items').delete().eq('user_id', userId);
-      await _client.from('transactions').delete().eq('user_id', userId);
-      await _client.from('purchases').delete().eq('user_id', userId);
-      await _client.from('customers').delete().eq('user_id', userId);
-      // Delete products completely instead of resetting stocks to zero
-      await _client.from('products').delete().eq('user_id', userId);
+      final collections = [
+        'products',
+        'customers',
+        'purchases',
+        'expenses',
+        'transactions',
+        'transaction_items'
+      ];
+      for (final table in collections) {
+        try {
+          final list = await _makeRequest('GET', '/api/db/fetch?table=$table&owner_email=$userId') ?? [];
+          for (final record in list) {
+            final id = record['id'];
+            if (id != null) {
+              await _makeRequest('POST', '/api/db/delete', body: {
+                'table': table,
+                'id': id,
+              });
+            }
+          }
+        } catch (_) {}
+      }
     }
   }
 
   // -------------------------------------------------------------
-  // 2. PRODUCT MANAGEMENT (পণ্য তালিকা)
+  // 2. PRODUCT MANAGEMENT
   // -------------------------------------------------------------
 
   Future<List<Product>> fetchProducts() async {
-    final List<dynamic> records = await _client
-        .from('products')
-        .select()
-        .eq('user_id', currentUser!.id)
-        .order('name', ascending: true);
-    return records.map((json) => Product.fromJson(json)).toList();
+    await _loadSession();
+    if (_cachedSession == null) return [];
+    final userId = _cachedSession!['id'];
+    final list = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
+    return (list as List).map((json) => Product.fromJson(Map<String, dynamic>.from(json))).toList();
   }
 
   Future<Product> addProduct(Product product) async {
-    final Map<String, dynamic> record = await _client
-        .from('products')
-        .insert({
-          'owner_id': currentUser!.id,
-          'user_id': currentUser!.id,
-          'name': product.name,
-          'sku': product.sku,
-          'category': product.category,
-          'buy_price': product.buyPrice,
-          'sell_price': product.sellPrice,
-          'stock': product.stock,
-          'unit': product.unit,
-          'image_url': product.imageUrl,
-        })
-        .select()
-        .single();
-    return Product.fromJson(record);
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    final id = product.id.isNotEmpty ? product.id : 'prod_${DateTime.now().millisecondsSinceEpoch}';
+    
+    final data = {
+      'id': id,
+      'owner_id': userId,
+      'user_id': userId,
+      'name': product.name,
+      'sku': product.sku,
+      'category': product.category,
+      'buy_price': product.buyPrice,
+      'sell_price': product.sellPrice,
+      'stock': product.stock,
+      'unit': product.unit,
+      'image_url': product.imageUrl,
+    };
+    
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'products',
+      'id': id,
+      'data': data,
+    });
+    return Product.fromJson(data);
   }
 
   Future<void> updateProductPricesAndStock({
@@ -163,98 +296,164 @@ class SupabaseService {
     required double sellPrice,
     required double addedStock,
   }) async {
-    // If added stock > 0, we fetch the current stock first
-    if (addedStock != 0) {
-      final oldProduct = await _client.from('products').select('stock').eq('id', productId).single();
-      final double currentStock = (oldProduct['stock'] as num).toDouble();
-      await _client.from('products').update({
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    
+    final list = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
+    final match = (list as List).firstWhere((p) => p['id'] == productId, orElse: () => null);
+    
+    if (match != null) {
+      final oldStock = (match['stock'] ?? 0.0).toDouble();
+      final updatedData = {
+        ...Map<String, dynamic>.from(match),
         'buy_price': buyPrice,
         'sell_price': sellPrice,
-        'stock': currentStock + addedStock,
-      }).eq('id', productId);
-    } else {
-      await _client.from('products').update({
-        'buy_price': buyPrice,
-        'sell_price': sellPrice,
-      }).eq('id', productId);
+        'stock': oldStock + addedStock,
+      };
+      await _makeRequest('POST', '/api/db/upsert', body: {
+        'table': 'products',
+        'id': productId,
+        'data': updatedData,
+      });
     }
   }
 
   Future<void> removeProduct(String id) async {
-    await _client.from('products').delete().eq('id', id);
+    await _makeRequest('POST', '/api/db/delete', body: {
+      'table': 'products',
+      'id': id,
+    });
   }
 
   // -------------------------------------------------------------
-  // 3. PURCHASES RESTOCK LEDGER (ক্রয় খতিয়ান)
+  // 3. PURCHASES RESTOCK LEDGER
   // -------------------------------------------------------------
 
   Future<List<Purchase>> fetchPurchases() async {
-    final List<dynamic> records = await _client
-        .from('purchases')
-        .select()
-        .eq('user_id', currentUser!.id)
-        .order('created_at', ascending: false);
-    return records.map((e) => Purchase.fromJson(e)).toList();
+    await _loadSession();
+    if (_cachedSession == null) return [];
+    final userId = _cachedSession!['id'];
+    final list = await _makeRequest('GET', '/api/db/fetch?table=purchases&owner_email=$userId') ?? [];
+    final result = (list as List).map((json) => Purchase.fromJson(Map<String, dynamic>.from(json))).toList();
+    result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return result;
   }
 
-  /// Inserts purchase and invokes Postgres Trigger to adjust product stocks and negative profits
   Future<void> writePurchaseBill(Purchase pur) async {
-    await _client.from('purchases').insert({
-      'owner_id': currentUser!.id,
-      'user_id': currentUser!.id,
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    final id = pur.id.isNotEmpty ? pur.id : 'pur_${DateTime.now().millisecondsSinceEpoch}';
+    
+    final data = {
+      'id': id,
+      'owner_id': userId,
+      'user_id': userId,
       'invoice_no': pur.invoiceNo,
       'product_id': pur.productId,
       'quantity': pur.quantity,
       'buy_price': pur.buyPrice,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'purchases',
+      'id': id,
+      'data': data,
     });
+    
+    final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
+    final match = (products as List).firstWhere((p) => p['id'] == pur.productId, orElse: () => null);
+    if (match != null) {
+      final oldStock = (match['stock'] ?? 0.0).toDouble();
+      final updatedData = {
+        ...Map<String, dynamic>.from(match),
+        'stock': oldStock + pur.quantity,
+        'buy_price': pur.buyPrice,
+      };
+      await _makeRequest('POST', '/api/db/upsert', body: {
+        'table': 'products',
+        'id': pur.productId,
+        'data': updatedData,
+      });
+    }
   }
 
-  /// Edit existing purchase cost. If buy price is corrected, trigger automatically recalculates
-  /// affected negative sale invoices profits.
   Future<void> updatePurchaseCost(String purchaseId, double updatedBuyPrice) async {
-    await _client.from('purchases').update({
-      'buy_price': updatedBuyPrice,
-    }).eq('id', purchaseId);
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    
+    final purchases = await _makeRequest('GET', '/api/db/fetch?table=purchases&owner_email=$userId') ?? [];
+    final match = (purchases as List).firstWhere((p) => p['id'] == purchaseId, orElse: () => null);
+    if (match != null) {
+      final updatedData = {
+        ...Map<String, dynamic>.from(match),
+        'buy_price': updatedBuyPrice,
+      };
+      await _makeRequest('POST', '/api/db/upsert', body: {
+        'table': 'purchases',
+        'id': purchaseId,
+        'data': updatedData,
+      });
+    }
   }
 
   Future<void> deletePurchaseBill(String id) async {
-    // Requires inventory stock adjustment
-    final oldBill = await _client.from('purchases').select().eq('id', id).single();
-    final double quantity = (oldBill['quantity'] as num).toDouble();
-    final String productId = oldBill['product_id'];
-
-    // Adjust physical stock backward
-    final product = await _client.from('products').select('stock').eq('id', productId).single();
-    final double currentStock = (product['stock'] as num).toDouble();
-
-    await _client.from('products').update({'stock': currentStock - quantity}).eq('id', productId);
-    await _client.from('purchases').delete().eq('id', id);
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    
+    final purchases = await _makeRequest('GET', '/api/db/fetch?table=purchases&owner_email=$userId') ?? [];
+    final matchPur = (purchases as List).firstWhere((p) => p['id'] == id, orElse: () => null);
+    if (matchPur != null) {
+      final double quantity = (matchPur['quantity'] ?? 0.0).toDouble();
+      final String productId = matchPur['product_id'] ?? '';
+      
+      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
+      final matchProd = (products as List).firstWhere((p) => p['id'] == productId, orElse: () => null);
+      if (matchProd != null) {
+        final double currentStock = (matchProd['stock'] ?? 0.0).toDouble();
+        final updatedProd = {
+          ...Map<String, dynamic>.from(matchProd),
+          'stock': currentStock - quantity,
+        };
+        await _makeRequest('POST', '/api/db/upsert', body: {
+          'table': 'products',
+          'id': productId,
+          'data': updatedProd,
+        });
+      }
+      
+      await _makeRequest('POST', '/api/db/delete', body: {
+        'table': 'purchases',
+        'id': id,
+      });
+    }
   }
 
   // -------------------------------------------------------------
-  // 4. SALES CHECKOUT ENGINE (কাউন্টার ক্যাশ কাউন্টার)
+  // 4. SALES CHECKOUT ENGINE
   // -------------------------------------------------------------
 
   Future<List<OrderTransaction>> fetchSalesLedger() async {
-    final List<dynamic> invoices = await _client
-        .from('transactions')
-        .select()
-        .eq('user_id', currentUser!.id)
-        .order('created_at', ascending: false);
-
+    await _loadSession();
+    if (_cachedSession == null) return [];
+    final userId = _cachedSession!['id'];
+    
+    final invoices = await _makeRequest('GET', '/api/db/fetch?table=transactions&owner_email=$userId') ?? [];
+    final lineItems = await _makeRequest('GET', '/api/db/fetch?table=transaction_items&owner_email=$userId') ?? [];
+    
     final List<OrderTransaction> result = [];
     for (var inv in invoices) {
-      final List<dynamic> lineItems = await _client
-          .from('transaction_items')
-          .select()
-          .eq('transaction_id', inv['id']);
-      final items = lineItems.map((e) => TransactionItem.fromJson(e)).toList();
-      result.add(OrderTransaction.fromJson(inv, items));
+      final String invoiceId = inv['id'];
+      final relatedLineItems = (lineItems as List)
+          .where((item) => item['transaction_id'] == invoiceId)
+          .map((item) => TransactionItem.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+      result.add(OrderTransaction.fromJson(Map<String, dynamic>.from(inv), relatedLineItems));
     }
+    result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return result;
   }
 
-  /// Complete Checkout transaction with negative stock logs
   Future<void> executeCheckout({
     required List<Map<String, dynamic>> cartItems,
     required double total,
@@ -266,9 +465,14 @@ class SupabaseService {
     required String? customerId,
     required String? signatureBase64,
   }) async {
-    final Map<String, dynamic> tx = await _client.from('transactions').insert({
-      'owner_id': currentUser!.id,
-      'user_id': currentUser!.id,
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    final txId = 'tx_${DateTime.now().millisecondsSinceEpoch}';
+    
+    final txData = {
+      'id': txId,
+      'owner_id': userId,
+      'user_id': userId,
       'invoice_no': invoiceNo,
       'customer_id': customerId,
       'total_amount': total,
@@ -277,95 +481,160 @@ class SupabaseService {
       'paid_amount': paid,
       'payment_method': method,
       'signature_svg': signatureBase64,
-    }).select().single();
-
-    final String txId = tx['id'];
-
-    // Post items and adjust stocks
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'transactions',
+      'id': txId,
+      'data': txData,
+    });
+    
     for (var item in cartItems) {
       final Product prod = item['product'];
       final double qty = item['quantity'];
       final double selectedPrice = item['sell_price'];
-      
-      // Determine if check is negative stock sale
       final bool isNegative = prod.stock < qty;
-
-      await _client.from('transaction_items').insert({
-        'owner_id': currentUser!.id,
-        'user_id': currentUser!.id,
+      final itemUUID = 'txi_${DateTime.now().millisecondsSinceEpoch}_${prod.id}';
+      
+      final itemData = {
+        'id': itemUUID,
+        'owner_id': userId,
+        'user_id': userId,
         'transaction_id': txId,
         'product_id': prod.id,
         'quantity': qty,
         'sell_price': selectedPrice,
-        'cost_price': prod.buyPrice, // Save latest buy price as base cost
+        'cost_price': prod.buyPrice,
         'is_negative_sale': isNegative,
+      };
+      
+      await _makeRequest('POST', '/api/db/upsert', body: {
+        'table': 'transaction_items',
+        'id': itemUUID,
+        'data': itemData,
       });
-
-      // Update physical product inventory stock levels
-      await _client.from('products').update({
-        'stock': prod.stock - qty,
-      }).eq('id', prod.id);
+      
+      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
+      final match = (products as List).firstWhere((p) => p['id'] == prod.id, orElse: () => null);
+      if (match != null) {
+        final double currentStock = (match['stock'] ?? 0.0).toDouble();
+        final updatedProd = {
+          ...Map<String, dynamic>.from(match),
+          'stock': currentStock - qty,
+        };
+        await _makeRequest('POST', '/api/db/upsert', body: {
+          'table': 'products',
+          'id': prod.id,
+          'data': updatedProd,
+        });
+      }
     }
   }
 
   Future<void> deleteSaleMemo(OrderTransaction tx) async {
-    // Adjust stocks back to positive
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    
     for (var item in tx.items) {
-      final prodSec = await _client.from('products').select('stock').eq('id', item.productId).single();
-      final double stockNow = (prodSec['stock'] as num).toDouble();
-      await _client.from('products').update({
-        'stock': stockNow + item.quantity,
-      }).eq('id', item.productId);
+      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
+      final match = (products as List).firstWhere((p) => p['id'] == item.productId, orElse: () => null);
+      if (match != null) {
+        final double stockNow = (match['stock'] ?? 0.0).toDouble();
+        final updatedProd = {
+          ...Map<String, dynamic>.from(match),
+          'stock': stockNow + item.quantity,
+        };
+        await _makeRequest('POST', '/api/db/upsert', body: {
+          'table': 'products',
+          'id': item.productId,
+          'data': updatedProd,
+        });
+      }
+      
+      await _makeRequest('POST', '/api/db/delete', body: {
+        'table': 'transaction_items',
+        'id': item.id,
+      });
     }
-
-    await _client.from('transaction_items').delete().eq('transaction_id', tx.id);
-    await _client.from('transactions').delete().eq('id', tx.id);
+    
+    await _makeRequest('POST', '/api/db/delete', body: {
+      'table': 'transactions',
+      'id': tx.id,
+    });
   }
 
   // -------------------------------------------------------------
-  // 5. CRM CUSTOMERS & OUTGOINGS (ব্যয় খতিয়ান)
+  // 5. CRM CUSTOMERS & OUTGOINGS
   // -------------------------------------------------------------
 
   Future<List<Customer>> fetchCustomers() async {
-    final List<dynamic> raw = await _client
-        .from('customers')
-        .select()
-        .eq('user_id', currentUser!.id)
-        .order('name');
-    return raw.map((e) => Customer.fromJson(e)).toList();
+    await _loadSession();
+    if (_cachedSession == null) return [];
+    final userId = _cachedSession!['id'];
+    final list = await _makeRequest('GET', '/api/db/fetch?table=customers&owner_email=$userId') ?? [];
+    return (list as List).map((e) => Customer.fromJson(Map<String, dynamic>.from(e))).toList();
   }
 
   Future<void> addCustomer(Customer client) async {
-    await _client.from('customers').insert({
-      'owner_id': currentUser!.id,
-      'user_id': currentUser!.id,
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    final id = client.id.isNotEmpty ? client.id : 'cust_${DateTime.now().millisecondsSinceEpoch}';
+    
+    final data = {
+      'id': id,
+      'owner_id': userId,
+      'user_id': userId,
       'name': client.name,
       'phone': client.phone,
       'address': client.address,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'customers',
+      'id': id,
+      'data': data,
     });
   }
 
   Future<List<Expense>> fetchExpenses() async {
-    final List<dynamic> raw = await _client
-        .from('expenses')
-        .select()
-        .eq('user_id', currentUser!.id)
-        .order('created_at', ascending: false);
-    return raw.map((e) => Expense.fromJson(e)).toList();
+    await _loadSession();
+    if (_cachedSession == null) return [];
+    final userId = _cachedSession!['id'];
+    final list = await _makeRequest('GET', '/api/db/fetch?table=expenses&owner_email=$userId') ?? [];
+    final result = (list as List).map((e) => Expense.fromJson(Map<String, dynamic>.from(e))).toList();
+    result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return result;
   }
 
   Future<void> logExpense(Expense exp) async {
-    await _client.from('expenses').insert({
-      'owner_id': currentUser!.id,
-      'user_id': currentUser!.id,
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    final id = exp.id.isNotEmpty ? exp.id : 'exp_${DateTime.now().millisecondsSinceEpoch}';
+    
+    final data = {
+      'id': id,
+      'owner_id': userId,
+      'user_id': userId,
       'description': exp.description,
       'category': exp.category,
       'amount': exp.amount,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    
+    await _makeRequest('POST', '/api/db/upsert', body: {
+      'table': 'expenses',
+      'id': id,
+      'data': data,
     });
   }
 
   Future<void> deleteExpense(String id) async {
-    await _client.from('expenses').delete().eq('id', id);
+    await _makeRequest('POST', '/api/db/delete', body: {
+      'table': 'expenses',
+      'id': id,
+    });
   }
 
   // -------------------------------------------------------------
@@ -374,91 +643,129 @@ class SupabaseService {
 
   Future<Map<String, double>> queryDynamicPnLSummary() async {
     try {
-      final List<dynamic> data = await _client
-          .from('view_financial_overview')
-          .select()
-          .eq('owner_id', currentUser!.id);
-
-      if (data.isEmpty) {
-        return {'sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
+      final ledger = await fetchSalesLedger();
+      final expenses = await fetchExpenses();
+      
+      double sales = 0.0;
+      double cogs = 0.0;
+      double discounts = 0.0;
+      double totalExpenses = 0.0;
+      
+      for (final tx in ledger) {
+        sales += tx.totalAmount;
+        discounts += tx.discount;
+        for (final item in tx.items) {
+          cogs += item.quantity * item.costPrice;
+        }
       }
-
-      final row = data.first;
+      
+      for (final exp in expenses) {
+        totalExpenses += exp.amount;
+      }
+      
       return {
-        'sales': (row['raw_sales'] ?? 0.0).toDouble(),
-        'cogs': (row['total_cogs'] ?? 0.0).toDouble(),
-        'discounts': (row['total_discounts'] ?? 0.0).toDouble(),
-        'expenses': (row['total_expenses'] ?? 0.0).toDouble(),
-        'net_profit': (row['net_profit'] ?? 0.0).toDouble(),
+        'sales': sales,
+        'cogs': cogs,
+        'discounts': discounts,
+        'expenses': totalExpenses,
+        'net_profit': sales - cogs - totalExpenses,
       };
-    } catch (e) {
+    } catch (_) {
       return {'sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
     }
   }
 
   // -------------------------------------------------------------
-  // 7. REAL-TIME STREAMING INTEGRATION (Real-time Stream Engine)
+  // 7. REAL-TIME SYSTEM STREAM POLLING EMULATORS (Timer-driven)
   // -------------------------------------------------------------
 
-  /// Stream of Products (Inventory) - Realtime enabled
   Stream<List<Product>> productsStream() {
-    return _client
-        .from('products')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', currentUser!.id)
-        .map((records) => records.map((json) => Product.fromJson(json)).toList());
+    final controller = StreamController<List<Product>>();
+    fetchProducts().then((res) => controller.add(res)).catchError((e) {});
+    final timer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_cachedSession != null && !controller.isClosed) {
+        try {
+          final res = await fetchProducts();
+          if (!controller.isClosed) controller.add(res);
+        } catch (_) {}
+      }
+    });
+    controller.onCancel = () {
+      timer.cancel();
+      controller.close();
+    };
+    return controller.stream;
   }
 
-  /// Stream of Purchases
   Stream<List<Purchase>> purchasesStream() {
-    return _client
-        .from('purchases')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', currentUser!.id)
-        .map((records) => records.map((json) => Purchase.fromJson(json)).toList());
+    final controller = StreamController<List<Purchase>>();
+    fetchPurchases().then((res) => controller.add(res)).catchError((e) {});
+    final timer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_cachedSession != null && !controller.isClosed) {
+        try {
+          final res = await fetchPurchases();
+          if (!controller.isClosed) controller.add(res);
+        } catch (_) {}
+      }
+    });
+    controller.onCancel = () {
+      timer.cancel();
+      controller.close();
+    };
+    return controller.stream;
   }
 
-  /// Stream of Customers
   Stream<List<Customer>> customersStream() {
-    return _client
-        .from('customers')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', currentUser!.id)
-        .map((records) => records.map((json) => Customer.fromJson(json)).toList());
+    final controller = StreamController<List<Customer>>();
+    fetchCustomers().then((res) => controller.add(res)).catchError((e) {});
+    final timer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_cachedSession != null && !controller.isClosed) {
+        try {
+          final res = await fetchCustomers();
+          if (!controller.isClosed) controller.add(res);
+        } catch (_) {}
+      }
+    });
+    controller.onCancel = () {
+      timer.cancel();
+      controller.close();
+    };
+    return controller.stream;
   }
 
-  /// Stream of Expenses
   Stream<List<Expense>> expensesStream() {
-    return _client
-        .from('expenses')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', currentUser!.id)
-        .map((records) => records.map((json) => Expense.fromJson(json)).toList());
+    final controller = StreamController<List<Expense>>();
+    fetchExpenses().then((res) => controller.add(res)).catchError((e) {});
+    final timer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_cachedSession != null && !controller.isClosed) {
+        try {
+          final res = await fetchExpenses();
+          if (!controller.isClosed) controller.add(res);
+        } catch (_) {}
+      }
+    });
+    controller.onCancel = () {
+      timer.cancel();
+      controller.close();
+    };
+    return controller.stream;
   }
 
-  /// Stream of Order Transactions (representing dynamic sales)
-  /// Asynchronously joins transaction line items to build fully hydrated OrderTransaction models
   Stream<List<OrderTransaction>> transactionsStream() {
-    return _client
-        .from('transactions')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', currentUser!.id)
-        .asyncMap((invoices) async {
-          final List<OrderTransaction> result = [];
-          for (var inv in invoices) {
-            try {
-              final List<dynamic> lineItems = await _client
-                  .from('transaction_items')
-                  .select()
-                  .eq('transaction_id', inv['id']);
-              final items = lineItems.map((e) => TransactionItem.fromJson(e)).toList();
-              result.add(OrderTransaction.fromJson(inv, items));
-            } catch (_) {
-              result.add(OrderTransaction.fromJson(inv, []));
-            }
-          }
-          result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return result;
-        });
+    final controller = StreamController<List<OrderTransaction>>();
+    fetchSalesLedger().then((res) => controller.add(res)).catchError((e) {});
+    final timer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_cachedSession != null && !controller.isClosed) {
+        try {
+          final res = await fetchSalesLedger();
+          if (!controller.isClosed) controller.add(res);
+        } catch (_) {}
+      }
+    });
+    controller.onCancel = () {
+      timer.cancel();
+      controller.close();
+    };
+    return controller.stream;
   }
 }
