@@ -8,8 +8,8 @@ import {
   INITIAL_BUSINESS_INFO
 } from './mockDB';
 
-const fallbackUrl = 'https://cmanayslirpenaruncwr.supabase.co';
-const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtYW5heXNsaXJwZW5hcnVuY3dyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTQwNDQsImV4cCI6MjA5NTI5MDA0NH0.f4-DddnnqnknJ_X-4rVjes7a32QlI59cdEW1eyQkads';
+const fallbackUrl = 'https://dmgbhwwugdrwbqdzgnqa.supabase.co';
+const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZ2Jod3d1Z2Ryd2JxZHpnbnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzOTE1MDYsImV4cCI6MjA5NTk2NzUwNn0.qo8Itnqd561hvk7Js8IvF4xuF12xjGw8B8u1C7cpTUo';
 
 // Fallback logic inside the client bundle
 // @ts-ignore
