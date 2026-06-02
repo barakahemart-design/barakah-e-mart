@@ -845,36 +845,45 @@ export const signUpWithEmail = async (email: string, pass: string) => {
       } else {
         user = data.user;
       }
-    } catch (directErr) {
+    } catch (directErr: any) {
       console.warn("Direct signup call error, falling back to server route...", directErr);
+      authError = directErr;
     }
 
     if (!user) {
       // If direct signup failed, parse and throw local friendly errors manually
-      if (authError && (authError.message.includes("weak") || authError.message.includes("at least 6"))) {
+      if (authError && (authError.message?.includes("weak") || authError.message?.includes("at least 6"))) {
         throw new Error("Password must be at least 6 characters long!");
       }
-      if (authError && authError.message.includes("already registered")) {
+      if (authError && authError.message?.includes("already registered")) {
         throw new Error("This email is already registered! Please log in instead.");
       }
 
-      // Try backend Express server proxy
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password: pass })
-      });
-      
-      const contentType = response.headers.get("content-type");
-      if (response.ok && contentType && contentType.includes("application/json")) {
-        const result = await response.json();
-        if (result.error) throw new Error(result.error);
-        user = result.user;
-      } else {
-        if (authError) {
-          throw authError;
+      try {
+        // Try backend Express server proxy
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password: pass })
+        });
+        
+        const contentType = response.headers.get("content-type");
+        if (response.ok && contentType && contentType.includes("application/json")) {
+          const result = await response.json();
+          if (result.error) throw new Error(result.error);
+          user = result.user;
         } else {
-          throw new Error("Registration failed. Please try a different email or connection.");
+          if (authError) {
+            throw authError;
+          } else {
+            throw new Error("Registration failed. Please try a different email or connection.");
+          }
+        }
+      } catch (fetchErr: any) {
+        if (authError) {
+          throw new Error(`সুপাবেজ অথেনটিকেশন ব্যর্থ হয়েছে: ${authError.message || authError}. ব্রাউজার অ্যাডব্লকার Supabase ডোমেইন ব্লক করতে পারে অথবা আপনার নতুন সুপাবেজ প্রজেক্টে SQL টেবিল সেটাপ করা দরকার।`);
+        } else {
+          throw fetchErr;
         }
       }
     }
@@ -933,8 +942,9 @@ export const signInWithEmail = async (email: string, pass: string) => {
       } else {
         user = data.user;
       }
-    } catch (directErr) {
+    } catch (directErr: any) {
       console.warn("Direct signin call error, falling back to server route...", directErr);
+      authError = directErr;
     }
 
     if (!user) {
@@ -947,23 +957,31 @@ export const signInWithEmail = async (email: string, pass: string) => {
         }
       }
 
-      // Try backend Express server proxy fallback
-      const response = await fetch('/api/auth/signin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password: pass })
-      });
-      
-      const contentType = response.headers.get("content-type");
-      if (response.ok && contentType && contentType.includes("application/json")) {
-        const result = await response.json();
-        if (result.error) throw new Error(result.error);
-        user = result.user;
-      } else {
-        if (authError) {
-          throw authError;
+      try {
+        // Try backend Express server proxy fallback
+        const response = await fetch('/api/auth/signin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password: pass })
+        });
+        
+        const contentType = response.headers.get("content-type");
+        if (response.ok && contentType && contentType.includes("application/json")) {
+          const result = await response.json();
+          if (result.error) throw new Error(result.error);
+          user = result.user;
         } else {
-          throw new Error("Invalid signin credentials or server timeout.");
+          if (authError) {
+            throw authError;
+          } else {
+            throw new Error("Invalid signin credentials or server timeout.");
+          }
+        }
+      } catch (fetchErr: any) {
+        if (authError) {
+          throw new Error(`সুপাবেজ সংযোগ ব্যর্থ হয়েছে: ${authError.message || authError}. অনুগ্রহ করে আপনার ইমেইল/পাসওয়ার্ড যাচাই করুন এবং নিশ্চিত করুন যে ডেটাবেজ সচল রয়েছে।`);
+        } else {
+          throw fetchErr;
         }
       }
     }
