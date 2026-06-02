@@ -756,7 +756,8 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
               quantity: Number(item.quantity) || 0,
               price: Number(item.sell_price) || 0,
               total: Number(item.quantity * item.sell_price) || 0,
-              productId: item.product_id || undefined
+              productId: item.product_id || undefined,
+              buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
             }));
 
             return {
@@ -1346,6 +1347,66 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
             console.log("[Direct Sync Engine] Cloud tables wiped successfully.");
           } catch (wipeErr) {
             console.warn("Direct collections wipe exception:", wipeErr);
+          }
+        } else {
+          // Normal up-sync smart pruning: delete any Firestore docs that were deleted/removed on the laptop
+          console.log("[Direct Sync Engine] Pruning deleted/orphaned cloud records to maintain 100% parity...");
+          try {
+            const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes, itemsRes] = await Promise.all([
+              getDocs(query(collection(db, "products"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "purchases"), where("user_id", "==", activeUserId))),
+              getDocs(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)))
+            ]);
+
+            const targetProductsIds = new Set(productsToUpsert.map(p => p.id));
+            const targetCustomersIds = new Set(contactsToUpsert.map(c => c.id));
+            const targetExpensesIds = new Set(expensesToUpsert.map(e => e.id));
+            const targetTransactionsIds = new Set(transactionsToUpsert.map(tx => tx.id));
+            const targetPurchasesIds = new Set(purchasesToUpsert.map(pur => pur.id));
+            const targetItemsIds = new Set(transactionItemsToUpsert.map(item => item.id));
+
+            const prunePromises: Promise<void>[] = [];
+
+            productsRes.docs.forEach(docSnap => {
+              if (!targetProductsIds.has(docSnap.id)) {
+                prunePromises.push(deleteDoc(doc(db, "products", docSnap.id)));
+              }
+            });
+            customersRes.docs.forEach(docSnap => {
+              if (!targetCustomersIds.has(docSnap.id)) {
+                prunePromises.push(deleteDoc(doc(db, "customers", docSnap.id)));
+              }
+            });
+            expensesRes.docs.forEach(docSnap => {
+              if (!targetExpensesIds.has(docSnap.id)) {
+                prunePromises.push(deleteDoc(doc(db, "expenses", docSnap.id)));
+              }
+            });
+            transactionsRes.docs.forEach(docSnap => {
+              if (!targetTransactionsIds.has(docSnap.id)) {
+                prunePromises.push(deleteDoc(doc(db, "transactions", docSnap.id)));
+              }
+            });
+            purchasesRes.docs.forEach(docSnap => {
+              if (!targetPurchasesIds.has(docSnap.id)) {
+                prunePromises.push(deleteDoc(doc(db, "purchases", docSnap.id)));
+              }
+            });
+            itemsRes.docs.forEach(docSnap => {
+              if (!targetItemsIds.has(docSnap.id)) {
+                prunePromises.push(deleteDoc(doc(db, "transaction_items", docSnap.id)));
+              }
+            });
+
+            if (prunePromises.length > 0) {
+              await Promise.all(prunePromises);
+              console.log(`[Direct Sync Engine] Pruned ${prunePromises.length} legacy/deleted entries from Firestore.`);
+            }
+          } catch (gcErr) {
+            console.warn("Direct collections garbage collection exception:", gcErr);
           }
         }
 

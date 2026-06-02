@@ -95,7 +95,7 @@ class Customer {
       name: json['name'] ?? '',
       phone: json['phone'] ?? '',
       address: json['address'],
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()).toLocal(),
     );
   }
 
@@ -191,7 +191,7 @@ class Purchase {
       productId: json['product_id'] ?? '',
       quantity: (json['quantity'] ?? 0.0).toDouble(),
       buyPrice: (json['buy_price'] ?? 0.0).toDouble(),
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()).toLocal(),
     );
   }
 
@@ -294,7 +294,7 @@ class OrderTransaction {
       paidAmount: (json['paid_amount'] ?? 0.0).toDouble(),
       paymentMethod: json['payment_method'] ?? 'Cash',
       signatureSvg: json['signature_svg'],
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()).toLocal(),
       items: lineItems,
     );
   }
@@ -338,7 +338,7 @@ class Expense {
       description: json['description'] ?? '',
       category: json['category'] ?? 'Others',
       amount: (json['amount'] ?? 0.0).toDouble(),
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()).toLocal(),
     );
   }
 
