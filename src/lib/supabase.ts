@@ -12,8 +12,10 @@ const fallbackUrl = 'https://cmanayslirpenaruncwr.supabase.co';
 const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtYW5heXNsaXJwZW5hcnVuY3dyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTQwNDQsImV4cCI6MjA5NTI5MDA0NH0.f4-DddnnqnknJ_X-4rVjes7a32QlI59cdEW1eyQkads';
 
 // Fallback logic inside the client bundle
-let rawUrl = (import.meta as any).env?.VITE_SUPABASE_URL || fallbackUrl;
-let rawKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || fallbackKey;
+// @ts-ignore
+let rawUrl = import.meta.env.VITE_SUPABASE_URL || fallbackUrl;
+// @ts-ignore
+let rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || fallbackKey;
 
 const supabaseUrl = rawUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
 const supabaseAnonKey = rawKey.trim();
@@ -1280,37 +1282,66 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         updated_at: new Date().toISOString()
       }));
 
-      // Concurrent non-blocking requests to optimize response latencies
-      if (productsToUpsert.length > 0) {
-        supabase.from("products").upsert(productsToUpsert).then(({ error }) => {
+      // Sequential, reference-safe database synchronization
+      try {
+        // 1. Independent parent tables first
+        if (productsToUpsert.length > 0) {
+          const { error } = await supabase.from("products").upsert(productsToUpsert);
           if (error) console.error("[Sync Engine] Products upsert failure:", error.message);
-        });
-      }
-      if (contactsToUpsert.length > 0) {
-        supabase.from("customers").upsert(contactsToUpsert).then(({ error }) => {
+        }
+        if (contactsToUpsert.length > 0) {
+          const { error } = await supabase.from("customers").upsert(contactsToUpsert);
           if (error) console.error("[Sync Engine] Customers upsert failure:", error.message);
-        });
-      }
-      if (expensesToUpsert.length > 0) {
-        supabase.from("expenses").upsert(expensesToUpsert).then(({ error }) => {
+        }
+        if (expensesToUpsert.length > 0) {
+          const { error } = await supabase.from("expenses").upsert(expensesToUpsert);
           if (error) console.error("[Sync Engine] Expenses upsert failure:", error.message);
+        }
+
+        // 2. Dependent tables next (filtered to guarantee foreign key integrity)
+        const validProductIds = new Set(productsToUpsert.map(p => p.id));
+        const validCustomerIds = new Set(contactsToUpsert.map(c => c.id));
+
+        // Map transactions with verified customer references
+        const checkedTransactions = transactionsToUpsert.map(tx => {
+          if (tx.customer_id && !validCustomerIds.has(tx.customer_id)) {
+            tx.customer_id = null;
+          }
+          return tx;
         });
-      }
-      if (transactionsToUpsert.length > 0) {
-        supabase.from("transactions").upsert(transactionsToUpsert).then(({ error }) => {
+
+        if (checkedTransactions.length > 0) {
+          const { error } = await supabase.from("transactions").upsert(checkedTransactions);
           if (error) {
             console.error("[Sync Engine] Transactions upsert failure:", error.message);
-          } else if (transactionItemsToUpsert.length > 0) {
-            supabase.from("transaction_items").upsert(transactionItemsToUpsert).then(({ error: tiErr }) => {
+          } else {
+            // Upsert transaction items only if the transactions succeeded
+            const validTransactionIds = new Set(checkedTransactions.map(t => t.id));
+            const filteredTransactionItems = transactionItemsToUpsert.filter(item => 
+              item.product_id && 
+              validProductIds.has(item.product_id) && 
+              item.transaction_id && 
+              validTransactionIds.has(item.transaction_id)
+            );
+
+            if (filteredTransactionItems.length > 0) {
+              const { error: tiErr } = await supabase.from("transaction_items").upsert(filteredTransactionItems);
               if (tiErr) console.error("[Sync Engine] Transaction items upsert failure:", tiErr.message);
-            });
+            }
           }
-        });
-      }
-      if (purchasesToUpsert.length > 0) {
-        supabase.from("purchases").upsert(purchasesToUpsert).then(({ error }) => {
+        }
+
+        // Upsert purchases only with verified products
+        const filteredPurchases = purchasesToUpsert.filter(pur => 
+          pur.product_id && validProductIds.has(pur.product_id)
+        );
+
+        if (filteredPurchases.length > 0) {
+          const { error } = await supabase.from("purchases").upsert(filteredPurchases);
           if (error) console.error("[Sync Engine] Purchases upsert failure:", error.message);
-        });
+        }
+      } catch (tableSyncErr: any) {
+        console.error("[Sync Engine] Sequenced table upserts crashed:", tableSyncErr);
       }
     }
   } catch (syncErr) {

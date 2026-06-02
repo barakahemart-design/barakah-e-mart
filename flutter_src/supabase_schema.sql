@@ -196,3 +196,28 @@ CREATE POLICY "Users can manage own purchases" ON public.purchases FOR ALL USING
 CREATE POLICY "Users can manage own transactions" ON public.transactions FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage own transaction items" ON public.transaction_items FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage own expenses" ON public.expenses FOR ALL USING (auth.uid() = user_id);
+
+-- =========================================================================
+-- STEP 6: BACKUP & PIN PASSTHROUGH (passcode_syncs JSON STORAGE BODY)
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.passcode_syncs (
+    id TEXT PRIMARY KEY,
+    linked_email TEXT NOT NULL,
+    products JSONB DEFAULT '[]'::jsonb,
+    contacts JSONB DEFAULT '[]'::jsonb,
+    expenses JSONB DEFAULT '[]'::jsonb,
+    transactions JSONB DEFAULT '[]'::jsonb,
+    business_info JSONB DEFAULT '{}'::jsonb,
+    businessInfo JSONB DEFAULT '{}'::jsonb,
+    purchases JSONB DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS for passcode syncs
+ALTER TABLE public.passcode_syncs ENABLE ROW LEVEL SECURITY;
+
+-- Anonymous/registered users need read/write access to sync rows via direct client interaction or Express proxy.
+-- This ensures background PIN flow devices can fetch & upload backups effortlessly.
+CREATE POLICY "Allow public read/write access to passcode_syncs" ON public.passcode_syncs 
+    FOR ALL USING (true) WITH CHECK (true);
