@@ -149,7 +149,7 @@ async function startServer() {
       if (email) {
         const { data, error } = await supabase
           .from("passcode_syncs")
-          .select("*")
+          .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
           .eq("linked_email", String(email).trim().toLowerCase());
           
         if (error) return res.status(400).json({ error: error.message });
@@ -172,7 +172,7 @@ async function startServer() {
 
       const { data, error } = await supabase
         .from("passcode_syncs")
-        .select("*")
+        .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
         .eq("id", String(id))
         .maybeSingle();
       if (error) return res.status(400).json({ error: error.message });

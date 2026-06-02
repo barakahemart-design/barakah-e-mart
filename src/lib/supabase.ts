@@ -589,7 +589,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
     // 1. Smart direct query: retrieve ALL backups created under this email to find the latest active database row
     const { data: directList, error: directError } = await supabase
       .from("passcode_syncs")
-      .select("*")
+      .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
       .eq("linked_email", cleanEmail);
 
     if (!directError && directList && directList.length > 0) {
@@ -607,7 +607,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
       // Fallback: Query directly using the specific syncId in case linked_email isn't mapped
       const { data: idData, error: idError } = await supabase
         .from("passcode_syncs")
-        .select("*")
+        .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
         .eq("id", syncId)
         .maybeSingle();
       if (!idError && idData) {

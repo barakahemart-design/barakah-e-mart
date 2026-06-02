@@ -1902,7 +1902,7 @@ export default function App() {
       <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col md:h-screen md:overflow-hidden pb-20 md:pb-0" id="viewport-workspace">
         
         {/* TOP STATUS BAR */}
-        <header className={`bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex-row items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn ${activeTab === 'dashboard' ? 'hidden md:flex' : 'flex'}`} id="top-navbar">
+        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
           
           <div id="active-tab-title-display" className="min-w-0">
             <div className="flex items-center gap-1.5 md:gap-2">
