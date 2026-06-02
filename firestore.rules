@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Core Security Helpers (No DB writes)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Validation Blueprints (Strict Key & Type checks)
+    function isValidPasscodeSync(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.linked_email is string && data.linked_email.size() <= 128
+        && (data.products == null || data.products is list)
+        && (data.contacts == null || data.contacts is list)
+        && (data.expenses == null || data.expenses is list)
+        && (data.transactions == null || data.transactions is list)
+        && (data.businessInfo == null || data.businessInfo is map || data.business_info == null || data.business_info is map);
+    }
+
+    function isValidProfile(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.email is string && data.email.size() <= 128
+        && (data.shop_name == null || (data.shop_name is string && data.shop_name.size() <= 256))
+        && (data.shop_address == null || (data.shop_address is string && data.shop_address.size() <= 512));
+    }
+
+    function isValidProduct(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.user_id is string && data.user_id.size() <= 128)
+        && data.name is string && data.name.size() <= 256
+        && (data.sku == null || (data.sku is string && data.sku.size() <= 128))
+        && (data.buy_price == null || data.buy_price is number)
+        && (data.sell_price == null || data.sell_price is number)
+        && (data.stock == null || data.stock is number);
+    }
+
+    function isValidCustomer(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.user_id is string && data.user_id.size() <= 128)
+        && data.name is string && data.name.size() <= 256
+        && (data.phone == null || (data.phone is string && data.phone.size() <= 32));
+    }
+
+    function isValidExpense(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.user_id is string && data.user_id.size() <= 128)
+        && data.amount is number
+        && (data.description == null || (data.description is string && data.description.size() <= 512));
+    }
+
+    function isValidTransaction(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.user_id is string && data.user_id.size() <= 128)
+        && data.total_amount is number
+        && (data.invoice_no == null || (data.invoice_no is string && data.invoice_no.size() <= 64));
+    }
+
+    function isValidTransactionItem(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.user_id is string && data.user_id.size() <= 128)
+        && data.transaction_id is string && data.transaction_id.size() <= 128
+        && data.quantity is number;
+    }
+
+    function isValidPurchase(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.user_id is string && data.user_id.size() <= 128)
+        && data.product_id is string && data.product_id.size() <= 128;
+    }
+
+    function isValidBusinessInfo(data) {
+      return data.id is string && data.id.size() <= 128;
+    }
+
+    // 4. Collection Access Rule Definitions
+    match /passcode_syncs/{syncId} {
+      allow get: if true;
+      allow list: if isSignedIn() && (resource.data.linked_email == request.auth.token.email || resource.data.linked_email == request.auth.uid);
+      allow create, update: if isValidId(syncId) && isValidPasscodeSync(incoming()) && (
+        !isSignedIn() || 
+        incoming().linked_email == request.auth.token.email || 
+        incoming().linked_email == request.auth.uid
+      );
+      allow delete: if isSignedIn() && (existing().linked_email == request.auth.token.email || existing().linked_email == request.auth.uid);
+    }
+
+    match /profiles/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidProfile(incoming());
+      allow delete: if isOwner(userId);
+    }
+
+    match /products/{productId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow create, update: if isSignedIn() && isValidId(productId) && incoming().user_id == request.auth.uid && isValidProduct(incoming());
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    match /customers/{customerId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow create, update: if isSignedIn() && isValidId(customerId) && incoming().user_id == request.auth.uid && isValidCustomer(incoming());
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow create, update: if isSignedIn() && isValidId(expenseId) && incoming().user_id == request.auth.uid && isValidExpense(incoming());
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow create, update: if isSignedIn() && isValidId(transactionId) && incoming().user_id == request.auth.uid && isValidTransaction(incoming());
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    match /transaction_items/{itemId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow create, update: if isSignedIn() && isValidId(itemId) && incoming().user_id == request.auth.uid && isValidTransactionItem(incoming());
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow create, update: if isSignedIn() && isValidId(purchaseId) && incoming().user_id == request.auth.uid && isValidPurchase(incoming());
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    match /business_info/{businessInfoId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.id != null);
+      allow create, update: if isSignedIn() && isValidId(businessInfoId) && isValidBusinessInfo(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}

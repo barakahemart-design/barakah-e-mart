@@ -2,8 +2,30 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { createClient } from "@supabase/supabase-js";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword 
+} from "firebase/auth";
+import { 
+  getFirestore, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  collection, 
+  query, 
+  where 
+} from "firebase/firestore";
+import firebaseConfig from "./firebase-applet-config.json";
+
+// Initialize Firebase Core Client on express node runtime
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const firebaseAuth = getAuth(firebaseApp);
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -32,88 +54,70 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // Fallback credentials for Supabase demo
-  const fallbackUrl = "https://dmgbhwwugdrwbqdzgnqa.supabase.co";
-  const fallbackKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZ2Jod3d1Z2Ryd2JxZHpnbnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzOTE1MDYsImV4cCI6MjA5NTk2NzUwNn0.qo8Itnqd561hvk7Js8IvF4xuF12xjGw8B8u1C7cpTUo";
-
-  let rawUrl = process.env.VITE_SUPABASE_URL || fallbackUrl;
-  let rawKey = process.env.VITE_SUPABASE_ANON_KEY || fallbackKey;
-
-  if (rawUrl.includes("bsaumznrvfcqwhqdpdgo")) {
-    rawUrl = fallbackUrl;
-    rawKey = fallbackKey;
-  }
-
-  const supabaseUrl = rawUrl.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
-  const supabaseAnonKey = rawKey.trim();
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
   app.get("/api/health", (req: Request, res: Response) => {
     res.json({ 
       status: "ok", 
-      supabaseConfigured: !!supabaseUrl,
-      isUsingFallback: supabaseUrl === fallbackUrl
+      firebaseConfigured: !!firebaseConfig.apiKey,
+      isUsingFallback: false 
     });
   });
 
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     const { email, password } = req.body;
     try {
-      const origin = req.get('origin') || `${req.protocol}://${req.get('host')}`;
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password: password,
-        options: { emailRedirectTo: origin }
-      });
-      if (error) {
-        let displayError = error.message;
-        if (error.message.includes("at least 6") || error.message.includes("weak") || error.message.includes("should be at least")) {
-          displayError = "পাসওয়ার্ডটি কমপক্ষে ৬ অক্ষরের হতে হবে!";
+      const cleanEmail = email.trim().toLowerCase();
+      const creds = await createUserWithEmailAndPassword(firebaseAuth, cleanEmail, password);
+      res.json({ 
+        user: {
+          id: creds.user.uid,
+          uid: creds.user.uid,
+          email: creds.user.email
         }
-        return res.status(400).json({ error: displayError });
-      }
-      res.json({ user: data.user, session: data.session });
+      });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      let displayError = err.message || String(err);
+      if (err.code === "auth/weak-password" || err.message?.includes("at least") || err.message?.includes("weak")) {
+        displayError = "পাসওয়ার্ডটি কমপক্ষে ৬ অক্ষরের হতে হবে!";
+      } else if (err.code === "auth/email-already-in-use" || err.message?.includes("already registered")) {
+        displayError = "এই ইমেইলটি ইতিপূর্বে রেজিস্টার করা হয়েছে!";
+      }
+      res.status(400).json({ error: displayError });
     }
   });
 
   app.post("/api/auth/signin", async (req: Request, res: Response) => {
     const { email, password } = req.body;
-    const cleanEmail = email.trim().toLowerCase();
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      });
-      
-      if (error) {
-        // Return clear, user-friendly translation or guidelines alongside error
-        let displayError = error.message;
-        if (error.message === "Email not confirmed") {
-          displayError = "আপনার ইমেইল কনফার্মেশন পেন্ডিং আছে। অনুগ্রহ করে ইনবক্স চেক করুন অথবা 'Passcode Cloud Sync' ব্যবহার করে ৪-সংখ্যার কোড দিয়ে সরাসরি লগইন করুন!";
-        } else if (error.message === "Invalid login credentials") {
-          displayError = "ভুল পাসওয়ার্ড! অথবা একাউন্টটি এখনো তৈরি করা হয়নি। পাসওয়ার্ডটি পুনরায় চেক করুন অথবা 'Create a New Store Account' এ ক্লিক করুন!";
+      const cleanEmail = email.trim().toLowerCase();
+      const creds = await signInWithEmailAndPassword(firebaseAuth, cleanEmail, password);
+      res.json({ 
+        user: {
+          id: creds.user.uid,
+          uid: creds.user.uid,
+          email: creds.user.email
         }
-        
-        return res.status(400).json({ error: displayError });
-      }
-      
-      res.json({ user: data.user, session: data.session });
+      });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      let displayError = err.message || String(err);
+      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.message?.toLowerCase().includes("credentials")) {
+        displayError = "ভুল পাসওয়ার্ড! অথবা একাউন্টটি এখনো তৈরি করা হয়নি। পাসওয়ার্ডটি পুনরায় চেক করুন!";
+      }
+      res.status(400).json({ error: displayError });
     }
   });
 
   app.get("/api/db/fetch", async (req: Request, res: Response) => {
     const { table, owner_email } = req.query;
     try {
-      const { data, error } = await supabase
-        .from(String(table))
-        .select("*")
-        .eq("owner_email", String(owner_email));
-      if (error) return res.status(400).json({ error: error.message });
-      res.json(data || []);
+      let q;
+      if (table === "business_info") {
+        q = collection(db, String(table));
+      } else {
+        q = query(collection(db, String(table)), where("user_id", "==", String(owner_email)));
+      }
+      const docsSnap = await getDocs(q);
+      const records = docsSnap.docs.map(docSnapshot => docSnapshot.data());
+      res.json(records);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -122,10 +126,7 @@ async function startServer() {
   app.post("/api/db/upsert", async (req: Request, res: Response) => {
     const { table, id, data } = req.body;
     try {
-      const { error } = await supabase
-        .from(String(table))
-        .upsert({ id, ...data }, { onConflict: "id" });
-      if (error) return res.status(400).json({ error: error.message });
+      await setDoc(doc(db, String(table), String(id)), { id, ...data });
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -135,8 +136,7 @@ async function startServer() {
   app.post("/api/db/delete", async (req: Request, res: Response) => {
     const { table, id } = req.body;
     try {
-      const { error } = await supabase.from(String(table)).delete().eq("id", id);
-      if (error) return res.status(400).json({ error: error.message });
+      await deleteDoc(doc(db, String(table), String(id)));
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -147,21 +147,17 @@ async function startServer() {
     const { id, email } = req.query;
     try {
       if (email) {
-        const { data, error } = await supabase
-          .from("passcode_syncs")
-          .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
-          .eq("linked_email", String(email).trim().toLowerCase());
-          
-        if (error) return res.status(400).json({ error: error.message });
-        
-        if (data && data.length > 0) {
-          // Sort descending by updated_at to ensure the latest backup gets restored
-          data.sort((a: any, b: any) => {
+        const passcodeRef = collection(db, "passcode_syncs");
+        const q = query(passcodeRef, where("linked_email", "==", String(email).trim().toLowerCase()));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          const docs = querySnap.docs.map(docSnapshot => docSnapshot.data());
+          docs.sort((a: any, b: any) => {
             const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
             const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
             return t2 - t1;
           });
-          return res.json(data[0]);
+          return res.json(docs[0]);
         }
         return res.json(null);
       }
@@ -170,13 +166,11 @@ async function startServer() {
         return res.status(400).json({ error: "Missing id or email parameter" });
       }
 
-      const { data, error } = await supabase
-        .from("passcode_syncs")
-        .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
-        .eq("id", String(id))
-        .maybeSingle();
-      if (error) return res.status(400).json({ error: error.message });
-      res.json(data || null);
+      const docSnap = await getDoc(doc(db, "passcode_syncs", String(id)));
+      if (docSnap.exists()) {
+        return res.json(docSnap.data());
+      }
+      res.json(null);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -186,51 +180,23 @@ async function startServer() {
     const { payload } = req.body;
     try {
       if (payload && payload.id) {
-        // Prevent blank/initial states from overwriting populated states in the cloud database
         const incomingProductsCount = (payload.products || []).length;
         const incomingTransactionsCount = (payload.transactions || []).length;
         
         if (incomingProductsCount === 0 && incomingTransactionsCount === 0) {
-          // Fetch existing backup from the database
-          const { data: existing } = await supabase
-            .from("passcode_syncs")
-            .select("products, transactions")
-            .eq("id", payload.id)
-            .maybeSingle();
-            
-          if (existing) {
+          const docSnap = await getDoc(doc(db, "passcode_syncs", payload.id));
+          if (docSnap.exists()) {
+            const existing = docSnap.data();
             const existingProductsCount = (existing.products || []).length;
             const existingTransactionsCount = (existing.transactions || []).length;
             if (existingProductsCount > 0 || existingTransactionsCount > 0) {
-              console.log(`[Sync Guard] Stopped blank payload override for sync ID: ${payload.id}`);
+              console.log(`[Server Sync] Stopped blank payload override for sync ID: ${payload.id}`);
               return res.json({ success: true, ignored: true, message: "Protected existing non-empty cloud backup." });
             }
           }
         }
       }
-      const { error } = await supabase.from("passcode_syncs").upsert(payload);
-      if (error) {
-        // Fallback for missing columns (e.g. businessInfo or purchases column is not present in user's manual database)
-        if (error.code === "42703" || error.message?.toLowerCase().includes("column")) {
-          console.warn("[Server Sync] Column error, retrying with minimalist snake_case payload...");
-          const cleanBody = {
-            id: payload.id,
-            linked_email: payload.linked_email,
-            products: payload.products,
-            contacts: payload.contacts,
-            expenses: payload.expenses,
-            transactions: payload.transactions,
-            business_info: payload.business_info || payload.businessInfo,
-            updated_at: payload.updated_at || new Date().toISOString()
-          };
-          const { error: retryError } = await supabase.from("passcode_syncs").upsert(cleanBody);
-          if (retryError) {
-            return res.status(400).json({ error: retryError.message });
-          }
-          return res.json({ success: true, retried: true });
-        }
-        return res.status(400).json({ error: error.message });
-      }
+      await setDoc(doc(db, "passcode_syncs", payload.id), payload);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -251,7 +217,6 @@ async function startServer() {
       try {
         ai = getGeminiClient();
       } catch (err: any) {
-        // Fallback insights if API key is not configured or fails
         res.json([
           {
             title: " ক্যাশফ্লো সর্তকতা (Cashflow Balance Alert)",

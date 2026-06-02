@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { 
   cleanDemoProducts, 
   cleanDemoContacts, 
@@ -8,55 +7,75 @@ import {
   INITIAL_BUSINESS_INFO
 } from './mockDB';
 
-const fallbackUrl = 'https://dmgbhwwugdrwbqdzgnqa.supabase.co';
-const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZ2Jod3d1Z2Ryd2JxZHpnbnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzOTE1MDYsImV4cCI6MjA5NTk2NzUwNn0.qo8Itnqd561hvk7Js8IvF4xuF12xjGw8B8u1C7cpTUo';
+import { 
+  db, 
+  auth as firebaseAuth, 
+  handleFirestoreError, 
+  OperationType 
+} from './firebase';
 
-// Fallback logic inside the client bundle
-// @ts-ignore
-let rawUrl = import.meta.env.VITE_SUPABASE_URL || fallbackUrl;
-// @ts-ignore
-let rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || fallbackKey;
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
 
-const supabaseUrl = rawUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-const supabaseAnonKey = rawKey.trim();
+import { 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  collection, 
+  query, 
+  where 
+} from 'firebase/firestore';
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const isSupabaseConfigured = true;
+export const supabase = null as any; // Mock for any uncalled references
 
 let currentSupabaseUser: any = null;
 const authListeners = new Set<(user: any) => void>();
 
 const updateCurrentUser = (sessionUser: any) => {
   if (sessionUser) {
-    currentSupabaseUser = { uid: sessionUser.id, id: sessionUser.id, email: sessionUser.email, ...sessionUser };
+    currentSupabaseUser = { 
+      uid: sessionUser.id || sessionUser.uid, 
+      id: sessionUser.id || sessionUser.uid, 
+      email: sessionUser.email, 
+      ...sessionUser 
+    };
   } else {
     currentSupabaseUser = null;
   }
   authListeners.forEach(cb => cb(currentSupabaseUser));
 };
 
-supabase.auth.onAuthStateChange((_event, session) => {
-  if (session?.user) {
-    updateCurrentUser(session.user);
+// Listen for firebase auth state alterations
+onAuthStateChanged(firebaseAuth, (user: FirebaseUser | null) => {
+  if (user) {
+    updateCurrentUser({
+      id: user.uid,
+      uid: user.uid,
+      email: user.email,
+      emailVerified: user.emailVerified
+    });
   } else {
-    if (_event === 'SIGNED_OUT') {
-      updateCurrentUser(null);
-    } else {
-      // Keep cached user if we have one on app reload to prevent auto-logout
-      const cached = localStorage.getItem('barakah_local_active_user');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (parsed) {
-            updateCurrentUser(parsed);
-            return;
-          }
-        } catch (e) {
-          // ignore
+    const cached = localStorage.getItem('barakah_local_active_user');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed) {
+          updateCurrentUser(parsed);
+          return;
         }
+      } catch (e) {
+        // ignore
       }
-      updateCurrentUser(null);
     }
+    updateCurrentUser(null);
   }
 });
 
@@ -148,18 +167,13 @@ export function deduplicateExpenses(expenses: any[]): any[] {
     const cleanId = (e.id || "").trim();
     const cleanDesc = (e.description || "").trim().toLowerCase();
     const amount = Number(e.amount) || 0;
-    const dateStr = (e.date || "").substring(0, 10);
 
     let matchedIdx = -1;
     if (cleanId) {
       matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
     }
-    if (matchedIdx === -1 && cleanDesc) {
-      matchedIdx = uniqueList.findIndex(x => 
-        (x.description || "").trim().toLowerCase() === cleanDesc &&
-        Math.abs((Number(x.amount) || 0) - amount) < 0.01 &&
-        (x.date || "").substring(0, 10) === dateStr
-      );
+    if (matchedIdx === -1 && cleanDesc && amount > 0) {
+      matchedIdx = uniqueList.findIndex(x => (x.description || "").trim().toLowerCase() === cleanDesc && Number(x.amount) === amount);
     }
 
     if (matchedIdx >= 0) {
@@ -182,21 +196,14 @@ export function deduplicatePurchases(purchases: any[]): any[] {
     if (!pur) continue;
     const cleanId = (pur.id || "").trim();
     const productId = (pur.productId || "").trim();
-    const invNo = (pur.invoiceNo || "").trim().toLowerCase();
     const qty = Number(pur.quantity) || 0;
-    const dateStr = (pur.date || "").substring(0, 10);
 
     let matchedIdx = -1;
     if (cleanId) {
       matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
     }
-    if (matchedIdx === -1 && productId && invNo) {
-      matchedIdx = uniqueList.findIndex(x => 
-        (x.productId || "").trim() === productId &&
-        (x.invoiceNo || "").trim().toLowerCase() === invNo &&
-        Math.abs((Number(x.quantity) || 0) - qty) < 0.001 &&
-        (x.date || "").substring(0, 10) === dateStr
-      );
+    if (matchedIdx === -1 && productId && qty > 0) {
+      matchedIdx = uniqueList.findIndex(x => (x.productId || "").trim() === productId && Number(x.quantity) === qty);
     }
 
     if (matchedIdx >= 0) {
@@ -218,14 +225,14 @@ export function deduplicateTransactions(transactions: any[]): any[] {
   for (const t of transactions) {
     if (!t) continue;
     const cleanId = (t.id || "").trim();
-    const invNo = (t.invoiceNo || "").trim().toLowerCase();
+    const invoiceNo = (t.invoiceNo || "").trim().toLowerCase();
 
     let matchedIdx = -1;
     if (cleanId) {
       matchedIdx = uniqueList.findIndex(x => (x.id || "").trim() === cleanId);
     }
-    if (matchedIdx === -1 && invNo) {
-      matchedIdx = uniqueList.findIndex(x => (x.invoiceNo || "").trim().toLowerCase() === invNo);
+    if (matchedIdx === -1 && invoiceNo) {
+      matchedIdx = uniqueList.findIndex(x => (x.invoiceNo || "").trim().toLowerCase() === invoiceNo);
     }
 
     if (matchedIdx >= 0) {
@@ -342,7 +349,6 @@ export const restoreLocalKeys = (data: any) => {
 
   const email = (data.linked_email || data.linkedEmail || currentSupabaseUser?.email || "").trim().toLowerCase();
 
-  // Helper to safely convert IDs and foreign key links using user email salt
   const normalizeProduct = (p: any): any => {
     if (!p) return p;
     return {
@@ -474,9 +480,9 @@ export const restoreLocalKeys = (data: any) => {
       localStorage.setItem('barakah_transactions', JSON.stringify([]));
     }
   }
-  
+
   const bizData = data.businessInfo || data.business_info || data.businessinfo;
-  
+
   // 5. MERGE PURCHASES
   let p = data.purchases;
   if (!p && bizData && bizData.purchases) {
@@ -541,7 +547,7 @@ export function toUUID(str: string, email: string = ""): string {
   const part2 = "4000";
   const part3 = "8000";
   const part4 = absHash.substring(4, 8).padStart(4, "0");
-  
+
   let hash2 = 1729;
   for (let i = saltedStr.length - 1; i >= 0; i--) {
     hash2 = (hash2 << 5) - hash2 + saltedStr.charCodeAt(i);
@@ -549,7 +555,7 @@ export function toUUID(str: string, email: string = ""): string {
   }
   const absHash2 = Math.abs(hash2).toString(16).padStart(12, "1");
   const part5 = absHash2.substring(0, 12);
-  
+
   return `${part1}-${part2}-${part3}-${part4}-${part5}`;
 }
 
@@ -582,40 +588,35 @@ function mergeTransactionsLists(listA: any[], listB: any[]) {
 export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => {
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
-  
+
   try {
     let finalData: any = null;
 
-    // 1. Smart direct query: retrieve ALL backups created under this email to find the latest active database row
-    const { data: directList, error: directError } = await supabase
-      .from("passcode_syncs")
-      .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
-      .eq("linked_email", cleanEmail);
-
-    if (!directError && directList && directList.length > 0) {
-      // Sort by updated_at descending to grab the freshest backup
-      directList.sort((a: any, b: any) => {
-        const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-        const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-        return t2 - t1;
-      });
-      finalData = directList[0];
-    } else {
-      if (directError) {
-        console.warn("Direct linked_email query failed, trying ID query...", directError.message);
+    // 1. Fetch cloud backups matching this email
+    try {
+      const passcodeRef = collection(db, "passcode_syncs");
+      const q = query(passcodeRef, where("linked_email", "==", cleanEmail));
+      const querySnap = await getDocs(q);
+      
+      if (!querySnap.empty) {
+        const docs = querySnap.docs.map(docSnap => docSnap.data());
+        docs.sort((a: any, b: any) => {
+          const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          return t2 - t1;
+        });
+        finalData = docs[0];
+      } else {
+        const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
+        if (docSnap.exists()) {
+          finalData = docSnap.data();
+        }
       }
-      // Fallback: Query directly using the specific syncId in case linked_email isn't mapped
-      const { data: idData, error: idError } = await supabase
-        .from("passcode_syncs")
-        .select("id, linked_email, products, contacts, expenses, transactions, business_info, updated_at")
-        .eq("id", syncId)
-        .maybeSingle();
-      if (!idError && idData) {
-        finalData = idData;
-      }
+    } catch (dbErr) {
+      console.warn("Direct firestore backup list fetch failed:", dbErr);
     }
 
-    // 2. Express fallback query: ask the proxy server for the latest backup by email or ID
+    // 2. Express fallback backup retrieval query
     if (!finalData) {
       finalData = await (async () => {
         try {
@@ -633,19 +634,28 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
       })();
     }
 
-    // 3. Replicate direct table records back to laptop to ensure any sync additions on mobile appear on laptop too
+    // 3. Sync individual collection records to construct the complete state
     try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", cleanEmail)
-        .maybeSingle();
+      // Find the active profile mapping or fallback
+      let activeUserId = "";
+      try {
+        const profileSnap = await getDoc(doc(db, "profiles", syncId));
+        if (profileSnap.exists()) {
+          activeUserId = profileSnap.id;
+        } else {
+          const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
+          const profileSnapQ = await getDocs(profileQ);
+          if (!profileSnapQ.empty) {
+            activeUserId = profileSnapQ.docs[0].id;
+          }
+        }
+      } catch (profErr) {
+        console.warn("Could not query profiles lookup directly:", profErr);
+      }
 
-      const activeUserId = profile?.id;
       if (activeUserId) {
-        console.log(`[Direct Sync Engine] Replicating direct table records on restore for profile: ${activeUserId}`);
+        console.log(`[Direct Firestore Sync Engine] Mapping profile: ${activeUserId}`);
 
-        // Normalize loaded JSON columns to salted UUID format first, so there is never ID mismatch during SQL table merges
         if (finalData) {
           if (finalData.products) {
             finalData.products = finalData.products.map((p: any) => ({ ...p, id: toUUID(p.id, cleanEmail) }));
@@ -673,63 +683,71 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
           }
         }
 
-        const [productsRes, customersRes, expensesRes, transactionsRes, detailRes] = await Promise.all([
-          supabase.from("products").select("*").eq("user_id", activeUserId),
-          supabase.from("customers").select("*").eq("user_id", activeUserId),
-          supabase.from("expenses").select("*").eq("user_id", activeUserId),
-          supabase.from("transactions").select("*").eq("user_id", activeUserId).order('created_at', { ascending: false }),
-          supabase.from("purchases").select("*").eq("user_id", activeUserId)
+        const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes] = await Promise.all([
+          getDocs(query(collection(db, "products"), where("user_id", "==", activeUserId))),
+          getDocs(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
+          getDocs(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
+          getDocs(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
+          getDocs(query(collection(db, "purchases"), where("user_id", "==", activeUserId)))
         ]);
 
-        if (productsRes.data && productsRes.data.length > 0) {
-          const sqlProducts = productsRes.data.map(p => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku || "",
-            stock: Number(p.stock) || 0,
-            buyPrice: Number(p.buy_price) || 0,
-            sellPrice: Number(p.sell_price) || 0,
-            category: p.category || "Electronics",
-            unit: p.unit || "piece",
-            imageUrl: p.image_url || undefined
-          }));
+        if (!productsRes.empty) {
+          const sqlProducts = productsRes.docs.map(docSnapshot => {
+            const p = docSnapshot.data();
+            return {
+              id: p.id,
+              name: p.name,
+              sku: p.sku || "",
+              stock: Number(p.stock) || 0,
+              buyPrice: Number(p.buy_price) || 0,
+              sellPrice: Number(p.sell_price) || 0,
+              category: p.category || "Electronics",
+              unit: p.unit || "piece",
+              imageUrl: p.image_url || undefined
+            };
+          });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
           finalData.products = mergeListsById(finalData.products || [], sqlProducts);
         }
 
-        if (customersRes.data && customersRes.data.length > 0) {
-          const sqlCustomers = customersRes.data.map(c => ({
-            id: c.id,
-            name: c.name,
-            phone: c.phone,
-            address: c.address || "",
-            type: "customer",
-            created_at: c.created_at || new Date().toISOString()
-          }));
+        if (!customersRes.empty) {
+          const sqlCustomers = customersRes.docs.map(docSnapshot => {
+            const c = docSnapshot.data();
+            return {
+              id: c.id,
+              name: c.name,
+              phone: c.phone || "",
+              address: c.address || "",
+              type: "customer",
+              created_at: c.updated_at || new Date().toISOString()
+            };
+          });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
           finalData.contacts = mergeListsById(finalData.contacts || [], sqlCustomers);
         }
 
-        if (expensesRes.data && expensesRes.data.length > 0) {
-          const sqlExpenses = expensesRes.data.map(e => ({
-            id: e.id,
-            category: e.category || "Others",
-            amount: Number(e.amount) || 0,
-            description: e.description || "",
-            date: e.created_at || new Date().toISOString()
-          }));
+        if (!expensesRes.empty) {
+          const sqlExpenses = expensesRes.docs.map(docSnapshot => {
+            const e = docSnapshot.data();
+            return {
+              id: e.id,
+              category: e.category || "Others",
+              amount: Number(e.amount) || 0,
+              description: e.description || "",
+              date: e.created_at || new Date().toISOString()
+            };
+          });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
           finalData.expenses = mergeListsById(finalData.expenses || [], sqlExpenses);
         }
 
-        if (transactionsRes.data && transactionsRes.data.length > 0) {
-          const { data: itemRows } = await supabase
-            .from("transaction_items")
-            .select("*")
-            .eq("user_id", activeUserId);
+        if (!transactionsRes.empty) {
+          const itemsRes = await getDocs(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)));
+          const itemRows = itemsRes.empty ? [] : itemsRes.docs.map(docSnapshot => docSnapshot.data());
 
-          const sqlTransactions = transactionsRes.data.map(t => {
-            const relatedItems = (itemRows || []).filter((item: any) => item.transaction_id === t.id);
+          const sqlTransactions = transactionsRes.docs.map(docSnapshot => {
+            const t = docSnapshot.data();
+            const relatedItems = itemRows.filter((item: any) => item.transaction_id === t.id);
             const mappedItems = relatedItems.map((item: any) => ({
               id: item.id,
               name: item.product_id ? "Product Item" : "Standard Item",
@@ -760,52 +778,41 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
           finalData.transactions = mergeTransactionsLists(finalData.transactions || [], sqlTransactions);
         }
 
-        if (detailRes.data && detailRes.data.length > 0) {
-          const sqlPurchases = detailRes.data.map(p => ({
-            id: p.id,
-            productId: p.product_id,
-            productName: "Purchase Item",
-            supplierId: "",
-            supplierName: "Main Depot",
-            quantity: Number(p.quantity) || 0,
-            buyPrice: Number(p.buy_price) || 0,
-            totalAmount: Number(p.quantity * p.buy_price) || 0,
-            date: p.created_at || new Date().toISOString()
-          }));
+        if (!purchasesRes.empty) {
+          const sqlPurchases = purchasesRes.docs.map(docSnapshot => {
+            const p = docSnapshot.data();
+            return {
+              id: p.id,
+              productId: p.product_id,
+              productName: "Purchase Item",
+              supplierId: "",
+              supplierName: "Main Depot",
+              quantity: Number(p.quantity) || 0,
+              buyPrice: Number(p.buy_price) || 0,
+              totalAmount: Number(p.quantity * p.buy_price) || 0,
+              date: p.created_at || new Date().toISOString()
+            };
+          });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
           finalData.purchases = mergeListsById(finalData.purchases || [], sqlPurchases);
         }
       }
     } catch (tblErr) {
-      console.warn("[Direct Sync Engine] Background tables load failed:", tblErr);
+      console.warn("[Firestore Sync Engine] Background load completed with fallback:", tblErr);
     }
 
     if (finalData) {
-      // Normalize all client IDs in finalData to clean deterministic UUID format to perfectly match SQL relational tables 
       if (finalData.products) {
-        finalData.products = finalData.products.map((p: any) => ({
-          ...p,
-          id: toUUID(p.id, cleanEmail)
-        }));
+        finalData.products = finalData.products.map((p: any) => ({ ...p, id: toUUID(p.id, cleanEmail) }));
       }
       if (finalData.contacts) {
-        finalData.contacts = finalData.contacts.map((c: any) => ({
-          ...c,
-          id: toUUID(c.id, cleanEmail)
-        }));
+        finalData.contacts = finalData.contacts.map((c: any) => ({ ...c, id: toUUID(c.id, cleanEmail) }));
       }
       if (finalData.expenses) {
-        finalData.expenses = finalData.expenses.map((e: any) => ({
-          ...e,
-          id: toUUID(e.id, cleanEmail)
-        }));
+        finalData.expenses = finalData.expenses.map((e: any) => ({ ...e, id: toUUID(e.id, cleanEmail) }));
       }
       if (finalData.purchases) {
-        finalData.purchases = finalData.purchases.map((pur: any) => ({
-          ...pur,
-          id: toUUID(pur.id, cleanEmail),
-          productId: toUUID(pur.productId, cleanEmail)
-        }));
+        finalData.purchases = finalData.purchases.map((pur: any) => ({ ...pur, id: toUUID(pur.id, cleanEmail), productId: toUUID(pur.productId, cleanEmail) }));
       }
       if (finalData.transactions) {
         finalData.transactions = finalData.transactions.map((t: any) => ({
@@ -824,7 +831,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
       return true;
     }
   } catch (err) {
-    console.warn("Failed cloud backup restore:", err);
+    console.warn("Backup restoration procedure failed:", err);
   }
   return false;
 };
@@ -832,68 +839,52 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string) => 
 export const signUpWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
-    let user: any = null;
-    let authError: any = null;
-
+    let authUser: any = null;
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: pass,
-      });
-      if (error) {
-        authError = error;
-      } else {
-        user = data.user;
-      }
+      const creds = await createUserWithEmailAndPassword(firebaseAuth, cleanEmail, pass);
+      authUser = creds.user;
     } catch (directErr: any) {
-      console.warn("Direct signup call error, falling back to server route...", directErr);
-      authError = directErr;
-    }
-
-    if (!user) {
-      // If direct signup failed, parse and throw local friendly errors manually
-      if (authError && (authError.message?.includes("weak") || authError.message?.includes("at least 6"))) {
+      console.warn("Direct Firebase authentication signUp failing, retrying server fallback...", directErr);
+      if (directErr.code === "auth/weak-password" || directErr.message?.includes("6 characters")) {
         throw new Error("Password must be at least 6 characters long!");
       }
-      if (authError && authError.message?.includes("already registered")) {
+      if (directErr.code === "auth/email-already-in-use" || directErr.message?.includes("already registered")) {
         throw new Error("This email is already registered! Please log in instead.");
       }
+    }
 
+    if (!authUser) {
+      // Direct call fallback proxy
       try {
-        // Try backend Express server proxy
         const response = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: cleanEmail, password: pass })
         });
-        
         const contentType = response.headers.get("content-type");
         if (response.ok && contentType && contentType.includes("application/json")) {
           const result = await response.json();
           if (result.error) throw new Error(result.error);
-          user = result.user;
+          authUser = result.user;
         } else {
-          if (authError) {
-            throw authError;
-          } else {
-            throw new Error("Registration failed. Please try a different email or connection.");
-          }
+          throw new Error("Registration timed out. Please try again with valid credentials.");
         }
-      } catch (fetchErr: any) {
-        if (authError) {
-          throw new Error(`সুপাবেজ অথেনটিকেশন ব্যর্থ হয়েছে: ${authError.message || authError}. ব্রাউজার অ্যাডব্লকার Supabase ডোমেইন ব্লক করতে পারে অথবা আপনার নতুন সুপাবেজ প্রজেক্টে SQL টেবিল সেটাপ করা দরকার।`);
-        } else {
-          throw fetchErr;
-        }
+      } catch (fetchErr) {
+        throw new Error("রেজিস্ট্রেশন সংযোগ ব্যর্থ হয়েছে। আপনার ইন্টারনেট সচল রয়েছে কি না চেক করুন।");
       }
     }
 
-    if (user) {
-      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored: false, isPasscodeUser: false };
-      
-      // Ensure profile exists in 'profiles' table so mobile apps can log in and reference ID
+    if (authUser) {
+      const userObj = { 
+        email: cleanEmail, 
+        id: authUser.uid || authUser.id, 
+        uid: authUser.uid || authUser.id, 
+        restored: false, 
+        isPasscodeUser: false 
+      };
+
       try {
-        const uId = user.id || user.uid;
+        const uId = authUser.uid || authUser.id;
         if (uId) {
           const profileData = {
             id: uId,
@@ -903,18 +894,17 @@ export const signUpWithEmail = async (email: string, pass: string) => {
             support_phone: "01700-000000",
             vat_reg_id: "VAT-884499"
           };
-          await supabase.from("profiles").upsert(profileData);
-          console.log("[Auth Engine] Automatically ensured profile row is active in PostgreSQL on signup.");
+          await setDoc(doc(db, "profiles", uId), profileData);
         }
       } catch (profErr: any) {
-        console.warn("[Auth Engine] Profiles table registration warning from signup:", profErr.message);
+        console.warn("[Auth Engine] Automatically ensuring profile document warning:", profErr.message);
       }
-      
+
       try {
         const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
         userObj.restored = wasRestored;
       } catch (err) {
-        console.warn("Restore backup info failed on signup:", err);
+        console.warn("Auto restorating backup after secure login failed:", err);
       }
 
       updateCurrentUser(userObj);
@@ -929,69 +919,45 @@ export const signUpWithEmail = async (email: string, pass: string) => {
 export const signInWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
-    let user: any = null;
-    let authError: any = null;
-
+    let authUser: any = null;
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: pass,
-      });
-      if (error) {
-        authError = error;
-      } else {
-        user = data.user;
-      }
+      const creds = await signInWithEmailAndPassword(firebaseAuth, cleanEmail, pass);
+      authUser = creds.user;
     } catch (directErr: any) {
-      console.warn("Direct signin call error, falling back to server route...", directErr);
-      authError = directErr;
+      console.warn("Direct Firebase authentication signIn failing, retrying server fallback...", directErr);
     }
 
-    if (!user) {
-      // If direct login failed, parse and throw translation
-      if (authError) {
-        if (authError.message === "Invalid login credentials") {
-          throw new Error("Invalid email or password! Please check your credentials and try again.");
-        } else if (authError.message === "Email not confirmed") {
-          throw new Error("Your email address has not been verified yet. Please click the verification link in your inbox!");
-        }
-      }
-
+    if (!authUser) {
       try {
-        // Try backend Express server proxy fallback
         const response = await fetch('/api/auth/signin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: cleanEmail, password: pass })
         });
-        
         const contentType = response.headers.get("content-type");
         if (response.ok && contentType && contentType.includes("application/json")) {
           const result = await response.json();
           if (result.error) throw new Error(result.error);
-          user = result.user;
+          authUser = result.user;
         } else {
-          if (authError) {
-            throw authError;
-          } else {
-            throw new Error("Invalid signin credentials or server timeout.");
-          }
+          throw new Error("Invalid login credentials or verification missing.");
         }
       } catch (fetchErr: any) {
-        if (authError) {
-          throw new Error(`সুপাবেজ সংযোগ ব্যর্থ হয়েছে: ${authError.message || authError}. অনুগ্রহ করে আপনার ইমেইল/পাসওয়ার্ড যাচাই করুন এবং নিশ্চিত করুন যে ডেটাবেজ সচল রয়েছে।`);
-        } else {
-          throw fetchErr;
-        }
+        throw new Error("লগইন কানেকশন ব্যর্থ হয়েছে। ইমেইল এবং পাসওয়ার্ডটি পুনরায় চেক করুন!");
       }
     }
 
-    if (user) {
-      const userObj = { ...user, email: cleanEmail, id: user.id || user.uid, restored: false, isPasscodeUser: false };
-      
-      // Ensure profile exists in 'profiles' table so mobile apps can log in and reference ID
+    if (authUser) {
+      const userObj = { 
+        email: cleanEmail, 
+        id: authUser.uid || authUser.id, 
+        uid: authUser.uid || authUser.id, 
+        restored: false, 
+        isPasscodeUser: false 
+      };
+
       try {
-        const uId = user.id || user.uid;
+        const uId = authUser.uid || authUser.id;
         if (uId) {
           const profileData = {
             id: uId,
@@ -1001,18 +967,17 @@ export const signInWithEmail = async (email: string, pass: string) => {
             support_phone: "01700-000000",
             vat_reg_id: "VAT-884499"
           };
-          await supabase.from("profiles").upsert(profileData);
-          console.log("[Auth Engine] Automatically ensured profile row is active in PostgreSQL on signin.");
+          await setDoc(doc(db, "profiles", uId), profileData);
         }
       } catch (profErr: any) {
-        console.warn("[Auth Engine] Profiles table registration warning from signin:", profErr.message);
+        console.warn("[Auth Engine] Profile write warning:", profErr.message);
       }
-      
+
       try {
         const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
         userObj.restored = wasRestored;
       } catch (err) {
-        console.warn("Restore backup info failed on signin:", err);
+        console.warn("Restore backup information on standard email login failed:", err);
       }
 
       updateCurrentUser(userObj);
@@ -1025,28 +990,40 @@ export const signInWithEmail = async (email: string, pass: string) => {
 };
 
 export const signOut = async () => {
+  try {
+    await firebaseSignOut(firebaseAuth);
+  } catch (e) {
+    console.warn("Direct auth engine signout warning:", e);
+  }
   localStorage.removeItem('barakah_local_active_user');
   currentSupabaseUser = null;
   authListeners.forEach(cb => cb(null));
-  await supabase.auth.signOut();
 };
 
 export const subscribeToAuthChanges = (callback: (user: any) => void) => {
   authListeners.add(callback);
   callback(currentSupabaseUser);
-  return () => { authListeners.delete(callback); };
+  return () => {
+    authListeners.delete(callback);
+  };
 };
 
 export const auth = {
-  get currentUser() { return currentSupabaseUser; }
+  get currentUser() {
+    return currentSupabaseUser;
+  },
+  signUpWithEmail,
+  signInWithEmail,
+  signOut,
+  subscribeToAuthChanges
 };
 
 export function getPasscodeSyncId(email: string, pin: string): string {
+  if (!email) return "anonymous_vault";
   const cleanEmail = email.trim().toLowerCase();
-  let resolvedPin = pin.trim();
+  let resolvedPin = String(pin || "").trim();
 
-  if (resolvedPin === "classic_account_secure") {
-    // Attempt to read custom admin passcode from local business settings
+  if (!resolvedPin) {
     try {
       const bizInfoStr = localStorage.getItem("barakah_business_info");
       if (bizInfoStr) {
@@ -1057,7 +1034,6 @@ export function getPasscodeSyncId(email: string, pin: string): string {
       }
     } catch (_) {}
 
-    // Default fallback to "1234" if no custom passcode is configured
     if (resolvedPin === "classic_account_secure") {
       resolvedPin = "1234";
     }
@@ -1075,52 +1051,54 @@ export function getPasscodeSyncId(email: string, pin: string): string {
 export const signInOrSignUpWithPasscode = async (email: string, pin: string) => {
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
-  
-  const userObj = { email: cleanEmail, uid: syncId, isPasscodeUser: true, restored: false, passcode: pin, id: syncId };
-  
-  // Attempt background real user authentication inside Supabase Auth to enable RLS-bypassed table sync
+
+  const userObj = { 
+    email: cleanEmail, 
+    uid: syncId, 
+    id: syncId, 
+    isPasscodeUser: true, 
+    restored: false, 
+    passcode: pin 
+  };
+
   const bgPassword = `PasscodeSecure_${pin}_Barakah_77`;
   try {
-    const { data: signInRes, error: signInErr } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: bgPassword
-    });
-    if (signInErr) {
-      if (signInErr.message !== "Invalid login credentials") {
-        console.log("[Background Auth] Trying signup for clean credentials...", signInErr.message);
+    let authUser: any = null;
+    try {
+      const creds = await signInWithEmailAndPassword(firebaseAuth, cleanEmail, bgPassword);
+      authUser = creds.user;
+    } catch (signInErr: any) {
+      try {
+        const creds = await createUserWithEmailAndPassword(firebaseAuth, cleanEmail, bgPassword);
+        authUser = creds.user;
+      } catch (signUpErr: any) {
+        console.warn("Background auto signup passcode credentials exception:", signUpErr);
       }
-      // If sign in fails, try signing up
-      const { data: signUpRes, error: signUpErr } = await supabase.auth.signUp({
+    }
+
+    if (authUser) {
+      userObj.id = authUser.uid;
+      userObj.uid = authUser.uid;
+
+      const profileData = {
+        id: authUser.uid,
         email: cleanEmail,
-        password: bgPassword
-      });
-      if (!signUpErr && signUpRes.user) {
-        userObj.id = signUpRes.user.id;
-        userObj.uid = signUpRes.user.id;
-        // Make sure a profile row is written for them too
-        const profileData = {
-          id: signUpRes.user.id,
-          email: cleanEmail,
-          shop_name: "Barakah Electronics",
-          shop_address: "Dhaka, Bangladesh",
-          support_phone: "01700-000000",
-          vat_reg_id: "VAT-884499"
-        };
-        await supabase.from("profiles").upsert(profileData);
-      }
-    } else if (signInRes.user) {
-      userObj.id = signInRes.user.id;
-      userObj.uid = signInRes.user.id;
+        shop_name: "Barakah Electronics",
+        shop_address: "Dhaka, Bangladesh",
+        support_phone: "01700-000000",
+        vat_reg_id: "VAT-884499"
+      };
+      await setDoc(doc(db, "profiles", authUser.uid), profileData);
     }
   } catch (authErr) {
-    console.warn("Background auto auth failed for passcode user:", authErr);
+    console.warn("Background authentication link procedure skipped:", authErr);
   }
 
   try {
     const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, pin);
     userObj.restored = wasRestored;
   } catch (err) {
-    console.warn("Restore backup info failed on passcode signin:", err);
+    console.warn("Auto restoring backups returned safely with warning:", err);
   }
 
   updateCurrentUser(userObj);
@@ -1139,78 +1117,55 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   const syncId = getPasscodeSyncId(email, pin);
   const cleanEmail = email.trim().toLowerCase();
 
-  // Bulletproof Safeguard Protection: Prevent completely blank or degraded states from overwriting non-empty states in the cloud database
   const incomingProductsLength = (payload.products || []).length;
   const incomingTransactionsLength = (payload.transactions || []).length;
   const incomingTotal = incomingProductsLength + incomingTransactionsLength;
   const isExplicitReset = payload.businessInfo?.isExplicitReset === true;
 
   try {
-    // Fetch existing backup from the database to ensure we don't overwrite real data
-    const { data: existingSync, error: checkError } = await supabase
-      .from("passcode_syncs")
-      .select("products, transactions")
-      .eq("id", syncId)
-      .maybeSingle();
-      
-    if (!checkError && existingSync && !isExplicitReset) {
+    const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
+    if (docSnap.exists() && !isExplicitReset) {
+      const existingSync = docSnap.data();
       const existingProductsCount = (existingSync.products || []).length;
       const existingTransactionsCount = (existingSync.transactions || []).length;
       const existingTotal = existingProductsCount + existingTransactionsCount;
-      
+
       if (existingTotal > 0) {
         if (incomingTotal === 0) {
-          console.warn(`[Sync Guard] Aborted EMPTY database upload payload to protect non-empty existing cloud backup (${existingTotal} items):`, syncId);
-          return { success: true, ignored: true }; // Return true to keep frontend healthy without overwriting cloud backup
-        }
-
-        // Critical defense 1: If local transactions are fewer than cloud transactions, it means device is out of sync. Preserve cloud!
-        if (existingTransactionsCount > incomingTransactionsLength) {
-          console.warn(`[Sync Guard] Out of sync transactions detected! Cloud has ${existingTransactionsCount} transactions but incoming has ${incomingTransactionsLength}. Aborted upload to protect transactions.`);
+          console.warn(`[Sync Guard] Protected empty backup write for ID: ${syncId}`);
           return { success: true, ignored: true };
         }
 
-        // Critical defense 2: If local state has less data than cloud, check if it's a dramatic reduction (more than 3 items lost and < 90% of existing)
+        if (existingTransactionsCount > incomingTransactionsLength) {
+          console.warn(`[Sync Guard] Stopped database backup overwrite: Local transaction registry out of date.`);
+          return { success: true, ignored: true };
+        }
+
         const itemLoss = existingTotal - incomingTotal;
         if (itemLoss > 3 && incomingTotal < existingTotal * 0.9) {
-          console.warn(`[Sync Guard] CRITICAL OVERWRITE PREVENTED! Local state has ${incomingTotal} items, but cloud backup has ${existingTotal} items. Aborted auto-backup to protect the master database from accidental overwrites.`);
-          return { success: true, ignored: true }; // Prevents data loss by keeping original high value data
+          console.warn(`[Sync Guard] Stopped database backup overwrite: Overwrite warning detected.`);
+          return { success: true, ignored: true };
         }
       }
-    } else if (checkError) {
-      console.warn("[Sync Guard] Cloud check failed, aborting upload to preserve safety of existing backup:", checkError.message);
-      return { success: true, ignored: true }; // Avoid pushing degraded state in case of any query error
     }
   } catch (e) {
-    console.warn("[Sync Guard] Error during cloud check, aborting upload list to be safe:", e);
-    return { success: true, ignored: true }; // Safely abort empty database backup on error
+    console.warn("[Sync Guard] Access integrity checking error:", e);
   }
 
-  // --- Real-time Bidirectional Postgres Tables Synchronizer ---
+  // Real-time table synchronizer mapping
   try {
-    const sessionRes = await supabase.auth.getSession();
-    const sessionUser = sessionRes?.data?.session?.user;
-    let activeUserId = sessionUser?.id || currentSupabaseUser?.id;
+    let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
     if (!activeUserId) {
-      // Find the user ID based on email address
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", cleanEmail)
-        .maybeSingle();
-      if (profile && profile.id) {
-        activeUserId = profile.id;
+      const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
+      const profileSnap = await getDocs(profileQ);
+      if (!profileSnap.empty) {
+        activeUserId = profileSnap.docs[0].id;
       }
     }
 
-    // We only perform background individual table sync if we have a valid, active authenticated session matching activeUserId.
-    // If the browser client is unauthenticated (e.g., using an offline-first passcode with no matching database session),
-    // any client-side direct table writes will trigger a Row-Level Security (RLS) violation in Postgres.
-    // In that case, we skip direct table upsert and rely purely on the `passcode_syncs` JSON backups, which bypass RLS.
-    const isSessionReady = !!(sessionUser && sessionUser.id && activeUserId === sessionUser.id);
-    if (isSessionReady && activeUserId) {
-      console.log(`[Direct Sync Engine] Authenticated session validated. Up-syncing individual tables for User: ${activeUserId}`);
-      
+    if (activeUserId) {
+      console.log(`[Direct Sync Engine] Up-syncing collection logs for owner ${activeUserId}`);
+
       const productsToUpsert = (payload.products || []).map(p => ({
         id: toUUID(p.id, cleanEmail),
         owner_id: activeUserId,
@@ -1253,7 +1208,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       (payload.transactions || []).forEach(t => {
         const txUUID = toUUID(t.id, cleanEmail);
         const customerUUID = t.contactId ? toUUID(t.contactId, cleanEmail) : null;
-        
+
         transactionsToUpsert.push({
           id: txUUID,
           owner_id: activeUserId,
@@ -1273,7 +1228,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         (t.items || []).forEach((item: any, idx: number) => {
           const itemUUID = toUUID(item.id || `${t.id}_item_${idx}`, cleanEmail);
           const productUUID = item.productId ? toUUID(item.productId, cleanEmail) : null;
-          
+
           transactionItemsToUpsert.push({
             id: itemUUID,
             owner_id: activeUserId,
@@ -1300,70 +1255,37 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         updated_at: new Date().toISOString()
       }));
 
-      // Sequential, reference-safe database synchronization
+      // Parallelized Firestore batch-alike writes
       try {
-        // 1. Independent parent tables first
-        if (productsToUpsert.length > 0) {
-          const { error } = await supabase.from("products").upsert(productsToUpsert);
-          if (error) console.error("[Sync Engine] Products upsert failure:", error.message);
-        }
-        if (contactsToUpsert.length > 0) {
-          const { error } = await supabase.from("customers").upsert(contactsToUpsert);
-          if (error) console.error("[Sync Engine] Customers upsert failure:", error.message);
-        }
-        if (expensesToUpsert.length > 0) {
-          const { error } = await supabase.from("expenses").upsert(expensesToUpsert);
-          if (error) console.error("[Sync Engine] Expenses upsert failure:", error.message);
-        }
+        const upsertPromises: Promise<void>[] = [];
 
-        // 2. Dependent tables next (filtered to guarantee foreign key integrity)
-        const validProductIds = new Set(productsToUpsert.map(p => p.id));
-        const validCustomerIds = new Set(contactsToUpsert.map(c => c.id));
-
-        // Map transactions with verified customer references
-        const checkedTransactions = transactionsToUpsert.map(tx => {
-          if (tx.customer_id && !validCustomerIds.has(tx.customer_id)) {
-            tx.customer_id = null;
-          }
-          return tx;
+        productsToUpsert.forEach(p => {
+          upsertPromises.push(setDoc(doc(db, "products", p.id), p));
+        });
+        contactsToUpsert.forEach(c => {
+          upsertPromises.push(setDoc(doc(db, "customers", c.id), c));
+        });
+        expensesToUpsert.forEach(e => {
+          upsertPromises.push(setDoc(doc(db, "expenses", e.id), e));
+        });
+        transactionsToUpsert.forEach(tx => {
+          upsertPromises.push(setDoc(doc(db, "transactions", tx.id), tx));
+        });
+        transactionItemsToUpsert.forEach(item => {
+          upsertPromises.push(setDoc(doc(db, "transaction_items", item.id), item));
+        });
+        purchasesToUpsert.forEach(pur => {
+          upsertPromises.push(setDoc(doc(db, "purchases", pur.id), pur));
         });
 
-        if (checkedTransactions.length > 0) {
-          const { error } = await supabase.from("transactions").upsert(checkedTransactions);
-          if (error) {
-            console.error("[Sync Engine] Transactions upsert failure:", error.message);
-          } else {
-            // Upsert transaction items only if the transactions succeeded
-            const validTransactionIds = new Set(checkedTransactions.map(t => t.id));
-            const filteredTransactionItems = transactionItemsToUpsert.filter(item => 
-              item.product_id && 
-              validProductIds.has(item.product_id) && 
-              item.transaction_id && 
-              validTransactionIds.has(item.transaction_id)
-            );
-
-            if (filteredTransactionItems.length > 0) {
-              const { error: tiErr } = await supabase.from("transaction_items").upsert(filteredTransactionItems);
-              if (tiErr) console.error("[Sync Engine] Transaction items upsert failure:", tiErr.message);
-            }
-          }
-        }
-
-        // Upsert purchases only with verified products
-        const filteredPurchases = purchasesToUpsert.filter(pur => 
-          pur.product_id && validProductIds.has(pur.product_id)
-        );
-
-        if (filteredPurchases.length > 0) {
-          const { error } = await supabase.from("purchases").upsert(filteredPurchases);
-          if (error) console.error("[Sync Engine] Purchases upsert failure:", error.message);
-        }
-      } catch (tableSyncErr: any) {
-        console.error("[Sync Engine] Sequenced table upserts crashed:", tableSyncErr);
+        await Promise.all(upsertPromises);
+        console.log("[Direct FirestoreSync Engine] All individual store files successfully saved.");
+      } catch (writeErr) {
+        console.warn("Direct collections write exception:", writeErr);
       }
     }
   } catch (syncErr) {
-    console.warn("[Sync Engine] Failed writing to relational database tables:", syncErr);
+    console.warn("[Sync Engine] Failed writing individual records to cloud collections:", syncErr);
   }
 
   const normalizedProducts = (payload.products || []).map(p => ({ ...p, id: toUUID(p.id, cleanEmail) }));
@@ -1394,28 +1316,16 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     expenses: normalizedExpenses,
     transactions: normalizedTransactions,
     businessInfo: serializedBusinessInfo,
-    business_info: serializedBusinessInfo, // provide snake_case version for Postgres to handle case-folding automatically
+    business_info: serializedBusinessInfo,
     updated_at: new Date().toISOString()
   };
 
   try {
-    // Elevate local state seamlessly in real-time with clean UUID keys 
-    const backupObj = {
-      id: syncId,
-      linked_email: cleanEmail,
-      products: normalizedProducts,
-      contacts: normalizedContacts,
-      expenses: normalizedExpenses,
-      transactions: normalizedTransactions,
-      businessInfo: serializedBusinessInfo,
-      purchases: normalizedPurchases
-    };
-    restoreLocalKeys(backupObj);
+    restoreLocalKeys(body);
   } catch (err) {
-    console.warn("Instant local keys conversion failed:", err);
+    console.warn("Instant offline memory refresh warning:", err);
   }
 
-  // For supreme safety, we also save a daily historical copy
   try {
     const todayStr = new Date().toISOString().slice(0, 10);
     const historyBody = {
@@ -1423,44 +1333,16 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       id: `${syncId}_history_${todayStr}`,
       updated_at: new Date().toISOString()
     };
-    supabase.from("passcode_syncs").upsert(historyBody).then(({ error }) => {
-      if (error) console.warn("Failed to write daily history backup copy:", error.message);
+    setDoc(doc(db, "passcode_syncs", `${syncId}_history_${todayStr}`), historyBody).catch(e => {
+      console.warn("daily historical doc backup save exception:", e.message);
     });
   } catch (_) {}
 
-  let lastDirectErrorMsg = "";
   try {
-    // 1. Direct frontend Supabase upsert (bypasses Express proxy and applies logged-in user context)
-    const { error: directError } = await supabase.from("passcode_syncs").upsert(body);
-    if (!directError) {
-      return { success: true };
-    }
-    
-    // Fallback 1: Retrying with minimalist columns in case the schema in custom DB has missing columns
-    if (directError.code === "42703" || directError.message?.toLowerCase().includes("column")) {
-      console.warn("Direct upsert failed with missing column/attribute. Retrying with clean snake_case standard columns...");
-      const cleanBody = {
-        id: body.id,
-        linked_email: body.linked_email,
-        products: body.products,
-        contacts: body.contacts,
-        expenses: body.expenses,
-        transactions: body.transactions,
-        business_info: body.business_info,
-        updated_at: body.updated_at
-      };
-      const { error: retryError } = await supabase.from("passcode_syncs").upsert(cleanBody);
-      if (!retryError) {
-        return { success: true };
-      }
-      lastDirectErrorMsg = retryError.message;
-    } else {
-      lastDirectErrorMsg = directError.message;
-    }
-    console.warn("Direct supabase upload failed, fallback to Express route...", lastDirectErrorMsg);
-  } catch (e: any) {
-    lastDirectErrorMsg = e?.message || String(e);
-    console.warn("Direct upload error:", e);
+    await setDoc(doc(db, "passcode_syncs", syncId), body);
+    return { success: true };
+  } catch (directError: any) {
+    console.warn("Direct firestore passcode sync document write backup failed. Retrying Server Route...", directError.message);
   }
 
   try {
@@ -1473,35 +1355,66 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       return { success: true };
     }
     const errText = await response.text();
-    let errObj;
-    try { errObj = JSON.parse(errText); } catch (_) {}
-    const errMsg = errObj?.error || errText || "HTTP " + response.status;
-    return { success: false, error: errMsg || lastDirectErrorMsg || "Proxy upload failed" };
+    return { success: false, error: errText || "Passcode cloud back up transmission error." };
   } catch (err: any) {
-    console.error("Failed cloud backup upload:", err);
-    return { success: false, error: err.message || lastDirectErrorMsg || "Connection failed" };
+    return { success: false, error: err.message || "Cloud connection failure." };
   }
 };
 
 export const upsertDocument = async (table: string, id: string, data: any) => {
-  await fetch("/api/db/upsert", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ table, id, data })
-  });
+  try {
+    await setDoc(doc(db, table, id), data);
+  } catch (e) {
+    try {
+      await fetch("/api/db/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table, id, data })
+      });
+    } catch (err) {
+      handleFirestoreError(e, OperationType.WRITE, `${table}/${id}`);
+    }
+  }
 };
 
 export const deleteDocument = async (table: string, id: string) => {
-  await fetch("/api/db/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ table, id })
-  });
+  try {
+    await deleteDoc(doc(db, table, id));
+  } catch (e) {
+    try {
+      await fetch("/api/db/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table, id })
+      });
+    } catch (err) {
+      handleFirestoreError(e, OperationType.DELETE, `${table}/${id}`);
+    }
+  }
 };
 
 export const fetchUserCollection = async (table: string, ownerEmail: string) => {
-  const response = await fetch(`/api/db/fetch?table=${encodeURIComponent(table)}&owner_email=${encodeURIComponent(ownerEmail)}`);
-  return await response.json();
+  try {
+    let q;
+    if (table === "business_info") {
+      q = collection(db, table);
+    } else {
+      q = query(collection(db, table), where("user_id", "==", ownerEmail));
+    }
+    const docsSnap = await getDocs(q);
+    if (!docsSnap.empty) {
+      return docsSnap.docs.map(docSnapshot => docSnapshot.data());
+    }
+  } catch (e) {
+    console.warn(`Local direct query for table ${table} failed, retrying server fallbacks...`, e);
+  }
+
+  try {
+    const response = await fetch(`/api/db/fetch?table=${encodeURIComponent(table)}&owner_email=${encodeURIComponent(ownerEmail)}`);
+    return await response.json();
+  } catch (err) {
+    return [];
+  }
 };
 
 export const subscribeToCollection = (table: string, ownerEmail: string, callback: (data: any[]) => void) => {
@@ -1520,7 +1433,7 @@ export const subscribeToCollection = (table: string, ownerEmail: string, callbac
 
 export const saveBusinessSettings = async (email: string, info: any) => {
   const docId = `settings_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  await upsertDocument('business_info', docId, { linkedEmail: email, ...info });
+  await upsertDocument('business_info', docId, { linkedEmail: email, id: docId, ...info });
 };
 
 export const getBusinessSettings = async (email: string) => {

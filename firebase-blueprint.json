@@ -1,0 +1,188 @@
+{
+  "entities": {
+    "PasscodeSync": {
+      "title": "Passcode Sync Backup",
+      "description": "Unified backup and sync point for offline-first passcode-protected items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Vault ID derived from email and PIN" },
+        "linked_email": { "type": "string", "description": "Email associated with the vault" },
+        "products": { "type": "array", "description": "List of store products" },
+        "contacts": { "type": "array", "description": "List of store contacts/customers" },
+        "expenses": { "type": "array", "description": "List of store expenses" },
+        "transactions": { "type": "array", "description": "List of store sales transactions" },
+        "business_info": { "type": "object", "description": "Dynamic store metadata and setup details" },
+        "updated_at": { "type": "string", "description": "ISO timestamp for synchronization" }
+      },
+      "required": ["id", "linked_email"]
+    },
+    "Profile": {
+      "title": "User Profile",
+      "description": "Standard registration and checkout metadata of store owner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Authenticated user UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "shop_name": { "type": "string", "description": "Brand/shop display name" },
+        "shop_address": { "type": "string", "description": "Retail shop location" },
+        "support_phone": { "type": "string", "description": "Customer help phone number" },
+        "vat_reg_id": { "type": "string", "description": "VAT government identification code" }
+      },
+      "required": ["id", "email"]
+    },
+    "Product": {
+      "title": "Store Product",
+      "description": "Product in inventory catalogue",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "category": { "type": "string" },
+        "buy_price": { "type": "number" },
+        "sell_price": { "type": "number" },
+        "stock": { "type": "number" },
+        "unit": { "type": "string" },
+        "image_url": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "user_id"]
+    },
+    "Customer": {
+      "title": "Store Customer",
+      "description": "Retail consumer and partner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "user_id"]
+    },
+    "Expense": {
+      "title": "Store Expense",
+      "description": "Shop and operation expense records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "user_id"]
+    },
+    "Transaction": {
+      "title": "Sale Transaction",
+      "description": "Client invoice receipt document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "invoice_no": { "type": "string" },
+        "customer_id": { "type": "string" },
+        "total_amount": { "type": "number" },
+        "discount": { "type": "number" },
+        "vat_rate": { "type": "number" },
+        "paid_amount": { "type": "number" },
+        "payment_method": { "type": "string" },
+        "signature_svg": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "user_id"]
+    },
+    "TransactionItem": {
+      "title": "Transaction Item",
+      "description": "Line items sold in a transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "transaction_id": { "type": "string" },
+        "product_id": { "type": "string" },
+        "quantity": { "type": "number" },
+        "sell_price": { "type": "number" },
+        "cost_price": { "type": "number" },
+        "is_negative_sale": { "type": "boolean" }
+      },
+      "required": ["id", "user_id"]
+    },
+    "Purchase": {
+      "title": "Inventory Purchase",
+      "description": "Purchase transaction for stocking catalogue item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "owner_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "invoice_no": { "type": "string" },
+        "product_id": { "type": "string" },
+        "quantity": { "type": "number" },
+        "buy_price": { "type": "number" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "user_id"]
+    },
+    "BusinessInfo": {
+      "title": "Business Info Details",
+      "description": "Linked business metadata and custom parameters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "linkedEmail": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/passcode_syncs/{syncId}": {
+      "schema": "PasscodeSync",
+      "description": "Passcode synced offline backup vault documents"
+    },
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "Individually customized user credentials"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Active product inventory catalog list"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Store customers registry list"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Store operations expenses"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Recorded customer purchases and sales"
+    },
+    "/transaction_items/{itemId}": {
+      "schema": "TransactionItem",
+      "description": "Sale line-items tied specifically to transaction parent ID"
+    },
+    "/purchases/{purchaseId}": {
+      "schema": "Purchase",
+      "description": "Catalogue item stock procurement records"
+    },
+    "/business_info/{businessInfoId}": {
+      "schema": "BusinessInfo",
+      "description": "Direct configuration items for settings synchronization"
+    }
+  }
+}
