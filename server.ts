@@ -209,7 +209,28 @@ async function startServer() {
         }
       }
       const { error } = await supabase.from("passcode_syncs").upsert(payload);
-      if (error) return res.status(400).json({ error: error.message });
+      if (error) {
+        // Fallback for missing columns (e.g. businessInfo or purchases column is not present in user's manual database)
+        if (error.code === "42703" || error.message?.toLowerCase().includes("column")) {
+          console.warn("[Server Sync] Column error, retrying with minimalist snake_case payload...");
+          const cleanBody = {
+            id: payload.id,
+            linked_email: payload.linked_email,
+            products: payload.products,
+            contacts: payload.contacts,
+            expenses: payload.expenses,
+            transactions: payload.transactions,
+            business_info: payload.business_info || payload.businessInfo,
+            updated_at: payload.updated_at || new Date().toISOString()
+          };
+          const { error: retryError } = await supabase.from("passcode_syncs").upsert(cleanBody);
+          if (retryError) {
+            return res.status(400).json({ error: retryError.message });
+          }
+          return res.json({ success: true, retried: true });
+        }
+        return res.status(400).json({ error: error.message });
+      }
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

@@ -378,7 +378,7 @@ export default function App() {
     }
     setIsBackingUp(true);
     const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
-    const success = await uploadPasscodeBackup(activeUser.email, passcode, {
+    const res = await uploadPasscodeBackup(activeUser.email, passcode, {
       products,
       contacts,
       expenses,
@@ -387,10 +387,12 @@ export default function App() {
       purchases
     });
     setIsBackingUp(false);
-    if (success) {
+    const isSuccess = !!(res && (res as any).success);
+    if (isSuccess) {
       triggerNotification("Cloud backup successfully synchronized!", "success");
     } else {
-      triggerNotification("Cloud backup failed. Please try again later.", "error");
+      const errorMsg = (res && typeof res === 'object' && (res as any).error) ? (res as any).error : "Please check your network and credentials";
+      triggerNotification(`Cloud backup failed: ${errorMsg}`, "error");
     }
   };
 

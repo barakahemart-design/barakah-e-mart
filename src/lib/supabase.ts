@@ -1143,29 +1143,29 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       if (existingTotal > 0) {
         if (incomingTotal === 0) {
           console.warn(`[Sync Guard] Aborted EMPTY database upload payload to protect non-empty existing cloud backup (${existingTotal} items):`, syncId);
-          return true; // Return true to keep frontend healthy without overwriting cloud backup
+          return { success: true, ignored: true }; // Return true to keep frontend healthy without overwriting cloud backup
         }
 
         // Critical defense 1: If local transactions are fewer than cloud transactions, it means device is out of sync. Preserve cloud!
         if (existingTransactionsCount > incomingTransactionsLength) {
           console.warn(`[Sync Guard] Out of sync transactions detected! Cloud has ${existingTransactionsCount} transactions but incoming has ${incomingTransactionsLength}. Aborted upload to protect transactions.`);
-          return true;
+          return { success: true, ignored: true };
         }
 
         // Critical defense 2: If local state has less data than cloud, check if it's a dramatic reduction (more than 3 items lost and < 90% of existing)
         const itemLoss = existingTotal - incomingTotal;
         if (itemLoss > 3 && incomingTotal < existingTotal * 0.9) {
           console.warn(`[Sync Guard] CRITICAL OVERWRITE PREVENTED! Local state has ${incomingTotal} items, but cloud backup has ${existingTotal} items. Aborted auto-backup to protect the master database from accidental overwrites.`);
-          return true; // Prevents data loss by keeping original high value data
+          return { success: true, ignored: true }; // Prevents data loss by keeping original high value data
         }
       }
     } else if (checkError) {
       console.warn("[Sync Guard] Cloud check failed, aborting upload to preserve safety of existing backup:", checkError.message);
-      return true; // Avoid pushing degraded state in case of any query error
+      return { success: true, ignored: true }; // Avoid pushing degraded state in case of any query error
     }
   } catch (e) {
     console.warn("[Sync Guard] Error during cloud check, aborting upload list to be safe:", e);
-    return true; // Safely abort empty database backup on error
+    return { success: true, ignored: true }; // Safely abort empty database backup on error
   }
 
   // --- Real-time Bidirectional Postgres Tables Synchronizer ---
@@ -1410,14 +1410,38 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     });
   } catch (_) {}
 
+  let lastDirectErrorMsg = "";
   try {
     // 1. Direct frontend Supabase upsert (bypasses Express proxy and applies logged-in user context)
     const { error: directError } = await supabase.from("passcode_syncs").upsert(body);
     if (!directError) {
-      return true;
+      return { success: true };
     }
-    console.warn("Direct supabase upload failed, fallback to Express route...", directError.message);
-  } catch (e) {
+    
+    // Fallback 1: Retrying with minimalist columns in case the schema in custom DB has missing columns
+    if (directError.code === "42703" || directError.message?.toLowerCase().includes("column")) {
+      console.warn("Direct upsert failed with missing column/attribute. Retrying with clean snake_case standard columns...");
+      const cleanBody = {
+        id: body.id,
+        linked_email: body.linked_email,
+        products: body.products,
+        contacts: body.contacts,
+        expenses: body.expenses,
+        transactions: body.transactions,
+        business_info: body.business_info,
+        updated_at: body.updated_at
+      };
+      const { error: retryError } = await supabase.from("passcode_syncs").upsert(cleanBody);
+      if (!retryError) {
+        return { success: true };
+      }
+      lastDirectErrorMsg = retryError.message;
+    } else {
+      lastDirectErrorMsg = directError.message;
+    }
+    console.warn("Direct supabase upload failed, fallback to Express route...", lastDirectErrorMsg);
+  } catch (e: any) {
+    lastDirectErrorMsg = e?.message || String(e);
     console.warn("Direct upload error:", e);
   }
 
@@ -1427,10 +1451,17 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ payload: body })
     });
-    return response.ok;
-  } catch (err) {
+    if (response.ok) {
+      return { success: true };
+    }
+    const errText = await response.text();
+    let errObj;
+    try { errObj = JSON.parse(errText); } catch (_) {}
+    const errMsg = errObj?.error || errText || "HTTP " + response.status;
+    return { success: false, error: errMsg || lastDirectErrorMsg || "Proxy upload failed" };
+  } catch (err: any) {
     console.error("Failed cloud backup upload:", err);
-    return false;
+    return { success: false, error: err.message || lastDirectErrorMsg || "Connection failed" };
   }
 };
 
