@@ -840,17 +840,19 @@ export const signUpWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
     let authUser: any = null;
+    let fallbackError: string | null = null;
     try {
       const creds = await createUserWithEmailAndPassword(firebaseAuth, cleanEmail, pass);
       authUser = creds.user;
     } catch (directErr: any) {
       console.warn("Direct Firebase authentication signUp failing, retrying server fallback...", directErr);
       if (directErr.code === "auth/weak-password" || directErr.message?.includes("6 characters")) {
-        throw new Error("Password must be at least 6 characters long!");
+        throw new Error("পাসওয়ার্ডটি কমপক্ষে ৬ অক্ষরের হতে হবে!");
       }
       if (directErr.code === "auth/email-already-in-use" || directErr.message?.includes("already registered")) {
-        throw new Error("This email is already registered! Please log in instead.");
+        throw new Error("এই ইমেইলটি ইতিপূর্বে রেজিস্টার করা হয়েছে! দয়া করে লগইন করুন।");
       }
+      fallbackError = directErr.message || String(directErr);
     }
 
     if (!authUser) {
@@ -862,15 +864,24 @@ export const signUpWithEmail = async (email: string, pass: string) => {
           body: JSON.stringify({ email: cleanEmail, password: pass })
         });
         const contentType = response.headers.get("content-type");
-        if (response.ok && contentType && contentType.includes("application/json")) {
+        if (contentType && contentType.includes("application/json")) {
           const result = await response.json();
           if (result.error) throw new Error(result.error);
-          authUser = result.user;
+          if (response.ok) {
+            authUser = result.user;
+          } else {
+            throw new Error("রেজিস্ট্রেশন ব্যর্থ হয়েছে।");
+          }
         } else {
           throw new Error("Registration timed out. Please try again with valid credentials.");
         }
-      } catch (fetchErr) {
-        throw new Error("রেজিস্ট্রেশন সংযোগ ব্যর্থ হয়েছে। আপনার ইন্টারনেট সচল রয়েছে কি না চেক করুন।");
+      } catch (fetchErr: any) {
+        const errMsg = fetchErr.message || "";
+        if (errMsg && !errMsg.includes("Failed to fetch") && !errMsg.includes("fetch") && !errMsg.includes("network")) {
+          throw fetchErr;
+        }
+        const suffix = fallbackError ? ` (${fallbackError})` : "";
+        throw new Error(`রেজিস্ট্রেশন সংযোগ ব্যর্থ হয়েছে। আপনার ইন্টারনেট সচল রয়েছে কি না চেক করুন।${suffix}`);
       }
     }
 
@@ -920,11 +931,13 @@ export const signInWithEmail = async (email: string, pass: string) => {
   const cleanEmail = email.trim().toLowerCase();
   try {
     let authUser: any = null;
+    let fallbackError: string | null = null;
     try {
       const creds = await signInWithEmailAndPassword(firebaseAuth, cleanEmail, pass);
       authUser = creds.user;
     } catch (directErr: any) {
       console.warn("Direct Firebase authentication signIn failing, retrying server fallback...", directErr);
+      fallbackError = directErr.message || String(directErr);
     }
 
     if (!authUser) {
@@ -935,15 +948,24 @@ export const signInWithEmail = async (email: string, pass: string) => {
           body: JSON.stringify({ email: cleanEmail, password: pass })
         });
         const contentType = response.headers.get("content-type");
-        if (response.ok && contentType && contentType.includes("application/json")) {
+        if (contentType && contentType.includes("application/json")) {
           const result = await response.json();
           if (result.error) throw new Error(result.error);
-          authUser = result.user;
+          if (response.ok) {
+            authUser = result.user;
+          } else {
+            throw new Error("লগইন ব্যর্থ হয়েছে।");
+          }
         } else {
           throw new Error("Invalid login credentials or verification missing.");
         }
       } catch (fetchErr: any) {
-        throw new Error("লগইন কানেকশন ব্যর্থ হয়েছে। ইমেইল এবং পাসওয়ার্ডটি পুনরায় চেক করুন!");
+        const errMsg = fetchErr.message || "";
+        if (errMsg && !errMsg.includes("Failed to fetch") && !errMsg.includes("fetch") && !errMsg.includes("network")) {
+          throw fetchErr;
+        }
+        const suffix = fallbackError ? ` (${fallbackError})` : "";
+        throw new Error(`লগইন কানেকশন ব্যর্থ হয়েছে। ইমেইল এবং পাসওয়ার্ডটি পুনরায় চেক করুন!${suffix}`);
       }
     }
 
