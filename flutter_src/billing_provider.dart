@@ -125,6 +125,11 @@ class BillingProvider with ChangeNotifier {
   DateRangeFilter get activeFilter => _activeFilter;
   DateTimeRange? get customDateRange => _customDateRange;
 
+  void updateActiveFilter(DateRangeFilter filter) {
+    _activeFilter = filter;
+    notifyListeners();
+  }
+
   // Dynamic Math Calculators
   double get cartSubtotal {
     return _cart.fold(0.0, (sum, item) => sum + (item['quantity'] * item['sell_price']));

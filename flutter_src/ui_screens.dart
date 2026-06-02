@@ -940,9 +940,112 @@ class _MainNavigationWorkspaceState extends State<MainNavigationWorkspace> {
 class DashboardView extends StatelessWidget {
   const DashboardView({Key? key}) : super(key: key);
 
+  bool _checkDateInFilter(DateTime targetDate, DateRangeFilter filter) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(targetDate.year, targetDate.month, targetDate.day);
+
+    switch (filter) {
+      case DateRangeFilter.daily:
+        return target.isAtSameMomentAs(today);
+      case DateRangeFilter.weekly:
+        final sevenDaysAgo = today.subtract(const Duration(days: 7));
+        return targetDate.isAfter(sevenDaysAgo) && targetDate.isBefore(now.add(const Duration(seconds: 1)));
+      case DateRangeFilter.monthly:
+        return targetDate.month == now.month && targetDate.year == now.year;
+      case DateRangeFilter.yearly:
+        return targetDate.year == now.year;
+      case DateRangeFilter.custom:
+        return true;
+    }
+  }
+
+  String _formatTaka(double amount) {
+    final int val = amount.round();
+    if (val < 0) {
+      return "-৳ ${_formatAbsoluteTaka(-val)}";
+    }
+    return "৳ ${_formatAbsoluteTaka(val)}";
+  }
+
+  String _formatAbsoluteTaka(int value) {
+    final String s = value.toString();
+    if (s.length <= 3) return s;
+    final String last3 = s.substring(s.length - 3);
+    String remaining = s.substring(0, s.length - 3);
+    final List<String> groups = [];
+    while (remaining.length > 2) {
+      groups.insert(0, remaining.substring(remaining.length - 2));
+      remaining = remaining.substring(0, remaining.length - 2);
+    }
+    if (remaining.isNotEmpty) {
+      groups.insert(0, remaining);
+    }
+    return "${groups.join(',')},$last3";
+  }
+
   @override
   Widget build(BuildContext context) {
     final bp = Provider.of<BillingProvider>(context);
+
+    // Apply active filter to datasets
+    final filteredSales = bp.salesLedger.where((t) => _checkDateInFilter(t.createdAt, bp.activeFilter)).toList();
+    final filteredExpenses = bp.expenses.where((e) => _checkDateInFilter(e.createdAt, bp.activeFilter)).toList();
+    final filteredPurchases = bp.purchases.where((p) => _checkDateInFilter(p.createdAt, bp.activeFilter)).toList();
+
+    // Summarize standard metrics
+    final double totalSales = filteredSales.fold(0.0, (sum, t) => sum + t.totalAmount);
+    final double totalPurchases = filteredPurchases.fold(0.0, (sum, p) => sum + (p.quantity * p.buyPrice));
+    final double totalExpenses = filteredExpenses.fold(0.0, (sum, e) => sum + e.amount);
+
+    // Calculate COGS matching the React/laptop algorithm
+    double totalCostOfGoodsSold = 0.0;
+    for (var tx in filteredSales) {
+      for (var item in tx.items) {
+        final bpProductList = bp.products.where((p) => p.id == item.productId);
+        final bpProduct = bpProductList.isNotEmpty ? bpProductList.first : null;
+
+        final buyCost = item.costPrice > 0
+            ? item.costPrice
+            : (bpProduct != null ? bpProduct.buyPrice : (item.sellPrice * 0.85));
+
+        totalCostOfGoodsSold += buyCost * item.quantity;
+      }
+    }
+
+    final double netProfit = totalSales - totalCostOfGoodsSold - totalExpenses;
+
+    String salesLabel = "Sales";
+    String purchasesLabel = "Purchases";
+    String expensesLabel = "Expenses";
+
+    switch (bp.activeFilter) {
+      case DateRangeFilter.daily:
+        salesLabel = "Daily Sales";
+        purchasesLabel = "Showroom Purchases";
+        expensesLabel = "Overheads outgoings";
+        break;
+      case DateRangeFilter.weekly:
+        salesLabel = "Weekly Sales";
+        purchasesLabel = "Weekly Purchases";
+        expensesLabel = "Weekly Expenses";
+        break;
+      case DateRangeFilter.monthly:
+        salesLabel = "Monthly Sales";
+        purchasesLabel = "Monthly Purchases";
+        expensesLabel = "Monthly Expenses";
+        break;
+      case DateRangeFilter.yearly:
+        salesLabel = "Yearly Sales";
+        purchasesLabel = "Yearly Purchases";
+        expensesLabel = "Yearly Expenses";
+        break;
+      case DateRangeFilter.custom:
+        salesLabel = "Period Sales";
+        purchasesLabel = "Period Purchases";
+        expensesLabel = "Period Expenses";
+        break;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -958,7 +1061,11 @@ class DashboardView extends StatelessWidget {
               value: bp.activeFilter,
               dropdownColor: const Color(0xFF0C111D),
               style: const TextStyle(color: Colors.white),
-              onChanged: (v) {}, // Trigger custom filter change
+              onChanged: (v) {
+                if (v != null) {
+                  bp.updateActiveFilter(v);
+                }
+              },
               items: const [
                 DropdownMenuItem(value: DateRangeFilter.daily, child: Text("Daily Summary")),
                 DropdownMenuItem(value: DateRangeFilter.weekly, child: Text("Weekly Overview")),
@@ -973,13 +1080,13 @@ class DashboardView extends StatelessWidget {
         // Bento-grid dashboard overview reporting metrics cards
         Row(
           children: [
-            _cardMetric("Daily Sales", "৳ 1,45,000", Colors.emerald, Icons.trending_up),
+            _cardMetric(salesLabel, _formatTaka(totalSales), Colors.emerald, Icons.trending_up),
             const SizedBox(width: 16),
-            _cardMetric("Showroom Purchases", "৳ 90,000", Colors.blue, Icons.inventory),
+            _cardMetric(purchasesLabel, _formatTaka(totalPurchases), Colors.blue, Icons.inventory),
             const SizedBox(width: 16),
-            _cardMetric("Overheads outgoings", "৳ 15,000", Colors.orange, Icons.money_off),
+            _cardMetric(expensesLabel, _formatTaka(totalExpenses), Colors.orange, Icons.money_off),
             const SizedBox(width: 16),
-            _cardMetric("Net Profit/Loss", "৳ 40,000", Colors.amber, Icons.pie_chart),
+            _cardMetric("Net Profit/Loss", _formatTaka(netProfit), Colors.amber, Icons.pie_chart),
           ],
         )
       ],
