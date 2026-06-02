@@ -18,9 +18,17 @@ import {
   deleteDoc, 
   collection, 
   query, 
-  where 
+  where,
+  setLogLevel
 } from "firebase/firestore";
 import firebaseConfig from "./firebase-applet-config.json";
+
+// Set Silent logging level for Firestore client to silence idle stream cancel warnings
+try {
+  setLogLevel("silent");
+} catch (e) {
+  console.warn("Could not set Firestore log level:", e);
+}
 
 // Initialize Firebase Core Client on express node runtime
 const firebaseApp = initializeApp(firebaseConfig);
