@@ -33,6 +33,8 @@ interface PurchasesViewProps {
     date: string;
     note: string;
     updatedSellPrice?: number;
+    cashPaid?: number;
+    dueAmount?: number;
   }) => void;
   onDeletePurchase: (id: string) => void;
   onEditPurchase: (id: string, purchase: {
@@ -177,7 +179,9 @@ export function PurchasesView({
       totalAmount: calculatedTotalAmount,
       date,
       note: note || `Purchase of ${getChosenProductObj()?.name}`,
-      updatedSellPrice: updateSellPrice ? (parseFloat(newSellPriceInput) || undefined) : undefined
+      updatedSellPrice: updateSellPrice ? (parseFloat(newSellPriceInput) || undefined) : undefined,
+      cashPaid: parseFloat(cashPaid) || 0,
+      dueAmount: Math.max(0, calculatedTotalAmount - (parseFloat(cashPaid) || 0))
     });
 
     // Reset wizard

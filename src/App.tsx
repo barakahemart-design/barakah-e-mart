@@ -46,7 +46,9 @@ import {
   Menu,
   LayoutDashboard,
   Sun,
-  Moon
+  Moon,
+  Layers,
+  ShoppingBag
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format } from "date-fns";
@@ -955,6 +957,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
+  const [stockSubTab, setStockSubTab] = useState<"catalog" | "supplier-bills">("catalog");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1286,10 +1289,23 @@ export default function App() {
 
   const handleAddPurchase = (pur: any) => {
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+    const prodObj = products.find(p => p.id === pur.productId);
+    const supObj = contacts.find(c => c.id === pur.supplierId);
+    
     const newPur: Purchase = {
-      ...pur,
       id: toUUID(`pur_${Date.now()}`, cleanEmail),
-      productId: pur.productId ? toUUID(pur.productId, cleanEmail) : ""
+      productId: pur.productId ? toUUID(pur.productId, cleanEmail) : "",
+      productName: prodObj ? prodObj.name : "Unknown Product",
+      supplierId: pur.supplierId,
+      supplierName: supObj ? supObj.name : (pur.supplierId === "walk-in-supplier" ? "Walk-in Supplier" : "Unknown Supplier"),
+      quantity: pur.quantity,
+      buyPrice: pur.unitPrice,
+      totalAmount: pur.totalAmount,
+      date: pur.date,
+      cashPaid: pur.cashPaid,
+      dueAmount: pur.dueAmount,
+      invoiceNo: pur.invoiceNo,
+      note: pur.note
     };
     setPurchases([newPur, ...purchases]);
     setProducts(products.map(p => {
@@ -1869,7 +1885,7 @@ export default function App() {
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'inventory' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <Bookmark className="w-4 h-4" />
-                  Inventory
+                  স্টক ম্যানেজমেন্ট (Stock)
                 </button>
 
                 <button
@@ -2038,7 +2054,7 @@ export default function App() {
                 {activeTab === 'negative-sales' && 'Negative Stock Log'}
                 {activeTab === 'purchases' && 'Purchases Ledger'}
                 {activeTab === "pos" && "Counter Cash Memo"}
-                {activeTab === 'inventory' && 'Shop Inventory'}
+                {activeTab === 'inventory' && 'স্টক ম্যানেজমেন্ট (Stock Management)'}
                 {activeTab === 'ledger' && 'Account Ledger'}
                 {activeTab === "insights" && "AI Assistant"}
                 {activeTab === 'expenses' && 'Expenses Ledger'}
@@ -2053,7 +2069,7 @@ export default function App() {
               {activeTab === 'negative-sales' && 'Adjust purchase rate on negative quantity sales to reflect correct net income metrics.'}
               {activeTab === 'purchases' && 'Log fresh supplier purchases, add bulk stocks, and assign actual values.'}
               {activeTab === "pos" && "Point-of-Sale Checkout terminal. Easily add items to cart and print receipt."}
-              {activeTab === 'inventory' && 'Monitor overall physical inventory items, remaining thresholds and unit metrics.'}
+              {activeTab === 'inventory' && 'স্টকে থাকা পণ্যের হিসাব, টাকার মূল্য ও সাপ্লায়ারদের থেকে ক্রয়কৃত পণ্যের লেনদেন ট্র্যাকার।'}
               {activeTab === 'ledger' && 'Acknowledge transactions, review accounts receivable and enter payments due.'}
               {activeTab === 'insights' && 'Securely inspects ledger records using Google Gemini.'}
               {activeTab === 'expenses' && 'Record administrative costs, electricity bills, and monthly outlays.'}
@@ -2735,206 +2751,382 @@ export default function App() {
           )}
 
           {/* -----------------------------------------------------------------
-              VIEW 2: INVENTORY PRODUCT CATALOG & RESTOCKS
+              VIEW 2: INVENTORY PRODUCT CATALOG & RESTOCKS -> UPGRADED TO STOCK MANAGEMENT
               ----------------------------------------------------------------- */}
           {activeTab === "inventory" && (
-            <div className="space-y-6" id="view-inventory-container">
+            <div className="space-y-6 animate-fadeIn" id="view-inventory-container">
               
-              {/* Top inventory control bar */}
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 bg-[#0a101f]/80 border border-slate-800 rounded-2xl" id="inventory-toolbar">
-                <div className="relative w-full md:w-80" id="inventory-search-wrap">
-                  <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                  <input
-                    type="text"
-                    id="inventory-search-input"
-                    placeholder="Search product tags, names, SKU codes..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className="w-full px-3 py-2 pl-9 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                  />
+              {/* STOCKS STATS / KPI OVERVIEW ROAD DETAILS */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="stock-valuation-summary-cards">
+                
+                {/* CARD 1: TOTAL STOCK VALUE VALUATION */}
+                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-total-stock-asset">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">স্টকের মোট সম্পদ মূল্য (Stock Asset Worth)</span>
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black font-mono text-white tracking-tight">
+                      {businessInfo.currencySymbol} {products.reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
+                      স্টকে থাকা পণ্যের ক্রয় মূল্যের মোট হিসাব। কাস্টমার মেমো থেকে পণ্য বিক্রি হওয়া মাত্রই এই মূল্য এবং স্টক স্বয়ংক্রিয়ভাবে মাইনাস হয়ে আপডেট হয়।
+                    </p>
+                  </div>
                 </div>
-                <div className="text-xs text-slate-400 font-mono" id="inventory-stats-sub">
-                  Total Inventory Items: <span className="text-white font-bold">{products.length}</span> items
+
+                {/* CARD 2: LOW STOCK COUNT AND STATS */}
+                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-slate-800 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-stock-quantity-tracker">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">মোট স্টক আইটেমস (Active Stocks)</span>
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black font-mono text-white tracking-tight flex items-baseline gap-2">
+                      <span>{products.length}</span>
+                      <span className="text-xs text-slate-500 font-medium font-sans">টি পণ্য নথিভুক্ত</span>
+                    </h3>
+                    <div className="flex items-center gap-1.5 mt-2 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-xl w-max">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                      <span className="text-[9px] font-bold font-mono text-rose-400 uppercase">
+                        লো-স্টক পণ্য: {products.filter(p => p.stock <= 5).length} টি আইটেম
+                      </span>
+                    </div>
+                  </div>
                 </div>
+
+                {/* CARD 3: SUPPLIER UNPAID BILLS DUES TRACKER */}
+                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-amber-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-supplier-dues-tracker">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/15 rounded-full blur-3xl -mr-10 -mt-10" />
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 font-mono">সাপ্লায়ার বকেয়া (Supplier Dues Ledger)</span>
+                    <ShoppingBag className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black font-mono text-amber-400 tracking-tight">
+                      {businessInfo.currencySymbol} {purchases.reduce((acc, pur) => acc + (pur.dueAmount || 0), 0).toLocaleString()}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
+                      সাপ্লায়ারদের থেকে বাকিতে কেনা পণ্যের মোট অপরিশোধিত বকেয়া বিল। নিচে বকেয়া পরিশোধ বাটনে ক্লিক করে এটি আপডেট করা যায়।
+                    </p>
+                  </div>
+                </div>
+
               </div>
 
-              {/* Add New Product Drawer and Catalog List layout (Grid) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="inventory-grid">
-                
-                {/* Form to submit registration (4 Cols) */}
-                <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4" id="add-product-form-panel">
-                  <h3 className="text-sm font-semibold text-white tracking-wide border-b border-slate-900 pb-2.5">Register New Catalog Product</h3>
-                  
-                  <form onSubmit={handleCreateProduct} className="space-y-3.5" id="new-product-form">
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1 pl-1">Product Name *</label>
+              {/* DUAL MODULE TAB SELECTOR BAR */}
+              <div className="flex gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
+                <button 
+                  onClick={() => setStockSubTab("catalog")}
+                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'catalog' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>স্টক পণ্যতালিকা ও মূল্যায়ন (Stock Inventory Catalog & Rates)</span>
+                </button>
+                <button 
+                  onClick={() => setStockSubTab("supplier-bills")}
+                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'supplier-bills' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>সাপ্লায়ার ক্রয় ও বকেয়া খাতা (Supplier Cash & Credit Purchases)</span>
+                </button>
+              </div>
+
+              {stockSubTab === "catalog" ? (
+                <div className="space-y-6" id="stock-catalog-rendered-view">
+                  {/* Top inventory control search bar */}
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-[#0a101f]/80 border border-slate-800 rounded-2xl animate-slideDown" id="inventory-toolbar">
+                    <div className="relative w-full md:w-80" id="inventory-search-wrap">
+                      <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
                       <input
                         type="text"
-                        required
-                        placeholder="e.g. Rice 10kg, sugar, bulb"
-                        value={newProdName}
-                        onChange={(e) => setNewProdName(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans"
+                        id="inventory-search-input"
+                        placeholder="শ্রেণী, পণ্যের নাম, SKU কোড দিয়ে স্টক সার্চ..."
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                        className="w-full px-3 py-2 pl-9 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
                       />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">SKU Part Code (Optional)</label>
-                        <input
-                          type="text"
-                          placeholder="PRO-01"
-                          value={newProdSKU}
-                          onChange={(e) => setNewProdSKU(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Product Category Segment</label>
-                        <select
-                          value={newProdCategory}
-                          onChange={(e) => setNewProdCategory(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                        >
-                          <option value="Groceries">Groceries</option>
-                          <option value="Grains">Grains / Foods</option>
-                          <option value="Oils">Oils / Fluids</option>
-                          <option value="Dairy">Dairy Products</option>
-                          <option value="Spices">Spices & Spreading</option>
-                          <option value="Toiletries">Toiletries</option>
-                          <option value="Others">Others</option>
-                        </select>
-                      </div>
+                    <div className="text-xs text-slate-400 font-mono" id="inventory-stats-sub">
+                      Total Catalog Stock Items: <span className="text-white font-bold">{products.length}</span> categories
                     </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Unit Purchase Buying Price *</label>
-                        <input
-                          type="number"
-                          required
-                          placeholder="0"
-                          value={newProdBuyPrice}
-                          onChange={(e) => setNewProdBuyPrice(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Unit Standard Selling Price *</label>
-                        <input
-                          type="number"
-                          required
-                          placeholder="0"
-                          value={newProdSellPrice}
-                          onChange={(e) => setNewProdSellPrice(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Initial Opening Stock Count</label>
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={newProdStock}
-                          onChange={(e) => setNewProdStock(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Measurement Base Unit</label>
-                        <select
-                          value={newProdUnit}
-                          onChange={(e) => setNewProdUnit(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                        >
-                          <option value="piece">Piece</option>
-                          <option value="kg">Kilogram (kg)</option>
-                          <option value="ltr">Liter (ltr)</option>
-                          <option value="Pack">Pack Case</option>
-                          <option value="Sack">Sack / Bulk Lot</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      id="save-new-product-btn"
-                      className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-[#070b13] font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      Commit Item to Catalog
-                    </button>
-
-                  </form>
-                </div>
-
-                {/* Catalog Tables (8 Cols) */}
-                <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="inventory-list-panel">
-                  <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex items-center justify-between" id="catalog-list-header">
-                    <span className="text-xs font-semibold text-white">Documented Stocks & Catalog Items</span>
-                    <span className="text-[10px] text-slate-500 font-mono">Catalog Items size: {filteredProducts.length}</span>
                   </div>
 
-                  <div className="overflow-x-auto" id="inventory-table-scroll">
-                    <table className="w-full text-slate-300 text-xs">
+                  {/* Add New Product Drawer and Catalog List layout (Grid) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="inventory-grid">
+                    
+                    {/* Form to submit registration (4 Cols) */}
+                    <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4 shadow-md" id="add-product-form-panel">
+                      <div className="border-b border-slate-900 pb-2.5 flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">রজিস্টার নতুন স্টক প্রোডাক্ট (Register New Stock Item)</h3>
+                      </div>
+                      
+                      <form onSubmit={handleCreateProduct} className="space-y-3.5" id="new-product-form">
+                        
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Product Name * (পণ্যের নাম)</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="যেমন: মিনিকেট চাল ১০ কেজি, চিনি, বল বাল্ব"
+                            value={newProdName}
+                            onChange={(e) => setNewProdName(e.target.value)}
+                            className="w-full px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">SKU Code (ঐচ্ছিক)</label>
+                            <input
+                              type="text"
+                              placeholder="PRO-01"
+                              value={newProdSKU}
+                              onChange={(e) => setNewProdSKU(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Category (ক্যাটাগরি)</label>
+                            <select
+                              value={newProdCategory}
+                              onChange={(e) => setNewProdCategory(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
+                            >
+                              <option value="Groceries">Groceries</option>
+                              <option value="Grains">Grains / Foods</option>
+                              <option value="Oils">Oils / Fluids</option>
+                              <option value="Dairy">Dairy Products</option>
+                              <option value="Spices">Spices & Spreading</option>
+                              <option value="Toiletries">Toiletries</option>
+                              <option value="Others">Others</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Buy Price * (ক্রয় মূল্য)</label>
+                            <input
+                              type="number"
+                              required
+                              placeholder="0"
+                              value={newProdBuyPrice}
+                              onChange={(e) => setNewProdBuyPrice(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Sell Price * (বিক্রয় মূল্য)</label>
+                            <input
+                              type="number"
+                              required
+                              placeholder="0"
+                              value={newProdSellPrice}
+                              onChange={(e) => setNewProdSellPrice(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Opening Stock (শুরু স্টক)</label>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              value={newProdStock}
+                              onChange={(e) => setNewProdStock(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Unit (একক)</label>
+                            <select
+                              value={newProdUnit}
+                              onChange={(e) => setNewProdUnit(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
+                            >
+                              <option value="piece">Piece</option>
+                              <option value="kg">Kilogram (kg)</option>
+                              <option value="ltr">Liter (ltr)</option>
+                              <option value="Pack">Pack Case</option>
+                              <option value="Sack">Sack / Bulk Lot</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          id="save-new-product-btn"
+                          className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-[#070b13] font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md font-sans"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                          ক্যাটালগ পণ্য হিসেবে যোগ করুন
+                        </button>
+
+                      </form>
+                    </div>
+
+                    {/* Catalog Tables (8 Cols) */}
+                    <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-md font-sans" id="inventory-list-panel">
+                      <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex items-center justify-between" id="catalog-list-header">
+                        <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                          বর্তমান সচল স্টক পণ্য এবং তাদের মূল্যায়ন
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">আইটেম সাইজ: {filteredProducts.length}</span>
+                      </div>
+
+                      <div className="overflow-x-auto" id="inventory-table-scroll">
+                        <table className="w-full text-[#A0A0A5] text-xs">
+                          <thead>
+                            <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                              <th className="py-2.5 px-4 text-left">SKU</th>
+                              <th className="py-2.5 px-4 text-left">Product Name (পণ্যের নাম)</th>
+                              <th className="py-2.5 px-4 text-left">Category</th>
+                              <th className="py-2.5 px-4 text-right">ক্রয়মূল্য (Buy)</th>
+                              <th className="py-2.5 px-4 text-right">বিক্রয়মূল্য (Sell)</th>
+                              <th className="py-2.5 px-4 text-center">স্টক কোয়ান্টিটি</th>
+                              <th className="py-2.5 px-4 text-right border-l border-slate-850">বর্তমান স্টক মূল্য</th>
+                              <th className="py-2.5 px-4 text-center">রিস্টক (+১০)</th>
+                              <th className="py-2.5 px-4 text-center">মুছুন</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
+                            {filteredProducts.length === 0 ? (
+                              <tr>
+                                <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
+                                  স্টকে কোনো পণ্য নিবন্ধিত নেই। বাম পাশের ফর্মটি পূরণ করুন।
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredProducts.map((p) => {
+                                const isLowStock = p.stock <= 5;
+                                const stockWorth = p.stock > 0 ? (p.stock * p.buyPrice) : 0;
+                                return (
+                                  <tr key={p.id} className="hover:bg-slate-900/10 text-slate-300">
+                                    <td className="py-3 px-4 font-mono font-bold text-slate-500 text-[10px]">{p.sku}</td>
+                                    <td className="py-3 px-4 font-semibold text-white font-sans truncate max-w-[150px]" title={p.name}>{p.name}</td>
+                                    <td className="py-3 px-4 font-sans"><span className="text-[9px] font-medium bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full text-slate-400">{p.category}</span></td>
+                                    <td className="py-3 px-4 text-right">{businessInfo.currencySymbol} {p.buyPrice}</td>
+                                    <td className="py-3 px-4 text-right text-emerald-400 font-medium">{businessInfo.currencySymbol} {p.sellPrice}</td>
+                                    <td className="py-3 px-4 text-center">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLowStock ? 'bg-rose-500/15 text-rose-400 animate-pulse border border-rose-500/20' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'}`}>
+                                        {p.stock} {p.unit}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right text-white font-bold bg-slate-950/10 border-l border-slate-850">
+                                      {businessInfo.currencySymbol} {stockWorth.toLocaleString()}
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <button
+                                        id={`quick-restock-${p.id}`}
+                                        onClick={() => incrementProductStock(p.id)}
+                                        className="px-2 py-1 text-[10px] font-bold text-slate-300 hover:text-emerald-450 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded hover:border-emerald-500 transition-colors cursor-pointer"
+                                      >
+                                        +10
+                                      </button>
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <button
+                                        id={`delete-product-${p.id}`}
+                                        onClick={() => handleDeleteProduct(p.id, p.name)}
+                                        className="p-1 hover:bg-slate-900 rounded text-rose-400 hover:text-white transition-colors"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                    </div>
+
+                  </div>
+                </div>
+              ) : (
+                /* SUPPLIER PURCHASES LEDGER WITH CASH CODE & DUE BILL TRACKING */
+                <div className="bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg animate-slideDown" id="supplier-purchases-subtab-rendered">
+                  <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2" id="supplier-bills-ledger-top flex">
+                    <div className="flex items-center gap-2">
+                      <ShoppingBag className="w-4 h-4 text-amber-500" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">সাপ্লায়ারদের থেকে ক্রয় করা পণ্য ও পেমেন্ট ট্র্যাকিং লেজার</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">মোট লেনদেন ভাউচার: {purchases.length} টি</span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
                       <thead>
-                        <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
-                          <th className="py-2 px-4 text-left">SKU</th>
-                          <th className="py-2 px-4 text-left">Product Name</th>
-                          <th className="py-2 px-4 text-left">Category</th>
-                          <th className="py-2 px-4 text-right">Wholesale Cost</th>
-                          <th className="py-2 px-4 text-right">Retail Sell Price</th>
-                          <th className="py-2 px-4 text-center">Current Stock Left</th>
-                          <th className="py-2 px-4 text-center">Quick Restock (+10)</th>
-                          <th className="py-2 px-4 text-center">Remove</th>
+                        <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                          <th className="py-3 px-4">তারিখ (Date)</th>
+                          <th className="py-3 px-4">ভাউচার কোড (Invoice)</th>
+                          <th className="py-3 px-4">সাপ্লায়ার (Supplier)</th>
+                          <th className="py-3 px-4">ক্রয়কৃত পণ্য (Purchased Item)</th>
+                          <th className="py-3 px-4 text-right">পরিমাণ (Qty)</th>
+                          <th className="py-3 px-4 text-right">ক্রয় হার (Price)</th>
+                          <th className="py-3 px-4 text-right">মোট বিল (Total)</th>
+                          <th className="py-3 px-4 text-center">লেনদেন ধরণ / অবস্থা (Cash vs Due)</th>
+                          <th className="py-3 px-4 text-center">বকেয়া পরিশোধ করুন (Action)</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800/60 font-mono">
-                        {filteredProducts.length === 0 ? (
+                      <tbody className="divide-y divide-slate-800/50 font-mono">
+                        {purchases.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="py-12 text-center text-slate-500">
-                              No catalog products registered yet. Populate the left form to write entries.
+                            <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
+                              কোনো সাপ্লায়ার পারচেজ ভাউচার রেকর্ড পাওয়া যায়নি। পেমেন্ট সহ ভাউচার তৈরি করতে বাম পাশের "Purchases" ট্যাবে গিয়ে ২ মিনিটের উইজার্ড ফ্লো ব্যবহার করুন।
                             </td>
                           </tr>
                         ) : (
-                          filteredProducts.map((p) => {
-                            const isLowStock = p.stock <= 5;
+                          purchases.map((pur) => {
+                            const isDue = (pur.dueAmount || 0) > 0;
+                            const isCash = !isDue;
                             return (
-                              <tr key={p.id} className="hover:bg-slate-900/10 text-slate-300">
-                                <td className="py-3.5 px-4 font-mono font-bold text-slate-500">{p.sku}</td>
-                                <td className="py-3.5 px-4 font-semibold text-white">{p.name}</td>
-                                <td className="py-3.5 px-4"><span className="text-[10px] font-medium bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full text-slate-400">{p.category}</span></td>
-                                <td className="py-3.5 px-4 text-right">{businessInfo.currencySymbol} {p.buyPrice}</td>
-                                <td className="py-3.5 px-4 text-right text-emerald-400 font-medium">{businessInfo.currencySymbol} {p.sellPrice}</td>
+                              <tr key={pur.id} className="hover:bg-slate-900/10 text-slate-300">
+                                <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">{pur.date}</td>
+                                <td className="py-3.5 px-4 font-bold text-emerald-400">{pur.invoiceNo || "N/A"}</td>
+                                <td className="py-3.5 px-4 font-sans text-white">{pur.supplierName || "Walk-in Supplier"}</td>
+                                <td className="py-3.5 px-4 font-sans text-slate-200">{pur.productName || "Unknown Product"}</td>
+                                <td className="py-3.5 px-4 text-right text-slate-400">{pur.quantity}</td>
+                                <td className="py-3.5 px-4 text-right">{businessInfo.currencySymbol} {pur.buyPrice}</td>
+                                <td className="py-3.5 px-4 text-right text-white font-bold">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</td>
                                 <td className="py-3.5 px-4 text-center">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLowStock ? 'bg-rose-500/15 text-rose-400 animate-pulse border border-rose-500/20' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'}`}>
-                                    {p.stock} {p.unit}
-                                  </span>
+                                  {isCash ? (
+                                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-sans font-bold text-emerald-400">
+                                      <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+                                      ক্যাশ পরিশোধিত
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-sans font-bold text-amber-400">
+                                      <span className="w-1 h-1 bg-amber-400 rounded-full" />
+                                      বকেয়া বকে (Due: {businessInfo.currencySymbol} {pur.dueAmount})
+                                    </span>
+                                  )}
                                 </td>
-                                <td className="py-3.5 px-4 text-center">
-                                  <button
-                                    id={`quick-restock-${p.id}`}
-                                    onClick={() => incrementProductStock(p.id)}
-                                    className="px-2.5 py-1 text-[10px] font-bold text-slate-200 hover:text-emerald-400 bg-slate-950/80 border border-slate-800 rounded hover:border-emerald-500 transition-colors cursor-pointer"
-                                  >
-                                    +10
-                                  </button>
-                                </td>
-                                <td className="py-3.5 px-4 text-center">
-                                  <button
-                                    id={`delete-product-${p.id}`}
-                                    onClick={() => handleDeleteProduct(p.id, p.name)}
-                                    className="p-1 hover:bg-slate-900 rounded text-rose-400 hover:text-white transition-colors"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                <td className="py-3.5 px-4 text-center font-sans">
+                                  {isDue ? (
+                                    <button
+                                      onClick={() => {
+                                        setPurchases(prev => prev.map(item => item.id === pur.id ? { ...item, cashPaid: item.totalAmount, dueAmount: 0 } : item));
+                                        triggerNotification("Supplier due bill paid & fully settled in cash successfully! 🟢", "success");
+                                      }}
+                                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-200"
+                                    >
+                                      বকেয়া পরিশোধ
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500 font-sans italic">বকেয়া নেই</span>
+                                  )}
                                 </td>
                               </tr>
                             );
@@ -2943,10 +3135,8 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
-
                 </div>
-
-              </div>
+              )}
 
             </div>
           )}

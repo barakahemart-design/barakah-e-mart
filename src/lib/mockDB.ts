@@ -20,6 +20,10 @@ export interface Purchase {
   buyPrice: number;
   totalAmount: number;
   date: string;
+  cashPaid?: number;
+  dueAmount?: number;
+  invoiceNo?: string;
+  note?: string;
 }
 
 export interface Expense {
@@ -174,12 +178,8 @@ export const loadDB = () => {
     let transactionsRaw = transactionsStr ? JSON.parse(transactionsStr) : null;
     let purchasesRaw = purchasesStr ? JSON.parse(purchasesStr) : null;
 
-    // Local Fail-safe backup check: if all data arrays are empty, but we have a non-empty fail-safe copy, load from the fail-safe!
-    const localProductsCount = Array.isArray(productsRaw) ? productsRaw.length : 0;
-    const localTransactionsCount = Array.isArray(transactionsRaw) ? transactionsRaw.length : 0;
-    const localTotal = localProductsCount + localTransactionsCount;
-
-    if (localTotal === 0) {
+    // Local Fail-safe backup check: if local storage keys are completely missing, self-heal from the fail-safe!
+    if (productsStr === null && transactionsStr === null) {
       const failSafeStr = localStorage.getItem("barakah_fail_safe_backup");
       if (failSafeStr) {
         try {
