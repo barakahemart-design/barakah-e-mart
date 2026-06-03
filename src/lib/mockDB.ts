@@ -24,6 +24,7 @@ export interface Purchase {
   dueAmount?: number;
   invoiceNo?: string;
   note?: string;
+  originallyCredit?: boolean;
 }
 
 export interface Expense {
@@ -88,6 +89,7 @@ export interface BusinessInfo {
   showAuthorizedSignature?: boolean;
   termsConditions?: string;
   selectedFont?: string;
+  selectedInvoiceTemplate?: string;
   showPartnerLogos?: boolean;
   partnerLogos?: string[];
   presetBrands?: string[];
@@ -119,6 +121,7 @@ export const INITIAL_BUSINESS_INFO: BusinessInfo = {
   startingInvoiceNumber: 1001,
   showCustomerSignature: true,
   showAuthorizedSignature: true,
+  selectedInvoiceTemplate: "classic",
   showPartnerLogos: true,
   partnerLogos: [],
   presetBrands: ["Samsung", "Sony", "Xiaomi", "Walton", "HP", "Haier", "Gree", "Hisense", "TCL"],

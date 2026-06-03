@@ -42,6 +42,7 @@ import {
   History,
   Calendar,
   DollarSign,
+  Coins,
   Check,
   Menu,
   LayoutDashboard,
@@ -665,6 +666,7 @@ export default function App() {
   const [tempPresetBrands, setTempPresetBrands] = useState<string[]>([]);
   const [newCustomBrandName, setNewCustomBrandName] = useState("");
   const [tempFont, setTempFont] = useState("Inter");
+  const [tempInvoiceTemplate, setTempInvoiceTemplate] = useState("classic");
   const [tempLogoAlignment, setTempLogoAlignment] = useState<"left" | "center" | "right">("left");
   const [tempStartingInvoiceNumber, setTempStartingInvoiceNumber] = useState<number>(1001);
   
@@ -709,6 +711,7 @@ export default function App() {
       setTempPartnerLogos(businessInfo.partnerLogos || []);
       setTempPresetBrands(businessInfo.presetBrands || []);
       setTempFont(businessInfo.selectedFont || "Inter");
+      setTempInvoiceTemplate(businessInfo.selectedInvoiceTemplate || "classic");
       setTempLogoAlignment(businessInfo.logoAlignment || "left");
       setTempStartingInvoiceNumber(businessInfo.startingInvoiceNumber || 1001);
       const savedScale = (localStorage.getItem("font_size_scale") as "Regular" | "Medium" | "Large") || "Regular";
@@ -785,6 +788,22 @@ export default function App() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  // Add Specific Item to billing basket cart directly from product catalog view
+  const addSpecificProductToCart = (prod: Product, qty: number = 1) => {
+    const finalPrice = prod.sellPrice;
+    const existingIdx = posCart.findIndex(item => item.product.id === prod.id);
+    if (existingIdx > -1) {
+      const mergedQty = posCart[existingIdx].quantity + qty;
+      const updatedCart = [...posCart];
+      updatedCart[existingIdx].quantity = mergedQty;
+      updatedCart[existingIdx].price = finalPrice;
+      setPosCart(updatedCart);
+    } else {
+      setPosCart([...posCart, { product: prod, quantity: qty, price: finalPrice }]);
+    }
+    triggerNotification(`${prod.name} added to cart!`);
   };
 
   // Add Item to Billing Basket Cart
@@ -957,7 +976,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"catalog" | "supplier-bills">("catalog");
+  const [stockSubTab, setStockSubTab] = useState<"catalog" | "supplier-bills" | "due-list">("catalog");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1015,6 +1034,7 @@ export default function App() {
       termsConditions: tempTerms,
       showCustomerSignature: tempShowCustSig,
       showAuthorizedSignature: tempShowAuthSig,
+      selectedInvoiceTemplate: tempInvoiceTemplate,
       logoAlignment: tempLogoAlignment,
       startingInvoiceNumber: tempStartingInvoiceNumber,
       showPartnerLogos: tempShowPartners,
@@ -1305,7 +1325,8 @@ export default function App() {
       cashPaid: pur.cashPaid,
       dueAmount: pur.dueAmount,
       invoiceNo: pur.invoiceNo,
-      note: pur.note
+      note: pur.note,
+      originallyCredit: pur.dueAmount > 0
     };
     setPurchases([newPur, ...purchases]);
     setProducts(products.map(p => {
@@ -1369,8 +1390,42 @@ export default function App() {
   // -----------------------------------------------------------------
   // 3. LEDGER TRANSACTION ACCOUNTING WORKSPACE STATE
   // -----------------------------------------------------------------
-  const [ledgerSearch, setLedgerSearch] = useState("");
-  const [ledgerStatusFilter, setLedgerStatusFilter] = useState<string>("all");
+  const [ledgerSearch, setLedgerSearch] = useState(() => {
+    try {
+      return localStorage.getItem("barakah_ledger_search") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [ledgerStatusFilter, setLedgerStatusFilter] = useState<string>(() => {
+    try {
+      return localStorage.getItem("barakah_ledger_status_filter") || "all";
+    } catch {
+      return "all";
+    }
+  });
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      try {
+        localStorage.setItem("barakah_ledger_search", ledgerSearch);
+      } catch (e) {
+        console.error("Failed to save ledger search to localStorage", e);
+      }
+    }, 450);
+    return () => clearTimeout(handler);
+  }, [ledgerSearch]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      try {
+        localStorage.setItem("barakah_ledger_status_filter", ledgerStatusFilter);
+      } catch (e) {
+        console.error("Failed to save ledger status filter to localStorage", e);
+      }
+    }, 450);
+    return () => clearTimeout(handler);
+  }, [ledgerStatusFilter]);
 
   const incrementDuePayment = (invoiceNo: string, collectionAmt: number) => {
     if (!collectionAmt || collectionAmt <= 0) return;
@@ -1471,6 +1526,9 @@ export default function App() {
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
   const [expenseFilterCategory, setExpenseFilterCategory] = useState("All");
   const [posSearchQuery, setPosSearchQuery] = useState("");
+  const [posTerminalTab, setPosTerminalTab] = useState<"checkout" | "catalog" | "history">("checkout");
+  const [posProductsSearch, setPosProductsSearch] = useState("");
+  const [posTxSearch, setPosTxSearch] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [isClassifying, setIsClassifying] = useState(false);
@@ -1711,6 +1769,7 @@ export default function App() {
 
   // Filter lists dynamically
   const filteredProducts = products.filter(p => {
+    if (p.stock <= 0) return false;
     const query = inventorySearch.toLowerCase().trim();
     if (!query) return true;
     const searchTerms = query.split(/\s+/);
@@ -1885,7 +1944,7 @@ export default function App() {
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'inventory' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <Bookmark className="w-4 h-4" />
-                  স্টক ম্যানেজমেন্ট (Stock)
+                  Stock Management
                 </button>
 
                 <button
@@ -2048,13 +2107,13 @@ export default function App() {
             <div className="flex items-center gap-1.5 md:gap-2">
               <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
               <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
-                {activeTab === 'dashboard' && `${businessInfo.name} - Dashboard`}
+                {activeTab === 'dashboard' && 'Dashboard'}
                 {activeTab === 'reports' && 'Reports Dashboard'}
                 {activeTab === 'products' && 'Product Settings'}
                 {activeTab === 'negative-sales' && 'Negative Stock Log'}
                 {activeTab === 'purchases' && 'Purchases Ledger'}
                 {activeTab === "pos" && "Counter Cash Memo"}
-                {activeTab === 'inventory' && 'স্টক ম্যানেজমেন্ট (Stock Management)'}
+                {activeTab === 'inventory' && 'Stock Management'}
                 {activeTab === 'ledger' && 'Account Ledger'}
                 {activeTab === "insights" && "AI Assistant"}
                 {activeTab === 'expenses' && 'Expenses Ledger'}
@@ -2069,7 +2128,7 @@ export default function App() {
               {activeTab === 'negative-sales' && 'Adjust purchase rate on negative quantity sales to reflect correct net income metrics.'}
               {activeTab === 'purchases' && 'Log fresh supplier purchases, add bulk stocks, and assign actual values.'}
               {activeTab === "pos" && "Point-of-Sale Checkout terminal. Easily add items to cart and print receipt."}
-              {activeTab === 'inventory' && 'স্টকে থাকা পণ্যের হিসাব, টাকার মূল্য ও সাপ্লায়ারদের থেকে ক্রয়কৃত পণ্যের লেনদেন ট্র্যাকার।'}
+              {activeTab === 'inventory' && 'Track physical stocks, inventory valuations, and supplier purchases/credit accounts.'}
               {activeTab === 'ledger' && 'Acknowledge transactions, review accounts receivable and enter payments due.'}
               {activeTab === 'insights' && 'Securely inspects ledger records using Google Gemini.'}
               {activeTab === 'expenses' && 'Record administrative costs, electricity bills, and monthly outlays.'}
@@ -2290,7 +2349,70 @@ export default function App() {
               VIEW 1: POS BILLING WORKSPACE & LIVE INVOICE CARTRIDGE
               ----------------------------------------------------------------- */}
           {activeTab === "pos" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="view-pos-container">
+            <div className="space-y-6 w-full animate-slideDown" id="view-pos-container-wrapper">
+              
+              {/* POS Terminal Sub-Tab Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-950 to-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl" id="pos-terminal-tab-selector-bar">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/10">
+                    <ShoppingCart className="w-5 h-5 shrink-0" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-1.5 font-display">
+                      POS Terminal
+                      <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/10 font-mono font-medium normal-case">Sales Desk</span>
+                    </h2>
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-sans">Counter billing, available catalog lookup and receipt reprinting list</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2.5 font-sans text-xs">
+                  <button
+                    onClick={() => setPosTerminalTab("checkout")}
+                    className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                      posTerminalTab === "checkout"
+                        ? "bg-[#00E676]/10 text-[#00E676] border-[#00E676]/35 shadow-sm"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900 border-transparent"
+                    }`}
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>New Checkout</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setPosTerminalTab("catalog");
+                      setPosProductsSearch("");
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                      posTerminalTab === "catalog"
+                        ? "bg-[#00E676]/10 text-[#00E676] border-[#00E676]/35 shadow-sm"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900 border-transparent"
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Products List</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setPosTerminalTab("history");
+                      setPosTxSearch("");
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                      posTerminalTab === "history"
+                        ? "bg-[#00E676]/10 text-[#00E676] border-[#00E676]/35 shadow-sm"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900 border-transparent"
+                    }`}
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>Sales History</span>
+                  </button>
+                </div>
+              </div>
+
+              {posTerminalTab === "checkout" && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="view-pos-container">
               
               {/* POS Billing Basket Configuration (8 Cols) */}
               <div className="col-span-1 lg:col-span-8 space-y-6" id="pos-billing-basket-column">
@@ -2699,6 +2821,270 @@ export default function App() {
             </div>
           )}
 
+          {/* BRAND NEW SALESMAN VIEW: AVAILABLE PRODUCTS CATALOG */}
+          {posTerminalTab === "catalog" && (
+            <div className="space-y-6 animate-slideDown" id="pos-catalog-view-panel">
+              {/* Search and filter toolbar */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 bg-[#0a101f]/80 border border-slate-800 rounded-2xl shadow-xl">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <Package className="w-4 h-4 text-emerald-400" />
+                    Available Products Catalog
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Quickly view and query products to sell. Click "Add to Basket" to add items with 1-click.
+                  </p>
+                </div>
+
+                <div className="relative w-full md:w-80">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                  <input
+                    type="text"
+                    placeholder="Search products by name or SKU..."
+                    value={posProductsSearch}
+                    onChange={(e) => setPosProductsSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Grid layout */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="pos-catalog-cards-grid">
+                {(() => {
+                  const filteredList = products.filter(p => {
+                    const term = posProductsSearch.toLowerCase().trim();
+                    if (!term) return true;
+                    return p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term);
+                  });
+
+                  if (filteredList.length === 0) {
+                    return (
+                      <div className="col-span-full py-16 text-center text-slate-500 font-sans">
+                        No matching products found. Check your search query.
+                      </div>
+                    );
+                  }
+
+                  return filteredList.map((p) => {
+                    const isInStock = p.stock > 0;
+                    const cartOccurrences = posCart.find(item => item.product.id === p.id)?.quantity || 0;
+
+                    return (
+                      <div 
+                        key={p.id}
+                        className={`bg-[#1E1E24] border rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 ${
+                          cartOccurrences > 0 
+                            ? 'border-[#00E676] bg-[#00E676]/5 shadow-md shadow-[#00E676]/5' 
+                            : 'border-slate-800 hover:border-slate-700 hover:bg-[#1f1f28]'
+                        }`}
+                      >
+                        <div className="space-y-3">
+                          {/* Stock status indicator */}
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800/80">
+                              {p.category}
+                            </span>
+                            <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full ${
+                              isInStock 
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                : 'bg-rose-500/10 text-rose-455 border border-rose-500/20'
+                            }`}>
+                              {p.stock} {p.unit}
+                            </span>
+                          </div>
+
+                          {/* Product Image preview or placeholder icon */}
+                          <div className="h-28 w-full bg-[#121214] rounded-xl flex items-center justify-center overflow-hidden border border-slate-800/80">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <Package className="w-8 h-8 text-slate-600/50" />
+                            )}
+                          </div>
+
+                          {/* Title / Info */}
+                          <div>
+                            <h4 className="text-xs font-black text-white tracking-wide truncate" title={p.name}>{p.name}</h4>
+                            <span className="text-[10px] text-slate-500 font-mono block mt-0.5">SKU: {p.sku}</span>
+                          </div>
+
+                          {/* Pricing */}
+                          <div className="flex items-baseline justify-between pt-1 font-mono">
+                            <span className="text-[9px] text-slate-500 font-sans uppercase">Sale Rate:</span>
+                            <span className="text-xs font-black text-[#00E676]">
+                              {businessInfo.currencySymbol} {p.sellPrice.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Actions block */}
+                        <div className="pt-4 mt-4 border-t border-slate-800 flex flex-col gap-2">
+                          {cartOccurrences > 0 ? (
+                            <div className="flex items-center justify-between text-[10px] font-sans font-semibold text-[#00E676] bg-[#00E676]/10 px-3 py-1 rounded-lg border border-[#00E676]/25">
+                              <span>Added to Basket</span>
+                              <span className="font-mono font-bold">Qty: {cartOccurrences}</span>
+                            </div>
+                          ) : (
+                            <div className="h-5" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => addSpecificProductToCart(p, 1)}
+                            className={`py-2 px-3 rounded-xl text-xs font-bold uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer w-full ${
+                              isInStock 
+                                ? 'bg-[#00E676] hover:bg-[#00D065] text-slate-950 font-black' 
+                                : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-455 border border-rose-500/15'
+                            }`}
+                          >
+                            <Plus className="w-3.5 h-3.5 shrink-0" />
+                            {isInStock ? "Add to Basket" : "Force Add Out-of-Stock"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* BRAND NEW SALESMAN VIEW: COMPLETED SALES REGISTRY & DIRECT REPRINTING */}
+          {posTerminalTab === "history" && (
+            <div className="space-y-6 animate-slideDown" id="pos-history-view-panel">
+              {/* Search and control bar */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 bg-[#0a101f]/80 border border-slate-800 rounded-2xl shadow-xl">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <History className="w-4 h-4 text-emerald-400" />
+                    Sales Registry & Receipt Dispatch
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    View transactions, trace user memo records, and reprint or download delivery receipts anytime.
+                  </p>
+                </div>
+
+                <div className="relative w-full md:w-80">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                  <input
+                    type="text"
+                    placeholder="Search invoice number, client info..."
+                    value={posTxSearch}
+                    onChange={(e) => setPosTxSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Desktop / responsive sales log table */}
+              <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg" id="pos-history-table-wrapper">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300 font-mono">
+                    <thead>
+                      <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                        <th className="py-3.5 px-4">Invoice No</th>
+                        <th className="py-3.5 px-4">Date & Time</th>
+                        <th className="py-3.5 px-4 font-sans">Customer Reference</th>
+                        <th className="py-3.5 px-4 text-center">Items Count</th>
+                        <th className="py-3.5 px-4 text-right">Invoice Total</th>
+                        <th className="py-3.5 px-4 text-right">Cash Received</th>
+                        <th className="py-3.5 px-4 text-center">Status</th>
+                        <th className="py-3.5 px-4 text-center">Receipt Reprint Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {(() => {
+                        const filteredInvoices = transactions.filter(t => {
+                          const term = posTxSearch.toLowerCase().trim();
+                          if (!term) return true;
+                          const contact = contacts.find(c => c.id === t.contactId);
+                          const contactName = contact ? contact.name.toLowerCase() : "";
+                          return t.invoiceNo.toLowerCase().includes(term) || contactName.includes(term);
+                        });
+
+                        if (filteredInvoices.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={8} className="py-16 text-center text-slate-500 font-sans">
+                                No completed sales transactions logged. Start selling in "New Checkout" tab to record transaction invoices.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filteredInvoices.map((t) => {
+                          const transDate = new Date(t.date);
+                          const isPaid = t.status === "paid";
+                          const listContact = contacts.find(c => c.id === t.contactId);
+
+                          return (
+                            <tr key={t.id} className="hover:bg-slate-900/10 text-slate-300">
+                              <td className="py-4 px-4 font-bold text-emerald-450">{t.invoiceNo}</td>
+                              <td className="py-4 px-4 text-slate-400 text-[10px]">
+                                {transDate.toLocaleDateString()} {transDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="py-4 px-4 font-sans font-semibold text-white">
+                                {listContact ? (
+                                  <div>
+                                    <span>{listContact.name}</span>
+                                    <span className="block text-[9px] font-mono text-slate-500 font-normal mt-0.5">{listContact.phone}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic">Walk-in Customer</span>
+                                )}
+                              </td>
+                              <td className="py-4 px-4 text-center font-bold text-white">
+                                {t.items?.reduce((sum, item) => sum + item.quantity, 0) || 0} units
+                              </td>
+                              <td className="py-4 px-4 text-right text-slate-200 font-bold">
+                                {businessInfo.currencySymbol} {t.total.toLocaleString()}
+                              </td>
+                              <td className="py-4 px-4 text-right text-emerald-400 font-bold">
+                                {businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}
+                              </td>
+                              <td className="py-4 px-4 text-center font-sans">
+                                {isPaid ? (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/35 px-2.5 py-0.5 rounded-full text-[9px] font-bold text-emerald-400">
+                                    Paid
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/35 px-2.5 py-0.5 rounded-full text-[9px] font-bold text-amber-500">
+                                    {t.status === "partial" ? "Partial" : "Due"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-4 px-4 text-center font-sans">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    generateInvoicePDF(t, listContact, businessInfo)
+                                      .then(() => {
+                                        triggerNotification(`Receipt reprinted & downloaded for ${t.invoiceNo}!`, "success");
+                                      })
+                                      .catch(err => {
+                                        console.error(err);
+                                        triggerNotification("Failed to reprint receipt", "error");
+                                      });
+                                  }}
+                                  className="px-3 py-1.5 bg-[#00E676] hover:bg-[#00D065] text-slate-950 font-black text-[10px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-[#00E676]/5 duration-150 flex items-center gap-1.5 mx-auto font-sans"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  Reprint Receipt
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+            </div>
+          )}
+
           {/* -------------------- VIEW 1.1: MODULAR CATALOGS -------------------- */}
           {activeTab === "products" && (
             <ProductsView
@@ -2751,49 +3137,46 @@ export default function App() {
           )}
 
           {/* -----------------------------------------------------------------
-              VIEW 2: INVENTORY PRODUCT CATALOG & RESTOCKS -> UPGRADED TO STOCK MANAGEMENT
+              VIEW 2: STOCK MANAGEMENT & VALUATIONS (UPGRADED, NO REGISTRATION, ENGLISH ONLY)
               ----------------------------------------------------------------- */}
           {activeTab === "inventory" && (
             <div className="space-y-6 animate-fadeIn" id="view-inventory-container">
               
-              {/* STOCKS STATS / KPI OVERVIEW ROAD DETAILS */}
+              {/* STOCKS STATS / KPI OVERVIEW DETAILS */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="stock-valuation-summary-cards">
                 
                 {/* CARD 1: TOTAL STOCK VALUE VALUATION */}
                 <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-total-stock-asset">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">স্টকের মোট সম্পদ মূল্য (Stock Asset Worth)</span>
-                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">Stock Asset Valuation</span>
+                    <Coins className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div>
                     <h3 className="text-2xl font-black font-mono text-white tracking-tight">
                       {businessInfo.currencySymbol} {products.reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
-                      স্টকে থাকা পণ্যের ক্রয় মূল্যের মোট হিসাব। কাস্টমার মেমো থেকে পণ্য বিক্রি হওয়া মাত্রই এই মূল্য এবং স্টক স্বয়ংক্রিয়ভাবে মাইনাস হয়ে আপডেট হয়।
+                      Total cost basis of remaining physical inventory stocks. Selling items dynamically reduces both physical count and asset value automatically on the database server.
                     </p>
                   </div>
                 </div>
 
-                {/* CARD 2: LOW STOCK COUNT AND STATS */}
+                {/* CARD 2: ACTIVE STOCKS */}
                 <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-slate-800 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-stock-quantity-tracker">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">মোট স্টক আইটেমস (Active Stocks)</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">Active Stocks</span>
                     <Layers className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div>
                     <h3 className="text-2xl font-black font-mono text-white tracking-tight flex items-baseline gap-2">
-                      <span>{products.length}</span>
-                      <span className="text-xs text-slate-500 font-medium font-sans">টি পণ্য নথিভুক্ত</span>
+                      <span>{products.filter(p => p.stock > 0).length}</span>
+                      <span className="text-xs text-slate-500 font-medium font-sans">In-Stock Products</span>
                     </h3>
-                    <div className="flex items-center gap-1.5 mt-2 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-xl w-max">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                      <span className="text-[9px] font-bold font-mono text-rose-400 uppercase">
-                        লো-স্টক পণ্য: {products.filter(p => p.stock <= 5).length} টি আইটেম
-                      </span>
-                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5 font-sans leading-relaxed">
+                      Total quantity: <span className="font-bold text-white font-mono">{products.reduce((acc, p) => acc + (p.stock > 0 ? p.stock : 0), 0)}</span> units currently across stock items.
+                    </p>
                   </div>
                 </div>
 
@@ -2801,7 +3184,7 @@ export default function App() {
                 <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-amber-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-supplier-dues-tracker">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/15 rounded-full blur-3xl -mr-10 -mt-10" />
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 font-mono">সাপ্লায়ার বকেয়া (Supplier Dues Ledger)</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 font-mono">Supplier Credit Owed</span>
                     <ShoppingBag className="w-4 h-4 text-amber-500" />
                   </div>
                   <div>
@@ -2809,282 +3192,169 @@ export default function App() {
                       {businessInfo.currencySymbol} {purchases.reduce((acc, pur) => acc + (pur.dueAmount || 0), 0).toLocaleString()}
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
-                      সাপ্লায়ারদের থেকে বাকিতে কেনা পণ্যের মোট অপরিশোধিত বকেয়া বিল। নিচে বকেয়া পরিশোধ বাটনে ক্লিক করে এটি আপডেট করা যায়।
+                      Outstanding balance remaining for credit-based purchase invoices. Handled easily by clicking the "Settle Due" buttons on the Supplier ledger.
                     </p>
                   </div>
                 </div>
 
               </div>
 
-              {/* DUAL MODULE TAB SELECTOR BAR */}
+              {/* TRI-MODULE TAB SELECTOR BAR */}
               <div className="flex gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
                 <button 
                   onClick={() => setStockSubTab("catalog")}
                   className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'catalog' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>স্টক পণ্যতালিকা ও মূল্যায়ন (Stock Inventory Catalog & Rates)</span>
+                  <span>Stock Inventory Catalog & Valuations</span>
                 </button>
                 <button 
                   onClick={() => setStockSubTab("supplier-bills")}
                   className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'supplier-bills' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
                 >
                   <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>সাপ্লায়ার ক্রয় ও বকেয়া খাতা (Supplier Cash & Credit Purchases)</span>
+                  <span>Supplier Cash & Credit Ledger</span>
+                </button>
+                <button 
+                  onClick={() => setStockSubTab("due-list")}
+                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'due-list' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-[#00E676]/20 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-rose-450 animate-pulse" />
+                  <span>Supplier Items Due List</span>
                 </button>
               </div>
 
-              {stockSubTab === "catalog" ? (
-                <div className="space-y-6" id="stock-catalog-rendered-view">
+              {stockSubTab === "catalog" && (
+                <div className="space-y-6 animate-slideDown" id="stock-catalog-rendered-view">
                   {/* Top inventory control search bar */}
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-[#0a101f]/80 border border-slate-800 rounded-2xl animate-slideDown" id="inventory-toolbar">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-[#0a101f]/80 border border-slate-800 rounded-2xl" id="inventory-toolbar">
                     <div className="relative w-full md:w-80" id="inventory-search-wrap">
                       <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
                       <input
                         type="text"
                         id="inventory-search-input"
-                        placeholder="শ্রেণী, পণ্যের নাম, SKU কোড দিয়ে স্টক সার্চ..."
+                        placeholder="Filter stock by product name or SKU..."
                         value={inventorySearch}
                         onChange={(e) => setInventorySearch(e.target.value)}
                         className="w-full px-3 py-2 pl-9 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
                       />
                     </div>
                     <div className="text-xs text-slate-400 font-mono" id="inventory-stats-sub">
-                      Total Catalog Stock Items: <span className="text-white font-bold">{products.length}</span> categories
+                      Total Catalog Stock Items: <span className="text-white font-bold">{filteredProducts.length}</span> items
                     </div>
                   </div>
 
-                  {/* Add New Product Drawer and Catalog List layout (Grid) */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="inventory-grid">
-                    
-                    {/* Form to submit registration (4 Cols) */}
-                    <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4 shadow-md" id="add-product-form-panel">
-                      <div className="border-b border-slate-900 pb-2.5 flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">রজিস্টার নতুন স্টক প্রোডাক্ট (Register New Stock Item)</h3>
-                      </div>
-                      
-                      <form onSubmit={handleCreateProduct} className="space-y-3.5" id="new-product-form">
-                        
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Product Name * (পণ্যের নাম)</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="যেমন: মিনিকেট চাল ১০ কেজি, চিনি, বল বাল্ব"
-                            value={newProdName}
-                            onChange={(e) => setNewProdName(e.target.value)}
-                            className="w-full px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">SKU Code (ঐচ্ছিক)</label>
-                            <input
-                              type="text"
-                              placeholder="PRO-01"
-                              value={newProdSKU}
-                              onChange={(e) => setNewProdSKU(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Category (ক্যাটাগরি)</label>
-                            <select
-                              value={newProdCategory}
-                              onChange={(e) => setNewProdCategory(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                            >
-                              <option value="Groceries">Groceries</option>
-                              <option value="Grains">Grains / Foods</option>
-                              <option value="Oils">Oils / Fluids</option>
-                              <option value="Dairy">Dairy Products</option>
-                              <option value="Spices">Spices & Spreading</option>
-                              <option value="Toiletries">Toiletries</option>
-                              <option value="Others">Others</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Buy Price * (ক্রয় মূল্য)</label>
-                            <input
-                              type="number"
-                              required
-                              placeholder="0"
-                              value={newProdBuyPrice}
-                              onChange={(e) => setNewProdBuyPrice(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Sell Price * (বিক্রয় মূল্য)</label>
-                            <input
-                              type="number"
-                              required
-                              placeholder="0"
-                              value={newProdSellPrice}
-                              onChange={(e) => setNewProdSellPrice(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Opening Stock (শুরু স্টক)</label>
-                            <input
-                              type="number"
-                              placeholder="0"
-                              value={newProdStock}
-                              onChange={(e) => setNewProdStock(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Unit (একক)</label>
-                            <select
-                              value={newProdUnit}
-                              onChange={(e) => setNewProdUnit(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                            >
-                              <option value="piece">Piece</option>
-                              <option value="kg">Kilogram (kg)</option>
-                              <option value="ltr">Liter (ltr)</option>
-                              <option value="Pack">Pack Case</option>
-                              <option value="Sack">Sack / Bulk Lot</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <button
-                          type="submit"
-                          id="save-new-product-btn"
-                          className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-[#070b13] font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md font-sans"
-                        >
-                          <PlusCircle className="w-4 h-4" />
-                          ক্যাটালগ পণ্য হিসেবে যোগ করুন
-                        </button>
-
-                      </form>
+                  {/* Catalog Tables layout (Now Full Width - w-full, no registration forms) */}
+                  <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-md font-sans" id="inventory-list-panel">
+                    <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex items-center justify-between" id="catalog-list-header">
+                      <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                        Physical Stock Inventory Catalog & Real-Time Rates
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">Total Recorded Products: {filteredProducts.length}</span>
                     </div>
 
-                    {/* Catalog Tables (8 Cols) */}
-                    <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-md font-sans" id="inventory-list-panel">
-                      <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex items-center justify-between" id="catalog-list-header">
-                        <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                          বর্তমান সচল স্টক পণ্য এবং তাদের মূল্যায়ন
-                        </span>
-                        <span className="text-[10px] text-slate-500 font-mono">আইটেম সাইজ: {filteredProducts.length}</span>
-                      </div>
-
-                      <div className="overflow-x-auto" id="inventory-table-scroll">
-                        <table className="w-full text-[#A0A0A5] text-xs">
-                          <thead>
-                            <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
-                              <th className="py-2.5 px-4 text-left">SKU</th>
-                              <th className="py-2.5 px-4 text-left">Product Name (পণ্যের নাম)</th>
-                              <th className="py-2.5 px-4 text-left">Category</th>
-                              <th className="py-2.5 px-4 text-right">ক্রয়মূল্য (Buy)</th>
-                              <th className="py-2.5 px-4 text-right">বিক্রয়মূল্য (Sell)</th>
-                              <th className="py-2.5 px-4 text-center">স্টক কোয়ান্টিটি</th>
-                              <th className="py-2.5 px-4 text-right border-l border-slate-850">বর্তমান স্টক মূল্য</th>
-                              <th className="py-2.5 px-4 text-center">রিস্টক (+১০)</th>
-                              <th className="py-2.5 px-4 text-center">মুছুন</th>
+                    <div className="overflow-x-auto" id="inventory-table-scroll">
+                      <table className="w-full text-[#A0A0A5] text-xs">
+                        <thead>
+                          <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                            <th className="py-2.5 px-4 text-left">SKU</th>
+                            <th className="py-2.5 px-4 text-left">Product Name</th>
+                            <th className="py-2.5 px-4 text-left">Category</th>
+                            <th className="py-2.5 px-4 text-right">Cost Rate (Buy)</th>
+                            <th className="py-2.5 px-4 text-right">Selling Price (Sell)</th>
+                            <th className="py-2.5 px-4 text-center">In-Stock Quantity</th>
+                            <th className="py-2.5 px-4 text-right border-l border-slate-850">Stock Valuation</th>
+                            <th className="py-2.5 px-4 text-center">Restock (+10)</th>
+                            <th className="py-2.5 px-4 text-center">Delete</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
+                          {filteredProducts.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
+                                No catalog stock items registered. Log new purchases or register items in the "Products" control screen.
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-                            {filteredProducts.length === 0 ? (
-                              <tr>
-                                <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
-                                  স্টকে কোনো পণ্য নিবন্ধিত নেই। বাম পাশের ফর্মটি পূরণ করুন।
-                                </td>
-                              </tr>
-                            ) : (
-                              filteredProducts.map((p) => {
-                                const isLowStock = p.stock <= 5;
-                                const stockWorth = p.stock > 0 ? (p.stock * p.buyPrice) : 0;
-                                return (
-                                  <tr key={p.id} className="hover:bg-slate-900/10 text-slate-300">
-                                    <td className="py-3 px-4 font-mono font-bold text-slate-500 text-[10px]">{p.sku}</td>
-                                    <td className="py-3 px-4 font-semibold text-white font-sans truncate max-w-[150px]" title={p.name}>{p.name}</td>
-                                    <td className="py-3 px-4 font-sans"><span className="text-[9px] font-medium bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full text-slate-400">{p.category}</span></td>
-                                    <td className="py-3 px-4 text-right">{businessInfo.currencySymbol} {p.buyPrice}</td>
-                                    <td className="py-3 px-4 text-right text-emerald-400 font-medium">{businessInfo.currencySymbol} {p.sellPrice}</td>
-                                    <td className="py-3 px-4 text-center">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLowStock ? 'bg-rose-500/15 text-rose-400 animate-pulse border border-rose-500/20' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'}`}>
-                                        {p.stock} {p.unit}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4 text-right text-white font-bold bg-slate-950/10 border-l border-slate-850">
-                                      {businessInfo.currencySymbol} {stockWorth.toLocaleString()}
-                                    </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <button
-                                        id={`quick-restock-${p.id}`}
-                                        onClick={() => incrementProductStock(p.id)}
-                                        className="px-2 py-1 text-[10px] font-bold text-slate-300 hover:text-emerald-450 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded hover:border-emerald-500 transition-colors cursor-pointer"
-                                      >
-                                        +10
-                                      </button>
-                                    </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <button
-                                        id={`delete-product-${p.id}`}
-                                        onClick={() => handleDeleteProduct(p.id, p.name)}
-                                        className="p-1 hover:bg-slate-900 rounded text-rose-400 hover:text-white transition-colors"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
+                          ) : (
+                            filteredProducts.map((p) => {
+                              const stockWorth = p.stock > 0 ? (p.stock * p.buyPrice) : 0;
+                              return (
+                                <tr key={p.id} className="hover:bg-slate-900/10 text-slate-300">
+                                  <td className="py-3 px-4 font-mono font-bold text-slate-500 text-[10px]">{p.sku}</td>
+                                  <td className="py-3 px-4 font-semibold text-white font-sans truncate max-w-[150px]" title={p.name}>{p.name}</td>
+                                  <td className="py-3 px-4 font-sans"><span className="text-[9px] font-medium bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full text-slate-400">{p.category}</span></td>
+                                  <td className="py-3 px-4 text-right">{businessInfo.currencySymbol} {p.buyPrice}</td>
+                                  <td className="py-3 px-4 text-right text-emerald-400 font-medium">{businessInfo.currencySymbol} {p.sellPrice}</td>
+                                  <td className="py-3 px-4 text-center">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                      {p.stock} {p.unit}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-white font-bold bg-slate-950/10 border-l border-slate-850">
+                                    {businessInfo.currencySymbol} {stockWorth.toLocaleString()}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <button
+                                      id={`quick-restock-${p.id}`}
+                                      onClick={() => incrementProductStock(p.id)}
+                                      className="px-2 py-1 text-[10px] font-bold text-slate-300 hover:text-emerald-450 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded hover:border-emerald-500 transition-colors cursor-pointer"
+                                    >
+                                      +10
+                                    </button>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <button
+                                      id={`delete-product-${p.id}`}
+                                      onClick={() => handleDeleteProduct(p.id, p.name)}
+                                      className="p-1 hover:bg-slate-900 rounded text-rose-400 hover:text-white transition-colors"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
                     </div>
 
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {stockSubTab === "supplier-bills" && (
                 /* SUPPLIER PURCHASES LEDGER WITH CASH CODE & DUE BILL TRACKING */
                 <div className="bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg animate-slideDown" id="supplier-purchases-subtab-rendered">
                   <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2" id="supplier-bills-ledger-top flex">
                     <div className="flex items-center gap-2">
                       <ShoppingBag className="w-4 h-4 text-amber-500" />
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">সাপ্লায়ারদের থেকে ক্রয় করা পণ্য ও পেমেন্ট ট্র্যাকিং লেজার</span>
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">Supplier Purchase & Credit Ledger</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-mono">মোট লেনদেন ভাউচার: {purchases.length} টি</span>
+                    <span className="text-[10px] text-slate-500 font-mono">Total Transaction Vouchers: {purchases.length}</span>
                   </div>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs text-slate-300">
                       <thead>
                         <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
-                          <th className="py-3 px-4">তারিখ (Date)</th>
-                          <th className="py-3 px-4">ভাউচার কোড (Invoice)</th>
-                          <th className="py-3 px-4">সাপ্লায়ার (Supplier)</th>
-                          <th className="py-3 px-4">ক্রয়কৃত পণ্য (Purchased Item)</th>
-                          <th className="py-3 px-4 text-right">পরিমাণ (Qty)</th>
-                          <th className="py-3 px-4 text-right">ক্রয় হার (Price)</th>
-                          <th className="py-3 px-4 text-right">মোট বিল (Total)</th>
-                          <th className="py-3 px-4 text-center">লেনদেন ধরণ / অবস্থা (Cash vs Due)</th>
-                          <th className="py-3 px-4 text-center">বকেয়া পরিশোধ করুন (Action)</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4">Invoice No.</th>
+                          <th className="py-3 px-4">Supplier</th>
+                          <th className="py-3 px-4">Purchased Product</th>
+                          <th className="py-3 px-4 text-right">Quantity (Qty)</th>
+                          <th className="py-3 px-4 text-right">Unit Price</th>
+                          <th className="py-3 px-4 text-right">Total Cost</th>
+                          <th className="py-3 px-4 text-center">Payment Status</th>
+                          <th className="py-3 px-4 text-center">Balance Settlement</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50 font-mono">
                         {purchases.length === 0 ? (
                           <tr>
                             <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
-                              কোনো সাপ্লায়ার পারচেজ ভাউচার রেকর্ড পাওয়া যায়নি। পেমেন্ট সহ ভাউচার তৈরি করতে বাম পাশের "Purchases" ট্যাবে গিয়ে ২ মিনিটের উইজার্ড ফ্লো ব্যবহার করুন।
+                              No supplier purchase vouchers found. Log a new product batch with custom payment terms inside the "Purchases" view tab.
                             </td>
                           </tr>
                         ) : (
@@ -3104,12 +3374,12 @@ export default function App() {
                                   {isCash ? (
                                     <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-sans font-bold text-emerald-400">
                                       <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
-                                      ক্যাশ পরিশোধিত
+                                      Paid Cash
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-sans font-bold text-amber-400">
                                       <span className="w-1 h-1 bg-amber-400 rounded-full" />
-                                      বকেয়া বকে (Due: {businessInfo.currencySymbol} {pur.dueAmount})
+                                      Credit Due (Due: {businessInfo.currencySymbol} {pur.dueAmount})
                                     </span>
                                   )}
                                 </td>
@@ -3122,10 +3392,10 @@ export default function App() {
                                       }}
                                       className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-200"
                                     >
-                                      বকেয়া পরিশোধ
+                                      Settle Due
                                     </button>
                                   ) : (
-                                    <span className="text-[10px] text-slate-500 font-sans italic">বকেয়া নেই</span>
+                                    <span className="text-[10px] text-slate-500 font-sans italic">Fully Settled</span>
                                   )}
                                 </td>
                               </tr>
@@ -3138,8 +3408,182 @@ export default function App() {
                 </div>
               )}
 
+              {/* BRAND NEW SUPPLIER ITEMS DUE LIST & STEPWISE REPAYMENT */}
+              {stockSubTab === "due-list" && (
+                <div className="space-y-6 animate-slideDown" id="credit-due-list-sec">
+                  <div className="p-5 bg-gradient-to-r from-slate-955 to-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-rose-550" />
+                        Credit-Based Purchases Due List
+                      </h4>
+                      <p className="text-[10px] text-slate-400 max-w-xl">
+                        Tracks items purchased on credit. When a portion of the debt is repaid, the due list reflects the exact paid versus remaining quantities alongside settled visual colors.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2.5 text-xs font-mono">
+                      <div className="bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-xl text-rose-400 flex items-center gap-1.5 shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                        <span>Unsettled: {purchases.filter(p => (p.dueAmount || 0) > 0).length}</span>
+                      </div>
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-emerald-400 flex items-center gap-1.5 shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-450" />
+                        <span>Fully Paid: {purchases.filter(p => (p.originallyCredit || p.dueAmount > 0 || (p.totalAmount > (p.cashPaid || 0))) && (p.dueAmount || 0) === 0).length}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg" id="due-items-registry-wrapper">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300 font-mono">
+                        <thead>
+                          <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                            <th className="py-3 px-4">Invoice No</th>
+                            <th className="py-3 px-4">Product Name</th>
+                            <th className="py-3 px-4">Supplier / Vendor</th>
+                            <th className="py-3 px-4 text-center">Batch Bought</th>
+                            <th className="py-3 px-4 text-center">Stepwise Units Paid Progress</th>
+                            <th className="py-3 px-4 text-right">Unit Price</th>
+                            <th className="py-3 px-4 text-right">Total Debit</th>
+                            <th className="py-3 px-4 text-right">Cash Unpaid</th>
+                            <th className="py-3 px-4 text-center">Outstanding Status</th>
+                            <th className="py-3 px-4 text-center">Dues Repay Adjustment</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/50">
+                          {(() => {
+                            const creditPurchases = purchases.filter(p => p.originallyCredit || (p.dueAmount || 0) > 0 || (p.totalAmount > (p.cashPaid || 0)));
+                            if (creditPurchases.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={10} className="py-16 text-center text-slate-500 font-sans">
+                                    No recorded credit-based purchases. Start logging purchase orders under credit payments on "Purchases" to monitor outstanding items.
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return creditPurchases.map((pur) => {
+                              const due = pur.dueAmount || 0;
+                              const isFullyPaid = due <= 0;
+                              const qty = pur.quantity || 1;
+                              const unitCost = pur.buyPrice || 0;
+
+                              // Calculate equivalent paid and due items Qty
+                              const paidAmt = pur.cashPaid || 0;
+                              const eqPaidQty = Math.min(qty, parseFloat((paidAmt / unitCost).toFixed(2)));
+                              const eqDueQty = Math.max(0, parseFloat((qty - eqPaidQty).toFixed(2)));
+
+                              return (
+                                <tr key={pur.id} className={`hover:bg-slate-900/10 text-slate-300 ${isFullyPaid ? 'bg-emerald-950/5' : ''}`}>
+                                  <td className="py-4 px-4 text-emerald-400 font-bold">{pur.invoiceNo || "N/A"}</td>
+                                  <td className="py-4 px-4 font-sans text-white font-semibold">
+                                    {pur.productName || "Unknown Product"}
+                                    <span className="block text-[9px] font-mono text-slate-500 font-normal mt-0.5">Date: {pur.date}</span>
+                                  </td>
+                                  <td className="py-4 px-4 font-sans text-slate-300">{pur.supplierName || "Walk-in Supplier"}</td>
+                                  <td className="py-4 px-4 text-center text-slate-400 font-black">{qty} units</td>
+                                  <td className="py-4 px-4 text-center font-sans mr-2">
+                                    <div className="flex flex-col items-center gap-1">
+                                      <div className="flex justify-between w-28 text-[9px] text-slate-400 font-mono font-bold">
+                                        <span className="text-emerald-400">Paid: {eqPaidQty}</span>
+                                        <span className="text-rose-455">Due: {eqDueQty}</span>
+                                      </div>
+                                      <div className="w-28 h-2 bg-slate-950/80 rounded-full overflow-hidden border border-slate-900 flex">
+                                        <div className="bg-emerald-500 h-full" style={{ width: `${(eqPaidQty / qty) * 100}%` }} />
+                                        <div className="bg-rose-500 h-full animate-pulse" style={{ width: `${(eqDueQty / qty) * 100}%` }} />
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4 text-right text-slate-400">{businessInfo.currencySymbol} {unitCost}</td>
+                                  <td className="py-4 px-4 text-right text-slate-300">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</td>
+                                  <td className="py-4 px-4 text-right font-bold text-rose-455">{businessInfo.currencySymbol} {due.toLocaleString()}</td>
+                                  <td className="py-4 px-4 text-center font-sans">
+                                    {isFullyPaid ? (
+                                      <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full text-[9px] font-bold text-emerald-400 transition-colors">
+                                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+                                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute" />
+                                        <span>Settled Green</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1 rounded-full text-[9px] font-bold text-rose-455 transition-colors animate-pulse">
+                                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
+                                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full absolute" />
+                                        <span>Outstanding Red</span>
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-4 px-4 text-center font-sans lg:min-w-[190px]">
+                                    {isFullyPaid ? (
+                                      <span className="text-[10px] text-emerald-500 font-bold font-mono">Completed Settlement &nbsp;✔</span>
+                                    ) : (
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        <button
+                                          onClick={() => {
+                                            const payAmt = Math.min(due, unitCost);
+                                            setPurchases(prev => prev.map(item => {
+                                              if (item.id === pur.id) {
+                                                const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
+                                                return {
+                                                  ...item,
+                                                  cashPaid: nextPaid,
+                                                  dueAmount: Math.max(0, item.totalAmount - nextPaid)
+                                                };
+                                              }
+                                              return item;
+                                            }));
+                                            triggerNotification(`Settled cost for 1 Unit (${businessInfo.currencySymbol} ${payAmt}) toward ${pur.productName}!`, "success");
+                                          }}
+                                          className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-emerald-500/5 duration-150 font-sans"
+                                          title="Repay cost of exactly 1 item"
+                                        >
+                                          +1 Unit Cost
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            const customInput = prompt(`Enter cash repayment in ${businessInfo.currencySymbol} (Active Debt: ${businessInfo.currencySymbol}${due}):`);
+                                            if (customInput === null) return;
+                                            const amt = parseFloat(customInput);
+                                            if (isNaN(amt) || amt <= 0) {
+                                              triggerNotification("Please enter a valid monetary amount!", "error");
+                                              return;
+                                            }
+                                            const payAmt = Math.min(due, amt);
+                                            setPurchases(prev => prev.map(item => {
+                                              if (item.id === pur.id) {
+                                                const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
+                                                return {
+                                                  ...item,
+                                                  cashPaid: nextPaid,
+                                                  dueAmount: Math.max(0, item.totalAmount - nextPaid)
+                                                };
+                                              }
+                                              return item;
+                                            }));
+                                            triggerNotification(`Stepwise repayment of ${businessInfo.currencySymbol} ${payAmt} recorded successfully!`, "success");
+                                          }}
+                                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-150 font-sans"
+                                          title="Enter custom money amount"
+                                        >
+                                          Custom Repay
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
+
 
           {/* -----------------------------------------------------------------
               VIEW 3: LEDGER INVOICING ACCOUNTING & DUE COLLECTOR
@@ -4409,6 +4853,525 @@ export default function App() {
 
                 <div className="space-y-4">
                   
+                  {/* BRAND NEW: SEPARATE FIELD FOR INVOICES - SEVEN PREMIUM TEMPLATE SELECTION CARD GRID */}
+                  <div className="space-y-3 pt-2" id="settings-invoice-template-selection-container">
+                    <label className="text-[10px] font-black uppercase tracking-widest font-mono text-slate-400 pl-1 block flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                      SELECT INVOICE DESIGN & LAYOUT TEMPLATE (Choose 1 of 7 Designs)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" id="invoice-templates-grid">
+                      
+                      {/* Template 1: Classic Retail */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("classic")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "classic"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 01</span>
+                            <span className="text-[9px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded uppercase font-mono">Retail Default</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Classic Retail Standard</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Double-bordered structural layout with solid deep charcoal headers. Standard format ideal for retail showrooms.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "classic" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "classic" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "classic" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Template 2: Modern Minimalist */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("modern_minimal")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "modern_minimal"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 02</span>
+                            <span className="text-[9px] bg-[#00E676]/10 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Clean Space</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Clean Tech Minimalist</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Sophisticated layout emphasizing clean margins, light teal separators, plenty of white space, and zero bulky boxes.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "modern_minimal" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "modern_minimal" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "modern_minimal" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Template 3: Executive Premium Navy */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("premium_navy")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "premium_navy"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 03</span>
+                            <span className="text-[9px] bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Executive</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Premium Navy Executive</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Solid Deep Navy blue head bars, elegant subtle underline ribbons, and clean grid separators. Promotes unmatched corporate prestige.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "premium_navy" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "premium_navy" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "premium_navy" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Template 4: Cosmic Dark Elite */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("cosmic_dark")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "cosmic_dark"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 04</span>
+                            <span className="text-[9px] bg-purple-500/10 text-purple-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Sci-Fi Bold</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Cosmic Dark Elite</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Futuristic high-contrast tech look. Features bold dark-graphite background boxes and bright lime-accent inline borders.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "cosmic_dark" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "cosmic_dark" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "cosmic_dark" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Template 5: Vintage Editorial */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("vintage_editorial")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "vintage_editorial"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 05</span>
+                            <span className="text-[9px] bg-amber-500/10 text-amber-550 font-bold px-2 py-0.5 rounded uppercase font-mono">Luxury Serif</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Vintage Editorial Serif</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Warm literary slate tones. Features beautiful thin rules, double dashed spacers, and elegant classic serif headings.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "vintage_editorial" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "vintage_editorial" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "vintage_editorial" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Template 6: Bold Accent Emerald */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("bold_emerald")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "bold_emerald"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 06</span>
+                            <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Fresh Green</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Vibrant Emerald Accent</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Fresh, striking, and energetic. Framed by a thick emerald top band and matching green table headers & payment status pills.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "bold_emerald" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "bold_emerald" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "bold_emerald" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Template 7: Compact POS Receipt */}
+                      <div 
+                        onClick={() => setTempInvoiceTemplate("compact_pos")}
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
+                          tempInvoiceTemplate === "compact_pos"
+                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 07</span>
+                            <span className="text-[9px] bg-yellow-500/10 text-yellow-500 font-bold px-2 py-0.5 rounded uppercase font-mono">Thermal POS</span>
+                          </div>
+                          <h5 className="text-xs font-black text-white">Compact Thermal Ticket</h5>
+                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
+                            Narrow receipts format optimized with high-density spacing. Compact font sizes and light dashed separators. Perfect for thermal desk rolls.
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                            tempInvoiceTemplate === "compact_pos" ? "border-[#00E676]" : "border-slate-700"
+                          }`}>
+                            {tempInvoiceTemplate === "compact_pos" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                          </div>
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {tempInvoiceTemplate === "compact_pos" ? "Activated" : "Select Style"}
+                          </span>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* INVOICE TEMPLATE LIVE DEMO LAYOUT REPRESENTATION */}
+                  <div className="space-y-4 p-5 bg-[#121214] border border-slate-800 rounded-xl" id="invoice-template-live-demo-preview">
+                    <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-200">
+                          Live PDF Design Blueprint Preview (Demo Mockup)
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-mono text-slate-500 uppercase font-black">
+                        Simulated Document Display
+                      </span>
+                    </div>
+
+                    {/* DYNAMIC DESIGN CONTAINER */}
+                    {(() => {
+                      const styles = (() => {
+                        switch (tempInvoiceTemplate) {
+                          case "modern_minimal":
+                            return {
+                              container: "bg-white text-slate-900 border-2 border-teal-500/20 rounded-xl font-sans",
+                              topAccent: "h-1 bg-gradient-to-r from-emerald-400 to-teal-500",
+                              header: "pb-4 border-b border-teal-100",
+                              primaryText: "text-teal-600 font-sans font-bold",
+                              secondaryText: "text-slate-500 text-xs",
+                              accentLine: "border-teal-100",
+                              tableHeader: "bg-teal-50 text-teal-900 text-xs font-bold",
+                              tableRow: "border-b border-slate-100 text-slate-700",
+                              statusBadge: "border border-emerald-500 text-emerald-600 font-bold text-[10px] uppercase rounded-full px-2 py-0.5",
+                              totalsBox: "border border-teal-200/60 bg-teal-50/20 text-slate-800 p-3 rounded-lg",
+                              sigLine: "border-teal-200",
+                              fontFamily: "font-sans",
+                              sigColor: "text-slate-500"
+                            };
+                          case "premium_navy":
+                            return {
+                              container: "bg-[#FAFCFF] text-slate-1000 border border-blue-200 rounded-xl font-sans",
+                              topAccent: "h-2 bg-blue-900",
+                              header: "pb-4 border-b border-blue-100 bg-blue-50/50 p-4 rounded-t-lg",
+                              primaryText: "text-blue-900 font-sans font-black tracking-normal",
+                              secondaryText: "text-slate-500 text-xs",
+                              accentLine: "border-blue-200",
+                              tableHeader: "bg-blue-900 text-white text-xs font-bold",
+                              tableRow: "border-b border-blue-50 text-slate-700",
+                              statusBadge: "bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase rounded-lg px-2.5 py-0.5",
+                              totalsBox: "border-2 border-blue-900 bg-blue-50/30 text-slate-800 p-3",
+                              sigLine: "border-blue-900",
+                              fontFamily: "font-sans",
+                              sigColor: "text-slate-650"
+                            };
+                          case "cosmic_dark":
+                            return {
+                              container: "bg-[#18181B] text-zinc-300 border border-zinc-800 rounded-xl font-mono",
+                              topAccent: "h-1 bg-[#00E676]",
+                              header: "pb-3 border-b border-zinc-800 p-3 bg-zinc-900/60",
+                              primaryText: "text-[#00E676] font-mono font-bold tracking-widest",
+                              secondaryText: "text-zinc-500 text-[11px]",
+                              accentLine: "border-[#00E676]/35",
+                              tableHeader: "bg-zinc-800 text-zinc-100 text-xs font-mono tracking-tight",
+                              tableRow: "border-b border-zinc-900 text-zinc-300",
+                              statusBadge: "border border-[#00E676] text-[#00E676] text-[10px] font-bold rounded px-1.5 py-0.5 bg-[#00E676]/5",
+                              totalsBox: "border border-zinc-800 bg-zinc-900/80 text-zinc-300 p-3",
+                              sigLine: "border-zinc-750",
+                              fontFamily: "font-mono",
+                              sigColor: "text-zinc-500"
+                            };
+                          case "vintage_editorial":
+                            return {
+                              container: "bg-[#FEFBF6] text-amber-950 border border-amber-200 rounded-xl font-serif",
+                              topAccent: "h-0.5 bg-amber-800 border-b border-amber-800",
+                              header: "pb-4 border-b-2 border-double border-amber-300",
+                              primaryText: "text-amber-800 font-serif font-black italic tracking-wide text-lg",
+                              secondaryText: "text-amber-900/60 text-xs",
+                              accentLine: "border-amber-305",
+                              tableHeader: "bg-[#FEF3C7] text-amber-900 text-xs font-serif font-bold italic border-b border-amber-300",
+                              tableRow: "border-b border-amber-100 text-amber-950",
+                              statusBadge: "border border-amber-800 text-amber-800 font-serif font-black text-[10px] uppercase px-2 py-0.5 whitespace-nowrap",
+                              totalsBox: "border border-amber-300 bg-amber-50/50 text-amber-900 p-3",
+                              sigLine: "border-amber-800",
+                              fontFamily: "font-serif",
+                              sigColor: "text-amber-800"
+                            };
+                          case "bold_emerald":
+                            return {
+                              container: "bg-white text-slate-900 border border-emerald-500 rounded-xl font-sans",
+                              topAccent: "h-2.5 bg-emerald-700",
+                              header: "pb-4 border-b border-emerald-100 bg-emerald-50/20 p-3",
+                              primaryText: "text-emerald-700 font-sans font-black tracking-tight",
+                              secondaryText: "text-slate-600 text-xs",
+                              accentLine: "border-emerald-200",
+                              tableHeader: "bg-emerald-700 text-white text-xs font-bold",
+                              tableRow: "border-b border-slate-100 text-slate-800",
+                              statusBadge: "bg-emerald-600 text-white font-bold text-[10px] uppercase rounded px-2 py-0.5",
+                              totalsBox: "border-l-4 border-emerald-700 bg-slate-50 text-slate-800 p-3 rounded-r-lg",
+                              sigLine: "border-emerald-700",
+                              fontFamily: "font-sans",
+                              sigColor: "text-emerald-800"
+                            };
+                          case "compact_pos":
+                            return {
+                              container: "bg-white text-slate-950 border border-dashed border-slate-400 p-3 rounded font-mono max-w-sm mx-auto shadow-sm",
+                              topAccent: "border-t border-dashed border-slate-400",
+                              header: "text-center pb-3 border-b border-dashed border-slate-300",
+                              primaryText: "text-slate-900 font-mono font-bold tracking-tighter text-medium uppercase",
+                              secondaryText: "text-slate-500 text-[10px]",
+                              accentLine: "border-dashed border-b border-slate-300",
+                              tableHeader: "bg-slate-100 text-slate-800 text-[10px] font-bold border-y border-dashed border-slate-400 py-1",
+                              tableRow: "border-b border-dashed border-slate-200 text-slate-800 text-[10px]",
+                              statusBadge: "border border-slate-950 text-slate-950 text-[9px] font-mono font-semibold uppercase px-1 py-0.5",
+                              totalsBox: "border border-dashed border-slate-400 bg-slate-50 p-2.5",
+                              sigLine: "border-dashed border-slate-400",
+                              fontFamily: "font-mono",
+                              sigColor: "text-slate-600"
+                            };
+                          default: // classic
+                            return {
+                              container: "bg-slate-50 text-slate-900 border border-slate-200 rounded-xl font-sans",
+                              topAccent: "h-1 bg-slate-800",
+                              header: "pb-4 border-b border-slate-200 p-3",
+                              primaryText: "text-slate-900 font-sans font-extrabold tracking-tight",
+                              secondaryText: "text-slate-500 text-xs",
+                              accentLine: "border-slate-200",
+                              tableHeader: "bg-slate-900 text-white text-xs font-bold",
+                              tableRow: "border-b border-slate-200 text-slate-800",
+                              statusBadge: "bg-slate-900 text-white font-bold text-[10px] uppercase rounded px-2.5 py-0.5",
+                              totalsBox: "border border-slate-900 bg-slate-100 text-slate-900 p-3",
+                              sigLine: "border-slate-900",
+                              fontFamily: "font-sans",
+                              sigColor: "text-slate-900"
+                            };
+                        }
+                      })();
+
+                      return (
+                        <div className={`p-4 border rounded-xl overflow-hidden transition-all duration-300 ${styles.container}`}>
+                          {/* Top Accent line strip */}
+                          <div className={styles.topAccent} />
+
+                          {/* Inner Content spacing */}
+                          <div className="space-y-4 pt-3 text-left">
+                            
+                            {/* Brand and Metadata Header block */}
+                            <div className={`flex flex-col sm:flex-row justify-between gap-3 ${styles.header}`}>
+                              <div>
+                                <h4 className={`text-base tracking-tight ${styles.primaryText}`}>
+                                  BARAKAH SMART DEALER
+                                </h4>
+                                <p className={styles.secondaryText}>
+                                  Mirpur Showroom Complex, Dhaka, Bangladesh
+                                </p>
+                                <p className={styles.secondaryText}>
+                                  Phone: +880 1987-654321 | Bin: 00987654-TR
+                                </p>
+                              </div>
+                              <div className="sm:text-right space-y-1 sm:min-w-[150px]">
+                                <div className={`text-xs font-bold ${styles.primaryText.split(" ")[0]}`}>
+                                  INVOICE #: INV-2026-6202
+                                </div>
+                                <p className={styles.secondaryText}>Issue Date: 03/06/2026</p>
+                                <p className={styles.secondaryText}>Salesperson: Karim Manager</p>
+                                <p className={styles.secondaryText}>Mode: CASH / MOB-PAY</p>
+                                <div className="pt-1 flex sm:justify-end">
+                                  <span className={styles.statusBadge}>
+                                    FULLY PAID
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Client particulars bill to container */}
+                            <div className={`p-3 bg-opacity-70 border rounded ${styles.accentLine} bg-neutral-200/5`}>
+                              <div className={`text-[9px] font-mono tracking-wider text-slate-400 uppercase`}>
+                                BILL TO (CUSTOMER BIOGRAPHY TYPE):
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                                <div>
+                                  <div className="text-xs font-black">Mst. Sabrina Rahman</div>
+                                  <div className={styles.secondaryText}>Email: sabrina@dhaka.net</div>
+                                </div>
+                                <div className="sm:text-right">
+                                  <div className={styles.secondaryText}>Phone: +880 1712-345678</div>
+                                  <div className={styles.secondaryText}>Addr: House 12, Sector 10, Uttara, Dhaka</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Itemized list of values */}
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className={styles.tableHeader}>
+                                    <th className="p-1 px-2 text-[10px] w-8">SL</th>
+                                    <th className="p-1 px-2 text-[10px]">Item Details / SKU</th>
+                                    <th className="p-1 px-2 text-[10px] text-center w-12">Qty</th>
+                                    <th className="p-1 px-2 text-[10px] text-right w-24">Unit Rate</th>
+                                    <th className="p-1 px-2 text-[10px] text-right w-28">Total BDT</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr className={styles.tableRow}>
+                                    <td className="p-1.5 px-2 text-xs font-mono">01</td>
+                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-800">
+                                      Walton Primo H10 (Elite Black, 8/128)
+                                    </td>
+                                    <td className="p-1.5 px-2 text-xs text-center font-mono">1</td>
+                                    <td className="p-1.5 px-2 text-xs text-right font-mono">14,500.00</td>
+                                    <td className="p-1.5 px-2 text-xs text-right font-mono">14,500.00</td>
+                                  </tr>
+                                  <tr className={styles.tableRow}>
+                                    <td className="p-1.5 px-2 text-xs font-mono">02</td>
+                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-800">
+                                      Gree 1.5 Ton Split AC (Inverter-Extreme)
+                                    </td>
+                                    <td className="p-1.5 px-2 text-xs text-center font-mono">1</td>
+                                    <td className="p-1.5 px-2 text-xs text-right font-mono">65,000.00</td>
+                                    <td className="p-1.5 px-2 text-xs text-right font-mono">65,000.00</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Summary Calculations and Signatures */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                              {/* Left column declaration wordings */}
+                              <div className="space-y-2">
+                                <div className={`p-2 border rounded ${styles.accentLine} bg-slate-500/5`}>
+                                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider font-mono">
+                                    PRONOUNCEMENT (TOTAL BILL IN WORDS):
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-605 block mt-0.5">
+                                    Seventy-Seven Thousand BDT Only.
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 space-y-0.5 font-sans leading-relaxed">
+                                  <strong className="block text-slate-500 uppercase text-[9px] tracking-wider">OFFICIAL WARRANTY TERMS:</strong>
+                                  <div>• 1 Year Parts & Service Guarantee.</div>
+                                  <div>• Sold products can be serviced, no cash refund.</div>
+                                </div>
+                              </div>
+
+                              {/* Right column calculated totals */}
+                              <div>
+                                <div className={`space-y-1.5 rounded p-2.5 ${styles.totalsBox}`}>
+                                  <div className="flex justify-between text-xs text-slate-500">
+                                    <span>Itemized Sub-Total:</span>
+                                    <span className="font-mono">79,500.00 BDT</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs text-slate-500">
+                                    <span>Special Discount:</span>
+                                    <span className="font-mono">-2,500.00 BDT</span>
+                                  </div>
+                                  <div className={`flex justify-between text-xs font-black border-t pt-1.5 ${styles.accentLine}`}>
+                                    <span>GRAND TOTAL BILL:</span>
+                                    <span className="font-mono text-xs">77,000.00 BDT</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs text-emerald-600 font-bold">
+                                    <span>Total Cash Received:</span>
+                                    <span className="font-mono">77,000.00 BDT</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs text-slate-500">
+                                    <span>Outstanding Dues:</span>
+                                    <span className="font-mono">0.00 BDT</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Stamp and Authorization Sigs */}
+                            <div className="grid grid-cols-2 gap-4 pt-6 text-center">
+                              <div className="space-y-1">
+                                <span className="border-b border-slate-300 block w-full mx-auto max-w-[140px] pt-4" />
+                                <span className={`text-[9px] font-extrabold uppercase tracking-widest block font-mono ${styles.sigColor}`}>
+                                  CUSTOMER SIGN-OFF
+                                </span>
+                              </div>
+                              <div className="space-y-1">
+                                <span className={`border-b block w-full mx-auto max-w-[140px] pt-3 ${styles.sigLine}`} />
+                                <span className={`text-[9px] font-extrabold uppercase tracking-widest block font-mono ${styles.sigColor}`}>
+                                  AUTHORIZED BRAND SIGN
+                                </span>
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <hr className="border-slate-850 my-4" />
+
                   {/* File Upload / Image Picker */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1 block">Showroom Branding Logo</label>
@@ -5296,19 +6259,22 @@ export default function App() {
       )}
 
       {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1E1E24]/95 backdrop-blur-md border-t border-[#2A2A32] pb-safe flex items-center justify-around h-16 shadow-2xl" id="mobile-bottom-navbar">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/90 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe flex items-center justify-around h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
         {/* POS Button */}
         <button
           onClick={() => {
             setActiveTab("pos");
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
-            activeTab === "pos" ? "text-[#00E676] font-bold" : "text-[#A0A0A5] hover:text-white"
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "pos" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
         >
-          <ShoppingCart className="w-5 h-5 mb-1" />
-          <span className="text-[10px] font-medium">Sales / POS</span>
+          <ShoppingCart className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide">POS</span>
+          {activeTab === "pos" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
         </button>
 
         {/* Dashboard Button */}
@@ -5321,12 +6287,15 @@ export default function App() {
             }
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
-            activeTab === "dashboard" ? "text-[#00E676] font-bold" : "text-[#A0A0A5] hover:text-white"
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "dashboard" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
         >
-          <LayoutDashboard className="w-5 h-5 mb-1" />
-          <span className="text-[10px] font-medium font-sans">Dashboard</span>
+          <LayoutDashboard className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">Dashboard</span>
+          {activeTab === "dashboard" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
         </button>
 
         {/* Transactions & Ledger */}
@@ -5339,12 +6308,15 @@ export default function App() {
             }
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
-            activeTab === "ledger" ? "text-[#00E676] font-bold" : "text-[#A0A0A5] hover:text-white"
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "ledger" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
         >
-          <FileText className="w-5 h-5 mb-1" />
-          <span className="text-[10px] font-medium font-sans">Transactions & Ledger</span>
+          <FileText className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">Ledger</span>
+          {activeTab === "ledger" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
         </button>
 
         {/* AI Insights */}
@@ -5354,24 +6326,30 @@ export default function App() {
               setActiveTab("insights");
               setIsMobileMenuOpen(false);
             }}
-            className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
-              activeTab === "insights" ? "text-amber-400 font-bold" : "text-[#A0A0A5] hover:text-white"
+            className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+              activeTab === "insights" ? "text-amber-400 scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
             }`}
           >
-            <Sparkle className="w-5 h-5 mb-1 animate-pulse" />
-            <span className="text-[10px] font-medium">AI Insights</span>
+            <Sparkle className="w-[18px] h-[18px] mb-1 animate-pulse" />
+            <span className="text-[9px] font-semibold tracking-wide">AI</span>
+            {activeTab === "insights" && (
+              <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
+            )}
           </button>
         )}
 
-        {/* Menu Button */}
+        {/* Menu/More Button */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
-            isMobileMenuOpen ? "text-[#00E676]" : "text-[#A0A0A5] hover:text-white"
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            isMobileMenuOpen ? "text-[#00E676] scale-105" : "text-[#94a3b8] hover:text-white"
           }`}
         >
-          <Menu className="w-5 h-5 mb-1" />
-          <span className="text-[10px] font-medium font-sans">More</span>
+          <Menu className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">More</span>
+          {isMobileMenuOpen && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676]" />
+          )}
         </button>
       </nav>
 

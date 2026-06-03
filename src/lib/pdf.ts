@@ -97,6 +97,92 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     }
   }
 
+  // 1. CHOOSE CORRESPONDING DESIGN VARIABLES
+  const template = businessInfo.selectedInvoiceTemplate || "classic";
+
+  let primaryColor: [number, number, number] = [15, 23, 42];        // slate-900 (Main headings/accents)
+  let secondaryColor: [number, number, number] = [71, 85, 105];     // slate-600 (Meta text/labels)
+  let tableHeadBg: [number, number, number] = [15, 23, 42];         // Charcoal block headers default
+  let tableHeadTextColor: [number, number, number] = [255, 255, 255];
+  let accentLineColor: [number, number, number] = [226, 232, 240];  // slate-200 divider line
+  let billToBg: [number, number, number] = [248, 250, 252];         // slate-50 background Default
+  let billToBorderColor: [number, number, number] = [226, 232, 240];
+  let totalsBorderColor: [number, number, number] = [15, 23, 42];    // slate-900 black border
+  let totalsBg: [number, number, number] = [250, 250, 250];         // neutral white totals box
+
+  let isVintageEditorial = false;
+  let isCompactPOS = false;
+
+  if (template === "modern_minimal") {
+    // Elegant soft teal accents, ample whitespace, border columns
+    primaryColor = [13, 148, 136];        // Teal-600
+    secondaryColor = [100, 116, 139];     // Slate-500
+    tableHeadBg = [241, 245, 249];        // Slate-100 neutral
+    tableHeadTextColor = [15, 23, 42];    // Charcoal text
+    accentLineColor = [204, 251, 241];    // Teal-100 very light teal line
+    billToBg = [255, 255, 255];           // Pure white
+    billToBorderColor = [204, 251, 241];  // Teal-100 border
+    totalsBorderColor = [20, 184, 166];   // Teal-500 border
+    totalsBg = [255, 255, 255];
+  } else if (template === "premium_navy") {
+    // Corporate Navy Blue and Golden highlights
+    primaryColor = [30, 58, 138];         // Navy Blue
+    secondaryColor = [71, 85, 105];       // Slate-600
+    tableHeadBg = [30, 58, 138];          // Navy head block
+    tableHeadTextColor = [255, 255, 255];
+    accentLineColor = [219, 234, 254];    // Blue-100 line divider
+    billToBg = [240, 246, 255];           // Blue-50 back block
+    billToBorderColor = [191, 219, 254];  // Blue-200 border
+    totalsBorderColor = [30, 58, 138];    // Navy border totals
+    totalsBg = [248, 250, 252];
+  } else if (template === "cosmic_dark") {
+    // Intense futuristic Tech-Theme
+    primaryColor = [24, 24, 27];          // Zinc-900 / Dark black graphite
+    secondaryColor = [113, 113, 122];     // Zinc-500
+    tableHeadBg = [39, 39, 42];           // Zinc-800
+    tableHeadTextColor = [255, 255, 255];
+    accentLineColor = [0, 230, 118];      // High-contrast Lime green
+    billToBg = [244, 244, 245];           // Zinc-100
+    billToBorderColor = [228, 228, 231];  // Zinc-200 border
+    totalsBorderColor = [24, 24, 27];     // zinc-900 border
+    totalsBg = [250, 250, 250];
+  } else if (template === "vintage_editorial") {
+    // Warm Sepia/Amber, elegant tracking typography
+    primaryColor = [146, 64, 14];         // Amber-800
+    secondaryColor = [115, 115, 115];     // Neutral gray-500
+    tableHeadBg = [254, 243, 199];        // Amber-100 warm tint
+    tableHeadTextColor = [146, 64, 14];   // Amber-800 text
+    accentLineColor = [245, 158, 11];     // Amber-500 rule divider
+    billToBg = [255, 255, 255];           // Pure white
+    billToBorderColor = [252, 211, 77];   // Amber-300 border
+    totalsBorderColor = [146, 64, 14];
+    totalsBg = [255, 255, 255];
+    isVintageEditorial = true;
+  } else if (template === "bold_emerald") {
+    // Vibrant fresh eco-friendly emerald green
+    primaryColor = [4, 120, 87];          // Emerald-700
+    secondaryColor = [55, 65, 81];        // Gray-700
+    tableHeadBg = [4, 120, 87];           // Emerald forest head block
+    tableHeadTextColor = [255, 255, 255];
+    accentLineColor = [167, 243, 208];    // Emerald-100 divider
+    billToBg = [236, 253, 245];           // Emerald-50 light background
+    billToBorderColor = [167, 243, 208];  // Emerald-200 border
+    totalsBorderColor = [4, 120, 87];     // Emerald border
+    totalsBg = [248, 250, 252];
+  } else if (template === "compact_pos") {
+    // Mini thermal style receipt simulation
+    primaryColor = [15, 23, 42];
+    secondaryColor = [100, 116, 139];
+    tableHeadBg = [248, 250, 252];        // Light ash
+    tableHeadTextColor = [15, 23, 42];
+    accentLineColor = [203, 213, 225];
+    billToBg = [255, 255, 255];
+    billToBorderColor = [226, 232, 240];
+    totalsBorderColor = [15, 23, 42];
+    totalsBg = [255, 255, 255];
+    isCompactPOS = true;
+  }
+
   let formattedDate = "N/A";
   let formattedTime = "";
   try {
@@ -124,6 +210,29 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let logoHeight = 24;
   let hasLogoDrawn = false;
 
+  // Template-specific visual adjustments for logo layout
+  if (template === "bold_emerald") {
+    // Solid energetic emerald badge behind brand logos
+    doc.setFillColor(4, 120, 87);
+    doc.rect(15, 12, 180, 2.5, 'F'); // Emerald Horizontal top bar strip
+    identityY = 21;
+    metaY = 21;
+  } else if (template === "premium_navy") {
+    // Top border accent navy
+    doc.setFillColor(30, 58, 138);
+    doc.rect(15, 12, 180, 2, 'F');
+    identityY = 20;
+    metaY = 20;
+  } else if (template === "vintage_editorial") {
+    // Top double rule
+    doc.setDrawColor(146, 64, 14);
+    doc.setLineWidth(0.4);
+    doc.line(15, 13, 195, 13);
+    doc.line(15, 14.5, 195, 14.5);
+    identityY = 21;
+    metaY = 21;
+  }
+
   if (hasLogoImg && companyLogoStr) {
     try {
       doc.addImage(companyLogoStr, 'PNG', brandX, identityY, logoWidth, logoHeight);
@@ -133,12 +242,13 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     }
   } else if (hasLogoTextSymbol && companyLogoStr) {
     try {
-      doc.setFillColor(241, 245, 249); // slate-100 placeholder backplate
+      // Use design theme color for the circular backplate
+      doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
       doc.circle(brandX + 11, identityY + 11, 11, 'F');
       
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(14 * sizeFactor);
-      doc.setTextColor(15, 23, 42); // slate-900
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       doc.text(companyLogoStr, brandX + 11, identityY + 14.5, { align: 'center' });
       hasLogoDrawn = true;
     } catch (e) {
@@ -157,10 +267,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let singleLineTitle = normBiz;
   if (hasLogoLongText) {
     if (isSimilar) {
-      // If titles are similar, prioritize the user-specified custom logo name directly to avoid duplication.
       singleLineTitle = normLogo;
     } else {
-      // If titles are completely different, place them neatly in line in a single coherent flow
       singleLineTitle = `${normLogo} | ${normBiz}`;
     }
   }
@@ -174,15 +282,15 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     doc.setFontSize(titleFontSize);
   }
   
-  doc.setTextColor(15, 23, 42); // slate-900
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   let titleY = identityY + 5.5;
   doc.text(singleLineTitle, infoX, titleY);
   titleY = titleY + 6.5 * sizeFactor;
 
   // Address, phone, email & tax register
-  doc.setFont(pdfFontName, "normal");
+  doc.setFont(pdfFontName, isVintageEditorial ? "bold" : "normal");
   doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(71, 85, 105); // slate-600
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
 
   let textY = Math.max(titleY + 1.5, identityY + 11);
   const addressLines = doc.splitTextToSize(businessInfo.address || "Showroom Address, Dhaka", maxTitleWidth);
@@ -205,19 +313,19 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let brandYEnd = Math.max(textY, identityY + logoHeight + 4);
 
   // Render Right Column: Invoice Metadata (Invoice No, Date, Salesperson, Payment Status)
-  let rightY = identityY + 5.5; // Aligns perfectly on the horizontal axis with Showroom Title top edge
+  let rightY = metaY + 5.5; // Aligns perfectly with the horizontal axis
 
-  // Invoice Number (Significantly Larger & Bold)
+  // Invoice Number (Significantly Larger & Bold - Colored by theme)
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(11 * sizeFactor);
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.text(`INVOICE #: ${transaction.invoiceNo}`, metaX, rightY);
   rightY += 6;
 
   // Date and Time
   doc.setFont(pdfFontName, "normal");
   doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(100, 116, 139); // slate-500
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
   doc.text(`Issue Date: ${formattedDate}`, metaX, rightY);
   rightY += 4.5;
   if (formattedTime) {
@@ -233,64 +341,128 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.text(`Payment Mode: ${transaction.paymentMethod.toUpperCase()}`, metaX, rightY);
   rightY += 5.5;
 
-  // Payment Status Pill (Subtle High-Contrast Background Card)
-  const statusConfig = transaction.status === "paid"
-    ? { bg: [220, 252, 231], text: [21, 128, 61], label: "FULLY PAID" }
-    : transaction.status === "partial"
-    ? { bg: [254, 243, 199], text: [180, 83, 9], label: "PARTIALLY PAID" }
-    : { bg: [254, 226, 226], text: [220, 38, 38], label: "OUTSTANDING DUE" };
+  // Payment Status Pill (Subtle High-Contrast Background Card - Themed color badges)
+  let statusBg = [220, 252, 231];
+  let statusText = [21, 128, 61];
+  let statusLabel = "FULLY PAID";
 
-  doc.setFillColor(statusConfig.bg[0], statusConfig.bg[1], statusConfig.bg[2]);
-  doc.roundedRect(metaX, rightY, 38, 6.5, 1, 1, 'F');
+  if (transaction.status === "partial") {
+    statusBg = [254, 243, 199];
+    statusText = [180, 83, 9];
+    statusLabel = "PARTIALLY PAID";
+  } else if (transaction.status !== "paid") {
+    statusBg = [254, 226, 226];
+    statusText = [220, 38, 38];
+    statusLabel = "OUTSTANDING DUE";
+  }
+
+  // Customize statuses based on template preferences
+  if (template === "modern_minimal") {
+    // Beautiful clean outline borders instead of bulky filled boxes
+    doc.setDrawColor(statusText[0], statusText[1], statusText[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(metaX, rightY, 38, 6.5, 1, 1, 'S');
+  } else {
+    doc.setFillColor(statusBg[0], statusBg[1], statusBg[2]);
+    doc.roundedRect(metaX, rightY, 38, 6.5, 1, 1, 'F');
+  }
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(7.5 * sizeFactor);
-  doc.setTextColor(statusConfig.text[0], statusConfig.text[1], statusConfig.text[2]);
-  doc.text(statusConfig.label, metaX + 19, rightY + 4.5, { align: "center" });
+  doc.setTextColor(statusText[0], statusText[1], statusText[2]);
+  doc.text(statusLabel, metaX + 19, rightY + 4.5, { align: "center" });
 
   let metaYEnd = rightY + 11;
   let currentY = Math.max(brandYEnd, metaYEnd);
 
   // High-contrast clean thin separator line
-  doc.setDrawColor(226, 232, 240); // slate-200
-  doc.setLineWidth(0.5);
-  doc.line(15, currentY, 195, currentY);
-  currentY += 6;
+  if (isVintageEditorial) {
+    // Literary Editorial double line
+    doc.setDrawColor(accentLineColor[0], accentLineColor[1], accentLineColor[2]);
+    doc.setLineWidth(0.4);
+    doc.line(15, currentY, 195, currentY);
+    doc.setLineWidth(0.2);
+    doc.line(15, currentY + 1.2, 195, currentY + 1.2);
+    currentY += 6;
+  } else if (isCompactPOS) {
+    // Dashed receipt cut guideline
+    doc.setDrawColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.setLineDashPattern([2, 1.5], 0);
+    doc.setLineWidth(0.35);
+    doc.line(15, currentY, 195, currentY);
+    doc.setLineDashPattern([], 0); // Reset
+    currentY += 6;
+  } else {
+    doc.setDrawColor(accentLineColor[0], accentLineColor[1], accentLineColor[2]);
+    doc.setLineWidth(0.6);
+    doc.line(15, currentY, 195, currentY);
+    currentY += 6;
+  }
 
-  // Bil-To Box Panel
-  doc.setFillColor(248, 250, 252); // slate-50
-  doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'S');
+  // Bill-To Box Panel (Render Client Address info beautifully depending on theme)
+  if (isCompactPOS) {
+    // Ticket style client layout (No background box, just clean text boundaries)
+    doc.setDrawColor(241, 245, 249);
+    doc.setLineWidth(0.2);
+    doc.line(15, currentY, 195, currentY);
+    
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(7.5 * sizeFactor);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("CUSTOMER BILLING / SHIPPING PARTICULARS:", 15, currentY + 5);
+    
+    doc.text(contact ? contact.name : "Walk-in Regular Customer", 15, currentY + 11);
+    
+    doc.setFont(pdfFontName, "normal");
+    doc.setFontSize(7.5 * sizeFactor);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text(contact ? `Phone: ${contact.phone}` : "Phone: Walk-in cash transaction", 15, currentY + 16.5);
+    doc.text(contact ? `Addr: ${contact.address}` : "Addr: Counter Sale, Dhaka", 105, currentY + 16.5);
+    
+    currentY += 23;
+  } else {
+    // Default / Boxed Theme Panel layouts
+    doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
+    if (isVintageEditorial) {
+      doc.rect(15, currentY, 180, 23, 'F');
+      doc.setDrawColor(billToBorderColor[0], billToBorderColor[1], billToBorderColor[2]);
+      doc.setLineWidth(0.4);
+      doc.rect(15, currentY, 180, 23, 'S'); // sharp corners
+    } else {
+      doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'F');
+      doc.setDrawColor(billToBorderColor[0], billToBorderColor[1], billToBorderColor[2]);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(15, currentY, 180, 23, 1.5, 1.5, 'S');
+    }
 
-  doc.setFont(pdfFontName, "bold");
-  doc.setFontSize(7.5 * sizeFactor);
-  doc.setTextColor(148, 163, 184); // slate-400
-  doc.text("CUSTOMER IDENTITY DETAILS", 20, currentY + 5.5);
-  doc.text("CONTACT DETAILS & SHIPPING ADDRESS", 105, currentY + 5.5);
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(7.5 * sizeFactor);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text("CUSTOMER IDENTITY DETAILS", 20, currentY + 5.5);
+    doc.text("CONTACT DETAILS & SHIPPING ADDRESS", 105, currentY + 5.5);
 
-  doc.setFont(pdfFontName, "bold");
-  doc.setFontSize(9 * sizeFactor);
-  doc.setTextColor(15, 23, 42); // slate-900
-  const cName = contact ? contact.name : "Walk-in Regular Customer";
-  doc.text(cName, 20, currentY + 11.5);
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(9 * sizeFactor);
+    doc.setTextColor(15, 23, 42); // slate-900
+    const cName = contact ? contact.name : "Walk-in Regular Customer";
+    doc.text(cName, 20, currentY + 11.5);
 
-  doc.setFont(pdfFontName, "normal");
-  doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(71, 85, 105); // slate-600
-  const cPhone = contact ? `Phone: ${contact.phone}` : "Phone: Over-the-counter Transaction";
-  const cAddr = contact ? `Address: ${contact.address}` : "Address: Dhaka, Bangladesh";
-  const emailStr = (contact as any)?.email ? `Email: ${(contact as any).email}` : "Email: walkin-cashier@barakah.local";
-  
-  doc.text(cPhone, 105, currentY + 11.5); // Perfectly aligned level horizontally with Customer Name
-  
-  doc.setFont(pdfFontName, "normal");
-  doc.setFontSize(8 * sizeFactor);
-  doc.text(emailStr, 20, currentY + 17.5);
-  doc.text(cAddr, 105, currentY + 17.5); // Perfectly aligned level horizontally with Client Email
+    doc.setFont(pdfFontName, "normal");
+    doc.setFontSize(8 * sizeFactor);
+    doc.setTextColor(71, 85, 105); // slate-600
+    const cPhone = contact ? `Phone: ${contact.phone}` : "Phone: Over-the-counter Transaction";
+    const cAddr = contact ? `Address: ${contact.address}` : "Address: Dhaka, Bangladesh";
+    const emailStr = (contact as any)?.email ? `Email: ${(contact as any).email}` : "Email: walkin-cashier@barakah.local";
+    
+    doc.text(cPhone, 105, currentY + 11.5); // Perfectly aligned level horizontally with Customer Name
+    
+    doc.setFont(pdfFontName, "normal");
+    doc.setFontSize(8 * sizeFactor);
+    doc.text(emailStr, 20, currentY + 17.5);
+    doc.text(cAddr, 105, currentY + 17.5); // Perfectly aligned level horizontally with Client Email
 
-  currentY += 29;
+    currentY += 29;
+  }
 
   // Main Itemized Table mapping
   const tableHeaders = [['SL', 'Item Model / Specification / SKU', 'Qty', 'Unit Rate', 'Total Amount']];
@@ -302,30 +474,32 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     `${devCurrencySymbol} ${item.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   ]);
 
-  // Generate beautiful AutoTable (subtle background block headers, clean borders)
+  // Generate beautiful AutoTable (customized per theme layout)
   autoTable(doc, {
     startY: currentY,
     margin: { left: 15, right: 15 },
     head: tableHeaders,
     body: tableBody,
-    theme: 'striped',
+    theme: template === "modern_minimal" || isVintageEditorial ? "grid" : "striped",
     styles: {
       fontSize: 8.5 * sizeFactor,
       font: pdfFontName,
-      cellPadding: 3.5,
+      cellPadding: isCompactPOS ? 2.5 : 3.5,
       textColor: [51, 65, 85], // slate-700
       lineColor: [241, 245, 249],
       lineWidth: 0.1
     },
     headStyles: {
-      fillColor: [15, 23, 42], // Deep charcoal block
-      textColor: [255, 255, 255],
+      fillColor: tableHeadBg,
+      textColor: tableHeadTextColor,
       fontSize: 9 * sizeFactor,
       fontStyle: 'bold',
-      cellPadding: 4
+      cellPadding: 4,
+      lineWidth: isVintageEditorial ? 0.3 : 0,
+      lineColor: isVintageEditorial ? primaryColor : [255, 255, 255]
     },
     alternateRowStyles: {
-      fillColor: [248, 250, 252] // slate-50 rows
+      fillColor: template === "cosmic_dark" ? [250, 250, 250] : [248, 250, 252] // subtle gray rows
     }
   });
 
@@ -333,19 +507,27 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
 
   // BOTTOM FINANCIAL & SIGNATURES SECTION
   // Left Column: Total in Words block & Showroom Terms
-  doc.setFillColor(248, 250, 252); // slate-50
-  doc.roundedRect(15, finalY, 110, 16, 1.5, 1.5, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(15, finalY, 110, 16, 1.5, 1.5, 'S');
+  doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
+  if (isVintageEditorial) {
+    doc.rect(15, finalY, 110, 16, 'F');
+    doc.setDrawColor(billToBorderColor[0], billToBorderColor[1], billToBorderColor[2]);
+    doc.setLineWidth(0.4);
+    doc.rect(15, finalY, 110, 16, 'S');
+  } else {
+    doc.roundedRect(15, finalY, 110, 16, 1.5, 1.5, 'F');
+    doc.setDrawColor(billToBorderColor[0], billToBorderColor[1], billToBorderColor[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(15, finalY, 110, 16, 1.5, 1.5, 'S');
+  }
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(7 * sizeFactor);
-  doc.setTextColor(148, 163, 184); // slate-400
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
   doc.text("TOTAL BILL IN WORDS (PRONOUNCEMENT):", 20, finalY + 5);
 
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(15, 23, 42); // slate-900
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   const tVerbal = numberToWords(transaction.total);
   const wordLines = doc.splitTextToSize(tVerbal, 100);
   doc.text(wordLines, 20, finalY + 10);
@@ -354,13 +536,12 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let termsTitleY = finalY + 20;
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(15, 23, 42);
   doc.text("OFFICIAL WARRANTY & TERMS OF LEASE", 15, termsTitleY);
 
   let termsY = termsTitleY + 4.5;
   doc.setFont(pdfFontName, "normal");
   doc.setFontSize(6.5 * sizeFactor);
-  doc.setTextColor(100, 116, 139); // slate-500
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
 
   let terms: string[] = [];
   if (businessInfo.termsConditions) {
@@ -385,11 +566,11 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   let rightX = 135;
   let summaryY = finalY;
 
-  // Modern clean flat totals card with sharp corners (no rounded corners, no cluttered accents)
-  doc.setFillColor(250, 250, 250);
+  // Modern clean flat totals card depending on themed layout borders
+  doc.setFillColor(totalsBg[0], totalsBg[1], totalsBg[2]);
   doc.rect(rightX - 2, summaryY - 2, 62, 38, 'F');
-  doc.setDrawColor(15, 23, 42); // bold black border line
-  doc.setLineWidth(0.45);
+  doc.setDrawColor(totalsBorderColor[0], totalsBorderColor[1], totalsBorderColor[2]);
+  doc.setLineWidth(template === "bold_emerald" || template === "premium_navy" ? 0.7 : 0.45);
   doc.rect(rightX - 2, summaryY - 2, 62, 38, 'S');
 
   // Print summary elements
@@ -406,56 +587,56 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.text("Special Discount:", rightX, summaryY + 14);
   doc.text(`-${devCurrencySymbol} ${transaction.discount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 14, { align: "right" });
 
-  // Draw flat solid background strip for key total parameters (Grand Total, Cash Received, Outstanding/Change)
-  // Clean flat design with 100% sharp-cornered solid plate and absolute high-contrast text on top (no dual multi-color background pills)
-  doc.setFillColor(241, 245, 249); // clean slate-100 neutral gray block
+  // Custom highlights for total block
+  let highlightBg = [241, 245, 249]; // charcoal gray
+  if (template === "modern_minimal") {
+    highlightBg = [224, 242, 241];  // teal-100
+  } else if (template === "premium_navy") {
+    highlightBg = [239, 246, 255];  // blue-50
+  } else if (template === "bold_emerald") {
+    highlightBg = [209, 250, 229];  // emerald-100
+  } else if (isVintageEditorial) {
+    highlightBg = [254, 243, 199];  // amber-100
+  }
+
+  doc.setFillColor(highlightBg[0], highlightBg[1], highlightBg[2]);
   doc.rect(rightX - 1.6, summaryY + 17.5, 61.2, 18.0, 'F');
 
   const excess = transaction.paidAmount - transaction.total;
   const hasDue = transaction.dueBalance > 0;
 
-  // 🌟 High-contrast Highlighter Blocks for key figures to maximize visual focus
-  doc.setFillColor(209, 250, 229); // emerald-100 high-focus highlighter for Cash Received
-  doc.rect(rightX - 1.2, summaryY + 24.2, 60.4, 4.8, 'F');
+  // Highlights for the paid amount parameter
+  let innerPaidColor = [16, 124, 65];   // Emerald green text
+  if (isVintageEditorial) innerPaidColor = [146, 64, 14];
 
-  if (excess > 0) {
-    doc.setFillColor(207, 250, 254); // cyan-100 high-focus highlighter for Change
-    doc.rect(rightX - 1.2, summaryY + 29.2, 60.4, 4.8, 'F');
-  } else if (hasDue) {
-    doc.setFillColor(254, 226, 226); // red-100 intense warning highlighter for Dues Outstanding
-    doc.rect(rightX - 1.2, summaryY + 29.2, 60.4, 4.8, 'F');
-  } else {
-    doc.setFillColor(209, 250, 229); // emerald-100 highlighter for fully settled accounts
-    doc.rect(rightX - 1.2, summaryY + 29.2, 60.4, 4.8, 'F');
-  }
-
-  // Grand Total details on top of the solid background plate
+  // Grand Total details
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(9.5 * sizeFactor);
-  doc.setTextColor(15, 23, 42); // slate-900 black
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.text("GRAND BILL TOTAL:", rightX, summaryY + 22.5);
   doc.text(`${devCurrencySymbol} ${transaction.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 22.5, { align: "right" });
 
   // Cash Received
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(16, 124, 65); // High-contrast green text representing cash received on top of highlighter
+  doc.setTextColor(innerPaidColor[0], innerPaidColor[1], innerPaidColor[2]);
   doc.text("Total Cash Received:", rightX, summaryY + 27.5);
   doc.text(`${devCurrencySymbol} ${transaction.paidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 27.5, { align: "right" });
 
   // Change or Due Balance details
   if (excess > 0) {
     doc.setFont(pdfFontName, "bold");
-    doc.setTextColor(14, 116, 144); // high contrast deep teal representing change returned on cyan
+    const changeColor = template === "vintage_editorial" ? [180, 83, 9] : [14, 116, 144];
+    doc.setTextColor(changeColor[0], changeColor[1], changeColor[2]); // teal or amber
     doc.text("Change Returned:", rightX, summaryY + 32.5);
     doc.text(`${devCurrencySymbol} ${excess.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 32.5, { align: "right" });
   } else {
     if (hasDue) {
       doc.setFont(pdfFontName, "bold");
-      doc.setTextColor(153, 27, 27); // high contrast deep warning red on red background
+      doc.setTextColor(153, 27, 27); // high warning red
     } else {
       doc.setFont(pdfFontName, "bold");
-      doc.setTextColor(16, 124, 65); // high contrast green on emerald background
+      doc.setTextColor(innerPaidColor[0], innerPaidColor[1], innerPaidColor[2]);
     }
     doc.text("Dues Outstanding:", rightX, summaryY + 32.5);
     doc.text(`${devCurrencySymbol} ${transaction.dueBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 32.5, { align: "right" });
@@ -479,7 +660,7 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
 
     doc.setFont(pdfFontName, "bold");
     doc.setFontSize(7 * sizeFactor);
-    doc.setTextColor(71, 85, 105); // slate-600
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
     doc.text("CUSTOMER REGISTERED SIGN-OFF", 42.5, sigLineY + 4.5, { align: "center" });
 
     if (transaction.customerSignature) {
@@ -492,13 +673,13 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   }
 
   if (isAuthSigOn) {
-    doc.setDrawColor(15, 23, 42); // Bold dark brand line for authority
-    doc.setLineWidth(0.4);
+    doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]); // Match design theme
+    doc.setLineWidth(template === "bold_emerald" || template === "premium_navy" ? 0.6 : 0.4);
     doc.line(140, sigLineY, 195, sigLineY);
 
     doc.setFont(pdfFontName, "bold");
     doc.setFontSize(7 * sizeFactor);
-    doc.setTextColor(15, 23, 42);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.text("AUTHORIZED SHOWROOM BRAND SIGN", 167.5, sigLineY + 4.5, { align: "center" });
   }
 
