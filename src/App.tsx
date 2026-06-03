@@ -85,8 +85,11 @@ import {
   signInWithEmail,
   getPasscodeSyncId,
   selfHealDatabase,
-  toUUID
+  toUUID,
+  restoreLocalKeys
 } from "./lib/supabase";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "./lib/firebase";
 import { 
   generateInvoicePDF,
   generateDeliveryChallanPDF
@@ -157,6 +160,7 @@ export default function App() {
   // Cloud backup sync indicator active states
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"connecting" | "connected" | "reconciling" | "error" | "offline">("offline");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Custom dialog state overrides for iframe friendliness
@@ -304,8 +308,15 @@ export default function App() {
       // Auto cloud backup with 1.5 seconds debounce for all authenticated users so no data is ever lost
       if (activeUser && !activeUser.isGuest) {
         // Bulletproof sync guard: never auto-backup a completely blank database to the cloud
-        if (products.length === 0 && transactions.length === 0) {
-          console.warn("[Auto Backup Guard] Local database is completely empty. Skipping background auto-backup to protect the cloud database from accidental overwrites.");
+        const isSettingsModified = businessInfo && (
+          businessInfo.name !== INITIAL_BUSINESS_INFO.name ||
+          businessInfo.address !== INITIAL_BUSINESS_INFO.address ||
+          businessInfo.phoneNumber !== INITIAL_BUSINESS_INFO.phoneNumber ||
+          businessInfo.companyLogo !== INITIAL_BUSINESS_INFO.companyLogo
+        );
+
+        if (products.length === 0 && transactions.length === 0 && !isSettingsModified) {
+          console.warn("[Auto Backup Guard] Local database is completely empty and settings are unmodified. Skipping background auto-backup to protect the cloud database from accidental overwrites.");
           return;
         }
 
@@ -328,6 +339,93 @@ export default function App() {
       }
     }
   }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser]);
+
+  // Set up real-time multi-device cloud subscription
+  useEffect(() => {
+    if (!activeUser || activeUser.isGuest) {
+      setSyncStatus("offline");
+      return;
+    }
+
+    setSyncStatus("connecting");
+
+    const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+    const syncId = getPasscodeSyncId(activeUser.email, passcode);
+
+    console.log(`[Realtime Sync] Subscribing to cloud document: passcode_syncs/${syncId}`);
+
+    let lastUpdatedAt = "";
+
+    const unsub = onSnapshot(doc(db, "passcode_syncs", syncId), (docSnap) => {
+      // Document may not exist yet, but subscription connected successfully
+      if (!docSnap.exists()) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const cloudData = docSnap.data();
+      const cloudUpdatedAt = cloudData.updated_at || "";
+
+      // Avoid self-refresh loops or stale values
+      if (cloudUpdatedAt === lastUpdatedAt) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const cloudProducts = cloudData.products || [];
+      const cloudTransactions = cloudData.transactions || [];
+
+      // Protect local state if cloud data has not been initialized
+      if (cloudProducts.length === 0 && cloudTransactions.length === 0) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      try {
+        console.log(`[Realtime Sync] Remote database updated at ${cloudUpdatedAt}. Synchronizing...`);
+        lastUpdatedAt = cloudUpdatedAt;
+        setSyncStatus("reconciling");
+
+        // Restore to localStorage
+        restoreLocalKeys(cloudData, true);
+
+        // Load the new values from localStorage
+        const refreshedDB = loadDB();
+
+        // Momentarily pause backup triggers during React state updates
+        initialLoadedRef.current = false;
+
+        setProducts(refreshedDB.products);
+        setContacts(refreshedDB.contacts);
+        setExpenses(refreshedDB.expenses);
+        setTransactions(refreshedDB.transactions);
+        setBusinessInfo(refreshedDB.businessInfo);
+        setPurchases(refreshedDB.purchases || []);
+
+        if (refreshedDB.businessInfo && refreshedDB.businessInfo.staffList && Array.isArray(refreshedDB.businessInfo.staffList)) {
+          setStaffList(refreshedDB.businessInfo.staffList);
+        }
+
+        setTimeout(() => {
+          initialLoadedRef.current = true;
+          setSyncStatus("connected");
+          console.log("[Realtime Sync] Complete database and store settings synchronized in real-time.");
+        }, 300);
+
+      } catch (err) {
+        console.error("[Realtime Sync] Error syncing cloud snapshot locally:", err);
+        setSyncStatus("error");
+      }
+    }, (error) => {
+      console.warn("[Realtime Sync] Firestore snapshot subscription failed:", error);
+      setSyncStatus("error");
+    });
+
+    return () => {
+      unsub();
+      setSyncStatus("offline");
+    };
+  }, [activeUser]);
 
   // Synchronize staff list on cloud restore or config resets
   useEffect(() => {
@@ -411,7 +509,7 @@ export default function App() {
     setIsRestoring(true);
     const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
     try {
-      const restored = await fetchAndRestoreCloudBackup(activeUser.email, passcode);
+      const restored = await fetchAndRestoreCloudBackup(activeUser.email, passcode, true);
       if (restored) {
         // Reload states
         const db = loadDB();
@@ -2020,6 +2118,61 @@ export default function App() {
                 <Moon className="w-4 h-4 text-[#00E676]" />
               )}
             </button>
+
+            {activeUser && !activeUser.isGuest && (
+              <div 
+                id="cloud-sync-status-indicator"
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-xl border text-[9px] md:text-[10px] font-mono font-bold shadow-sm transition-all duration-300 ${
+                  syncStatus === "connected" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
+                  syncStatus === "reconciling" ? "bg-amber-500/10 border-amber-500/20 text-amber-500 animate-pulse" :
+                  syncStatus === "connecting" ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400 animate-pulse" :
+                  syncStatus === "error" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
+                  "bg-slate-500/10 border-slate-800 text-slate-400"
+                }`}
+                title={
+                  syncStatus === "connected" ? "Your local device is connected and up-to-date with cloud" :
+                  syncStatus === "reconciling" ? "Reconciling live data with cloud document..." :
+                  syncStatus === "connecting" ? "Connecting to secure live cloud stream..." :
+                  syncStatus === "error" ? "Cloud connection interrupted / unauthorized" :
+                  "Cloud sync is offline"
+                }
+              >
+                {syncStatus === "connected" && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="hidden sm:inline">CLOUD: SYNCED</span>
+                    <span className="sm:hidden">CLOUD: OK</span>
+                  </>
+                )}
+                {syncStatus === "reconciling" && (
+                  <>
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-amber-500" />
+                    <span className="hidden sm:inline">CLOUD: RECONCILING</span>
+                    <span className="sm:hidden">CLOUD: SYNC</span>
+                  </>
+                )}
+                {syncStatus === "connecting" && (
+                  <>
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-yellow-400" />
+                    <span className="hidden sm:inline">CLOUD: CONNECTING</span>
+                    <span className="sm:hidden">CLOUD: CONN</span>
+                  </>
+                )}
+                {syncStatus === "error" && (
+                  <>
+                    <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                    <span className="hidden sm:inline">CLOUD: ERR</span>
+                    <span className="sm:hidden">CLOUD: ERR</span>
+                  </>
+                )}
+                {syncStatus === "offline" && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                    <span>CLOUD: OFFLINE</span>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="bg-[#050912]/80 border border-slate-800 rounded-xl px-2 py-1 flex items-center gap-1.5 font-mono text-[9px] md:text-[10px]" id="engine-status">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
