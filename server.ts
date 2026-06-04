@@ -55,6 +55,86 @@ function getGeminiClient(): GoogleGenAI {
   return aiInstance;
 }
 
+// Shared fallback generators when Gemini is unavailable or rate-limited
+function getDynamicFallbackInsights(transactions: any[], expenses: any[], products: any[]) {
+  const lowStock = (products || []).filter((p: any) => p.stock !== undefined && Number(p.stock) <= 3);
+  const duesTotal = (transactions || []).reduce((acc: number, t: any) => acc + (Number(t.dueBalance) || 0), 0);
+
+  const expenseCategories: { [key: string]: number } = {};
+  (expenses || []).forEach((e: any) => {
+    const cat = e.cat || e.category || "Others";
+    const amt = Number(e.amount) || 0;
+    expenseCategories[cat] = (expenseCategories[cat] || 0) + amt;
+  });
+  let maxExpenseCat = "Others";
+  let maxExpenseAmt = 0;
+  Object.entries(expenseCategories).forEach(([cat, amt]) => {
+    if (amt > maxExpenseAmt) {
+      maxExpenseAmt = amt;
+      maxExpenseCat = cat;
+    }
+  });
+
+  const list = [];
+
+  // 1. Cashflow & Dues Insight
+  if (duesTotal > 0) {
+    list.push({
+      title: "📊 বকেয়া পাওনা সতর্কতা (Outstanding Due Alert)",
+      description: `আপনার স্টোরের বকেয়া খাতার মোট ব্যালেন্স **৳${duesTotal.toLocaleString()}**। ব্যবসার ক্যাশফ্লো সচল ও হেলদি রাখতে বাকী খাতা নিয়মিত পর্যালোচনা করুন এবং পাওনা সংগ্রহ ত্বরান্বিত করুন।`,
+      type: "warning" as const
+    });
+  } else {
+    list.push({
+      title: "💰 শতভাগ ক্যাশ রিসিভড (100% Cashflow Secured)",
+      description: "চমৎকার! আপনার স্টোরের বকেয়া খাতা সম্পূর্ণ পরিষ্কার, সমস্ত লেনদেন সফলভাবে আদায় করা হয়েছে। এটি ব্যবসার ওয়ার্কিং ক্যাপিটাল সচল রাখতে অগ্রণী ভূমিকা রাখবে।",
+      type: "success" as const
+    });
+  }
+
+  // 2. Stock Inventory Insight
+  if (lowStock.length > 0) {
+    const names = lowStock.slice(0, 3).map((p: any) => p.name).join(", ");
+    list.push({
+      title: "⚠️ স্টক রিঅর্ডার সতর্কতা (Inventory Stock Alert)",
+      description: `স্টোরে **${names}** সহ কিছু পণ্যের স্টক ফুরিয়ে আসছে (স্টক লেভেল ৩ বা তার নিচে)। ক্রেতার চাহিদা মেটাতে অবিলম্বে নতুন স্টক অর্ডার দিন।`,
+      type: "info" as const
+    });
+  } else {
+    list.push({
+      title: "📦 স্টক ইন্টিগ্রিটি সন্তোষজনক (Inventory Health Good)",
+      description: "স্টোরের সব প্রোডাক্টের পরিমিত ভারসাম্যপূর্ণ স্টক লেভেল রয়েছে। অনাকাঙ্ক্ষিতভাবে ফাঁকা স্টকে পড়ার ঝুঁকি নেই।",
+      type: "info" as const
+    });
+  }
+
+  // 3. Expense Control Insight
+  if (maxExpenseAmt > 0) {
+    list.push({
+      title: "💸 ব্যয় পর্যালোচনা ও অপ্টিমাইজেশন (Expense Focus)",
+      description: `চলতি মেয়াদে আপনার সর্বোচ্চ খরচ হয়েছে **${maxExpenseCat}** ক্যাটাগরিতে (মোট **৳${maxExpenseAmt.toLocaleString()}**)। নিট প্রফিট বাড়াতে অপ্রয়োজনীয় পরিচালনা ব্যয় হ্রাস করুন।`,
+      type: "success" as const
+    });
+  } else {
+    list.push({
+      title: "📈 পরিচালনা ব্যয় নিয়ন্ত্রণ (Low Operational Expense)",
+      description: "এই সপ্তাহে কোনো অস্বাভাবিক অতিরিক্ত ব্যয় নথিভুক্ত হয়নি। খরচের সামঞ্জস্য বজায় রাখলে ব্যবসার ক্যাশ মার্জিন বৃদ্ধি পাবে।",
+      type: "success" as const
+    });
+  }
+
+  return list;
+}
+
+function classifyExpenseLocally(description: string): string {
+  const desc = (description || "").toLowerCase();
+  if (desc.includes("rent") || desc.includes("ভাড়া") || desc.includes("দোকান") || desc.includes("shop rent")) return "Rent";
+  if (desc.includes("electric") || desc.includes("power") || desc.includes("বিল") || desc.includes("current") || desc.includes("বিদ্যুৎ") || desc.includes("utility")) return "Electricity";
+  if (desc.includes("salary") || desc.includes("wage") || desc.includes("বেতন") || desc.includes("staff") || desc.includes("কর্মচারী")) return "Salary";
+  if (desc.includes("ad") || desc.includes("market") || desc.includes("promo") || desc.includes("ফেসবুক") || desc.includes("বিজ্ঞাপন") || desc.includes("marketing")) return "Marketing";
+  return "Others";
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -213,8 +293,8 @@ async function startServer() {
 
   // API Endpoint: Intelligent Business Insights
   app.post("/api/ai/insights", async (req: Request, res: Response) => {
+    const { transactions, expenses, products } = req.body;
     try {
-      const { transactions, expenses, products } = req.body;
       const dataSummary = {
         transactions: (transactions || []).slice(0, 30).map((t: any) => ({ type: t.type, total: t.total, date: t.date })),
         expenses: (expenses || []).map((e: any) => ({ cat: e.category, amount: e.amount, desc: e.description })),
@@ -225,23 +305,8 @@ async function startServer() {
       try {
         ai = getGeminiClient();
       } catch (err: any) {
-        res.json([
-          {
-            title: " ক্যাশফ্লো সর্তকতা (Cashflow Balance Alert)",
-            description: "আপনার স্টোরে নগদ বিক্রয়ের তুলনায় বাকী বিক্রির হার সামঞ্জস্যপূর্ণ রাখা উচিত। বাকী খাতা নিয়মিত পর্যালোচনা করুন এবং পাওনা সংগ্রহ বেগবান করুন।",
-            type: "warning"
-          },
-          {
-            title: " স্টক অ্যালার্ট (Stock & Inventory Alert)",
-            description: "কয়েকটি পণ্যের স্টক শেষ হয়ে যাচ্ছে। গ্রাহকের চাহিদা মেটাতে অবিলম্বে নতুন স্টক অর্ডার করার পরামর্শ দেওয়া হলো।",
-            type: "info"
-          },
-          {
-            title: " ব্যয় অপ্টিমাইজেশন (Expense Control)",
-            description: "গত সপ্তাহের তুলনায় এই সপ্তাহে আনুষঙ্গিক ব্যয় ৫% বৃদ্ধি পেয়েছে। বিদ্যুৎ বিল এবং অন্যান্য খরচ নিয়ন্ত্রণের চেষ্টা করুন।",
-            type: "success"
-          }
-        ]);
+        // Silent default dynamic fallback
+        res.json(getDynamicFallbackInsights(transactions, expenses, products));
         return;
       }
 
@@ -261,24 +326,14 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
         });
         jsonStr = response.text?.trim() || "[]";
       } catch (geminiErr: any) {
-        console.warn("Gemini service unavailable, sending mock insights fallback:", geminiErr);
-        res.json([
-          {
-            title: " ক্যাশফ্লো সর্তকতা (Cashflow Balance Alert)",
-            description: "আপনার স্টোরে নগদ বিক্রয়ের তুলনায় বাকী বিক্রির হার সামঞ্জস্যপূর্ণ রাখা উচিত। বাকী খাতা নিয়মিত পর্যালোচনা করুন এবং পাওনা সংগ্রহ বেগবান করুন।",
-            type: "warning"
-          },
-          {
-            title: " স্টক অ্যালার্ট (Stock & Inventory Alert)",
-            description: "কয়েকটি পণ্যের স্টক শেষ হয়ে যাচ্ছে। গ্রাহকের চাহিদা মেটাতে অবিলম্বে নতুন স্টক অর্ডার করার পরামর্শ দেওয়া হলো।",
-            type: "info"
-          },
-          {
-            title: " ব্যয় অপ্টিমাইজেশন (Expense Control)",
-            description: "গত সপ্তাহের তুলনায় এই সপ্তাহে আনুষঙ্গিক ব্যয় ৫% বৃদ্ধি পেয়েছে। বিদ্যুৎ বিল এবং অন্যান্য খরচ নিয়ন্ত্রণের চেষ্টা করুন।",
-            type: "success"
-          }
-        ]);
+        // Safely handle 429 quota exhaustion or model rate limits silently, serving live personalized recommendations.
+        const msg = geminiErr.message || String(geminiErr);
+        if (msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+          console.log("[AI Insights] Serving live high-fidelity fallback insights (Gemini quota exhausted).");
+        } else {
+          console.warn("[AI Insights] Gemini unavailable, serving live dynamic fallback:", msg);
+        }
+        res.json(getDynamicFallbackInsights(transactions, expenses, products));
         return;
       }
 
@@ -286,51 +341,17 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
         const result = JSON.parse(jsonStr);
         res.json(result);
       } catch (jsonErr: any) {
-        console.warn("Gemini JSON parse failed, returning fallback:", jsonErr);
-        res.json([
-          {
-            title: " ক্যাশফ্লো সর্তকতা (Cashflow Balance Alert)",
-            description: "আপনার স্টোরে নগদ বিক্রয়ের তুলনায় বাকী বিক্রির হার সামঞ্জস্যপূর্ণ রাখা উচিত। বাকী খাতা নিয়মিত পর্যালোচনা করুন এবং পাওনা সংগ্রহ বেগবান করুন।",
-            type: "warning"
-          },
-          {
-            title: " স্টক অ্যালার্ট (Stock & Inventory Alert)",
-            description: "কয়েকটি পণ্যের স্টক শেষ হয়ে যাচ্ছে। গ্রাহকের চাহিদা মেটাতে অবিলম্বে নতুন স্টক অর্ডার করার পরামর্শ দেওয়া হলো।",
-            type: "info"
-          },
-          {
-            title: " ব্যয় অপ্টিমাইজেশন (Expense Control)",
-            description: "গত সপ্তাহের তুলনায় এই সপ্তাহে আনুষঙ্গিক ব্যয় ৫% বৃদ্ধি পেয়েছে। বিদ্যুৎ বিল এবং অন্যান্য খরচ নিয়ন্ত্রণের চেষ্টা করুন।",
-            type: "success"
-          }
-        ]);
+        res.json(getDynamicFallbackInsights(transactions, expenses, products));
       }
     } catch (error: any) {
-      console.error("Error generating business insights:", error);
-      res.json([
-        {
-          title: " ক্যাশফ্লো সর্তকতা (Cashflow Balance Alert)",
-          description: "আপনার স্টোরে নগদ বিক্রয়ের তুলনায় বাকী বিক্রির হার সামঞ্জস্যপূর্ণ রাখা উচিত। বাকী খাতা নিয়মিত পর্যালোচনা করুন এবং পাওনা সংগ্রহ বেগবান করুন।",
-          type: "warning"
-        },
-        {
-          title: " স্টক অ্যালার্ট (Stock & Inventory Alert)",
-          description: "কয়েকটি পণ্যের স্টক শেষ হয়ে যাচ্ছে। গ্রাহকের চাহিদা মেটাতে অবিলম্বে নতুন স্টক অর্ডার করার পরামর্শ দেওয়া হলো।",
-          type: "info"
-        },
-        {
-          title: " ব্যয় অপ্টিমাইজেশন (Expense Control)",
-          description: "গত সপ্তাহের তুলনায় এই সপ্তাহে আনুষঙ্গিক ব্যয় ৫% বৃদ্ধি পেয়েছে। বিদ্যুৎ বিল এবং অন্যান্য খরচ নিয়ন্ত্রণের চেষ্টা করুন।",
-          type: "success"
-        }
-      ]);
+      res.json(getDynamicFallbackInsights(transactions, expenses, products));
     }
   });
 
   // API Endpoint: Intelligent Expense Classification
   app.post("/api/ai/expense-category", async (req: Request, res: Response) => {
+    const { description } = req.body;
     try {
-      const { description } = req.body;
       if (!description) {
         res.json({ category: "Others" });
         return;
@@ -340,7 +361,7 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
       try {
         ai = getGeminiClient();
       } catch (err: any) {
-        res.json({ category: "Others" });
+        res.json({ category: classifyExpenseLocally(description) });
         return;
       }
 
@@ -352,11 +373,10 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
         contents: prompt
       });
 
-      const category = response.text?.trim() || "Others";
+      const category = response.text?.trim() || classifyExpenseLocally(description);
       res.json({ category });
     } catch (error: any) {
-      console.error("Error classifying expense:", error);
-      res.json({ category: "Others" });
+      res.json({ category: classifyExpenseLocally(description) });
     }
   });
 

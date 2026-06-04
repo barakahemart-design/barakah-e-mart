@@ -123,8 +123,10 @@ export default function App() {
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
-    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "ledger" | "insights" | "expenses" | "reports" | "staff" | "settings"
-  >("dashboard");
+    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "ledger" | "expenses" | "reports" | "staff" | "settings"
+  >(() => {
+    return typeof window !== "undefined" && window.innerWidth < 768 ? "dashboard" : "pos";
+  });
 
   // Staff members state
   const [staffList, setStaffList] = useState<Staff[]>(() => {
@@ -176,6 +178,7 @@ export default function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deleteTxId, setDeleteTxId] = useState<string | null>(null);
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [deleteExpenseId, setDeleteExpenseId] = useState<string | null>(null);
   const [collectionTx, setCollectionTx] = useState<Transaction | null>(null);
   const [collectAmount, setCollectAmount] = useState("");
@@ -217,7 +220,7 @@ export default function App() {
               if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
                 setStaffList((db.businessInfo as any).staffList);
               }
-              triggerNotification("পূর্ববর্তী সকল বিক্রয় ও প্রোডাক্ট ডেটা স্বয়ংক্রিয়ভাবে ক্লাউড থেকে রিস্টোর করা হয়েছে! (All previous sales & store data auto-restored!)", "success");
+              triggerNotification("All previous sales & store data auto-restored!", "success");
               
               // Cache and link auto-session for future continuous background syncing
               const autoUser = {
@@ -251,7 +254,7 @@ export default function App() {
 
         try {
           const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
-          const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode);
+          const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, true);
           if (wasRestored) {
             console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount.");
           }
@@ -534,6 +537,19 @@ export default function App() {
     }
   };
 
+  // Handler for importing local JSON data upload/backup file
+  const handleDataImport = (data: any) => {
+    restoreLocalKeys(data, true);
+    // Reload states from newly restored localStorage DB
+    const dbData = loadDB();
+    setProducts(dbData.products);
+    setContacts(dbData.contacts);
+    setExpenses(dbData.expenses);
+    setTransactions(dbData.transactions);
+    setBusinessInfo(dbData.businessInfo);
+    setPurchases(dbData.purchases || []);
+  };
+
   // Handler for custom local auth action signup
   const handleSignUp = async (email: string, pass: string) => {
     initialLoadedRef.current = false;
@@ -644,6 +660,7 @@ export default function App() {
   const [customerDiscount, setCustomerDiscount] = useState<number>(0);
   const [invoiceTaxRate, setInvoiceTaxRate] = useState<number>(0); // default VAT % is now 0
   const [posSelectedContactId, setPosSelectedContactId] = useState<string>("");
+  const [posCustomDate, setPosCustomDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash");
   const [amountPaidPaid, setAmountPaidPaid] = useState<string>("");
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(true);
@@ -895,10 +912,14 @@ export default function App() {
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const uniqueTxId = toUUID(`t_${Date.now()}`, cleanEmail);
 
+    const targetDateStr = posCustomDate 
+      ? new Date(posCustomDate + "T" + new Date().toTimeString().split(" ")[0]).toISOString()
+      : new Date().toISOString();
+
     const newTransaction: Transaction = {
       id: uniqueTxId,
       invoiceNo: uniqueInvoiceNo,
-      date: new Date().toISOString(),
+      date: targetDateStr,
       items: posCart.map((cartItem, idx) => {
         const itemPrice = cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice;
         return {
@@ -960,6 +981,7 @@ export default function App() {
     setCustomerDiscount(0);
     setAmountPaidPaid("");
     setPosSelectedContactId("");
+    setPosCustomDate(new Date().toISOString().split("T")[0]);
     clearSignatureCanvas();
 
     triggerNotification(`Invoice ${uniqueInvoiceNo} & Delivery Challan successfully downloaded!`);
@@ -1526,6 +1548,7 @@ export default function App() {
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
   const [expenseFilterCategory, setExpenseFilterCategory] = useState("All");
   const [posSearchQuery, setPosSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [posTerminalTab, setPosTerminalTab] = useState<"checkout" | "catalog" | "history">("checkout");
   const [posProductsSearch, setPosProductsSearch] = useState("");
   const [posTxSearch, setPosTxSearch] = useState("");
@@ -1623,20 +1646,44 @@ export default function App() {
     if (!cName || !cPhone) return;
 
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
-    const newContact: Contact = {
-      id: toUUID(`c_${Date.now()}`, cleanEmail),
-      name: cName,
-      phone: cPhone,
-      address: cAddress || "Dhaka, Bangladesh",
-      type: cType,
-      created_at: new Date().toISOString()
-    };
 
-    setContacts([newContact, ...contacts]);
-    setCName("");
-    setCPhone("");
-    setCAddress("");
-    triggerNotification(`Contact [${cName}] successfully compiled.`);
+    if (editingContact) {
+      // Inline update of current client profile
+      const updated = contacts.map(c => {
+        if (c.id === editingContact.id) {
+          return {
+            ...c,
+            name: cName,
+            phone: cPhone,
+            address: cAddress,
+            type: cType
+          };
+        }
+        return c;
+      });
+      setContacts(updated);
+      setEditingContact(null);
+      setCName("");
+      setCPhone("");
+      setCAddress("");
+      triggerNotification(`Contact [${cName}] updated successfully!`, "success");
+    } else {
+      // Create new profile record
+      const newContact: Contact = {
+        id: toUUID(`c_${Date.now()}`, cleanEmail),
+        name: cName,
+        phone: cPhone,
+        address: cAddress || "Dhaka, Bangladesh",
+        type: cType,
+        created_at: new Date().toISOString()
+      };
+
+      setContacts([newContact, ...contacts]);
+      setCName("");
+      setCPhone("");
+      setCAddress("");
+      triggerNotification(`Contact [${cName}] successfully compiled.`, "success");
+    }
   };
 
   // -----------------------------------------------------------------
@@ -1749,13 +1796,23 @@ export default function App() {
   const totalDuesActiveState = totalOutstandingDueTk;
   const netEarningsReceived = totalSalesTk - totalOutstandingDueTk;
   
-  // Exact COGS calculation using matching products buy price, preferring transaction item overrides
+  // Exact COGS calculation using matching products buy price, preferring actual catalog prices
   let totalCostOfGoodsSold = 0;
   filteredDashboardTx.forEach(t => {
     t.items.forEach(item => {
-      const dbProduct = products.find(p => p.id === item.id || p.name === item.name || p.productId === item.productId);
-      // Fallback to item-specific buyPrice override first, or standard dbProduct buyPrice, or 85% of price
-      const buyCost = item.buyPrice !== undefined ? item.buyPrice : (dbProduct ? dbProduct.buyPrice : (item.price * 0.85)); 
+      const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+      let buyCost = 0;
+      if (dbProduct && dbProduct.buyPrice > 0) {
+        buyCost = dbProduct.buyPrice;
+      } else if (item.buyPrice && item.buyPrice > 0) {
+        buyCost = item.buyPrice;
+      } else if (dbProduct) {
+        buyCost = dbProduct.buyPrice;
+      } else if (item.buyPrice !== undefined) {
+        buyCost = item.buyPrice;
+      } else {
+        buyCost = item.price * 0.70;
+      }
       totalCostOfGoodsSold += buyCost * item.quantity;
     });
   });
@@ -1889,7 +1946,7 @@ export default function App() {
                   onClick={() => setActiveTab("dashboard")}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'dashboard' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
-                  <TrendingUp className="w-4 h-4" />
+                  <LayoutDashboard className="w-4 h-4" />
                   Dashboard
                 </button>
 
@@ -1963,15 +2020,6 @@ export default function App() {
                 >
                   <PiggyBank className="w-4 h-4" />
                   Expenses Ledger
-                </button>
-
-                <button
-                  id="tab-insights-btn"
-                  onClick={() => setActiveTab("insights")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'insights' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <Sparkle className="w-4 h-4 animate-pulse text-amber-500" />
-                  AI Insights
                 </button>
 
                 <button
@@ -2107,7 +2155,7 @@ export default function App() {
             <div className="flex items-center gap-1.5 md:gap-2">
               <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
               <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
-                {activeTab === 'dashboard' && 'Dashboard'}
+                {activeTab === 'dashboard' && <span className="hidden md:inline">Dashboard</span>}
                 {activeTab === 'reports' && 'Reports Dashboard'}
                 {activeTab === 'products' && 'Product Settings'}
                 {activeTab === 'negative-sales' && 'Negative Stock Log'}
@@ -2115,7 +2163,6 @@ export default function App() {
                 {activeTab === "pos" && "Counter Cash Memo"}
                 {activeTab === 'inventory' && 'Stock Management'}
                 {activeTab === 'ledger' && 'Account Ledger'}
-                {activeTab === "insights" && "AI Assistant"}
                 {activeTab === 'expenses' && 'Expenses Ledger'}
                 {activeTab === 'contacts' && 'Customers Directory'}
                 {activeTab === 'settings' && 'System Settings'}
@@ -2130,7 +2177,6 @@ export default function App() {
               {activeTab === "pos" && "Point-of-Sale Checkout terminal. Easily add items to cart and print receipt."}
               {activeTab === 'inventory' && 'Track physical stocks, inventory valuations, and supplier purchases/credit accounts.'}
               {activeTab === 'ledger' && 'Acknowledge transactions, review accounts receivable and enter payments due.'}
-              {activeTab === 'insights' && 'Securely inspects ledger records using Google Gemini.'}
               {activeTab === 'expenses' && 'Record administrative costs, electricity bills, and monthly outlays.'}
               {activeTab === 'contacts' && 'CRM and suppliers contact list.'}
               {activeTab === 'settings' && 'Configure printed receipt company address, contact phone, and variables.'}
@@ -2309,11 +2355,16 @@ export default function App() {
           {/* -------------------- VIEW 0: BUSINESS DASHBOARD & PERIOD FILTERS -------------------- */}
           {activeTab === "dashboard" && (
             <DashboardView
-              products={products}
-              transactions={transactions}
-              expenses={expenses}
-              purchases={purchases}
               businessInfo={businessInfo}
+              isBackingUp={isBackingUp}
+              isRestoring={isRestoring}
+              triggerCloudBackupSync={triggerCloudBackupSync}
+              triggerCloudBackupRestore={triggerCloudBackupRestore}
+              onDataImport={handleDataImport}
+              onNavigate={(tab) => {
+                setActiveTab(tab);
+                triggerNotification(`${tab} view initialized`, "info");
+              }}
               dashboardFilter={dashboardFilter}
               setDashboardFilter={setDashboardFilter}
               customStart={customStart}
@@ -2326,10 +2377,8 @@ export default function App() {
               totalPurchasesTk={totalPurchasesTk}
               totalUnitsSold={totalUnitsSold}
               netProfitAmt={netProfitAmt}
-              onNavigate={(tab) => {
-                setActiveTab(tab);
-                triggerNotification(`${tab} view initialized`, "info");
-              }}
+              ledgerTrendsPlotData={ledgerTrendsPlotData}
+              expenseCategoryPlotData={expenseCategoryPlotData}
             />
           )}
 
@@ -2340,6 +2389,7 @@ export default function App() {
               transactions={transactions}
               expenses={expenses}
               purchases={purchases}
+              contacts={contacts}
               businessInfo={businessInfo}
               currencySymbol={businessInfo.currencySymbol || "৳"}
             />
@@ -2426,47 +2476,88 @@ export default function App() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end" id="product-picker-inputs">
                     
-                     <div className="col-span-1 md:col-span-5 space-y-1.5" id="pos-select-wrap">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Select Product</label>
+                     <div className="col-span-1 md:col-span-5 space-y-1.5 relative text-left" id="pos-select-wrap">
+                      <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Search & Select Product</label>
+                      <div className="relative">
                         <input
                           type="text"
-                          placeholder="Fuzzy filter items..."
+                          placeholder="Type product name, SKU, category..."
                           value={posSearchQuery}
-                          onChange={(e) => setPosSearchQuery(e.target.value)}
-                          className="px-2 py-0.5 bg-[#121214] border border-[#2D2D35] rounded-md text-[9px] text-[#00E676] placeholder-slate-600 outline-none focus:border-[#00E676] w-28 font-mono"
+                          onChange={(e) => {
+                            setPosSearchQuery(e.target.value);
+                            setShowSuggestions(true);
+                          }}
+                          onFocus={() => setShowSuggestions(true)}
+                          className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-slate-100 text-xs outline-none focus:border-[#00E676] transition-all font-sans focus:ring-1 focus:ring-[#00E676]/30"
                         />
+                        {selectedProductId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProductId("");
+                              setCartItemPrice("");
+                              setPosSearchQuery("");
+                            }}
+                            className="absolute right-3 top-2.5 text-[9px] font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500/25 px-1.5 py-1 rounded border border-rose-500/20 transition-all"
+                          >
+                            Clear Selection
+                          </button>
+                        )}
                       </div>
-                      <select
-                        id="pos-product-select"
-                        value={selectedProductId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedProductId(val);
-                          const prod = products.find(p => p.id === val);
-                          if (prod) {
-                            setCartItemPrice(prod.sellPrice.toString());
-                          } else {
-                            setCartItemPrice("");
-                          }
-                        }}
-                        className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-slate-100 text-xs outline-none focus:border-[#00E676] transition-all font-sans cursor-pointer focus:ring-1 focus:ring-[#00E676]/30"
-                      >
-                        <option value="">-- Choose Product to buy --</option>
-                        {products
-                          .filter(p => {
-                            const term = posSearchQuery.toLowerCase().trim();
-                            if (!term) return true;
-                            const searchWords = term.split(/\s+/);
-                            const target = `${p.name} ${p.sku} ${p.category}`.toLowerCase();
-                            return searchWords.every(word => target.includes(word));
-                          })
-                          .map((p) => (
-                            <option key={p.id} value={p.id} className="bg-[#1E1E24] text-white">
-                              {p.name} [{p.sku}] - Stock: {p.stock} {p.unit} ({p.sellPrice} {businessInfo.currencySymbol})
-                            </option>
-                          ))}
-                      </select>
+
+                      {/* Floating suggestions dropdown with auto-filtering */}
+                      {showSuggestions && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowSuggestions(false)} />
+                          <div className="absolute top-full left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto bg-[#1E1E24] border border-[#2D2D35] rounded-xl shadow-2xl p-1.5 divide-y divide-[#2D2D35]/30 scrollbar-thin scrollbar-thumb-slate-700 font-sans">
+                            {(() => {
+                              const term = posSearchQuery.toLowerCase().trim();
+                              const filtered = products.filter(p => {
+                                if (!term) return true;
+                                const searchWords = term.split(/\s+/);
+                                const target = `${p.name} ${p.sku} ${p.category}`.toLowerCase();
+                                return searchWords.every(word => target.includes(word));
+                              });
+
+                              if (filtered.length === 0) {
+                                return (
+                                  <div className="p-3 text-xs text-[#A0A0A5] italic text-center">
+                                    No products found matching "{posSearchQuery}"
+                                  </div>
+                                );
+                              }
+
+                              return filtered.map(p => {
+                                const isSelected = p.id === selectedProductId;
+                                return (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedProductId(p.id);
+                                      setCartItemPrice(p.sellPrice.toString());
+                                      setPosSearchQuery(p.name);
+                                      setShowSuggestions(false);
+                                      triggerNotification(`Selected product: ${p.name}`, "info");
+                                    }}
+                                    className={`w-full text-left p-2.5 rounded-lg flex items-center justify-between text-xs hover:bg-[#00E676]/15 hover:text-white transition-all cursor-pointer ${isSelected ? "bg-[#00E676]/10 text-[#00E676] font-bold" : "text-slate-300"}`}
+                                  >
+                                    <div className="min-w-0 pr-2">
+                                      <div className="font-bold truncate text-white">{p.name}</div>
+                                      <div className="text-[9px] text-[#A0A0A5] font-mono mt-0.5">
+                                        SKU: {p.sku || "N/A"} <span className="text-slate-600">|</span> Stock: {p.stock} {p.unit}
+                                      </div>
+                                    </div>
+                                    <div className="shrink-0 text-right font-mono font-bold text-[#00E676] bg-[#00E676]/5 px-2 py-0.5 rounded border border-[#00E676]/10">
+                                      {businessInfo.currencySymbol}{p.sellPrice}
+                                    </div>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <div className="col-span-1 md:col-span-2 space-y-1.5" id="pos-qty-wrap">
@@ -2644,6 +2735,17 @@ export default function App() {
                   <div className="flex items-center gap-2 border-b border-[#2D2D35] pb-3">
                     <span className="w-5 h-5 rounded-lg bg-[#00E676]/10 text-[#00E676] flex items-center justify-center font-bold text-xs">3</span>
                     <h3 className="text-sm font-bold text-white tracking-wide uppercase">Checkout Summary</h3>
+                  </div>
+
+                  {/* Custom invoice date picker option */}
+                  <div className="space-y-1.5" id="pos-billing-date-wrapper">
+                    <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Invoice / Transaction Date</label>
+                    <input
+                      type="date"
+                      value={posCustomDate}
+                      onChange={(e) => setPosCustomDate(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] font-mono focus:ring-1 focus:ring-[#00E676]/30 cursor-pointer"
+                    />
                   </div>
 
                   {/* Customer dropdown map */}
@@ -3735,7 +3837,18 @@ export default function App() {
                             <div className="space-y-1">
                               {t.items.map((it, idx) => {
                                 const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
-                                const buyCost = it.buyPrice !== undefined ? it.buyPrice : (dbProduct ? dbProduct.buyPrice : 0);
+                                let buyCost = 0;
+                                if (dbProduct && dbProduct.buyPrice > 0) {
+                                  buyCost = dbProduct.buyPrice;
+                                } else if (it.buyPrice && it.buyPrice > 0) {
+                                  buyCost = it.buyPrice;
+                                } else if (dbProduct) {
+                                  buyCost = dbProduct.buyPrice;
+                                } else if (it.buyPrice !== undefined) {
+                                  buyCost = it.buyPrice;
+                                } else {
+                                  buyCost = 0;
+                                }
                                 const showEdit = showCostEditId === `${t.id}-${idx}`;
 
                                 return (
@@ -3933,166 +4046,7 @@ export default function App() {
             </div>
           )}
 
-          {/* -----------------------------------------------------------------
-              VIEW 4: AI STRATEGIC REPORTS & ANALYTICS WORKSPACE
-              ----------------------------------------------------------------- */}
-          {activeTab === "insights" && (
-            <div className="space-y-6" id="view-insights-container">
-              
-              {/* Headline Banner */}
-              <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-sky-950/20 border border-emerald-500/10 p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6" id="ai-insights-header">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkle className="w-5 h-5 text-amber-400 animate-pulse" />
-                    <span className="text-xs uppercase tracking-wider font-mono text-emerald-400 font-bold">Google Gemini AI Engine Connected</span>
-                  </div>
-                  <h2 className="text-xl font-bold text-white font-display">Live AI Diagnostic Advisor (Powered by Gemini)</h2>
-                  <p className="text-xs text-slate-400 leading-relaxed font-sans max-w-2xl">
-                    Click below to invoke Gemini analysis. The engine reads stock logs, showroom outgoing vouchers, and active ledger sheets to construct professional strategic recommendations.
-                  </p>
-                </div>
 
-                <button
-                  id="recalculate-insights-btn"
-                  onClick={fetchStrategicInsights}
-                  disabled={isGeneratingInsights}
-                  className="bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 py-3.5 px-6 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg hover:from-emerald-400 hover:to-emerald-300 disabled:opacity-50 shrink-0 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {isGeneratingInsights ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Diagnosing business spreadsheet patterns...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkle className="w-4 h-4" />
-                      Formulate AI Strategic Advisor Report
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Insights Grid list */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5" id="ai-insights-list">
-                {aiInsightsList.length === 0 ? (
-                  <div className="col-span-3 p-12 bg-[#0a101f]/80 border border-slate-800 rounded-2xl text-center space-y-3" id="insights-empty">
-                    <p className="text-sm text-slate-500 italic">No business analytical advice compiled yet. Press the Formulate AI Strategic Report button to generate insights.</p>
-                  </div>
-                ) : (
-                  aiInsightsList.map((ins, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`p-5 rounded-2xl border relative overflow-hidden flex flex-col justify-between ${
-                        ins.type === "warning" 
-                          ? "bg-rose-950/15 border-rose-500/10 text-rose-400" 
-                          : ins.type === "success" 
-                            ? "bg-emerald-950/15 border-emerald-500/10 text-emerald-400" 
-                            : "bg-sky-950/15 border-sky-500/10 text-sky-400"
-                      }`}
-                      id={`insight-card-${idx}`}
-                    >
-                      <div className="space-y-3">
-                        <span className={`text-[10px] font-mono tracking-wider uppercase inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
-                          ins.type === 'warning' ? 'bg-rose-500/10' : ins.type === 'success' ? 'bg-emerald-500/10' : 'bg-sky-500/10'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            ins.type === 'warning' ? 'bg-rose-500' : ins.type === 'success' ? 'bg-emerald-500' : 'bg-sky-500'
-                          }`} />
-                          {ins.type === 'warning' ? 'Warning Alert' : ins.type === 'success' ? 'Optimization Win' : 'General Info'}
-                        </span>
-                        <h4 className="text-sm font-bold text-white font-display">{ins.title}</h4>
-                        <p className="text-xs text-slate-300 font-sans leading-relaxed whitespace-pre-wrap">{ins.description}</p>
-                      </div>
-                      
-                      <div className="mt-4 text-[10px] font-mono text-slate-500">
-                        Generated by gemini-3.5-flash
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Data Visualization Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" id="insights-charts-grid">
-                
-                {/* Sale trends */}
-                <div className="bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl" id="chart-sales-panel">
-                  <div className="mb-4" id="sales-chart-title">
-                    <h3 className="text-sm font-semibold text-white">Showroom Invoicing Traffic Velocity</h3>
-                    <p className="text-xs text-slate-500">Comparative visualization of billing value vs. cash collected over time.</p>
-                  </div>
-
-                  <div className="h-64" id="sales-chart-wrap">
-                    {ledgerTrendsPlotData.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-slate-500 italic text-xs">
-                        No checkout transaction logs recorded yet. Complete test checkout to initialize.
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={ledgerTrendsPlotData}>
-                          <defs>
-                            <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                            </linearGradient>
-                            <linearGradient id="colorCash" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
-                              <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="date" stroke="#64748b" style={{ fontSize: 10 }} />
-                          <YAxis stroke="#64748b" style={{ fontSize: 10 }} />
-                          <Tooltip contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155" }} />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
-                          <Area type="monotone" dataKey="Sales Value" stroke="#10b981" fillOpacity={1} fill="url(#colorSales)" />
-                          <Area type="monotone" dataKey="Cash Received" stroke="#06b6d4" fillOpacity={1} fill="url(#colorCash)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-
-                {/* Expense Categories summary */}
-                <div className="bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl" id="chart-expenses-panel">
-                  <div className="mb-4" id="expense-chart-title">
-                    <h3 className="text-sm font-semibold text-white">Overheads outlays proportional breakdown</h3>
-                    <p className="text-xs text-slate-500">Diagnostic pie representation of compiled business cost factors.</p>
-                  </div>
-
-                  <div className="h-64 flex items-center justify-center" id="expense-chart-wrap">
-                    {expenseCategoryPlotData.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-slate-500 italic text-xs">
-                        No cost factors recorded. Log outgoings into the database.
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={expenseCategoryPlotData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={5}
-                            dataKey="value"
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                          >
-                            {expenseCategoryPlotData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155" }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-          )}
 
           {/* -----------------------------------------------------------------
               VIEW 5: EXPENSES LEDGER WITH AI CATEGORY INFERENCE
@@ -4377,8 +4331,12 @@ export default function App() {
                 {/* Add contact form (4 Cols) */}
                 <div className="lg:col-span-4 bg-[#1E1E24] border border-[#2D2D35] p-6 rounded-2xl space-y-4 shadow-lg" id="add-contact-panel">
                   <div className="border-b border-[#2D2D35] pb-3">
-                    <h3 className="text-sm font-bold text-white tracking-wide uppercase">Register Partner</h3>
-                    <p className="text-[10px] text-[#A0A0A5]">Register a customer client or wholesaler to tracking payments</p>
+                    <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+                      {editingContact ? "Edit Active Partner" : "Register Partner"}
+                    </h3>
+                    <p className="text-[10px] text-[#A0A0A5]">
+                      {editingContact ? "Modify contact information for this client account" : "Register a customer client or wholesaler to tracking payments"}
+                    </p>
                   </div>
                   
                   <form onSubmit={handleAddContact} className="space-y-4" id="contacts-form">
@@ -4451,8 +4409,23 @@ export default function App() {
                       className="w-full py-3.5 bg-[#00E676] hover:bg-[#00D065] text-[#121214] font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-[#00E676]/10"
                     >
                       <PlusCircle className="w-4 h-4" />
-                      Register Profile
+                      {editingContact ? "Save Profile Changes" : "Register Profile"}
                     </button>
+
+                    {editingContact && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingContact(null);
+                          setCName("");
+                          setCPhone("");
+                          setCAddress("");
+                        }}
+                        className="w-full py-2 bg-[#2D2D35]/50 hover:bg-[#2D2D35] text-[#A0A0A5] hover:text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-[#2D2D35]"
+                      >
+                        Cancel Editing
+                      </button>
+                    )}
 
                   </form>
                 </div>
@@ -4579,6 +4552,22 @@ export default function App() {
                                   <History className="w-3 h-3" />
                                 </button>
                                 
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingContact(c);
+                                    setCName(c.name);
+                                    setCPhone(c.phone);
+                                    setCAddress(c.address || "");
+                                    setCType(c.type || "customer");
+                                    triggerNotification(`Editing profile for: ${c.name}`, "info");
+                                  }}
+                                  className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
+                                  title="Edit Profile"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+
                                 {deleteContactId === c.id ? (
                                   <div className="flex items-center gap-1 bg-rose-500/10 p-0.5 rounded border border-rose-500/20">
                                     <button
@@ -5253,12 +5242,11 @@ export default function App() {
                             {/* Client particulars bill to container */}
                             <div className={`p-3 bg-opacity-70 border rounded ${styles.accentLine} bg-neutral-200/5`}>
                               <div className={`text-[9px] font-mono tracking-wider text-slate-400 uppercase`}>
-                                BILL TO (CUSTOMER BIOGRAPHY TYPE):
+                                BILL TO (CUSTOMER BIOGRAPHY):
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
                                 <div>
                                   <div className="text-xs font-black">Mst. Sabrina Rahman</div>
-                                  <div className={styles.secondaryText}>Email: sabrina@dhaka.net</div>
                                 </div>
                                 <div className="sm:text-right">
                                   <div className={styles.secondaryText}>Phone: +880 1712-345678</div>
@@ -6292,7 +6280,7 @@ export default function App() {
           }`}
         >
           <LayoutDashboard className="w-[18px] h-[18px] mb-1" />
-          <span className="text-[9px] font-semibold tracking-wide font-sans">Dashboard</span>
+          {/* Label word Dashboard removed for clean mobile design */}
           {activeTab === "dashboard" && (
             <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
           )}
@@ -6318,25 +6306,6 @@ export default function App() {
             <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
           )}
         </button>
-
-        {/* AI Insights */}
-        {currentPanel === "admin" && (
-          <button
-            onClick={() => {
-              setActiveTab("insights");
-              setIsMobileMenuOpen(false);
-            }}
-            className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
-              activeTab === "insights" ? "text-amber-400 scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
-            }`}
-          >
-            <Sparkle className="w-[18px] h-[18px] mb-1 animate-pulse" />
-            <span className="text-[9px] font-semibold tracking-wide">AI</span>
-            {activeTab === "insights" && (
-              <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
-            )}
-          </button>
-        )}
 
         {/* Menu/More Button */}
         <button
@@ -6501,12 +6470,11 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Category 4: AI & Settings */}
+                    {/* Category 4: Management & System */}
                     <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35]">
-                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">A.I. & Diagnostics</span>
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Management & System</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "insights", label: "AI Insights", desc: "Expert tips", Icon: Sparkle, pulse: true },
                           { id: "staff", label: "Staff Management", desc: "Salary sheets", Icon: UserCheck },
                           { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
                         ].map((item) => {
@@ -6522,10 +6490,10 @@ export default function App() {
                               className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
                                 isActive 
                                   ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
-                                  : item.id === "insights" ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
                               }`}
                             >
-                              <Icon className={`w-4 h-4 mb-1 ${item.pulse ? 'animate-pulse text-amber-400' : 'text-[#00E676]'}`} />
+                              <Icon className={`w-4 h-4 mb-1 text-[#00E676]`} />
                               <span className="text-[11px] font-black leading-tight">{item.label}</span>
                               <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
                             </button>

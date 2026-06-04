@@ -884,16 +884,16 @@ export const signUpWithEmail = async (email: string, pass: string) => {
       const errMsg = directErr?.message || "";
 
       if (errCode === "auth/weak-password" || errMsg.includes("6 characters") || errMsg.includes("weak")) {
-        throw new Error("পাসওয়ার্ডটি কমপক্ষে ৬ অক্ষরের হতে হবে!");
+        throw new Error("Password must be at least 6 characters long!");
       }
       if (errCode === "auth/email-already-in-use" || errMsg.includes("already-registered") || errMsg.includes("already in use") || errMsg.includes("already registered")) {
-        throw new Error("এই ইমেইলটি ইতিপূর্বে রেজিস্টার করা হয়েছে! দয়া করে লগইন করুন।");
+        throw new Error("This email is already registered! Please sign in instead.");
       }
       if (errCode === "auth/operation-not-allowed" || errMsg.includes("operation-not-allowed") || errMsg.includes("not-allowed")) {
-        throw new Error("Firebase Authentication-এ 'Email/Password' বিকল্পটি সচল করা হয়নি। অনুগ্রহ করে আপনার Firebase Console-এ গিয়ে Build -> Authentication -> Sign-in method থেকে 'Email/Password' প্রোভাইডারটি Enable বা সচল করুন।");
+        throw new Error("Email/Password Auth is disabled in Firebase. Please enable it under Auth Sign-in methods in your Firebase Console.");
       }
       if (errCode === "auth/invalid-api-key" || errMsg.includes("invalid-api-key") || errMsg.includes("api-key")) {
-        throw new Error("ভুল Firebase API Key! অনুগ্রহ করে আপনার Firebase প্রজেক্ট প্রোভিশনিং বা কনফিগ পুনরায় চেক করার জন্য Settings থেকে API Key চেক করুন।");
+        throw new Error("Invalid Firebase API Key! Please verify your project configuration in the Settings.");
       }
       fallbackError = errMsg || String(directErr);
     }
@@ -913,15 +913,15 @@ export const signUpWithEmail = async (email: string, pass: string) => {
           if (response.ok) {
             authUser = result.user;
           } else {
-            throw new Error("রেজিস্ট্রেশন ব্যর্থ হয়েছে।");
+            throw new Error("Registration failed.");
           }
         } else {
           if (fallbackError) {
             let readableMsg = fallbackError;
             if (fallbackError.includes("auth/operation-not-allowed") || fallbackError.includes("operation-not-allowed")) {
-              readableMsg = "Firebase Authentication-এ 'Email/Password' সাইন-ইন মেথডটি চালু (Enabled) করা হয়নি। অনুগ্রহ করে Firebase Console থেকে এটি চালু করুন।";
+              readableMsg = "Email/Password sign-in method is not enabled in your Firebase Console. Please enable it to proceed.";
             } else if (fallbackError.includes("api-key")) {
-              readableMsg = "ভুল Firebase API Key! অনুগ্রহ করে আপনার API Key ও কনফিগ পুনরায় পরীক্ষা করুন।";
+              readableMsg = "Invalid Firebase API Key! Please verify your settings and credentials.";
             }
             throw new Error(readableMsg);
           }
@@ -933,7 +933,7 @@ export const signUpWithEmail = async (email: string, pass: string) => {
           throw fetchErr;
         }
         const suffix = fallbackError ? ` (${fallbackError})` : "";
-        throw new Error(`রেজিস্ট্রেশন সংযোগ ব্যর্থ হয়েছে। আপনার ইন্টারনেট সচল রয়েছে কি না চেক করুন।${suffix}`);
+        throw new Error(`Registration network request failed. Please check your internet connection.${suffix}`);
       }
     }
 
@@ -993,13 +993,13 @@ export const signInWithEmail = async (email: string, pass: string) => {
       const errMsg = directErr?.message || "";
 
       if (errCode === "auth/operation-not-allowed" || errMsg.includes("operation-not-allowed") || errMsg.includes("not-allowed")) {
-        throw new Error("Firebase Authentication-এ 'Email/Password' বিকল্পটি সচল করা হয়নি। অনুগ্রহ করে আপনার Firebase Console-এ গিয়ে Build -> Authentication -> Sign-in method থেকে 'Email/Password' প্রোভাইডারটি Enable বা সচল করুন।");
+        throw new Error("Email/Password Auth is disabled in Firebase. Please enable it under Auth Sign-in methods in your Firebase Console.");
       }
       if (errCode === "auth/invalid-api-key" || errMsg.includes("invalid-api-key") || errMsg.includes("api-key")) {
-        throw new Error("ভুল Firebase API Key! অনুগ্রহ করে আপনার Firebase প্রজেক্ট প্রোভিশনিং বা কনফিগ পুনরায় চেক করার জন্য Settings থেকে API Key চেক করুন।");
+        throw new Error("Invalid Firebase API Key! Please verify your project configuration in the Settings.");
       }
       if (errCode === "auth/wrong-password" || errCode === "auth/invalid-credential" || errCode === "auth/user-not-found" || errMsg.toLowerCase().includes("credentials") || errMsg.toLowerCase().includes("password")) {
-        throw new Error("ভুল পাসওয়ার্ড অথবা ইমেইল! পাসওয়ার্ডটি পুনরায় চেক করুন অথবা নতুন একাউন্ট তৈরি করতে Signup পেজে যান!");
+        throw new Error("Invalid email or password! Please check your credentials or create a new account.");
       }
       fallbackError = errMsg || String(directErr);
     }
@@ -1018,15 +1018,15 @@ export const signInWithEmail = async (email: string, pass: string) => {
           if (response.ok) {
             authUser = result.user;
           } else {
-            throw new Error("লগইন ব্যর্থ হয়েছে।");
+            throw new Error("Login failed.");
           }
         } else {
           if (fallbackError) {
             let readableMsg = fallbackError;
             if (fallbackError.includes("auth/operation-not-allowed") || fallbackError.includes("operation-not-allowed")) {
-              readableMsg = "Firebase Authentication-এ 'Email/Password' সাইন-ইন মেথডটি চালু (Enabled) করা হয়নি। অনুগ্রহ করে Firebase Console থেকে এটি চালু করুন।";
+              readableMsg = "Email/Password sign-in method is not enabled in your Firebase Console. Please enable it to proceed.";
             } else if (fallbackError.includes("api-key")) {
-              readableMsg = "ভুল Firebase API Key! অনুগ্রহ করে আপনার API Key ও কনফিগ পুনরায় পরীক্ষা করুন।";
+              readableMsg = "Invalid Firebase API Key! Please verify your settings and credentials.";
             }
             throw new Error(readableMsg);
           }
@@ -1038,7 +1038,7 @@ export const signInWithEmail = async (email: string, pass: string) => {
           throw fetchErr;
         }
         const suffix = fallbackError ? ` (${fallbackError})` : "";
-        throw new Error(`লগইন কানেকশন ব্যর্থ হয়েছে। ইমেইল এবং পাসওয়ার্ডটি পুনরায় চেক করুন!${suffix}`);
+        throw new Error(`Login network request failed. Please check your credentials and internet connection.${suffix}`);
       }
     }
 
@@ -1228,17 +1228,6 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       if (existingTotal > 0) {
         if (incomingTotal === 0) {
           console.warn(`[Sync Guard] Protected empty backup write for ID: ${syncId}`);
-          return { success: true, ignored: true };
-        }
-
-        if (existingTransactionsCount > incomingTransactionsLength) {
-          console.warn(`[Sync Guard] Stopped database backup overwrite: Local transaction registry out of date.`);
-          return { success: true, ignored: true };
-        }
-
-        const itemLoss = existingTotal - incomingTotal;
-        if (itemLoss > 3 && incomingTotal < existingTotal * 0.9) {
-          console.warn(`[Sync Guard] Stopped database backup overwrite: Overwrite warning detected.`);
           return { success: true, ignored: true };
         }
       }
@@ -1503,7 +1492,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   };
 
   try {
-    restoreLocalKeys(body);
+    restoreLocalKeys(body, true);
   } catch (err) {
     console.warn("Instant offline memory refresh warning:", err);
   }

@@ -38,6 +38,7 @@ interface ReportsViewProps {
   transactions: any[];
   expenses: any[];
   purchases: any[];
+  contacts: any[];
   businessInfo: any;
   currencySymbol: string;
 }
@@ -47,17 +48,30 @@ export function ReportsView({
   transactions,
   expenses,
   purchases,
+  contacts = [],
   businessInfo,
   currencySymbol = "৳"
 }: ReportsViewProps) {
   const [filterType, setFilterType] = useState<"all" | "today" | "weekly" | "monthly" | "custom">("all");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [productSearch, setProductSearch] = useState("");
 
   // Check if a date falls inside the current date filter
   const isDateInFilter = (dateStr: string) => {
     try {
-      const date = parseISO(dateStr);
+      if (!dateStr) return false;
+      let date: Date;
+      if (dateStr.includes("T")) {
+        date = parseISO(dateStr);
+      } else {
+        const parts = dateStr.split("-").map(Number);
+        if (parts.length === 3) {
+          date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+        } else {
+          date = parseISO(dateStr);
+        }
+      }
       const today = startOfDay(new Date());
 
       if (filterType === "all") return true;
@@ -87,11 +101,11 @@ export function ReportsView({
   }, [transactions, filterType, startDate, endDate]);
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => isDateInFilter(e.date + "T12:00:00"));
+    return expenses.filter(e => isDateInFilter(e.date));
   }, [expenses, filterType, startDate, endDate]);
 
   const filteredPurchases = useMemo(() => {
-    return purchases.filter(p => isDateInFilter(p.date + "T12:00:00"));
+    return purchases.filter(p => isDateInFilter(p.date));
   }, [purchases, filterType, startDate, endDate]);
 
   // Aggregate stats
@@ -234,6 +248,77 @@ export function ReportsView({
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
   }, [filteredTransactions]);
+
+  // Individual sale transaction items profitability breakdown ledger as requested by user
+  const individualSaleItemsLedger = useMemo(() => {
+    const list: Array<{
+      date: string;
+      invoiceNo: string;
+      customerName: string;
+      productName: string;
+      sku: string;
+      category: string;
+      quantity: number;
+      salePrice: number;
+      totalRevenue: number;
+      totalCogs: number;
+      netProfit: number;
+      profitMarginPct: number;
+    }> = [];
+
+    // Sort transactions from newest to oldest
+    const sortedTxs = [...filteredTransactions].sort((a, b) => {
+      return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+    });
+
+    sortedTxs.forEach(t => {
+      // Find customer name safely from contacts list
+      const pairedContact = contacts.find(c => c.id === t.contactId);
+      const customerName = pairedContact ? pairedContact.name : "Walk-In Customer";
+      const txDateStr = t.date ? format(new Date(t.date), "dd MMM yyyy") : "N/A";
+
+      t.items?.forEach((item: any) => {
+        // Resolve standard item buy price or match with product database CATALOG buy price
+        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+        
+        let buyCost = 0;
+        if (dbProduct && dbProduct.buyPrice > 0) {
+          buyCost = dbProduct.buyPrice;
+        } else if (item.buyPrice && item.buyPrice > 0) {
+          buyCost = item.buyPrice;
+        } else if (dbProduct) {
+          buyCost = dbProduct.buyPrice;
+        } else if (item.buyPrice !== undefined) {
+          buyCost = item.buyPrice;
+        } else {
+          buyCost = item.price * 0.70;
+        }
+
+        const qty = item.quantity || 1;
+        const totalRevenue = item.price * qty;
+        const totalCogs = buyCost * qty;
+        const netProfit = totalRevenue - totalCogs;
+        const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+        list.push({
+          date: txDateStr,
+          invoiceNo: t.invoiceNo || "N/A",
+          customerName,
+          productName: item.name,
+          sku: item.sku || dbProduct?.sku || "",
+          category: item.category || dbProduct?.category || "",
+          quantity: qty,
+          salePrice: item.price,
+          totalRevenue,
+          totalCogs,
+          netProfit,
+          profitMarginPct
+        });
+      });
+    });
+
+    return list;
+  }, [filteredTransactions, products, contacts]);
 
   const netProfitMarginPct = useMemo(() => {
     if (stats.salesVal <= 0) return 0;
@@ -664,7 +749,116 @@ export function ReportsView({
 
       </div>
 
-      {/* VAT & Sales Tax Ledger removed per user request (kono lenden % thakbe na) */}
+      {/* TRANSACTION PROFITABILITY LEDGER */}
+      <div className="bg-[#1E1E24] p-5 rounded-2xl border border-[#2D2D35] space-y-4 shadow-lg animate-fade-in" id="product-profitability-ledger-section">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2 font-mono">
+              <Layers className="w-4 h-4 text-[#00E676]" />
+              Transaction Profitability Ledger
+            </h3>
+            <p className="text-[10px] text-[#A0A0A5]">
+              Shows customer name, product item, sale price, custom wholesale cost, calculated net profit, and profit margin for each individual sales transaction item line.
+            </p>
+          </div>
+
+          {/* Quick Search input to find specific item gains */}
+          <div className="relative shrink-0 w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Search product or customer..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              className="w-full bg-[#121214] border border-[#2D2D35] focus:border-[#00B0FF] rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        {/* The responsive data table */}
+        <div className="overflow-x-auto rounded-xl border border-[#2D2D35]/60">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
+              <tr className="bg-[#121214]/60 border-b border-[#2D2D35] text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                <th className="py-3 px-4">Date & Invoice</th>
+                <th className="py-3 px-4">Customer Details</th>
+                <th className="py-3 px-4">Product Details</th>
+                <th className="py-3 px-4 text-center">Qty</th>
+                <th className="py-3 px-4 text-right">Sale Price</th>
+                <th className="py-3 px-4 text-right">Wholesale Cost (COGS)</th>
+                <th className="py-3 px-4 text-right">Net Profit</th>
+                <th className="py-3 px-4 text-right">Margin</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#2D2D35]/40 text-xs text-slate-300 font-medium font-sans">
+              {(() => {
+                const filteredList = individualSaleItemsLedger.filter(p => 
+                  p.productName.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  p.customerName.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  p.sku.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  p.invoiceNo.toLowerCase().includes(productSearch.toLowerCase())
+                );
+
+                if (filteredList.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-500 italic">
+                        No transaction sales records match your filters.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filteredList.map((p, idx) => {
+                  const isProfitPositive = p.netProfit >= 0;
+                  return (
+                    <tr key={idx} className="hover:bg-[#121214]/30 transition-colors">
+                      <td className="py-3.5 px-4 font-mono text-slate-400">
+                        <div className="text-[11px] font-bold text-slate-300">{p.date}</div>
+                        <div className="text-[9px] text-[#00E676] bg-[#00E676]/10 px-1 py-0.5 rounded inline-block mt-1 font-bold border border-[#00E676]/10">
+                          {p.invoiceNo}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 bg-[#00E676] rounded-full inline-block"></span>
+                          {p.customerName}
+                        </div>
+                        <div className="text-[9px] text-slate-400 mt-0.5 pl-3">
+                          Client Account Profile
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-white">{p.productName}</div>
+                        <div className="text-[9px] text-[#A0A0A5] font-mono mt-0.5">
+                          {p.sku ? `SKU: ${p.sku}` : `Category: ${p.category || "General"}`}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-300">
+                        {p.quantity}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-200">
+                        {currencySymbol}{p.salePrice.toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-400">
+                        {currencySymbol}{p.totalCogs.toLocaleString()}
+                      </td>
+                      <td className={`py-3.5 px-4 text-right font-mono font-extrabold ${isProfitPositive ? "text-[#00E676]" : "text-rose-500"}`}>
+                        {isProfitPositive ? "+" : ""}{currencySymbol}{Math.round(p.netProfit).toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${isProfitPositive ? "bg-emerald-950/40 text-emerald-400 border border-emerald-950" : "bg-rose-950/40 text-rose-400 border border-rose-950"}`}>
+                          {p.profitMarginPct.toFixed(1)}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
     </div>
   );
