@@ -1557,6 +1557,100 @@ export default function App() {
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [isClassifying, setIsClassifying] = useState(false);
 
+  // Expense Date Range States
+  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+    const saved = localStorage.getItem(getDbKey("barakah_expense_date_filter"));
+    if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+      return saved as any;
+    }
+    return "all";
+  });
+  const setExpenseDateFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+    _setExpenseDateFilter(val);
+    localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
+  };
+
+  const [expenseCustomStart, _setExpenseCustomStart] = useState<string>(() => {
+    return localStorage.getItem(getDbKey("barakah_expense_custom_start")) || new Date().toISOString().split("T")[0];
+  });
+  const setExpenseCustomStart = (val: string) => {
+    _setExpenseCustomStart(val);
+    localStorage.setItem(getDbKey("barakah_expense_custom_start"), val);
+  };
+
+  const [expenseCustomEnd, _setExpenseCustomEnd] = useState<string>(() => {
+    return localStorage.getItem(getDbKey("barakah_expense_custom_end")) || new Date().toISOString().split("T")[0];
+  });
+  const setExpenseCustomEnd = (val: string) => {
+    _setExpenseCustomEnd(val);
+    localStorage.setItem(getDbKey("barakah_expense_custom_end"), val);
+  };
+
+  // Edit Expense States
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editExpenseDesc, setEditExpenseDesc] = useState("");
+  const [editExpenseCategory, setEditExpenseCategory] = useState("Others");
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseDate, setEditExpenseDate] = useState("");
+
+  const checkExpenseDateInFilter = (dateStr: string) => {
+    try {
+      if (!dateStr) return false;
+      const targetDate = new Date(dateStr);
+      const targetTime = targetDate.getTime();
+      
+      const today = new Date();
+      if (expenseDateFilter === "all") return true;
+      if (expenseDateFilter === "today") {
+        return targetDate.toDateString() === today.toDateString();
+      }
+      if (expenseDateFilter === "weekly") {
+        const check7DaysAgo = new Date();
+        check7DaysAgo.setDate(today.getDate() - 7);
+        const tDate = new Date(dateStr + "T00:00:00");
+        const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+        const sevenDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7, 0, 0, 0);
+        return tDate.getTime() >= sevenDaysAgo.getTime() && tDate.getTime() <= midnightToday.getTime();
+      }
+      if (expenseDateFilter === "monthly") {
+        return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      }
+      if (expenseDateFilter === "yearly") {
+        return targetDate.getFullYear() === today.getFullYear();
+      }
+      if (expenseDateFilter === "custom") {
+        const start = new Date(expenseCustomStart + "T00:00:00");
+        const end = new Date(expenseCustomEnd + "T23:59:59");
+        const currentTarget = new Date(dateStr + "T12:00:00");
+        return currentTarget.getTime() >= start.getTime() && currentTarget.getTime() <= end.getTime();
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  };
+
+  const handleUpdateExpenseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense || !editExpenseDesc || !editExpenseAmount) return;
+
+    const updatedExp: Expense = {
+      ...editingExpense,
+      description: editExpenseDesc.trim(),
+      category: editExpenseCategory,
+      amount: Number(editExpenseAmount) || 0,
+      date: editExpenseDate
+    };
+
+    setExpenses(prev => prev.map(item => item.id === editingExpense.id ? updatedExp : item));
+    setEditingExpense(null);
+    setEditExpenseDesc("");
+    setEditExpenseCategory("Others");
+    setEditExpenseAmount("");
+    setEditExpenseDate("");
+    triggerNotification("Business expense item successfully updated!");
+  };
+
   // Combine standard default list alongside any category names extracted from already saved records
   const allCategories = Array.from(new Set([
     ...expenseCategories,
@@ -3856,7 +3950,10 @@ export default function App() {
                                   <div key={idx} className="flex justify-between items-center text-[11px] font-sans text-slate-300 py-1 border-b border-slate-800/20 last:border-b-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span> 
-                                      <span>{it.name}</span>
+                                      <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
+                                      </span>
                                       {buyCost > 0 && (
                                         <span className="text-[9px] text-slate-500 font-mono">
                                           (Cost: {businessInfo.currencySymbol}{buyCost})
@@ -4052,233 +4149,326 @@ export default function App() {
           {/* -----------------------------------------------------------------
               VIEW 5: EXPENSES LEDGER WITH AI CATEGORY INFERENCE
               ----------------------------------------------------------------- */}
+          {/* -----------------------------------------------------------------
+              VIEW 5: EXPENSES LEDGER WITH AI CATEGORY INFERENCE
+              ----------------------------------------------------------------- */}
           {activeTab === "expenses" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="view-expenses-container">
+            <div className="space-y-6" id="view-expenses-outer-container">
               
-              {/* Form panel to entry outgoings (4 Cols) */}
-              <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4" id="add-expense-panel">
-                <h3 className="text-sm font-semibold text-white tracking-wide border-b border-slate-900 pb-2.5">Log Administrative Showroom Outgoings</h3>
-                
-                <form onSubmit={handleAddExpense} className="space-y-4" id="outgoing-add-form">
+              {/* DATE RANGE FILTER FOR EXPENSES LEDGER */}
+              <div className="bg-[#0b0f19]/90 border border-slate-800 p-4 rounded-2xl shadow-lg" id="expense-period-menu-container">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-wrap gap-1.5" id="preset-expense-pills">
+                    {[
+                      { id: "all", label: "All Time" },
+                      { id: "today", label: "Today" },
+                      { id: "weekly", label: "7 Days" },
+                      { id: "monthly", label: "This Month" },
+                      { id: "yearly", label: "This Year" },
+                      { id: "custom", label: "Custom Range" }
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => setExpenseDateFilter(preset.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer whitespace-nowrap border ${
+                          expenseDateFilter === preset.id
+                            ? "bg-[#181d2f] text-[#00E676] border-[#2b3558] font-bold shadow-md"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/40 border-transparent bg-transparent"
+                        }`}
+                        id={`expense-preset-key-${preset.id}`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                   
-                  <div className="space-y-1.5" id="expense-desc-wrap">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Description / Pay Reason *</label>
-                    <textarea
-                      required
-                      placeholder="e.g. Warehouse monthly lease, electric bills, courier postage"
-                      value={expenseDesc}
-                      onChange={(e) => setExpenseDesc(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans h-20 resize-none leading-normal"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2" id="ai-classify-outgoing">
-                    <button
-                      type="button"
-                      id="ai-suggest-category-btn"
-                      onClick={fetchAISuggestedCategory}
-                      disabled={isClassifying}
-                      className="text-[11px] font-bold text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      {isClassifying ? "AI Categorizing..." : "✨ Predict Category with AI"}
-                    </button>
-                    <span className="text-[9px] text-slate-500 font-mono">Gemini automatically scans outgo’s category</span>
-                  </div>
-
-                  <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Expense Category Type *</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingCustomCategory(!isAddingCustomCategory);
-                            if (!isAddingCustomCategory) {
-                              setExpenseCategory("");
-                            } else {
-                              setExpenseCategory("Others");
-                            }
-                          }}
-                          className="text-[9px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors cursor-pointer select-none"
-                        >
-                          {isAddingCustomCategory ? "← Select Preset Category" : "⊕ Add Custom Category"}
-                        </button>
+                  {/* Summary of expense for current range */}
+                  {(() => {
+                    const filteredRangeExpenses = expenses.filter(e => checkExpenseDateInFilter(e.date));
+                    const rangeTotal = filteredRangeExpenses.reduce((sum, e) => sum + e.amount, 0);
+                    return (
+                      <div className="bg-[#121214]/60 border border-slate-800 rounded-xl px-4 py-2 font-mono text-center shrink-0">
+                        <span className="text-[9px] text-slate-400 uppercase block tracking-wider font-bold">Selected Range Total</span>
+                        <span className="text-xs font-semibold text-rose-400 font-sans">
+                          {businessInfo.currencySymbol} {rangeTotal.toLocaleString()}
+                        </span>
                       </div>
+                    );
+                  })()}
+                </div>
 
-                      {!isAddingCustomCategory ? (
-                        <select
-                          required
-                          value={expenseCategory}
-                          onChange={(e) => setExpenseCategory(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                        >
-                          {allCategories.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            required
-                            placeholder="Type new category (e.g. Internet, Office Tea)"
-                            value={customCategory}
-                            onChange={(e) => setCustomCategory(e.target.value)}
-                            className="w-full px-3 py-2 bg-[#050912] border border-emerald-500/40 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                          />
+                {/* Custom Date Inputs if "custom" range is chosen */}
+                {expenseDateFilter === "custom" && (
+                  <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-800/50 mt-1" id="expense-custom-limits-deck">
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-slate-500 uppercase block font-mono">Start Date</span>
+                      <input
+                        type="date"
+                        value={expenseCustomStart}
+                        onChange={(e) => setExpenseCustomStart(e.target.value)}
+                        className="bg-[#050912] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white uppercase focus:ring-1 focus:ring-rose-500/50 outline-none font-mono"
+                      />
+                    </div>
+                    <span className="text-slate-600 text-xs font-mono self-end pb-2">to</span>
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-slate-500 uppercase block font-mono">End Date</span>
+                      <input
+                        type="date"
+                        value={expenseCustomEnd}
+                        onChange={(e) => setExpenseCustomEnd(e.target.value)}
+                        className="bg-[#050912] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white uppercase focus:ring-1 focus:ring-rose-500/50 outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Grid content */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="view-expenses-container">
+                
+                {/* Form panel to entry outgoings (4 Cols) */}
+                <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4" id="add-expense-panel">
+                  <h3 className="text-sm font-semibold text-white tracking-wide border-b border-slate-900 pb-2.5">Log Administrative Showroom Outgoings</h3>
+                  
+                  <form onSubmit={handleAddExpense} className="space-y-4" id="outgoing-add-form">
+                    
+                    <div className="space-y-1.5" id="expense-desc-wrap">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Description / Pay Reason *</label>
+                      <textarea
+                        required
+                        placeholder="e.g. Warehouse monthly lease, electric bills, courier postage"
+                        value={expenseDesc}
+                        onChange={(e) => setExpenseDesc(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans h-20 resize-none leading-normal"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2" id="ai-classify-outgoing">
+                      <button
+                        type="button"
+                        id="ai-suggest-category-btn"
+                        onClick={fetchAISuggestedCategory}
+                        disabled={isClassifying}
+                        className="text-[11px] font-bold text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        {isClassifying ? "AI Categorizing..." : "✨ Predict Category with AI"}
+                      </button>
+                      <span className="text-[9px] text-slate-500 font-mono">Gemini automatically scans outgo’s category</span>
+                    </div>
+
+                    <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Expense Category Type *</label>
                           <button
                             type="button"
                             onClick={() => {
-                              const trimmed = customCategory.trim();
-                              if (trimmed) {
-                                if (!expenseCategories.includes(trimmed)) {
-                                  setExpenseCategories([...expenseCategories, trimmed]);
-                                }
-                                setExpenseCategory(trimmed);
-                                setIsAddingCustomCategory(false);
-                                setCustomCategory("");
-                                triggerNotification(`Category "${trimmed}" successfully mapped!`);
+                              setIsAddingCustomCategory(!isAddingCustomCategory);
+                              if (!isAddingCustomCategory) {
+                                setExpenseCategory("");
+                              } else {
+                                setExpenseCategory("Others");
                               }
                             }}
-                            className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shrink-0 uppercase tracking-wider select-none font-sans"
+                            className="text-[9px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors cursor-pointer select-none"
                           >
-                            Add
+                            {isAddingCustomCategory ? "← Select Preset Category" : "⊕ Add Custom Category"}
                           </button>
                         </div>
-                      )}
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Amount (৳) *</label>
-                        <input
-                          type="number"
-                          required
-                          placeholder="0"
-                          value={expenseAmount}
-                          onChange={(e) => setExpenseAmount(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                        />
+                        {!isAddingCustomCategory ? (
+                          <select
+                            required
+                            value={expenseCategory}
+                            onChange={(e) => setExpenseCategory(e.target.value)}
+                            className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
+                          >
+                            {allCategories.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              required
+                              placeholder="Type new category (e.g. Internet, Office Tea)"
+                              value={customCategory}
+                              onChange={(e) => setCustomCategory(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#050912] border border-emerald-500/40 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const trimmed = customCategory.trim();
+                                if (trimmed) {
+                                  if (!expenseCategories.includes(trimmed)) {
+                                    setExpenseCategories([...expenseCategories, trimmed]);
+                                  }
+                                  setExpenseCategory(trimmed);
+                                  setIsAddingCustomCategory(false);
+                                  setCustomCategory("");
+                                  triggerNotification(`Category "${trimmed}" successfully mapped!`);
+                                }
+                              }}
+                              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shrink-0 uppercase tracking-wider select-none font-sans"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Created Date</label>
-                        <input
-                          type="date"
-                          value={expenseDate}
-                          onChange={(e) => setExpenseDate(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                        />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Amount (৳) *</label>
+                          <input
+                            type="number"
+                            required
+                            placeholder="0"
+                            value={expenseAmount}
+                            onChange={(e) => setExpenseAmount(e.target.value)}
+                            className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Created Date</label>
+                          <input
+                            type="date"
+                            value={expenseDate}
+                            onChange={(e) => setExpenseDate(e.target.value)}
+                            className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <button
-                    type="submit"
-                    id="save-expense-btn"
-                    className="w-full py-3 bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
-                  >
-                    <PlusCircle className="w-4 h-4 shrink-0" />
-                    Log Expense Voucher
-                  </button>
-
-                </form>
-
-              </div>
-
-              {/* Expense entries list table (8 Cols) */}
-              <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
-                <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3" id="expenses-header">
-                  <span className="text-xs font-semibold text-white">Showroom Cumulative Outgoings History</span>
-                  <div className="flex flex-col items-end gap-1 text-right">
-                    <span className="text-[10px] font-mono font-bold text-rose-400">
-                      Total Cumulative: {businessInfo.currencySymbol} {(totalExpensesTk ?? 0).toLocaleString()}
-                    </span>
-                    {expenseFilterCategory !== "All" && (
-                      <span className="text-[10px] font-mono font-bold text-emerald-400">
-                        {expenseFilterCategory} Total: {businessInfo.currencySymbol} {expenses.filter(e => e.category === expenseFilterCategory).reduce((sum, e) => sum + e.amount, 0).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Filter chip tab bar */}
-                <div className="px-4 py-3 bg-slate-950/25 border-b border-slate-800/60 flex items-center gap-1.5 overflow-x-auto" id="expenses-category-filters">
-                  <span className="text-[10px] uppercase font-mono font-bold text-slate-500 mr-1 select-none">Filter:</span>
-                  {["All", ...allCategories].map((cat) => (
                     <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setExpenseFilterCategory(cat)}
-                      className={`px-2.5 py-1 rounded-lg text-[9px] font-bold tracking-wider font-mono cursor-pointer transition-all border shrink-0 ${
-                        expenseFilterCategory === cat
-                          ? "bg-rose-500/10 border-rose-500 text-rose-400 font-bold"
-                          : "bg-[#050912] border-slate-800 text-slate-400 hover:text-white"
-                      }`}
+                      type="submit"
+                      id="save-expense-btn"
+                      className="w-full py-3 bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
                     >
-                      {cat.toUpperCase()}
+                      <PlusCircle className="w-4 h-4 shrink-0" />
+                      Log Expense Voucher
                     </button>
-                  ))}
+
+                  </form>
+
                 </div>
 
-                <div className="overflow-x-auto" id="expenses-table-scroll">
-                  <table className="w-full text-slate-300 text-xs">
-                    <thead>
-                      <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
-                        <th className="py-2.5 px-4 text-left">Created Date</th>
-                        <th className="py-2.5 px-4 text-left">Voucher details</th>
-                        <th className="py-2.5 px-4 text-left">Category</th>
-                        <th className="py-2.5 px-4 text-right">Paid Amount</th>
-                        <th className="py-2.5 px-4 text-center">Delete / Adjust</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
-                      {(() => {
-                        const filteredExpenses = expenses.filter(e => 
-                          expenseFilterCategory === "All" || e.category === expenseFilterCategory
-                        );
+                {/* Expense entries list table (8 Cols) */}
+                <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
+                  <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3" id="expenses-header">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-white block">Expenses History & Vouchers</span>
+                      <span className="text-[10px] text-slate-400">Track and filter logged cash flows</span>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 text-right">
+                      <span className="text-[10px] font-mono font-bold text-rose-400">
+                        Total Cumulative: {businessInfo.currencySymbol} {(expenses.reduce((sum, e) => sum + e.amount, 0)).toLocaleString()}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-amber-400">
+                        Filtered Period Total: {businessInfo.currencySymbol} {expenses.filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date)).reduce((sum, e) => sum + e.amount, 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
 
-                        if (filteredExpenses.length === 0) {
-                          return (
-                            <tr>
-                              <td colSpan={5} className="py-12 text-center text-slate-500 italic">
-                                {expenseFilterCategory === "All"
-                                  ? "No administrative overhead outlays logged yet."
-                                  : `No outlays logged under "${expenseFilterCategory}" category.`}
+                  {/* Filter chip tab bar */}
+                  <div className="px-4 py-3 bg-slate-950/25 border-b border-slate-800/60 flex items-center gap-1.5 overflow-x-auto" id="expenses-category-filters">
+                    <span className="text-[10px] uppercase font-mono font-bold text-slate-500 mr-1 select-none">Filter:</span>
+                    {["All", ...allCategories].map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setExpenseFilterCategory(cat)}
+                        className={`px-2.5 py-1 rounded-lg text-[9px] font-bold tracking-wider font-mono cursor-pointer transition-all border shrink-0 ${
+                          expenseFilterCategory === cat
+                            ? "bg-rose-500/10 border-rose-500 text-rose-400 font-bold"
+                            : "bg-[#050912] border-slate-800 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {cat.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="overflow-x-auto" id="expenses-table-scroll">
+                    <table className="w-full text-slate-300 text-xs">
+                      <thead>
+                        <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                          <th className="py-2.5 px-4 text-left">Created Date</th>
+                          <th className="py-2.5 px-4 text-left">Voucher details</th>
+                          <th className="py-2.5 px-4 text-left">Category</th>
+                          <th className="py-2.5 px-4 text-right">Paid Amount</th>
+                          <th className="py-2.5 px-4 text-center">Actions / Adjust</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {(() => {
+                          const filteredExpenses = expenses.filter(e => 
+                            (expenseFilterCategory === "All" || e.category === expenseFilterCategory) &&
+                            checkExpenseDateInFilter(e.date)
+                          );
+
+                          if (filteredExpenses.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={5} className="py-12 text-center text-slate-500 italic">
+                                  {expenseFilterCategory === "All"
+                                    ? "No administrative overhead outlays logged yet for selected dates."
+                                    : `No outlays logged under "${expenseFilterCategory}" category for selected dates.`}
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return filteredExpenses.map((e) => (
+                            <tr key={e.id} className="hover:bg-slate-900/10 text-slate-300">
+                              <td className="py-3 px-4 font-mono text-slate-400">{e.date}</td>
+                              <td className="py-3 px-4 text-slate-100 font-semibold">{e.description}</td>
+                              <td className="py-3 px-4">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#050912] border border-slate-800 text-purple-400 font-mono inline-block">
+                                  {e.category}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right text-rose-400 font-bold font-mono">{businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}</td>
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    id={`edit-expense-btn-${e.id}`}
+                                    onClick={() => {
+                                      setEditingExpense(e);
+                                      setEditExpenseDesc(e.description);
+                                      setEditExpenseCategory(e.category);
+                                      setEditExpenseAmount(String(e.amount));
+                                      setEditExpenseDate(e.date);
+                                    }}
+                                    className="p-1.5 hover:bg-emerald-500/10 rounded-lg group transition-all text-slate-500 hover:text-emerald-400 cursor-pointer"
+                                    title="Edit expense"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    id={`delete-expense-${e.id}`}
+                                    onClick={() => setDeleteExpenseId(e.id)}
+                                    className="p-1.5 hover:bg-rose-500/10 rounded-lg group transition-all text-slate-500 hover:text-rose-400 cursor-pointer"
+                                    title="Delete expense"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
-                          );
-                        }
+                          ))
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
 
-                        return filteredExpenses.map((e) => (
-                          <tr key={e.id} className="hover:bg-slate-900/10 text-slate-300">
-                            <td className="py-3 px-4 font-mono text-slate-400">{e.date}</td>
-                            <td className="py-3 px-4 text-slate-100 font-semibold">{e.description}</td>
-                            <td className="py-3 px-4">
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#050912] border border-slate-800 text-purple-400 font-mono inline-block">
-                                {e.category}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right text-rose-400 font-bold font-mono">{businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}</td>
-                            <td className="py-3 px-4 text-center">
-                              <button
-                                id={`delete-expense-${e.id}`}
-                                onClick={() => setDeleteExpenseId(e.id)}
-                                className="p-1.5 hover:bg-rose-500/10 rounded-lg group transition-all text-slate-500 hover:text-rose-400 cursor-pointer"
-                                title="Delete expense"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      })()}
-                    </tbody>
-                  </table>
                 </div>
 
               </div>
-
             </div>
           )}
 
@@ -4483,20 +4673,78 @@ export default function App() {
                       {filteredContacts.map((c) => {
                         const status = getContactStatus(c);
                         const initials = getInitials(c.name);
+                        
+                        // Resolve client transactions with extremely robust fallback and normalization checks
+                        const clientTxs = transactions.filter(t => {
+                          if (!t) return false;
+                          if (t.contactId === c.id) return true;
+                          
+                          const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+                          const tIdNorm = toUUID(t.contactId || "", cleanEmail);
+                          const cIdNorm = toUUID(c.id || "", cleanEmail);
+                          if (tIdNorm === cIdNorm) return true;
+                          if (t.contactId === cIdNorm) return true;
+                          if (tIdNorm === c.id) return true;
+
+                          if (c.phone && t.contactId) {
+                            const txContact = contacts.find(co => co.id === t.contactId || toUUID(co.id, cleanEmail) === tIdNorm);
+                            if (txContact && txContact.phone && txContact.phone.trim() === c.phone.trim()) {
+                              return true;
+                            }
+                          }
+                          return false;
+                        });
+                        
+                        // Aggregate products bought by customer
+                        const purchasedProductsMap: { [productName: string]: { quantity: number; total: number; price: number } } = {};
+                        clientTxs.forEach(t => {
+                          if (t.items && Array.isArray(t.items)) {
+                            t.items.forEach(item => {
+                              const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+                              const pName = dbProduct?.name || item.name || "Product Item";
+                              if (!purchasedProductsMap[pName]) {
+                                purchasedProductsMap[pName] = { quantity: 0, total: 0, price: item.price || 0 };
+                              }
+                              purchasedProductsMap[pName].quantity += (item.quantity || 0);
+                              purchasedProductsMap[pName].total += (item.total || 0);
+                              if (item.price && item.price > 0) {
+                                purchasedProductsMap[pName].price = item.price;
+                              }
+                            });
+                          }
+                        });
+                        const purchasedProductsList = Object.entries(purchasedProductsMap).map(([name, data]) => ({
+                          name,
+                          quantity: data.quantity,
+                          total: data.total,
+                          price: data.price
+                        }));
+
                         return (
                           <div 
                             key={c.id} 
                             className="bg-[#1E1E24] border border-[#2D2D35] p-5 rounded-2xl shadow-md transition-all hover:border-[#00E676]/20 flex flex-col justify-between space-y-4 group relative overflow-hidden"
                             id={`contact-profile-card-${c.id}`}
                           >
+                            {/* Unregistered or Empty Purchases Indicator Badge */}
+                            {c.type === "customer" && clientTxs.length === 0 && (
+                              <div 
+                                className="absolute top-3 right-3 flex items-center justify-center bg-rose-500/15 border border-rose-500/30 text-rose-500 rounded-full p-1.5 animate-pulse z-10" 
+                                title="No active purchases mapped to this customer profile"
+                                id={`no-purchase-alert-${c.id}`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              </div>
+                            )}
+
                             {/* Card Header Profile block */}
                             <div className="flex gap-4">
                               {/* Initials circular placeholder layout with subtle glow */}
                               <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#121214] to-[#2D2D35] border border-[#2D2D35] flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-inner group-hover:border-[#00E676]/30 group-hover:from-emerald-500/10 transition-colors">
                                 {initials}
                               </div>
-                              <div className="space-y-1 min-w-0">
-                                <div className="text-xs font-bold text-white truncate font-sans tracking-wide pr-8 group-hover:text-[#00E676] transition-colors">{c.name}</div>
+                              <div className="space-y-1 min-w-0 pr-6">
+                                <div className="text-xs font-bold text-white truncate font-sans tracking-wide group-hover:text-[#00E676] transition-colors">{c.name}</div>
                                 <div className="text-[10px] font-mono text-[#A0A0A5] flex items-center gap-1.5">
                                   <Phone className="w-2.5 h-2.5 text-[#00E676]/70" />
                                   {c.phone}
@@ -4506,6 +4754,40 @@ export default function App() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Purchased Products Details Section */}
+                            {c.type === "customer" && (
+                              <div className="bg-[#121214]/60 border border-[#2D2D35]/30 rounded-xl p-3 space-y-1.5" id={`purchased-products-box-${c.id}`}>
+                                <div className="text-[10px] font-bold text-[#A0A0A5] font-mono tracking-wider flex items-center gap-1.5 border-b border-[#2D2D35]/50 pb-1 uppercase">
+                                  <Package className="w-3.5 h-3.5 text-[#00E676]" />
+                                  Purchased Items:
+                                </div>
+                                {purchasedProductsList.length > 0 ? (
+                                  <div className="max-h-[120px] overflow-y-auto space-y-1.5 pr-1 custom-scrollbar scrollbar-thin">
+                                    {purchasedProductsList.map((prod, idx) => (
+                                      <div key={idx} className="flex flex-col text-[10px] py-1.5 border-b border-[#2D2D35]/15 last:border-0 font-mono">
+                                        <div className="flex justify-between items-start gap-2">
+                                          <span className="text-slate-200 font-semibold text-wrap text-left" title={prod.name}>
+                                            • {prod.name} <span className="text-slate-400 font-normal text-[9px]">(@ {businessInfo.currencySymbol || "৳"}{prod.price.toLocaleString()}/unit)</span>
+                                          </span>
+                                          <span className="text-[#00E676] font-bold shrink-0 bg-[#1e1e24] px-1.5 py-0.5 rounded border border-[#2D2D35] text-[9px]">
+                                            {prod.quantity} {prod.quantity === 1 ? "Unit" : "Units"}
+                                          </span>
+                                        </div>
+                                        <div className="text-[9px] text-slate-500 pl-2.5 mt-0.5">
+                                          Total for {prod.name}: <span className="text-[#00E676] font-semibold">{businessInfo.currencySymbol || "৳"}{prod.total.toLocaleString()}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] italic text-rose-500 flex items-center gap-1.5 font-mono py-0.5">
+                                    <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                    No purchases logged yet.
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             {/* Status and Action bar */}
                             <div className="pt-3 border-t border-[#2D2D35]/50 flex flex-wrap items-center justify-between gap-2.5">
@@ -6081,12 +6363,12 @@ export default function App() {
                 <div className="p-2.5 bg-slate-50 border-b border-slate-200 font-bold text-[10px] uppercase text-slate-500 font-mono">Invoice items</div>
                 <div className="divide-y divide-slate-100 max-h-36 overflow-y-auto">
                   {editingTx.items.map((item, idx) => {
-                    const matchedProd = products.find(p => p.id === item.productId);
+                    const matchedProd = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
                     return (
                       <div key={idx} className="p-3 flex items-center justify-between gap-3 bg-white">
                         <div className="space-y-0.5 font-sans">
-                          <strong className="font-bold text-slate-800 block text-xs">{matchedProd ? matchedProd.name : "Unknown Item"}</strong>
-                          <span className="text-[9px] text-slate-400 font-mono">Price: {item.price}</span>
+                          <strong className="font-bold text-slate-800 block text-xs">{matchedProd ? matchedProd.name : (item.name || "Unknown Item")}</strong>
+                          <span className="text-[9px] text-slate-500 font-mono">Price: {businessInfo.currencySymbol || "৳"}{(item.price ?? 0).toLocaleString()}/unit</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-slate-450 font-bold font-mono">Qty</span>
@@ -6226,6 +6508,103 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* EDIT EXPENSE MODAL */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-50 bg-[#0c0c0e]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-md w-full p-6 space-y-4 text-slate-200 animate-scaleIn" id="modal-edit-expense">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
+                <Edit3 className="w-5 h-5 text-emerald-400" />
+                Edit Expense Voucher
+              </h3>
+              <button 
+                onClick={() => setEditingExpense(null)} 
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateExpenseSubmit} className="space-y-4 text-xs font-sans">
+              
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                  Voucher Description *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={editExpenseDesc}
+                  onChange={(e) => setEditExpenseDesc(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans leading-normal"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                    Category
+                  </label>
+                  <select
+                    value={editExpenseCategory}
+                    onChange={(e) => setEditExpenseCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 outline-none focus:border-emerald-500 font-mono"
+                  >
+                    {allCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editExpenseDate}
+                    onChange={(e) => setEditExpenseDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                  Amount (৳) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  placeholder="0"
+                  value={editExpenseAmount}
+                  onChange={(e) => setEditExpenseAmount(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-3 font-sans">
+                <button
+                  type="submit"
+                  className="flex-1 py-1 px-4 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-emerald-600/10 text-center uppercase tracking-wider"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+                >
+                  Close
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
 
       {dangerAction && (
         <div className="fixed inset-0 z-50 bg-[#0c0c0e]/85 backdrop-blur-sm flex items-center justify-center p-4">
