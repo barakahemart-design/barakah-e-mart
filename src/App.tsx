@@ -265,7 +265,7 @@ export default function App() {
       }
 
       // Reload database from custom localStorage storage corresponding to the session mode
-      const db = loadDB();
+      const db = loadDB(user.uid);
       setProducts(db.products);
       setContacts(db.contacts);
       setExpenses(db.expenses);
@@ -307,7 +307,7 @@ export default function App() {
         transactions,
         businessInfo: compiledBusinessInfo,
         purchases
-      });
+      }, activeUser.uid);
 
       // Also persist separately in localStorage just in case
       localStorage.setItem(getDbKey("barakah_staff_list"), JSON.stringify(staffList));
@@ -397,7 +397,7 @@ export default function App() {
         restoreLocalKeys(cloudData, true);
 
         // Load the new values from localStorage
-        const refreshedDB = loadDB();
+        const refreshedDB = loadDB(activeUser?.uid);
 
         // Momentarily pause backup triggers during React state updates
         initialLoadedRef.current = false;
@@ -519,7 +519,7 @@ export default function App() {
       const restored = await fetchAndRestoreCloudBackup(activeUser.email, passcode, true);
       if (restored) {
         // Reload states
-        const db = loadDB();
+        const db = loadDB(activeUser?.uid);
         setProducts(db.products);
         setContacts(db.contacts);
         setExpenses(db.expenses);
@@ -542,7 +542,7 @@ export default function App() {
   const handleDataImport = (data: any) => {
     restoreLocalKeys(data, true);
     // Reload states from newly restored localStorage DB
-    const dbData = loadDB();
+    const dbData = loadDB(activeUser?.uid);
     setProducts(dbData.products);
     setContacts(dbData.contacts);
     setExpenses(dbData.expenses);
@@ -558,7 +558,7 @@ export default function App() {
     setActiveUser(user);
     
     // Refresh states
-    const db = loadDB();
+    const db = loadDB(user?.uid);
     setProducts(db.products);
     setContacts(db.contacts);
     setExpenses(db.expenses);
@@ -583,7 +583,7 @@ export default function App() {
     setActiveUser(user);
 
     // Refresh states
-    const db = loadDB();
+    const db = loadDB(user?.uid);
     setProducts(db.products);
     setContacts(db.contacts);
     setExpenses(db.expenses);
@@ -608,7 +608,7 @@ export default function App() {
     setActiveUser(user);
     
     // Refresh states
-    const db = loadDB();
+    const db = loadDB(user?.uid);
     setProducts(db.products);
     setContacts(db.contacts);
     setExpenses(db.expenses);

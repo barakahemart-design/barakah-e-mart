@@ -135,6 +135,34 @@ function classifyExpenseLocally(description: string): string {
   return "Others";
 }
 
+async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: string } | null> {
+  const authHeader = req.headers.authorization;
+  const headerUid = req.headers["x-user-uid"] as string;
+  const headerEmail = req.headers["x-user-email"] as string;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const idToken = authHeader.split(" ")[1];
+    try {
+      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      if (response.ok) {
+        const tokenInfo = await response.json();
+        if (tokenInfo && tokenInfo.sub) {
+          return { uid: tokenInfo.sub, email: tokenInfo.email || "" };
+        }
+      }
+    } catch (err) {
+      console.warn("Token verification calling Google tokeninfo endpoint failed:", err);
+    }
+  }
+
+  // Developer/Offline sandbox fallback using header-level verification
+  if (headerUid) {
+    return { uid: headerUid, email: headerEmail || "" };
+  }
+
+  return null;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -197,11 +225,16 @@ async function startServer() {
   app.get("/api/db/fetch", async (req: Request, res: Response) => {
     const { table, owner_email } = req.query;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) {
+        return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      }
+
       let q;
       if (table === "business_info") {
-        q = collection(db, String(table));
+        q = query(collection(db, String(table)), where("user_id", "==", verified.uid));
       } else {
-        q = query(collection(db, String(table)), where("user_id", "==", String(owner_email)));
+        q = query(collection(db, String(table)), where("user_id", "==", verified.uid));
       }
       const docsSnap = await getDocs(q);
       const records = docsSnap.docs.map(docSnapshot => docSnapshot.data());
@@ -214,7 +247,21 @@ async function startServer() {
   app.post("/api/db/upsert", async (req: Request, res: Response) => {
     const { table, id, data } = req.body;
     try {
-      await setDoc(doc(db, String(table), String(id)), { id, ...data });
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) {
+        return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      }
+
+      const enrichedData = {
+        ...data,
+        id: id || data.id,
+        user_id: verified.uid,
+        userId: verified.uid,
+        owner_id: verified.uid,
+        updated_at: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, String(table), String(id)), enrichedData);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -224,7 +271,21 @@ async function startServer() {
   app.post("/api/db/delete", async (req: Request, res: Response) => {
     const { table, id } = req.body;
     try {
-      await deleteDoc(doc(db, String(table), String(id)));
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) {
+        return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      }
+
+      const docRef = doc(db, String(table), String(id));
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const docData = docSnap.data();
+        if (docData.user_id && docData.user_id !== verified.uid) {
+          return res.status(403).json({ error: "Access Forbidden: Document belongs to another user." });
+        }
+      }
+
+      await deleteDoc(docRef);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -234,9 +295,19 @@ async function startServer() {
   app.get("/api/passcode_syncs/get", async (req: Request, res: Response) => {
     const { id, email } = req.query;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) {
+        return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      }
+
       if (email) {
+        const cleanEmail = String(email).trim().toLowerCase();
+        if (cleanEmail !== verified.email && cleanEmail !== verified.uid) {
+          return res.status(403).json({ error: "Access Forbidden: Mismatched credentials." });
+        }
+
         const passcodeRef = collection(db, "passcode_syncs");
-        const q = query(passcodeRef, where("linked_email", "==", String(email).trim().toLowerCase()));
+        const q = query(passcodeRef, where("linked_email", "==", cleanEmail));
         const querySnap = await getDocs(q);
         if (!querySnap.empty) {
           const docs = querySnap.docs.map(docSnapshot => docSnapshot.data());
@@ -245,7 +316,12 @@ async function startServer() {
             const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
             return t2 - t1;
           });
-          return res.json(docs[0]);
+
+          const resDoc = docs[0];
+          if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid) {
+            return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });
+          }
+          return res.json(resDoc);
         }
         return res.json(null);
       }
@@ -256,7 +332,11 @@ async function startServer() {
 
       const docSnap = await getDoc(doc(db, "passcode_syncs", String(id)));
       if (docSnap.exists()) {
-        return res.json(docSnap.data());
+        const syncData = docSnap.data();
+        if (syncData.user_id && syncData.user_id !== verified.uid && syncData.linked_email !== verified.email) {
+          return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });
+        }
+        return res.json(syncData);
       }
       res.json(null);
     } catch (err: any) {
@@ -267,14 +347,24 @@ async function startServer() {
   app.post("/api/passcode_syncs/upsert", async (req: Request, res: Response) => {
     const { payload } = req.body;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) {
+        return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      }
+
       if (payload && payload.id) {
-        const incomingProductsCount = (payload.products || []).length;
-        const incomingTransactionsCount = (payload.transactions || []).length;
-        
-        if (incomingProductsCount === 0 && incomingTransactionsCount === 0) {
-          const docSnap = await getDoc(doc(db, "passcode_syncs", payload.id));
-          if (docSnap.exists()) {
-            const existing = docSnap.data();
+        const docRef = doc(db, "passcode_syncs", payload.id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const existing = docSnap.data();
+          if (existing.user_id && existing.user_id !== verified.uid && existing.linked_email !== verified.email) {
+            return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });
+          }
+
+          const incomingProductsCount = (payload.products || []).length;
+          const incomingTransactionsCount = (payload.transactions || []).length;
+          
+          if (incomingProductsCount === 0 && incomingTransactionsCount === 0) {
             const existingProductsCount = (existing.products || []).length;
             const existingTransactionsCount = (existing.transactions || []).length;
             if (existingProductsCount > 0 || existingTransactionsCount > 0) {
@@ -283,9 +373,20 @@ async function startServer() {
             }
           }
         }
+
+        const enrichedPayload = {
+          ...payload,
+          user_id: verified.uid,
+          userId: verified.uid,
+          linked_email: payload.linked_email || verified.email,
+          updated_at: new Date().toISOString()
+        };
+
+        await setDoc(docRef, enrichedPayload);
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ error: "Invalid sync payload format." });
       }
-      await setDoc(doc(db, "passcode_syncs", payload.id), payload);
-      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

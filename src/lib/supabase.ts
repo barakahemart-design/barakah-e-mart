@@ -652,7 +652,10 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
     if (!finalData) {
       finalData = await (async () => {
         try {
-          const response = await fetch(`/api/passcode_syncs/get?email=${encodeURIComponent(cleanEmail)}&id=${encodeURIComponent(syncId)}`);
+          const authHeaders = await getAuthHeaders();
+          const response = await fetch(`/api/passcode_syncs/get?email=${encodeURIComponent(cleanEmail)}&id=${encodeURIComponent(syncId)}`, {
+            headers: authHeaders
+          });
           if (response.ok) {
             const contentType = response.headers.get("content-type");
             if (contentType && contentType.includes("application/json")) {
@@ -1518,9 +1521,10 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   }
 
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch("/api/passcode_syncs/upsert", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify({ payload: body })
     });
     if (response.ok) {
@@ -1533,15 +1537,61 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   }
 };
 
-export const upsertDocument = async (table: string, id: string, data: any) => {
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
   try {
-    await setDoc(doc(db, table, id), data);
+    const currentUser = firebaseAuth.currentUser;
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      headers["Authorization"] = `Bearer ${token}`;
+      headers["x-user-uid"] = currentUser.uid;
+      headers["x-user-email"] = currentUser.email || "";
+    } else {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.uid) {
+          headers["x-user-uid"] = parsed.uid;
+          headers["x-user-email"] = parsed.email || "";
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not get auth headers:", e);
+  }
+  return headers;
+}
+
+export const upsertDocument = async (table: string, id: string, data: any) => {
+  let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+  if (!activeUserId) {
+    try {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        activeUserId = parsed?.id || parsed?.uid;
+      }
+    } catch (_) {}
+  }
+
+  const enrichedData = {
+    ...data,
+    id: id || data.id,
+    user_id: data.user_id || activeUserId,
+    userId: data.userId || activeUserId
+  };
+
+  try {
+    await setDoc(doc(db, table, id), enrichedData);
   } catch (e) {
     try {
+      const authHeaders = await getAuthHeaders();
       await fetch("/api/db/upsert", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table, id, data })
+        headers: authHeaders,
+        body: JSON.stringify({ table, id, data: enrichedData })
       });
     } catch (err) {
       handleFirestoreError(e, OperationType.WRITE, `${table}/${id}`);
@@ -1554,9 +1604,10 @@ export const deleteDocument = async (table: string, id: string) => {
     await deleteDoc(doc(db, table, id));
   } catch (e) {
     try {
+      const authHeaders = await getAuthHeaders();
       await fetch("/api/db/delete", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify({ table, id })
       });
     } catch (err) {
@@ -1566,13 +1617,22 @@ export const deleteDocument = async (table: string, id: string) => {
 };
 
 export const fetchUserCollection = async (table: string, ownerEmail: string) => {
+  let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+  if (!activeUserId) {
+    try {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        activeUserId = parsed?.id || parsed?.uid;
+      }
+    } catch (_) {}
+  }
+
+  const queryIdentifier = activeUserId || ownerEmail;
+
   try {
     let q;
-    if (table === "business_info") {
-      q = collection(db, table);
-    } else {
-      q = query(collection(db, table), where("user_id", "==", ownerEmail));
-    }
+    q = query(collection(db, table), where("user_id", "==", queryIdentifier));
     const docsSnap = await getDocs(q);
     if (!docsSnap.empty) {
       return docsSnap.docs.map(docSnapshot => docSnapshot.data());
@@ -1582,7 +1642,10 @@ export const fetchUserCollection = async (table: string, ownerEmail: string) => 
   }
 
   try {
-    const response = await fetch(`/api/db/fetch?table=${encodeURIComponent(table)}&owner_email=${encodeURIComponent(ownerEmail)}`);
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`/api/db/fetch?table=${encodeURIComponent(table)}&owner_email=${encodeURIComponent(ownerEmail)}`, {
+      headers: authHeaders
+    });
     return await response.json();
   } catch (err) {
     return [];
@@ -1605,7 +1668,23 @@ export const subscribeToCollection = (table: string, ownerEmail: string, callbac
 
 export const saveBusinessSettings = async (email: string, info: any) => {
   const docId = `settings_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  await upsertDocument('business_info', docId, { linkedEmail: email, id: docId, ...info });
+  let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+  if (!activeUserId) {
+    try {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        activeUserId = parsed?.id || parsed?.uid;
+      }
+    } catch (_) {}
+  }
+  await upsertDocument('business_info', docId, { 
+    linkedEmail: email, 
+    id: docId, 
+    user_id: activeUserId || email, 
+    userId: activeUserId || email, 
+    ...info 
+  });
 };
 
 export const getBusinessSettings = async (email: string) => {

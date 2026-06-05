@@ -95,14 +95,12 @@ service cloud.firestore {
 
     // 4. Collection Access Rule Definitions
     match /passcode_syncs/{syncId} {
-      allow get: if true;
-      allow list: if isSignedIn() && (resource.data.linked_email == request.auth.token.email || resource.data.linked_email == request.auth.uid);
-      allow create, update: if isValidId(syncId) && isValidPasscodeSync(incoming()) && (
-        !isSignedIn() || 
-        incoming().linked_email == request.auth.token.email || 
-        incoming().linked_email == request.auth.uid
+      allow get: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid || resource.data.linked_email == request.auth.token.email);
+      allow list: if isSignedIn() && (resource.data.user_id == request.auth.uid || resource.data.linked_email == request.auth.token.email);
+      allow create, update: if isValidId(syncId) && isValidPasscodeSync(incoming()) && isSignedIn() && (
+        incoming().user_id == request.auth.uid || incoming().linked_email == request.auth.token.email || incoming().linked_email == request.auth.uid
       );
-      allow delete: if isSignedIn() && (existing().linked_email == request.auth.token.email || existing().linked_email == request.auth.uid);
+      allow delete: if isSignedIn() && (existing().user_id == request.auth.uid || existing().linked_email == request.auth.token.email || existing().linked_email == request.auth.uid);
     }
 
     match /profiles/{userId} {
@@ -148,9 +146,9 @@ service cloud.firestore {
     }
 
     match /business_info/{businessInfoId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.id != null);
-      allow create, update: if isSignedIn() && isValidId(businessInfoId) && isValidBusinessInfo(incoming());
-      allow delete: if isSignedIn();
+      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid || resource.data.linkedEmail == request.auth.token.email);
+      allow create, update: if isSignedIn() && isValidId(businessInfoId) && isValidBusinessInfo(incoming()) && (incoming().user_id == request.auth.uid || incoming().linkedEmail == request.auth.token.email);
+      allow delete: if isSignedIn() && (existing().user_id == request.auth.uid || existing().linkedEmail == request.auth.token.email);
     }
   }
 }
