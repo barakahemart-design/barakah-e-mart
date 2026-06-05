@@ -76,7 +76,8 @@ import {
   INITIAL_CONTACTS,
   INITIAL_EXPENSES,
   INITIAL_BUSINESS_INFO,
-  INITIAL_PURCHASES
+  INITIAL_PURCHASES,
+  getDbKey
 } from "./lib/mockDB";
 import { 
   subscribeToAuthChanges, 
@@ -135,7 +136,7 @@ export default function App() {
       if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
         return (db.businessInfo as any).staffList;
       }
-      const savedStr = localStorage.getItem("barakah_staff_list");
+      const savedStr = localStorage.getItem(getDbKey("barakah_staff_list"));
       return savedStr ? JSON.parse(savedStr) : [];
     } catch (_) {
       return [];
@@ -147,7 +148,7 @@ export default function App() {
 
   // Global theme dark/light mode state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem("barakah_billing_dark_theme");
+    const saved = localStorage.getItem(getDbKey("barakah_billing_dark_theme"));
     return saved !== null ? saved === "true" : true; // Default is true (dark mode)
   });
 
@@ -159,7 +160,7 @@ export default function App() {
       document.documentElement.classList.add("light");
       document.documentElement.classList.remove("dark");
     }
-    localStorage.setItem("barakah_billing_dark_theme", String(isDarkMode));
+    localStorage.setItem(getDbKey("barakah_billing_dark_theme"), String(isDarkMode));
   }, [isDarkMode]);
 
   // Cloud backup sync indicator active states
@@ -275,7 +276,7 @@ export default function App() {
         setStaffList((db.businessInfo as any).staffList);
       } else {
         try {
-          const lstr = localStorage.getItem("barakah_staff_list");
+          const lstr = localStorage.getItem(getDbKey("barakah_staff_list"));
           if (lstr) setStaffList(JSON.parse(lstr));
         } catch (_) {}
       }
@@ -309,7 +310,7 @@ export default function App() {
       });
 
       // Also persist separately in localStorage just in case
-      localStorage.setItem("barakah_staff_list", JSON.stringify(staffList));
+      localStorage.setItem(getDbKey("barakah_staff_list"), JSON.stringify(staffList));
 
       // Auto cloud backup with 1.5 seconds debounce for all authenticated users so no data is ever lost
       if (activeUser && !activeUser.isGuest) {
@@ -1414,14 +1415,14 @@ export default function App() {
   // -----------------------------------------------------------------
   const [ledgerSearch, setLedgerSearch] = useState(() => {
     try {
-      return localStorage.getItem("barakah_ledger_search") || "";
+      return localStorage.getItem(getDbKey("barakah_ledger_search")) || "";
     } catch {
       return "";
     }
   });
   const [ledgerStatusFilter, setLedgerStatusFilter] = useState<string>(() => {
     try {
-      return localStorage.getItem("barakah_ledger_status_filter") || "all";
+      return localStorage.getItem(getDbKey("barakah_ledger_status_filter")) || "all";
     } catch {
       return "all";
     }
@@ -1430,7 +1431,7 @@ export default function App() {
   useEffect(() => {
     const handler = setTimeout(() => {
       try {
-        localStorage.setItem("barakah_ledger_search", ledgerSearch);
+        localStorage.setItem(getDbKey("barakah_ledger_search"), ledgerSearch);
       } catch (e) {
         console.error("Failed to save ledger search to localStorage", e);
       }
@@ -1441,7 +1442,7 @@ export default function App() {
   useEffect(() => {
     const handler = setTimeout(() => {
       try {
-        localStorage.setItem("barakah_ledger_status_filter", ledgerStatusFilter);
+        localStorage.setItem(getDbKey("barakah_ledger_status_filter"), ledgerStatusFilter);
       } catch (e) {
         console.error("Failed to save ledger status filter to localStorage", e);
       }
@@ -1716,7 +1717,7 @@ export default function App() {
   // DATE RANGE FILTER ENGINE
   // -----------------------------------------------------------------
   const [dashboardFilter, _setDashboardFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
-    const saved = localStorage.getItem("barakah_dashboard_filter");
+    const saved = localStorage.getItem(getDbKey("barakah_dashboard_filter"));
     if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
       return saved as any;
     }
@@ -1724,23 +1725,23 @@ export default function App() {
   });
   const setDashboardFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
     _setDashboardFilter(val);
-    localStorage.setItem("barakah_dashboard_filter", val);
+    localStorage.setItem(getDbKey("barakah_dashboard_filter"), val);
   };
 
   const [customStart, _setCustomStart] = useState<string>(() => {
-    return localStorage.getItem("barakah_custom_start") || "2026-05-01";
+    return localStorage.getItem(getDbKey("barakah_custom_start")) || "2026-05-01";
   });
   const setCustomStart = (val: string) => {
     _setCustomStart(val);
-    localStorage.setItem("barakah_custom_start", val);
+    localStorage.setItem(getDbKey("barakah_custom_start"), val);
   };
 
   const [customEnd, _setCustomEnd] = useState<string>(() => {
-    return localStorage.getItem("barakah_custom_end") || "2026-05-31";
+    return localStorage.getItem(getDbKey("barakah_custom_end")) || "2026-05-31";
   });
   const setCustomEnd = (val: string) => {
     _setCustomEnd(val);
-    localStorage.setItem("barakah_custom_end", val);
+    localStorage.setItem(getDbKey("barakah_custom_end"), val);
   };
 
   const checkDateInFilter = (dateStr: string) => {
@@ -5212,45 +5213,61 @@ export default function App() {
                           <div className="space-y-4 pt-3 text-left">
                             
                             {/* Brand and Metadata Header block */}
-                            <div className={`flex flex-col sm:flex-row justify-between gap-3 ${styles.header}`}>
-                              <div>
-                                <h4 className={`text-base tracking-tight ${styles.primaryText}`}>
-                                  BARAKAH SMART DEALER
+                            <div className={`flex flex-row items-center justify-center text-left gap-6 w-full border-b pb-4 ${styles.header}`}>
+                              {tempShowLogo && tempLogoBase64 && (
+                                <div className="flex-shrink-0 self-center">
+                                  {tempLogoBase64.startsWith("data:") || tempLogoBase64.startsWith("http") ? (
+                                    <img
+                                      src={tempLogoBase64}
+                                      alt="Company Logo"
+                                      className="h-24 w-auto object-contain max-w-[160px] self-center"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <div className="w-24 h-24 rounded-full bg-slate-500/15 flex items-center justify-center text-3xl font-black text-slate-750 dark:text-zinc-250 border border-slate-500/20 self-center shadow-sm">
+                                      {tempLogoBase64.substring(0, 3)}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <div className="flex-initial flex flex-col items-start justify-center self-center space-y-1">
+                                <h4 className={`text-xl sm:text-2xl md:text-3xl font-black tracking-tight ${styles.primaryText}`}>
+                                  {businessInfo?.name || "BARAKAH E-MART"}
                                 </h4>
-                                <p className={styles.secondaryText}>
-                                  Mirpur Showroom Complex, Dhaka, Bangladesh
+                                <p className={`${styles.secondaryText} text-xs sm:text-sm mt-1 max-w-xl font-medium text-left`}>
+                                  {businessInfo?.address || "Mirpur Showroom Complex, Dhaka, Bangladesh"}
                                 </p>
-                                <p className={styles.secondaryText}>
-                                  Phone: +880 1987-654321 | Bin: 00987654-TR
+                                <p className={`${styles.secondaryText} text-xs sm:text-sm mt-0.5 max-w-xl font-medium text-left`}>
+                                  Phone: {businessInfo?.phoneNumber || "+880 1987-654321"} {businessInfo?.email ? ` | Email: ${businessInfo.email}` : ""} {businessInfo?.vatRegNo ? ` | VAT: ${businessInfo.vatRegNo}` : ""}
                                 </p>
-                              </div>
-                              <div className="sm:text-right space-y-1 sm:min-w-[150px]">
-                                <div className={`text-xs font-bold ${styles.primaryText.split(" ")[0]}`}>
-                                  INVOICE #: INV-2026-6202
-                                </div>
-                                <p className={styles.secondaryText}>Issue Date: 03/06/2026</p>
-                                <p className={styles.secondaryText}>Salesperson: Karim Manager</p>
-                                <p className={styles.secondaryText}>Mode: CASH / MOB-PAY</p>
-                                <div className="pt-1 flex sm:justify-end">
-                                  <span className={styles.statusBadge}>
-                                    FULLY PAID
-                                  </span>
-                                </div>
                               </div>
                             </div>
 
                             {/* Client particulars bill to container */}
-                            <div className={`p-3 bg-opacity-70 border rounded ${styles.accentLine} bg-neutral-200/5`}>
-                              <div className={`text-[9px] font-mono tracking-wider text-slate-400 uppercase`}>
-                                BILL TO (CUSTOMER BIOGRAPHY):
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                                <div>
-                                  <div className="text-xs font-black">Mst. Sabrina Rahman</div>
+                            <div className={`p-4 bg-opacity-70 border rounded-xl ${styles.accentLine} bg-neutral-200/5`}>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Left Column: INVOICE DETAILS */}
+                                <div className="space-y-1">
+                                  <div className="text-[9px] font-mono tracking-wider text-slate-400 uppercase font-bold">
+                                    INVOICE METADATA DETAILS:
+                                  </div>
+                                  <div className={`text-xs font-bold ${styles.primaryText.split(" ")[0]}`}>
+                                    INVOICE #: INV-2026-6202
+                                  </div>
+                                  <p className={styles.secondaryText}>Issue Date: 03/06/2026</p>
+                                  <p className={styles.secondaryText}>Issue Time: 02:45 PM</p>
+                                  <p className={styles.secondaryText}>Sales Agent: Showroom Account Executive</p>
+                                  <p className={styles.secondaryText}>Payment Mode: CASH / MOB-PAY</p>
                                 </div>
-                                <div className="sm:text-right">
+
+                                {/* Right Column: CUSTOMER BIOGRAPHY & SHIPPING ADDRESS */}
+                                <div className="space-y-1">
+                                  <div className="text-[9px] font-mono tracking-wider text-slate-400 uppercase font-bold">
+                                    CUSTOMER & SHIPPING DETAILS:
+                                  </div>
+                                  <div className="text-xs font-black text-slate-900 dark:text-zinc-100">Mst. Sabrina Rahman</div>
                                   <div className={styles.secondaryText}>Phone: +880 1712-345678</div>
-                                  <div className={styles.secondaryText}>Addr: House 12, Sector 10, Uttara, Dhaka</div>
+                                  <div className={styles.secondaryText}>Address: House 12, Sector 10, Uttara, Dhaka</div>
                                 </div>
                               </div>
                             </div>
@@ -5270,7 +5287,7 @@ export default function App() {
                                 <tbody>
                                   <tr className={styles.tableRow}>
                                     <td className="p-1.5 px-2 text-xs font-mono">01</td>
-                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-800">
+                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-850 dark:text-zinc-100">
                                       Walton Primo H10 (Elite Black, 8/128)
                                     </td>
                                     <td className="p-1.5 px-2 text-xs text-center font-mono">1</td>
@@ -5279,7 +5296,7 @@ export default function App() {
                                   </tr>
                                   <tr className={styles.tableRow}>
                                     <td className="p-1.5 px-2 text-xs font-mono">02</td>
-                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-800">
+                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-850 dark:text-zinc-100">
                                       Gree 1.5 Ton Split AC (Inverter-Extreme)
                                     </td>
                                     <td className="p-1.5 px-2 text-xs text-center font-mono">1</td>
@@ -5291,48 +5308,78 @@ export default function App() {
                             </div>
 
                             {/* Summary Calculations and Signatures */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                              {/* Left column declaration wordings */}
-                              <div className="space-y-2">
-                                <div className={`p-2 border rounded ${styles.accentLine} bg-slate-500/5`}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                              {/* Left column declaration wordings - FLUSHED AND CLEAN ALIGNMENT */}
+                              <div className="space-y-4 pl-0 text-left">
+                                <div className="pl-0">
                                   <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider font-mono">
-                                    PRONOUNCEMENT (TOTAL BILL IN WORDS):
+                                    TOTAL BILL IN WORDS:
                                   </span>
-                                  <span className="text-xs font-bold text-slate-605 block mt-0.5">
+                                  <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block mt-0.5 pl-0">
                                     Seventy-Seven Thousand BDT Only.
                                   </span>
                                 </div>
-                                <div className="text-[10px] text-slate-400 space-y-0.5 font-sans leading-relaxed">
-                                  <strong className="block text-slate-500 uppercase text-[9px] tracking-wider">OFFICIAL WARRANTY TERMS:</strong>
-                                  <div>• 1 Year Parts & Service Guarantee.</div>
-                                  <div>• Sold products can be serviced, no cash refund.</div>
-                                </div>
-                              </div>
-
-                              {/* Right column calculated totals */}
-                              <div>
-                                <div className={`space-y-1.5 rounded p-2.5 ${styles.totalsBox}`}>
-                                  <div className="flex justify-between text-xs text-slate-500">
-                                    <span>Itemized Sub-Total:</span>
-                                    <span className="font-mono">79,500.00 BDT</span>
+                                <div className="text-[10px] text-slate-550 dark:text-zinc-400 space-y-1 pl-0 font-sans leading-relaxed">
+                                  <strong className="block text-slate-705 dark:text-zinc-300 uppercase text-[9px] tracking-wider">OFFICIAL WARRANTY, TERMS & CONDITIONS:</strong>
+                                  <div>1. Original cash receipt/invoice is strictly required for any warranty or replacement registration claims.</div>
+                                  <div>2. Warranty is void if products display physical damage, burned ICs, power surge trails, or fluid exposure.</div>
+                                  <div>3. Discrepancies if any must be brought to notice of the showroom management within 3 days of product issue.</div>
+                                   {/* Right column calculated totals - REDESIGNED PREMIUM & STRUCTURED PANEL */}
+                              <div className="pl-0">
+                                <div className={`space-y-2.5 rounded-xl p-4 border border-slate-200/80 dark:border-zinc-805/40 bg-slate-50/50 dark:bg-zinc-900/30 backdrop-blur-sm`}>
+                                  <div className="flex justify-between items-center text-xs text-slate-600 dark:text-zinc-400">
+                                    <span className="font-sans font-medium">Gross Subtotal:</span>
+                                    <span className="font-mono font-bold text-right">79,500.00 BDT</span>
                                   </div>
-                                  <div className="flex justify-between text-xs text-slate-500">
-                                    <span>Special Discount:</span>
-                                    <span className="font-mono">-2,500.00 BDT</span>
+                                  <div className="flex justify-between items-center text-xs text-slate-600 dark:text-zinc-400">
+                                    <span className="font-sans font-medium">VAT Surcharges (0.00%):</span>
+                                    <span className="font-mono font-bold text-right">0.00 BDT</span>
                                   </div>
-                                  <div className={`flex justify-between text-xs font-black border-t pt-1.5 ${styles.accentLine}`}>
-                                    <span>GRAND TOTAL BILL:</span>
-                                    <span className="font-mono text-xs">77,000.00 BDT</span>
+                                  <div className="flex justify-between items-center text-xs text-rose-500 font-medium pb-0.5">
+                                    <span className="font-sans font-bold">Special Discount:</span>
+                                    <span className="font-mono font-bold text-right">-2,500.00 BDT</span>
                                   </div>
-                                  <div className="flex justify-between text-xs text-emerald-600 font-bold">
+                                  
+                                  <div className="border-t border-slate-250 dark:border-zinc-800 my-1 pb-1" />
+                                  
+                                  <div className="flex justify-between items-center bg-slate-900/5 dark:bg-white/5 p-2 rounded-lg border border-slate-900/10 dark:border-white/10">
+                                    <span className="text-xs font-black text-slate-1000 dark:text-white uppercase tracking-wider font-sans">
+                                      GRAND BILL TOTAL:
+                                    </span>
+                                    <span className="font-mono text-sm font-black text-slate-900 dark:text-white text-right">
+                                      77,000.00 BDT
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-center text-xs text-emerald-600 font-bold px-1">
                                     <span>Total Cash Received:</span>
-                                    <span className="font-mono">77,000.00 BDT</span>
+                                    <span className="font-mono text-right">77,000.00 BDT</span>
                                   </div>
-                                  <div className="flex justify-between text-xs text-slate-500">
-                                    <span>Outstanding Dues:</span>
-                                    <span className="font-mono">0.00 BDT</span>
+ 
+                                  <div className="border-t border-slate-250 dark:border-zinc-800 my-1 pb-1" />
+ 
+                                  {/* CONDITIONAL STATUS STYLING BADGES */}
+                                  <div className="space-y-2 pt-1">
+                                    {/* Demo state for Paid - Centered badge/stamp highlight, hiding plain text */}
+                                    <div className="flex justify-center items-center bg-emerald-100 dark:bg-emerald-950/40 border-2 border-dashed border-emerald-500/50 px-4 py-2 rounded-xl shadow-inner">
+                                      <span className="text-xs font-black text-emerald-850 dark:text-emerald-400 uppercase tracking-widest font-sans flex items-center gap-1.5 font-bold">
+                                        ★ FULL PAID ★
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Demo state for Due (to fulfill the conditional DUE styling preview beautifully) */}
+                                    <div className="flex justify-between items-center bg-rose-50 dark:bg-rose-950/25 border border-rose-200/50 dark:border-rose-800/30 px-3 py-1.5 rounded-lg">
+                                      <span className="text-[10px] font-bold text-rose-800 dark:text-rose-450 uppercase tracking-wider font-sans">
+                                        Dues Outstanding:
+                                      </span>
+                                      <span className="text-[11px] font-black text-rose-600 dark:text-rose-400 font-mono text-right font-bold">
+                                        15,500.00 BDT
+                                      </span>
+                                    </div>
                                   </div>
+ 
                                 </div>
+                              </div>                             </div>
                               </div>
                             </div>
 

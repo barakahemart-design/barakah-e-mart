@@ -172,14 +172,11 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   const hasLogoTextSymbol = showLogoSetting && companyLogoStr && !hasLogoImg && companyLogoStr.trim().length <= 3;
   const hasLogoLongText = showLogoSetting && companyLogoStr && !hasLogoImg && companyLogoStr.trim().length > 3;
 
-  // Render Left Column: Showroom Identity Info & Prominent Branding Logo
-  let brandX = 15;
+  // Render Centered Brand Group: Prominent Branding Logo with Right Column Identity Information
   let identityY = 18;
-  let metaX = 125;
-  let metaY = 18;
-  let logoWidth = 24;
-  let logoHeight = 24;
-  let hasLogoDrawn = false;
+  let logoWidth = 34;
+  let logoHeight = 34;
+  let brandX = 15;
 
   // Template-specific visual adjustments for logo layout
   if (template === "bold_emerald") {
@@ -187,13 +184,11 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(15, 12, 180, 2.5, 'F'); // Horizontal top bar strip
     identityY = 21;
-    metaY = 21;
   } else if (template === "premium_navy") {
     // Top border accent navy (turned monochromatic)
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(15, 12, 180, 2, 'F');
     identityY = 20;
-    metaY = 20;
   } else if (template === "vintage_editorial") {
     // Top double rule (turned monochromatic)
     doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -201,36 +196,10 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     doc.line(15, 13, 195, 13);
     doc.line(15, 14.5, 195, 14.5);
     identityY = 21;
-    metaY = 21;
   }
 
-  if (hasLogoImg && companyLogoStr) {
-    try {
-      doc.addImage(companyLogoStr, 'PNG', brandX, identityY, logoWidth, logoHeight);
-      hasLogoDrawn = true;
-    } catch (e) {
-      console.error("Error drawing logo in PDF:", e);
-    }
-  } else if (hasLogoTextSymbol && companyLogoStr) {
-    try {
-      // Use design theme color for the circular backplate
-      doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
-      doc.circle(brandX + 11, identityY + 11, 11, 'F');
-      
-      doc.setFont("Helvetica", "normal");
-      doc.setFontSize(14 * sizeFactor);
-      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.text(companyLogoStr, brandX + 11, identityY + 14.5, { align: 'center' });
-      hasLogoDrawn = true;
-    } catch (e) {
-      // ignore
-    }
-  }
+  const hasLogoDrawn = !!(showLogoSetting && companyLogoStr && (hasLogoImg || hasLogoTextSymbol));
 
-  // Draw Showroom Title Name (Prominent & Significantly Larger - Single Line)
-  let infoX = hasLogoDrawn ? brandX + logoWidth + 6 : brandX;
-  doc.setFont(pdfFontName, "bold");
-  
   const normLogo = hasLogoLongText ? (companyLogoStr || "").trim().toUpperCase() : "";
   const normBiz = (businessInfo?.name || "BARAKAH E-MART").trim().toUpperCase();
   const isSimilar = normLogo === normBiz || (normLogo && normBiz && (normLogo.startsWith(normBiz.substring(0, 6)) || normBiz.startsWith(normLogo.substring(0, 6))));
@@ -243,79 +212,106 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
       singleLineTitle = `${normLogo} | ${normBiz}`;
     }
   }
-  const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
-  let titleFontSize = 20 * sizeFactor;
-  
-  doc.setFontSize(titleFontSize);
-  const measuredTitleWidth = doc.getTextWidth(singleLineTitle);
-  if (measuredTitleWidth > maxTitleWidth) {
-    titleFontSize = Math.max(11, (maxTitleWidth / measuredTitleWidth) * titleFontSize);
-    doc.setFontSize(titleFontSize);
-  }
-  
-  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  const initialTitleY = identityY + 5.5;
-  let titleY = initialTitleY;
-  doc.text(singleLineTitle, infoX, titleY);
-  titleY = titleY + 6.5 * sizeFactor;
 
-  // Address, phone, email & tax register
-  doc.setFont(pdfFontName, isVintageEditorial ? "bold" : "normal");
-  doc.setFontSize(8 * sizeFactor);
-  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-
-  let textY = Math.max(titleY + 1.5, identityY + 11);
+  const maxTitleWidth = 110; // compact readable width for details block to align nicely
   const addressLines = doc.splitTextToSize(businessInfo.address || "Showroom Address, Dhaka", maxTitleWidth);
+
+  // Let's measure the exact text block content width to center the entire group horizontally
+  let maxContentWidth = 0;
+  let testTitleFontSize = 21 * sizeFactor;
+  doc.setFont(pdfFontName, "bold");
+  doc.setFontSize(testTitleFontSize);
+  let testTitleWidth = doc.getTextWidth(singleLineTitle);
+  if (testTitleWidth > maxTitleWidth) {
+    testTitleFontSize = Math.max(12, (maxTitleWidth / testTitleWidth) * testTitleFontSize);
+    doc.setFontSize(testTitleFontSize);
+    testTitleWidth = doc.getTextWidth(singleLineTitle);
+  }
+  maxContentWidth = Math.max(maxContentWidth, testTitleWidth);
+
+  // Body text size measurement
+  doc.setFont(pdfFontName, isVintageEditorial ? "bold" : "normal");
+  doc.setFontSize(8.5 * sizeFactor);
   addressLines.forEach((line: string) => {
-    doc.text(line, infoX, textY);
-    textY += 4;
+    maxContentWidth = Math.max(maxContentWidth, doc.getTextWidth(line));
   });
 
-  doc.text(`Phone: ${businessInfo.phoneNumber}`, infoX, textY);
-  textY += 4;
+  let contactString = `Phone: ${businessInfo.phoneNumber}`;
   if (businessInfo.email) {
-    doc.text(`Email: ${businessInfo.email}`, infoX, textY);
-    textY += 4;
+    contactString += `   |   Email: ${businessInfo.email}`;
   }
+  maxContentWidth = Math.max(maxContentWidth, doc.getTextWidth(contactString));
+
   if (businessInfo.vatRegNo) {
-    doc.text(`VAT Reg No: ${businessInfo.vatRegNo}`, infoX, textY);
-    textY += 4;
+    maxContentWidth = Math.max(maxContentWidth, doc.getTextWidth(`VAT Reg No: ${businessInfo.vatRegNo}`));
   }
 
-  let brandYEnd = Math.max(textY, identityY + logoHeight + 4);
+  // Calculate horizontally centered group coordinates
+  const totalGroupWidth = hasLogoDrawn ? (logoWidth + 8 + maxContentWidth) : maxContentWidth;
+  brandX = 15 + (180 - totalGroupWidth) / 2;
+  let infoX = hasLogoDrawn ? brandX + logoWidth + 8 : brandX;
 
-  // Render Right Column: Invoice Metadata (Invoice No, Date, Salesperson, Payment Status)
-  // Perfectly align the first line of metadata on the exact same horizontal baseline as the store title.
-  let rightY = initialTitleY;
+  // Draw Logo
+  if (hasLogoImg && companyLogoStr) {
+    try {
+      doc.addImage(companyLogoStr, 'PNG', brandX, identityY, logoWidth, logoHeight);
+    } catch (e) {
+      console.error("Error drawing logo in PDF:", e);
+    }
+  } else if (hasLogoTextSymbol && companyLogoStr) {
+    try {
+      // Use design theme color for the circular backplate
+      doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
+      doc.circle(brandX + 17, identityY + 17, 17, 'F');
+      
+      doc.setFont("Helvetica", "normal");
+      doc.setFontSize(18 * sizeFactor);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(companyLogoStr, brandX + 17, identityY + 23, { align: 'center' });
+    } catch (e) {
+      // ignore
+    }
+  }
 
-  // Invoice Number (Significantly Larger & Bold - Colored by theme)
+  // Compute height of details text block to perfectly center it horizontally and vertically with the logo
+  const textSpacing = 4.5;
+  const titleHeight = 7 * sizeFactor;
+  const totalTextHeight = titleHeight + 1.5 + (addressLines.length * textSpacing) + textSpacing + (businessInfo.vatRegNo ? textSpacing : 0);
+
+  let textStartOffset = 0;
+  if (hasLogoDrawn && logoHeight > totalTextHeight) {
+    textStartOffset = (logoHeight - totalTextHeight) / 2;
+  }
+
+  let titleY = identityY + textStartOffset + 5.0 * sizeFactor;
   doc.setFont(pdfFontName, "bold");
-  doc.setFontSize(10.5 * sizeFactor);
+  doc.setFontSize(testTitleFontSize);
+  
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text(`INVOICE #: ${transaction.invoiceNo}`, metaX, rightY);
-  rightY += 6.5;
+  doc.text(singleLineTitle, infoX, titleY);
+  titleY = titleY + titleHeight;
 
-  // Date and Time
-  doc.setFont(pdfFontName, "normal");
+  // Address, phone, email & tax register - Left aligned to the right column
+  doc.setFont(pdfFontName, isVintageEditorial ? "bold" : "normal");
   doc.setFontSize(8.5 * sizeFactor);
   doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-  doc.text(`Issue Date: ${formattedDate}`, metaX, rightY);
-  rightY += 5.0;
-  if (formattedTime) {
-    doc.text(`Issue Time: ${formattedTime}`, metaX, rightY);
-    rightY += 5.0;
+
+  let textY = titleY + 1.5;
+  addressLines.forEach((line: string) => {
+    doc.text(line, infoX, textY);
+    textY += textSpacing;
+  });
+
+  doc.text(contactString, infoX, textY);
+  textY += textSpacing;
+
+  if (businessInfo.vatRegNo) {
+    doc.text(`VAT Reg No: ${businessInfo.vatRegNo}`, infoX, textY);
+    textY += textSpacing;
   }
 
-  // Sales Agent (Salesman Name)
-  doc.text("Sales Agent: Showroom Account Executive", metaX, rightY);
-  rightY += 5.0;
-
-  // Payment Method
-  doc.text(`Payment Mode: ${transaction.paymentMethod.toUpperCase()}`, metaX, rightY);
-  rightY += 6.0;
-
-  let metaYEnd = rightY + 3;
-  let currentY = Math.max(brandYEnd, metaYEnd);
+  let brandYEnd = Math.max(textY + 4, identityY + logoHeight + 4);
+  let currentY = brandYEnd;
 
   // High-contrast clean thin separator line
   if (isVintageEditorial) {
@@ -348,51 +344,94 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     doc.setLineWidth(0.2);
     doc.line(15, currentY, 195, currentY);
     
+    // Left side: Invoice metadata
     doc.setFont(pdfFontName, "bold");
     doc.setFontSize(7.5 * sizeFactor);
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text("CUSTOMER BILLING / SHIPPING PARTICULARS:", 15, currentY + 5);
-    
-    doc.text(contact ? contact.name : "Walk-in Regular Customer", 15, currentY + 11);
-    
+    doc.text(`INVOICE #: ${transaction.invoiceNo}`, 15, currentY + 5);
+
     doc.setFont(pdfFontName, "normal");
     doc.setFontSize(7.5 * sizeFactor);
     doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-    doc.text(contact ? `Phone: ${contact.phone}` : "Phone: Walk-in cash transaction", 15, currentY + 16);
-    doc.text(contact ? `Addr: ${contact.address}` : "Addr: Counter Sale, Dhaka", 105, currentY + 16);
+    doc.text(`Date: ${formattedDate} ${formattedTime}`, 15, currentY + 10);
+    doc.text(`Payment: ${transaction.paymentMethod.toUpperCase()}`, 15, currentY + 15);
+
+    // Right side: Customer / Shipping Details
+    doc.setFont(pdfFontName, "bold");
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("CUSTOMER PARTICULARS:", 105, currentY + 5);
+
+    const cName = contact ? contact.name : "Walk-in Regular Customer";
+    doc.text(cName, 105, currentY + 10);
+
+    doc.setFont(pdfFontName, "normal");
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    const cPhone = contact ? `Phone: ${contact.phone}` : "Phone: Walk-in Cash";
+    doc.text(cPhone, 105, currentY + 15);
+
+    const cAddr = contact ? `Addr: ${contact.address}` : "Addr: Counter Sale";
+    const addrLines = doc.splitTextToSize(cAddr, 80);
+    doc.text(addrLines, 105, currentY + 20);
     
-    currentY += 21;
+    currentY += 28;
   } else {
-    // Default / Boxed Theme Panel layouts
+    // Default / Boxed Theme Panel layouts with redesigned side-by-side columns
+    const boxHeight = 32;
     doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
     if (isVintageEditorial) {
-      doc.rect(15, currentY, 180, 18, 'F');
+      doc.rect(15, currentY, 180, boxHeight, 'F');
+      if (billToBorderColor) {
+        doc.setDrawColor(billToBorderColor[0], billToBorderColor[1], billToBorderColor[2]);
+        doc.setLineWidth(0.4);
+        doc.rect(15, currentY, 180, boxHeight, 'S');
+      }
     } else {
-      doc.roundedRect(15, currentY, 180, 18, 1.5, 1.5, 'F');
+      doc.roundedRect(15, currentY, 180, boxHeight, 1.5, 1.5, 'F');
+      if (billToBorderColor) {
+        doc.setDrawColor(billToBorderColor[0], billToBorderColor[1], billToBorderColor[2]);
+        doc.setLineWidth(0.2);
+        doc.roundedRect(15, currentY, 180, boxHeight, 1.5, 1.5, 'S');
+      }
     }
 
     doc.setFont(pdfFontName, "bold");
     doc.setFontSize(7.5 * sizeFactor);
     doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-    doc.text("CUSTOMER IDENTITY DETAILS", 20, currentY + 5.5);
-    doc.text("CONTACT DETAILS & SHIPPING ADDRESS", 105, currentY + 5.5);
+    doc.text("INVOICE METADATA DETAILS", 20, currentY + 5.5);
+    doc.text("CUSTOMER & SHIPPING DETAILS", 105, currentY + 5.5);
 
+    // Left Column Content (Invoice metadata)
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(8.5 * sizeFactor);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text(`INVOICE #: ${transaction.invoiceNo}`, 20, currentY + 11.5);
+
+    doc.setFont(pdfFontName, "normal");
+    doc.setFontSize(8 * sizeFactor);
+    doc.setTextColor(71, 85, 105); // slate-600
+    doc.text(`Issue Date: ${formattedDate}`, 20, currentY + 16.5);
+    doc.text(`Issue Time: ${formattedTime || "N/A"}`, 20, currentY + 21.0);
+    doc.text(`Sales Agent: Showroom Account Executive`, 20, currentY + 25.5);
+    doc.text(`Payment Mode: ${transaction.paymentMethod.toUpperCase()}`, 20, currentY + 30.0);
+
+    // Right Column Content (Combined Customer Biography & Address Details)
     doc.setFont(pdfFontName, "bold");
     doc.setFontSize(9 * sizeFactor);
     doc.setTextColor(15, 23, 42); // slate-900
     const cName = contact ? contact.name : "Walk-in Regular Customer";
-    doc.text(cName, 20, currentY + 11.5);
+    doc.text(cName, 105, currentY + 11.5);
 
     doc.setFont(pdfFontName, "normal");
     doc.setFontSize(8 * sizeFactor);
     doc.setTextColor(71, 85, 105); // slate-600
     const cPhone = contact ? `Phone: ${contact.phone}` : "Phone: Over-the-counter Transaction";
-    const cAddr = contact ? `Address: ${contact.address}` : "Address: Dhaka, Bangladesh";
-    
-    doc.text(cPhone, 105, currentY + 11.5); // Perfectly aligned level horizontally with Customer Name
-    doc.text(cAddr, 105, currentY + 15); // Aligned cleanly below phone number
+    doc.text(cPhone, 105, currentY + 16.5);
 
-    currentY += 24;
+    const cAddr = contact ? `Address: ${contact.address}` : "Address: Dhaka, Bangladesh";
+    const addrLines = doc.splitTextToSize(cAddr, 80);
+    doc.text(addrLines, 105, currentY + 21.0);
+
+    currentY += (boxHeight + 6);
   }
 
   // Main Itemized Table mapping
@@ -438,24 +477,17 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
 
   // BOTTOM FINANCIAL & SIGNATURES SECTION
   // Left Column: Total in Words block & Showroom Terms
-  doc.setFillColor(billToBg[0], billToBg[1], billToBg[2]);
-  if (isVintageEditorial) {
-    doc.rect(15, finalY, 110, 16, 'F');
-  } else {
-    doc.roundedRect(15, finalY, 110, 16, 1.5, 1.5, 'F');
-  }
-
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(7 * sizeFactor);
   doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-  doc.text("TOTAL BILL IN WORDS:", 20, finalY + 5.5);
+  doc.text("TOTAL BILL IN WORDS:", 15, finalY + 5.5);
 
   doc.setFont(pdfFontName, "bold");
-  doc.setFontSize(8 * sizeFactor);
+  doc.setFontSize(8.5 * sizeFactor);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   const tVerbal = numberToWords(transaction.total);
-  const wordLines = doc.splitTextToSize(tVerbal, 100);
-  doc.text(wordLines, 20, finalY + 11.5);
+  const wordLines = doc.splitTextToSize(tVerbal, 110);
+  doc.text(wordLines, 15, finalY + 11.5);
 
   // Showroom Terms
   let termsTitleY = finalY + 22;
@@ -538,23 +570,26 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.text("Total Cash Received:", rightX, summaryY + 27);
   doc.text(`${devCurrencySymbol} ${transaction.paidAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 27, { align: "right" });
 
-  // Change or Due Balance details
-  if (excess > 0) {
-    doc.setFont(pdfFontName, "bold");
-    doc.setTextColor(22, 101, 52); // Elegant dark forest green
-    doc.text("Dues Outstanding:", rightX, summaryY + 31.5);
-    doc.text("PAID", 190, summaryY + 31.5, { align: "right" });
+  // Change or Due Balance details - PREMIUM CONDITIONAL BADGE STYLING
+  doc.setFont(pdfFontName, "bold");
+  if (excess > 0 || !hasDue) {
+    // Prominent beautifully styled FULL PAID stamp/badge with light green background alignment
+    doc.setFillColor(220, 252, 231);
+    doc.roundedRect(rightX - 1.5, summaryY + 30.5, 61, 7.5, 1, 1, "F");
+    
+    doc.setFontSize(8.5 * sizeFactor);
+    doc.setTextColor(21, 115, 52);
+    // Centered FULL PAID text with stars for a distinct stamp style
+    doc.text("★ FULL PAID ★", rightX + 29, summaryY + 35.8, { align: "center" });
   } else {
-    doc.setFont(pdfFontName, "bold");
-    if (hasDue) {
-      doc.setTextColor(185, 28, 28); // Vibrant warning red for outstanding due
-      doc.text("Dues Outstanding:", rightX, summaryY + 31.5);
-      doc.text(`${devCurrencySymbol} ${transaction.dueBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 31.5, { align: "right" });
-    } else {
-      doc.setTextColor(22, 101, 52); // Elegant forest green
-      doc.text("Dues Outstanding:", rightX, summaryY + 31.5);
-      doc.text("PAID", 190, summaryY + 31.5, { align: "right" });
-    }
+    // Soft red background highlighter block with bold dark red text for OUTSTANDING DUE
+    doc.setFillColor(254, 226, 226);
+    doc.roundedRect(rightX - 1.5, summaryY + 30.5, 61, 7.5, 1, 1, "F");
+    
+    doc.setFontSize(7.5 * sizeFactor);
+    doc.setTextColor(185, 28, 28); // bold dark red text
+    doc.text("Dues Outstanding:", rightX + 2, summaryY + 35.4);
+    doc.text(`${devCurrencySymbol} ${transaction.dueBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, summaryY + 35.4, { align: "right" });
   }
 
   // SIGNATURES ROW
@@ -783,8 +818,8 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   let identityY = 18;
   let metaX = 125;
   let metaY = 18;
-  let logoWidth = 24;
-  let logoHeight = 24;
+  let logoWidth = 28;
+  let logoHeight = 28;
   let hasLogoDrawn = false;
 
   if (hasLogoImg && companyLogoStr) {
@@ -797,12 +832,12 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   } else if (hasLogoTextSymbol && companyLogoStr) {
     try {
       doc.setFillColor(241, 245, 249); // slate-100 placeholder backplate
-      doc.circle(brandX + 11, identityY + 11, 11, 'F');
+      doc.circle(brandX + 14, identityY + 14, 14, 'F');
       
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(14 * sizeFactor);
       doc.setTextColor(15, 23, 42); // slate-900
-      doc.text(companyLogoStr, brandX + 11, identityY + 14.5, { align: 'center' });
+      doc.text(companyLogoStr, brandX + 14, identityY + 18.5, { align: 'center' });
       hasLogoDrawn = true;
     } catch (e) {
       // ignore
@@ -810,12 +845,26 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   }
 
   // Draw Showroom Title Name
-  let infoX = hasLogoDrawn ? brandX + logoWidth + 6 : brandX;
+  let infoX = hasLogoDrawn ? brandX + logoWidth + 7 : brandX;
+  const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
+  const addressLines = doc.splitTextToSize(businessInfo.address || "Showroom Address, Dhaka", maxTitleWidth);
+
+  // Compute layout heights for dynamic vertical centering
+  const textSpacing = 4.0;
+  const titleHeight = 6.5 * sizeFactor;
+  const totalTextHeight = titleHeight + 1.5 + (addressLines.length * textSpacing) + textSpacing + (businessInfo.vatRegNo ? textSpacing : 0);
+
+  let textStartOffset = 0;
+  if (hasLogoDrawn && logoHeight > totalTextHeight) {
+    textStartOffset = (logoHeight - totalTextHeight) / 2;
+  }
+
+  let titleY = identityY + textStartOffset + 5.5 * sizeFactor;
   doc.setFont(pdfFontName, "bold");
   
   const normLogo = hasLogoLongText ? (companyLogoStr || "").trim().toUpperCase() : "";
   const normBiz = (businessInfo?.name || "BARAKAH E-MART").trim().toUpperCase();
-  const isSimilar = normLogo === normBiz || (normLogo && normBiz && (normLogo.startsWith(normBiz.substring(0, 6)) || normBiz.startsWith(normLogo.substring(0, 6))));
+  const isSimilar = normLogo === normBiz || (normLogo && normBiz && (normLogo.startsWith(normBiz.substring(0, 6)) || normBiz.startsWith(normLogo.substring(0, 1))));
 
   let singleLineTitle = normBiz;
   if (hasLogoLongText) {
@@ -827,7 +876,6 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
       singleLineTitle = `${normLogo} | ${normBiz}`;
     }
   }
-  const maxTitleWidth = metaX - infoX - 4; // safe width before metaX
   let titleFontSize = 18 * sizeFactor;
   
   doc.setFontSize(titleFontSize);
@@ -838,31 +886,29 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   }
   
   doc.setTextColor(15, 23, 42); // slate-900
-  let titleY = identityY + 5.5;
   doc.text(singleLineTitle, infoX, titleY);
-  titleY = titleY + 6.5 * sizeFactor;
+  titleY = titleY + titleHeight;
 
   // Address, phone, email & tax register
   doc.setFont(pdfFontName, "normal");
   doc.setFontSize(8 * sizeFactor);
   doc.setTextColor(71, 85, 105); // slate-600
 
-  let textY = Math.max(titleY + 1.5, identityY + 11);
-  const addressLines = doc.splitTextToSize(businessInfo.address || "Showroom Address, Dhaka", maxTitleWidth);
+  let textY = titleY + 1.5;
   addressLines.forEach((line: string) => {
     doc.text(line, infoX, textY);
-    textY += 4;
+    textY += textSpacing;
   });
 
   doc.text(`Phone: ${businessInfo.phoneNumber}`, infoX, textY);
-  textY += 4;
+  textY += textSpacing;
   if (businessInfo.email) {
     doc.text(`Email: ${businessInfo.email}`, infoX, textY);
-    textY += 4;
+    textY += textSpacing;
   }
   if (businessInfo.vatRegNo) {
     doc.text(`VAT Reg No: ${businessInfo.vatRegNo}`, infoX, textY);
-    textY += 4;
+    textY += textSpacing;
   }
 
   let brandYEnd = Math.max(textY, identityY + logoHeight + 4);

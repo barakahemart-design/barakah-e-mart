@@ -316,23 +316,30 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
 
       let jsonStr = "[]";
       try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            systemInstruction: "You are an elite, friendly business auditor specializing in retail stores and general shops."
-          }
-        });
-        jsonStr = response.text?.trim() || "[]";
-      } catch (geminiErr: any) {
-        // Safely handle 429 quota exhaustion or model rate limits silently, serving live personalized recommendations.
-        const msg = geminiErr.message || String(geminiErr);
-        if (msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED")) {
-          console.log("[AI Insights] Serving live high-fidelity fallback insights (Gemini quota exhausted).");
-        } else {
-          console.warn("[AI Insights] Gemini unavailable, serving live dynamic fallback:", msg);
+        try {
+          const response = await ai.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              systemInstruction: "You are an elite, friendly business auditor specializing in retail stores and general shops."
+            }
+          });
+          jsonStr = response.text?.trim() || "[]";
+        } catch (firstTryErr: any) {
+          console.log("[AI Insights] Primary gemini-3.5-flash experiencing high demand. Trying backup model gemini-3.1-flash-lite...");
+          const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              systemInstruction: "You are an elite, friendly business auditor specializing in retail stores and general shops."
+            }
+          });
+          jsonStr = response.text?.trim() || "[]";
         }
+      } catch (geminiErr: any) {
+        console.log("[AI Insights] Serving live high-fidelity fallback insights (models offline or busy).");
         res.json(getDynamicFallbackInsights(transactions, expenses, products));
         return;
       }
@@ -368,13 +375,27 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
       const categories = ["Rent", "Electricity", "Salary", "Marketing", "Others"];
       const prompt = `Classify this business expense based on its description: "${description}". Choose exactly one category from this restricted list: ${categories.join(", ")}. Return only the category name directly, with no surrounding quotes or markings.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt
-      });
+      let category = "";
+      try {
+        try {
+          const response = await ai.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: prompt
+          });
+          category = response.text?.trim() || "";
+        } catch (firstTryErr) {
+          const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt
+          });
+          category = response.text?.trim() || "";
+        }
+      } catch (geminiErr) {
+        category = classifyExpenseLocally(description);
+      }
 
-      const category = response.text?.trim() || classifyExpenseLocally(description);
-      res.json({ category });
+      const finalCategory = category || classifyExpenseLocally(description);
+      res.json({ category: finalCategory });
     } catch (error: any) {
       res.json({ category: classifyExpenseLocally(description) });
     }

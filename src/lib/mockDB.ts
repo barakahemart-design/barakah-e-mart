@@ -145,6 +145,26 @@ const KEYS = {
   PURCHASES: "barakah_purchases"
 };
 
+export function getDbKey(baseKey: string, customEmail?: string): string {
+  let email = customEmail;
+  if (!email) {
+    try {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        email = parsed?.email;
+      }
+    } catch (_) {}
+  }
+  if (email) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail) {
+      return `${baseKey}_${cleanEmail}`;
+    }
+  }
+  return baseKey;
+}
+
 // Demo cleaner helpers to ensure old demo entries never persist or load
 export function cleanDemoProducts(arr: any[]): any[] {
   return Array.isArray(arr) ? arr : [];
@@ -168,12 +188,12 @@ export function cleanDemoTransactions(arr: any[]): any[] {
 
 export const loadDB = () => {
   try {
-    const productsStr = localStorage.getItem(KEYS.PRODUCTS);
-    const contactsStr = localStorage.getItem(KEYS.CONTACTS);
-    const expensesStr = localStorage.getItem(KEYS.EXPENSES);
-    const transactionsStr = localStorage.getItem(KEYS.TRANSACTIONS);
-    const businessInfoStr = localStorage.getItem(KEYS.BUSINESS_INFO);
-    const purchasesStr = localStorage.getItem(KEYS.PURCHASES);
+    const productsStr = localStorage.getItem(getDbKey(KEYS.PRODUCTS));
+    const contactsStr = localStorage.getItem(getDbKey(KEYS.CONTACTS));
+    const expensesStr = localStorage.getItem(getDbKey(KEYS.EXPENSES));
+    const transactionsStr = localStorage.getItem(getDbKey(KEYS.TRANSACTIONS));
+    const businessInfoStr = localStorage.getItem(getDbKey(KEYS.BUSINESS_INFO));
+    const purchasesStr = localStorage.getItem(getDbKey(KEYS.PURCHASES));
 
     let productsRaw = productsStr ? JSON.parse(productsStr) : null;
     let contactsRaw = contactsStr ? JSON.parse(contactsStr) : null;
@@ -183,7 +203,7 @@ export const loadDB = () => {
 
     // Local Fail-safe backup check: if local storage keys are completely missing, self-heal from the fail-safe!
     if (productsStr === null && transactionsStr === null) {
-      const failSafeStr = localStorage.getItem("barakah_fail_safe_backup");
+      const failSafeStr = localStorage.getItem(getDbKey("barakah_fail_safe_backup"));
       if (failSafeStr) {
         try {
           const fs = JSON.parse(failSafeStr);
@@ -196,11 +216,11 @@ export const loadDB = () => {
             purchasesRaw = fs.purchases || [];
             
             // Re-write back to standards instantly to stabilize system
-            localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(productsRaw));
-            localStorage.setItem(KEYS.CONTACTS, JSON.stringify(contactsRaw));
-            localStorage.setItem(KEYS.EXPENSES, JSON.stringify(expensesRaw));
-            localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactionsRaw));
-            if (purchasesRaw) localStorage.setItem(KEYS.PURCHASES, JSON.stringify(purchasesRaw));
+            localStorage.setItem(getDbKey(KEYS.PRODUCTS), JSON.stringify(productsRaw));
+            localStorage.setItem(getDbKey(KEYS.CONTACTS), JSON.stringify(contactsRaw));
+            localStorage.setItem(getDbKey(KEYS.EXPENSES), JSON.stringify(expensesRaw));
+            localStorage.setItem(getDbKey(KEYS.TRANSACTIONS), JSON.stringify(transactionsRaw));
+            if (purchasesRaw) localStorage.setItem(getDbKey(KEYS.PURCHASES), JSON.stringify(purchasesRaw));
           }
         } catch (err) {
           console.warn("[Fail-safe Recovery] Error loading from local fail-safe backup copy:", err);
@@ -246,17 +266,17 @@ export const saveDB = (data: {
   purchases: Purchase[];
 }) => {
   try {
-    localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(data.products));
-    localStorage.setItem(KEYS.CONTACTS, JSON.stringify(data.contacts));
-    localStorage.setItem(KEYS.EXPENSES, JSON.stringify(data.expenses));
-    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(data.transactions));
-    localStorage.setItem(KEYS.BUSINESS_INFO, JSON.stringify(data.businessInfo));
-    localStorage.setItem(KEYS.PURCHASES, JSON.stringify(data.purchases));
+    localStorage.setItem(getDbKey(KEYS.PRODUCTS), JSON.stringify(data.products));
+    localStorage.setItem(getDbKey(KEYS.CONTACTS), JSON.stringify(data.contacts));
+    localStorage.setItem(getDbKey(KEYS.EXPENSES), JSON.stringify(data.expenses));
+    localStorage.setItem(getDbKey(KEYS.TRANSACTIONS), JSON.stringify(data.transactions));
+    localStorage.setItem(getDbKey(KEYS.BUSINESS_INFO), JSON.stringify(data.businessInfo));
+    localStorage.setItem(getDbKey(KEYS.PURCHASES), JSON.stringify(data.purchases));
 
     // Update the local fail-safe backup key only if the data has actual items, to prevent overwriting with blank states
     const totalItems = data.products.length + data.transactions.length;
     if (totalItems > 0) {
-      localStorage.setItem("barakah_fail_safe_backup", JSON.stringify({
+      localStorage.setItem(getDbKey("barakah_fail_safe_backup"), JSON.stringify({
         products: data.products,
         contacts: data.contacts,
         expenses: data.expenses,

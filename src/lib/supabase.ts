@@ -4,7 +4,8 @@ import {
   cleanDemoExpenses, 
   cleanDemoPurchases, 
   cleanDemoTransactions,
-  INITIAL_BUSINESS_INFO
+  INITIAL_BUSINESS_INFO,
+  getDbKey
 } from './mockDB';
 
 import { 
@@ -266,46 +267,46 @@ export const selfHealDatabase = (customEmail?: string) => {
   const normalizeWithEmail = (id: string) => toUUID(id, email);
 
   // 1. PRODUCTS DEDUPLICATE
-  const rawProducts = localStorage.getItem('barakah_products');
+  const rawProducts = localStorage.getItem(getDbKey('barakah_products', email));
   if (rawProducts) {
     try {
       const products = JSON.parse(rawProducts);
       if (Array.isArray(products)) {
         const normalized = products.map((p: any) => ({ ...p, id: normalizeWithEmail(p.id) }));
         const cleaned = deduplicateProducts(normalized);
-        localStorage.setItem('barakah_products', JSON.stringify(cleaned));
+        localStorage.setItem(getDbKey('barakah_products', email), JSON.stringify(cleaned));
       }
     } catch (_) {}
   }
 
   // 2. CONTACTS DEDUPLICATE
-  const rawContacts = localStorage.getItem('barakah_contacts');
+  const rawContacts = localStorage.getItem(getDbKey('barakah_contacts', email));
   if (rawContacts) {
     try {
       const contacts = JSON.parse(rawContacts);
       if (Array.isArray(contacts)) {
         const normalized = contacts.map((c: any) => ({ ...c, id: normalizeWithEmail(c.id) }));
         const cleaned = deduplicateContacts(normalized);
-        localStorage.setItem('barakah_contacts', JSON.stringify(cleaned));
+        localStorage.setItem(getDbKey('barakah_contacts', email), JSON.stringify(cleaned));
       }
     } catch (_) {}
   }
 
-  // 3. EXPENSES DEDUPLICATE
-  const rawExpenses = localStorage.getItem('barakah_expenses');
+  // 4. EXPENSES DEDUPLICATE
+  const rawExpenses = localStorage.getItem(getDbKey('barakah_expenses', email));
   if (rawExpenses) {
     try {
       const expenses = JSON.parse(rawExpenses);
       if (Array.isArray(expenses)) {
         const normalized = expenses.map((e: any) => ({ ...e, id: normalizeWithEmail(e.id) }));
         const cleaned = deduplicateExpenses(normalized);
-        localStorage.setItem('barakah_expenses', JSON.stringify(cleaned));
+        localStorage.setItem(getDbKey('barakah_expenses', email), JSON.stringify(cleaned));
       }
     } catch (_) {}
   }
 
   // 4. PURCHASES DEDUPLICATE
-  const rawPurchases = localStorage.getItem('barakah_purchases');
+  const rawPurchases = localStorage.getItem(getDbKey('barakah_purchases', email));
   if (rawPurchases) {
     try {
       const purchases = JSON.parse(rawPurchases);
@@ -316,13 +317,13 @@ export const selfHealDatabase = (customEmail?: string) => {
           productId: pur.productId ? normalizeWithEmail(pur.productId) : ""
         }));
         const cleaned = deduplicatePurchases(normalized);
-        localStorage.setItem('barakah_purchases', JSON.stringify(cleaned));
+        localStorage.setItem(getDbKey('barakah_purchases', email), JSON.stringify(cleaned));
       }
     } catch (_) {}
   }
 
   // 5. TRANSACTIONS DEDUPLICATE
-  const rawTransactions = localStorage.getItem('barakah_transactions');
+  const rawTransactions = localStorage.getItem(getDbKey('barakah_transactions', email));
   if (rawTransactions) {
     try {
       const transactions = JSON.parse(rawTransactions);
@@ -338,7 +339,7 @@ export const selfHealDatabase = (customEmail?: string) => {
           }))
         }));
         const cleaned = deduplicateTransactions(normalized);
-        localStorage.setItem('barakah_transactions', JSON.stringify(cleaned));
+        localStorage.setItem(getDbKey('barakah_transactions', email), JSON.stringify(cleaned));
       }
     } catch (_) {}
   }
@@ -411,35 +412,35 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
   if (overwrite) {
     // 1. PRODUCTS OVERWRITE
     if (data.products) {
-      localStorage.setItem('barakah_products', JSON.stringify(cleanCloudProducts));
+      localStorage.setItem(getDbKey('barakah_products', email), JSON.stringify(cleanCloudProducts));
     }
     // 2. CONTACTS OVERWRITE
     if (data.contacts) {
-      localStorage.setItem('barakah_contacts', JSON.stringify(cleanCloudContacts));
+      localStorage.setItem(getDbKey('barakah_contacts', email), JSON.stringify(cleanCloudContacts));
     }
     // 3. EXPENSES OVERWRITE
     if (data.expenses) {
-      localStorage.setItem('barakah_expenses', JSON.stringify(cleanCloudExpenses));
+      localStorage.setItem(getDbKey('barakah_expenses', email), JSON.stringify(cleanCloudExpenses));
     }
     // 4. TRANSACTIONS OVERWRITE
     if (data.transactions) {
       cleanCloudTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-      localStorage.setItem('barakah_transactions', JSON.stringify(cleanCloudTransactions));
+      localStorage.setItem(getDbKey('barakah_transactions', email), JSON.stringify(cleanCloudTransactions));
     }
     // 5. PURCHASES OVERWRITE
     if (p) {
-      localStorage.setItem('barakah_purchases', JSON.stringify(cleanCloudPurchases));
+      localStorage.setItem(getDbKey('barakah_purchases', email), JSON.stringify(cleanCloudPurchases));
     }
     // 6. BUSINESS SETTINGS OVERWRITE
     if (bizData) {
       const { purchases: ignore, ...cleanInfo } = bizData;
       const mergedBiz = { ...INITIAL_BUSINESS_INFO, ...cleanInfo };
-      localStorage.setItem('barakah_business_info', JSON.stringify(mergedBiz));
+      localStorage.setItem(getDbKey('barakah_business_info', email), JSON.stringify(mergedBiz));
     }
   } else {
     // 1. MERGE PRODUCTS
     if (data.products) {
-      const rawLocalProducts = localStorage.getItem('barakah_products');
+      const rawLocalProducts = localStorage.getItem(getDbKey('barakah_products', email));
       let localProducts = [];
       if (rawLocalProducts) {
         try {
@@ -449,17 +450,17 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       }
       const normalizedLocalProducts = localProducts.map(p => normalizeProduct(p));
       const mergedProducts = deduplicateProducts([...cleanCloudProducts, ...normalizedLocalProducts]);
-      localStorage.setItem('barakah_products', JSON.stringify(mergedProducts));
+      localStorage.setItem(getDbKey('barakah_products', email), JSON.stringify(mergedProducts));
     } else {
-      const rawLocalProducts = localStorage.getItem('barakah_products');
+      const rawLocalProducts = localStorage.getItem(getDbKey('barakah_products', email));
       if (!rawLocalProducts) {
-        localStorage.setItem('barakah_products', JSON.stringify([]));
+        localStorage.setItem(getDbKey('barakah_products', email), JSON.stringify([]));
       }
     }
 
     // 2. MERGE CONTACTS
     if (data.contacts) {
-      const rawLocalContacts = localStorage.getItem('barakah_contacts');
+      const rawLocalContacts = localStorage.getItem(getDbKey('barakah_contacts', email));
       let localContacts = [];
       if (rawLocalContacts) {
         try {
@@ -469,17 +470,17 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       }
       const normalizedLocalContacts = localContacts.map(c => normalizeContact(c));
       const mergedContacts = deduplicateContacts([...cleanCloudContacts, ...normalizedLocalContacts]);
-      localStorage.setItem('barakah_contacts', JSON.stringify(mergedContacts));
+      localStorage.setItem(getDbKey('barakah_contacts', email), JSON.stringify(mergedContacts));
     } else {
-      const rawLocalContacts = localStorage.getItem('barakah_contacts');
+      const rawLocalContacts = localStorage.getItem(getDbKey('barakah_contacts', email));
       if (!rawLocalContacts) {
-        localStorage.setItem('barakah_contacts', JSON.stringify([]));
+        localStorage.setItem(getDbKey('barakah_contacts', email), JSON.stringify([]));
       }
     }
 
     // 3. MERGE EXPENSES
     if (data.expenses) {
-      const rawLocalExpenses = localStorage.getItem('barakah_expenses');
+      const rawLocalExpenses = localStorage.getItem(getDbKey('barakah_expenses', email));
       let localExpenses = [];
       if (rawLocalExpenses) {
         try {
@@ -489,17 +490,17 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       }
       const normalizedLocalExpenses = localExpenses.map(e => normalizeExpense(e));
       const mergedExpenses = deduplicateExpenses([...cleanCloudExpenses, ...normalizedLocalExpenses]);
-      localStorage.setItem('barakah_expenses', JSON.stringify(mergedExpenses));
+      localStorage.setItem(getDbKey('barakah_expenses', email), JSON.stringify(mergedExpenses));
     } else {
-      const rawLocalExpenses = localStorage.getItem('barakah_expenses');
+      const rawLocalExpenses = localStorage.getItem(getDbKey('barakah_expenses', email));
       if (!rawLocalExpenses) {
-        localStorage.setItem('barakah_expenses', JSON.stringify([]));
+        localStorage.setItem(getDbKey('barakah_expenses', email), JSON.stringify([]));
       }
     }
 
     // 4. MERGE TRANSACTIONS
     if (data.transactions) {
-      const rawLocalTransactions = localStorage.getItem('barakah_transactions');
+      const rawLocalTransactions = localStorage.getItem(getDbKey('barakah_transactions', email));
       let localTransactions = [];
       if (rawLocalTransactions) {
         try {
@@ -510,17 +511,17 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       const normalizedLocalTransactions = localTransactions.map(t => normalizeTransaction(t));
       const mergedTransactions = deduplicateTransactions([...cleanCloudTransactions, ...normalizedLocalTransactions]);
       mergedTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-      localStorage.setItem('barakah_transactions', JSON.stringify(mergedTransactions));
+      localStorage.setItem(getDbKey('barakah_transactions', email), JSON.stringify(mergedTransactions));
     } else {
-      const rawLocalTransactions = localStorage.getItem('barakah_transactions');
+      const rawLocalTransactions = localStorage.getItem(getDbKey('barakah_transactions', email));
       if (!rawLocalTransactions) {
-        localStorage.setItem('barakah_transactions', JSON.stringify([]));
+        localStorage.setItem(getDbKey('barakah_transactions', email), JSON.stringify([]));
       }
     }
 
     // 5. MERGE PURCHASES
     if (p) {
-      const rawLocalPurchases = localStorage.getItem('barakah_purchases');
+      const rawLocalPurchases = localStorage.getItem(getDbKey('barakah_purchases', email));
       let localPurchases = [];
       if (rawLocalPurchases) {
         try {
@@ -530,18 +531,18 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       }
       const normalizedLocalPurchases = localPurchases.map(pur => normalizePurchase(pur));
       const mergedPurchases = deduplicatePurchases([...cleanCloudPurchases, ...normalizedLocalPurchases]);
-      localStorage.setItem('barakah_purchases', JSON.stringify(mergedPurchases));
+      localStorage.setItem(getDbKey('barakah_purchases', email), JSON.stringify(mergedPurchases));
     } else {
-      const rawLocalPurchases = localStorage.getItem('barakah_purchases');
+      const rawLocalPurchases = localStorage.getItem(getDbKey('barakah_purchases', email));
       if (!rawLocalPurchases) {
-        localStorage.setItem('barakah_purchases', JSON.stringify([]));
+        localStorage.setItem(getDbKey('barakah_purchases', email), JSON.stringify([]));
       }
     }
 
     // 6. BUSINESS SETTINGS MERGE
     if (bizData) {
       const { purchases: ignore, ...cleanInfo } = bizData;
-      const rawLocalBiz = localStorage.getItem('barakah_business_info');
+      const rawLocalBiz = localStorage.getItem(getDbKey('barakah_business_info', email));
       let mergedBiz = { ...INITIAL_BUSINESS_INFO, ...cleanInfo };
       if (rawLocalBiz) {
         try {
@@ -549,7 +550,7 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
           mergedBiz = { ...localBiz, ...cleanInfo };
         } catch (e) {}
       }
-      localStorage.setItem('barakah_business_info', JSON.stringify(mergedBiz));
+      localStorage.setItem(getDbKey('barakah_business_info', email), JSON.stringify(mergedBiz));
     }
   }
 
@@ -1120,7 +1121,7 @@ export function getPasscodeSyncId(email: string, pin: string): string {
 
   if (!resolvedPin) {
     try {
-      const bizInfoStr = localStorage.getItem("barakah_business_info");
+      const bizInfoStr = localStorage.getItem(getDbKey("barakah_business_info", email));
       if (bizInfoStr) {
         const bizInfo = JSON.parse(bizInfoStr);
         if (bizInfo && bizInfo.adminPasscode) {
