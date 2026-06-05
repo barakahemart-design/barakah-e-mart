@@ -785,15 +785,26 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
           const sqlTransactions = transactionsRes.docs.map(docSnapshot => {
             const t = docSnapshot.data();
             const relatedItems = itemRows.filter((item: any) => item.transaction_id === t.id);
-            const mappedItems = relatedItems.map((item: any) => ({
-              id: item.id,
-              name: item.product_id ? "Product Item" : "Standard Item",
-              quantity: Number(item.quantity) || 0,
-              price: Number(item.sell_price) || 0,
-              total: Number(item.quantity * item.sell_price) || 0,
-              productId: item.product_id || undefined,
-              buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
-            }));
+            const mappedItems = relatedItems.map((item: any) => {
+              let resolvedName = item.product_name;
+              if (!resolvedName && item.product_id) {
+                // Try finding the name in productsRes
+                const matchedProd = productsRes.empty ? null : productsRes.docs.find(docSnap => docSnap.id === item.product_id);
+                resolvedName = matchedProd ? (matchedProd.data()?.name || "Product Item") : "Product Item";
+              }
+              if (!resolvedName) {
+                resolvedName = item.product_id ? "Product Item" : "Standard Item";
+              }
+              return {
+                id: item.id,
+                name: resolvedName,
+                quantity: Number(item.quantity) || 0,
+                price: Number(item.sell_price) || 0,
+                total: Number(item.quantity * item.sell_price) || 0,
+                productId: item.product_id || undefined,
+                buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+              };
+            });
 
             return {
               id: t.id,
@@ -1323,6 +1334,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
             user_id: activeUserId,
             transaction_id: txUUID,
             product_id: productUUID,
+            product_name: item.name || (item.product ? item.product.name : "Product Item"),
             quantity: item.quantity || 0.0,
             sell_price: item.price || 0.0,
             cost_price: item.buyPrice || item.price || 0.0,
