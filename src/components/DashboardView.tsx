@@ -113,30 +113,19 @@ export function DashboardView({
     }
   };
 
-  // Safe chart data fetching (if empty, uses the precise metrics from user's demo state seen in screenshot)
+  // Safe chart data fetching (returns empty or user's active ledger plot data)
   const getActivePlotData = () => {
     if (ledgerTrendsPlotData && ledgerTrendsPlotData.length > 0) {
       return ledgerTrendsPlotData;
     }
-    return [
-      { date: "02 Jun", "Sales Value": 60000, "Cash Received": 25000 },
-      { date: "03 Jun", "Sales Value": 28000, "Cash Received": 42000 },
-      { date: "04 Jun", "Sales Value": 58000, "Cash Received": 45000 },
-      { date: "05 Jun", "Sales Value": 42000, "Cash Received": 38000 },
-      { date: "06 Jun", "Sales Value": 30000, "Cash Received": 25000 },
-      { date: "07 Jun", "Sales Value": 98000, "Cash Received": 91000 },
-    ];
+    return [];
   };
 
   const getActiveExpensesData = () => {
     if (expenseCategoryPlotData && expenseCategoryPlotData.length > 0) {
       return expenseCategoryPlotData;
     }
-    return [
-      { name: "Ahmad Sayed", value: 2000 },
-      { name: "Delivery", value: 1240 },
-      { name: "Transport", value: 2200 },
-    ];
+    return [];
   };
 
   const activeExpenses = getActiveExpensesData();
