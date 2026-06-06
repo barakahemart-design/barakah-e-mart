@@ -200,51 +200,16 @@ export default function App() {
       setActiveUser(user);
 
       if (!user) {
-        // Automatic Cloud Recovery for Empty local database or Origin Swaps
-        const localProducts = loadDB().products;
-        const localTransactions = loadDB().transactions;
-        const alreadyAttempted = sessionStorage.getItem("barakah_did_auto_restore");
-        
-        if (localProducts.length === 0 && localTransactions.length === 0 && !alreadyAttempted) {
-          sessionStorage.setItem("barakah_did_auto_restore", "true");
-          console.log("[Auto Restore] Empty local state detected. Attempting background cloud restore for barakahemart@gmail.com...");
-          try {
-            const wasRestored = await fetchAndRestoreCloudBackup("barakahemart@gmail.com", "1234");
-            if (wasRestored) {
-              console.log("[Auto Restore] Successfully recovered previous store data & sales from cloud database!");
-              const db = loadDB();
-              setProducts(db.products);
-              setContacts(db.contacts);
-              setExpenses(db.expenses);
-              setTransactions(db.transactions);
-              setBusinessInfo(db.businessInfo);
-              setPurchases(db.purchases || []);
-              if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
-                setStaffList((db.businessInfo as any).staffList);
-              }
-              triggerNotification("All previous sales & store data auto-restored!", "success");
-              
-              // Cache and link auto-session for future continuous background syncing
-              const autoUser = {
-                email: "barakahemart@gmail.com",
-                uid: getPasscodeSyncId("barakahemart@gmail.com", "1234"),
-                isPasscodeUser: true,
-                restored: true,
-                passcode: "1234"
-              };
-              localStorage.setItem('barakah_local_active_user', JSON.stringify(autoUser));
-              setTimeout(() => {
-                window.location.reload();
-              }, 1200);
-              return;
-            }
-          } catch (autoErr) {
-            console.warn("[Auto Restore] Background recovery check failed:", autoErr);
-          }
-        }
-
+        hasSyncedOnMountRef.current = false; // Reset sync status so the next user can pull their own data on mount
         setIsAuthLoading(false);
         initialLoadedRef.current = true;
+        // Cleanse memory state when user session is null to prevent carry-over data leak
+        setProducts([]);
+        setContacts([]);
+        setExpenses([]);
+        setTransactions([]);
+        setPurchases([]);
+        setBusinessInfo(INITIAL_BUSINESS_INFO);
         return;
       }
 
@@ -630,6 +595,7 @@ export default function App() {
   // User Sign out
   const handleLogOut = async () => {
     initialLoadedRef.current = false;
+    hasSyncedOnMountRef.current = false; // Reset the cloud sync status completely to allow the next login session to sync fresh
     if (activeUser && !activeUser.isGuest) {
       const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
       // Perform immediate cloud backup before signing out so nothing is ever lost
@@ -1221,7 +1187,38 @@ export default function App() {
         triggerNotification("System reset successful. Restored defaults completely.", "success");
       }
     } else if (dangerAction === "delete_account") {
-      localStorage.clear();
+      if (activeUser) {
+        const uid = activeUser.uid;
+        const email = activeUser.email?.trim().toLowerCase();
+
+        // 1. Permanently delete from local storage specifically for this user to protect other users on this shared terminal
+        const localKeys = Object.keys(localStorage);
+        localKeys.forEach((key) => {
+          const lowerKey = key.toLowerCase();
+          if (
+            (uid && key.includes(uid)) ||
+            (email && lowerKey.includes(email))
+          ) {
+            localStorage.removeItem(key);
+          }
+        });
+
+        // 2. Also wipe cloud backup to adhere to the account deletion promise
+        if (!activeUser.isGuest) {
+          const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+          uploadPasscodeBackup(activeUser.email, passcode, {
+            products: [],
+            contacts: [],
+            expenses: [],
+            transactions: [],
+            businessInfo: { isExplicitReset: true, name: "Deleted Account" },
+            purchases: []
+          }).catch(err => {
+            console.warn("[Account Delete] Failed to overwrite cloud backup doc:", err);
+          });
+        }
+      }
+
       setProducts(INITIAL_PRODUCTS);
       setContacts(INITIAL_CONTACTS);
       setExpenses(INITIAL_EXPENSES);
