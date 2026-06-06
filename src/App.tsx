@@ -110,18 +110,31 @@ export default function App() {
   const [activeUser, setActiveUser] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  const initialLoadedRef = useRef(false);
-
-  // Active Core Database State (Merged loaded state)
-  const [products, setProducts] = useState<Product[]>(() => loadDB().products);
-  const [contacts, setContacts] = useState<Contact[]>(() => loadDB().contacts);
-  const [expenses, setExpenses] = useState<Expense[]>(() => loadDB().expenses);
-  const [transactions, setTransactions] = useState<Transaction[]>(() => loadDB().transactions);
-  const [purchases, setPurchases] = useState<Purchase[]>(() => loadDB().purchases || []);
-  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(() => loadDB().businessInfo);
-
-  // Security Locking Roles state
-  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+   const initialLoadedRef = useRef(false);
+ 
+   // Active Core Database State (Merged loaded state)
+   const [products, setProducts] = useState<Product[]>(() => loadDB().products);
+   const [contacts, setContacts] = useState<Contact[]>(() => loadDB().contacts);
+   const [expenses, setExpenses] = useState<Expense[]>(() => loadDB().expenses);
+   const [transactions, setTransactions] = useState<Transaction[]>(() => loadDB().transactions);
+   const [purchases, setPurchases] = useState<Purchase[]>(() => loadDB().purchases || []);
+   const [deletedItems, setDeletedItems] = useState<any[]>(() => loadDB().deletedItems || []);
+   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(() => loadDB().businessInfo);
+ 
+   const softDeleteItem = (type: 'sale' | 'customer' | 'expense' | 'purchase' | 'product', originalId: string, itemData: any, label: string) => {
+     const newItem = {
+       id: `${type}_deleted_${originalId || Math.random().toString(36).substring(7)}`,
+       originalId,
+       type,
+       deletedAt: new Date().toISOString(),
+       data: itemData,
+       label
+     };
+     setDeletedItems(prev => [newItem, ...prev]);
+   };
+ 
+   // Security Locking Roles state
+   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
@@ -238,6 +251,7 @@ export default function App() {
       setTransactions(db.transactions);
       setBusinessInfo(db.businessInfo);
       setPurchases(db.purchases || []);
+      setDeletedItems(db.deletedItems || []);
       if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
         setStaffList((db.businessInfo as any).staffList);
       } else {
@@ -272,7 +286,8 @@ export default function App() {
         expenses,
         transactions,
         businessInfo: compiledBusinessInfo,
-        purchases
+        purchases,
+        deletedItems
       }, activeUser.uid);
 
       // Also persist separately in localStorage just in case
@@ -302,7 +317,8 @@ export default function App() {
               expenses,
               transactions,
               businessInfo: compiledBusinessInfo,
-              purchases
+              purchases,
+              deletedItems
             });
           } catch (e) {
             console.warn("Auto-backup failed silently in background:", e);
@@ -311,7 +327,7 @@ export default function App() {
         return () => clearTimeout(delayDebounceFn);
       }
     }
-  }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser]);
+  }, [products, contacts, expenses, transactions, businessInfo, purchases, deletedItems, staffList, activeUser]);
 
   // Set up real-time multi-device cloud subscription
   useEffect(() => {
@@ -374,6 +390,7 @@ export default function App() {
         setTransactions(refreshedDB.transactions);
         setBusinessInfo(refreshedDB.businessInfo);
         setPurchases(refreshedDB.purchases || []);
+        setDeletedItems(refreshedDB.deletedItems || []);
 
         if (refreshedDB.businessInfo && refreshedDB.businessInfo.staffList && Array.isArray(refreshedDB.businessInfo.staffList)) {
           setStaffList(refreshedDB.businessInfo.staffList);
@@ -1001,9 +1018,11 @@ export default function App() {
       triggerNotification("Security block: Only administrators are authorized to delete products! 🛑", "error");
       return;
     }
-    setProducts(products.filter(p => p.id !== id));
-    deleteCloudDocument("products", id).catch(e => console.warn(e));
-    triggerNotification(`Product '${name}' removed from catalog.`);
+    const p = products.find(prod => prod.id === id);
+    if (!p) return;
+    softDeleteItem("product", id, p, `Product: ${p.name} (SKU: ${p.sku || "N/A"}, Stock: ${p.stock})`);
+    setProducts(products.filter(item => item.id !== id));
+    triggerNotification(`Product '${name}' moved to Settings -> Deleted Filter.`);
   };
 
   // Save Shop Information Block
@@ -1392,8 +1411,8 @@ export default function App() {
     }
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
+    softDeleteItem("purchase", id, matchingPur, `Purchase Order: Invoice #${matchingPur.invoiceNo} (Qty: ${matchingPur.quantity}, Unit Price: ${businessInfo.currencySymbol || "৳"}${matchingPur.unitPrice})`);
     setPurchases(purchases.filter(p => p.id !== id));
-    deleteCloudDocument("purchases", id).catch(e => console.warn(e));
     setProducts(products.map(p => {
       if (p.id === matchingPur.productId) {
         return {
@@ -1403,7 +1422,7 @@ export default function App() {
       }
       return p;
     }));
-    triggerNotification("Purchase record removed and inventory adjusted.");
+    triggerNotification("Purchase record moved to Settings -> Deleted Filter and inventory adjusted.");
   };
 
   const handleEditPurchase = (id: string, updatedFields: any) => {
@@ -1512,10 +1531,10 @@ export default function App() {
       return prod;
     }));
 
-    // Remove transaction
+    // Soft delete transaction
+    softDeleteItem("sale", id, t, `Invoice #${t.invoiceNo} (Amount: ${businessInfo.currencySymbol || "৳"}${t.grandTotal?.toLocaleString() || "0"}, Customer: ${t.customerName || "Walk-in"})`);
     setTransactions(transactions.filter(item => item.id !== id));
-    deleteCloudDocument("transactions", id).catch(e => console.warn(e));
-    triggerNotification(`Invoice ${t.invoiceNo} successfully deleted. Product stock returned backward.`);
+    triggerNotification(`Invoice ${t.invoiceNo} moved to Settings -> Deleted Filter.`);
   };
 
   const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
@@ -4770,6 +4789,24 @@ export default function App() {
                           price: data.price
                         }));
 
+                        // Find the latest transaction date for this customer
+                        const latestTx = clientTxs.reduce((latest: any, current: any) => {
+                          const latestDate = new Date(latest.date || latest.created_at || 0);
+                          const currentDate = new Date(current.date || current.created_at || 0);
+                          return currentDate > latestDate ? current : latest;
+                        }, clientTxs[0] || null);
+
+                        const formattedLatestDate = latestTx 
+                          ? new Date(latestTx.date || latestTx.created_at).toLocaleString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true
+                            })
+                          : null;
+
                         return (
                           <div 
                             key={c.id} 
@@ -4802,6 +4839,12 @@ export default function App() {
                                 <div className="text-[10px] text-slate-400 font-sans truncate" title={c.address || "Address details unspecified"}>
                                   {c.address || "Address unspecified"}
                                 </div>
+                                {formattedLatestDate && (
+                                  <div className="text-[9px] text-[#00E676] font-mono flex items-center gap-1 mt-1 bg-[#121214]/60 p-1 px-1.5 rounded border border-[#00E676]/10 w-fit" title="Last transaction date/time">
+                                    <Clock className="w-2.5 h-2.5 shrink-0" />
+                                    <span>Last Bought: {formattedLatestDate}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -4824,9 +4867,11 @@ export default function App() {
                                             {prod.quantity} {prod.quantity === 1 ? "Unit" : "Units"}
                                           </span>
                                         </div>
-                                        <div className="text-[9px] text-slate-500 pl-2.5 mt-0.5">
-                                          Total for {prod.name}: <span className="text-[#00E676] font-semibold">{businessInfo.currencySymbol || "৳"}{prod.total.toLocaleString()}</span>
-                                        </div>
+                                        {prod.quantity > 1 && (
+                                          <div className="text-[9px] text-slate-500 pl-2.5 mt-0.5">
+                                            Total for {prod.name}: <span className="text-[#00E676] font-semibold">{businessInfo.currencySymbol || "৳"}{prod.total.toLocaleString()}</span>
+                                          </div>
+                                        )}
                                       </div>
                                     ))}
                                   </div>
@@ -4910,9 +4955,9 @@ export default function App() {
                                           setDeleteContactId(null);
                                           return;
                                         }
+                                        softDeleteItem("customer", c.id, c, `Partner: ${c.name} (${c.type === "supplier" ? "Supplier" : "Customer"}, Phone: ${c.phone || "N/A"})`);
                                         setContacts(contacts.filter(item => item.id !== c.id));
-                                        deleteCloudDocument("customers", c.id).catch(e => console.warn(e));
-                                        triggerNotification(`Removed partner profile: ${c.name}`);
+                                        triggerNotification(`Partner profile '${c.name}' moved to Settings -> Deleted Filter.`);
                                         setDeleteContactId(null);
                                       }}
                                       className="text-[8px] bg-rose-600 hover:bg-rose-500 text-white font-extrabold px-1.5 py-0.5 rounded transition-all cursor-pointer"
@@ -6296,6 +6341,156 @@ export default function App() {
                 </div>
               </div>
 
+              {/* 5. Deleted Items Management - Soft Deletion / "Trash Window" */}
+              <div className="bg-[#1E1E24]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl animate-fadeIn" id="settings-deleted-filter-block">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
+                      <Trash2 className="w-5 h-5 flex-shrink-0" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white font-sans">Deleted Items Trash Filter</h4>
+                      <p className="text-[10px] text-slate-400 leading-normal font-sans">Soft-deleted sales, customer profiles, purchases, and expenses are protected here before permanent cloud wipeout.</p>
+                    </div>
+                  </div>
+                  {deletedItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentPanel !== "admin") {
+                          triggerNotification("Restricted Action: Only administrators can empty the trash! 🛑", "error");
+                          return;
+                        }
+                        if (confirm("Are you sure you want to permanently delete all items in the trash? This physical deletion cannot be undone! ⚠️")) {
+                          deletedItems.forEach(item => {
+                            let cloudCol = "transactions";
+                            if (item.type === "customer") cloudCol = "customers";
+                            if (item.type === "expense") cloudCol = "expenses";
+                            if (item.type === "product") cloudCol = "products";
+                            if (item.type === "purchase") cloudCol = "purchases";
+                            deleteCloudDocument(cloudCol, item.originalId).catch(err => console.warn("Permanent purge fail:", err));
+                          });
+                          setDeletedItems([]);
+                          triggerNotification("Trash cleared completely and deleted permanently. 🤝", "success");
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-rose-950/20 hover:bg-rose-900/40 border border-rose-500/30 hover:border-rose-500 text-rose-450 hover:text-white font-mono text-[9px] uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                    >
+                      Empty Trash ({deletedItems.length})
+                    </button>
+                  )}
+                </div>
+
+                {deletedItems.length === 0 ? (
+                  <div className="py-6 text-center space-y-2">
+                    <p className="text-slate-500 text-xs font-sans">No deleted logs or pending trash database items found.</p>
+                    <p className="text-[10px] text-slate-600 max-w-lg mx-auto font-sans leading-relaxed">
+                      Customers, sales transactions, purchases, or expenses that you delete from primary panels are stored here in this safety buffer. You can choose to restore them back to active list or permanently delete them.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                    {deletedItems.map((item) => {
+                      let typeLabel = "Sale";
+                      let typeColor = "text-emerald-400 bg-emerald-500/5 border-emerald-500/10";
+                      if (item.type === "customer") {
+                        typeLabel = "Partner";
+                        typeColor = "text-sky-400 bg-sky-500/5 border-sky-500/10";
+                      } else if (item.type === "expense") {
+                        typeLabel = "Expense";
+                        typeColor = "text-purple-400 bg-purple-500/5 border-purple-500/10";
+                      } else if (item.type === "product") {
+                        typeLabel = "Product";
+                        typeColor = "text-amber-400 bg-amber-500/5 border-amber-500/10";
+                      } else if (item.type === "purchase") {
+                        typeLabel = "Purchase";
+                        typeColor = "text-pink-400 bg-pink-500/5 border-pink-500/10";
+                      }
+
+                      return (
+                        <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#121214] border border-slate-800 rounded-xl hover:border-slate-700 transition-colors">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-mono border font-semibold ${typeColor}`}>
+                                {typeLabel}
+                              </span>
+                              <span className="text-[9px] text-slate-500 font-mono">
+                                {new Date(item.deletedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <h5 className="text-xs font-semibold text-slate-200 font-sans">{item.label}</h5>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (item.type === "sale") {
+                                  if (!transactions.some(t => t.id === item.originalId)) {
+                                    setTransactions(prev => [item.data, ...prev]);
+                                  }
+                                } else if (item.type === "customer") {
+                                  if (!contacts.some(c => c.id === item.originalId)) {
+                                    setContacts(prev => [item.data, ...prev]);
+                                  }
+                                } else if (item.type === "expense") {
+                                  if (!expenses.some(e => e.id === item.originalId)) {
+                                    setExpenses(prev => [item.data, ...prev]);
+                                  }
+                                } else if (item.type === "product") {
+                                  if (!products.some(p => p.id === item.originalId)) {
+                                    setProducts(prev => [item.data, ...prev]);
+                                  }
+                                } else if (item.type === "purchase") {
+                                  if (!purchases.some(p => p.id === item.originalId)) {
+                                    setPurchases(prev => [item.data, ...prev]);
+                                  }
+                                }
+                                setDeletedItems(prev => prev.filter(x => x.id !== item.id));
+                                triggerNotification("Item successfully restored back to main list! 🚀", "success");
+                              }}
+                              className="px-2.5 py-1 text-[9px] bg-emerald-500/10 hover:bg-[#00E676] text-[#00E676] hover:text-slate-950 font-bold uppercase rounded-lg border border-[#00E676]/20 transition-all cursor-pointer font-sans"
+                            >
+                              Restore
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (currentPanel !== "admin") {
+                                  triggerNotification("Restricted Action: Only administrators can delete permanently! 🛑", "error");
+                                  return;
+                                }
+                                if (confirm("Execute permanent cloud wipeout on this item? This physical deletion cannot be undone! 😡")) {
+                                  let cloudCol = "transactions";
+                                  if (item.type === "customer") cloudCol = "customers";
+                                  if (item.type === "expense") cloudCol = "expenses";
+                                  if (item.type === "product") cloudCol = "products";
+                                  if (item.type === "purchase") cloudCol = "purchases";
+
+                                  deleteCloudDocument(cloudCol, item.originalId)
+                                    .then(() => {
+                                      setDeletedItems(prev => prev.filter(x => x.id !== item.id));
+                                      triggerNotification("Item permanently erased from record.", "success");
+                                    })
+                                    .catch(err => {
+                                      console.warn("Permanent erase failed:", err);
+                                      setDeletedItems(prev => prev.filter(x => x.id !== item.id));
+                                      triggerNotification("Item discarded.", "success");
+                                    });
+                                }
+                              }}
+                              className="px-2.5 py-1 text-[9px] bg-rose-500/10 hover:bg-rose-550 text-rose-450 hover:text-white font-bold uppercase rounded-lg border border-rose-500/20 transition-all cursor-pointer font-sans"
+                            >
+                              Wipe Permanent
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
 
@@ -6582,9 +6777,9 @@ export default function App() {
                       setDeleteExpenseId(null);
                       return;
                     }
+                    softDeleteItem("expense", expenseToDelete.id, expenseToDelete, `Expense Voucher: ${expenseToDelete.category} - ${expenseToDelete.description || "No info"} (${businessInfo.currencySymbol || "৳"}${expenseToDelete.amount})`);
                     setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
-                    deleteCloudDocument("expenses", expenseToDelete.id).catch(e => console.warn(e));
-                    triggerNotification("Voucher entry discarded.", "success");
+                    triggerNotification("Expense voucher moved to Settings -> Deleted Filter.", "success");
                     setDeleteExpenseId(null);
                   }}
                   className="flex-1 py-1 px-4 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-rose-600/10 text-center uppercase tracking-wider"

@@ -408,6 +408,7 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
     p = bizData.purchases;
   }
   const cleanCloudPurchases = p ? cleanDemoPurchases(p).map(pur => normalizePurchase(pur)) : [];
+  const cleanCloudDeletedItems = data.deletedItems || data.deleted_items || [];
 
   if (overwrite) {
     // 1. PRODUCTS OVERWRITE
@@ -436,6 +437,10 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       const { purchases: ignore, ...cleanInfo } = bizData;
       const mergedBiz = { ...INITIAL_BUSINESS_INFO, ...cleanInfo };
       localStorage.setItem(getDbKey('barakah_business_info', email), JSON.stringify(mergedBiz));
+    }
+    // 7. DELETED ITEMS OVERWRITE
+    if (data.deletedItems || data.deleted_items) {
+      localStorage.setItem(getDbKey('barakah_deleted_items', email), JSON.stringify(cleanCloudDeletedItems));
     }
   } else {
     // 1. MERGE PRODUCTS
@@ -552,6 +557,23 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
       }
       localStorage.setItem(getDbKey('barakah_business_info', email), JSON.stringify(mergedBiz));
     }
+
+    // 7. DELETED ITEMS MERGE
+    const rawLocalDeleted = localStorage.getItem(getDbKey('barakah_deleted_items', email));
+    let localDeleted = [];
+    if (rawLocalDeleted) {
+      try {
+        localDeleted = JSON.parse(rawLocalDeleted);
+        if (!Array.isArray(localDeleted)) localDeleted = [];
+      } catch (e) {}
+    }
+    const mergedDeleted = [...cleanCloudDeletedItems];
+    localDeleted.forEach((ld: any) => {
+      if (!mergedDeleted.some((md: any) => md.id === ld.id)) {
+        mergedDeleted.push(ld);
+      }
+    });
+    localStorage.setItem(getDbKey('barakah_deleted_items', email), JSON.stringify(mergedDeleted));
   }
 
   try {
@@ -1239,6 +1261,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   transactions: any[];
   businessInfo: any;
   purchases?: any[];
+  deletedItems?: any[];
 }) => {
   const syncId = getPasscodeSyncId(email, pin);
   const cleanEmail = email.trim().toLowerCase();
@@ -1459,6 +1482,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   let mergedContactsArr = normalizedContacts;
   let mergedExpensesArr = normalizedExpenses;
   let mergedTransactionsArr = normalizedTransactions;
+  let mergedDeletedItemsArr = payload.deletedItems || [];
 
   try {
     const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
@@ -1482,6 +1506,10 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         mergedTransactionsArr = existingData.transactions;
         console.warn("[Sync Recovery Guard] Retained existing transactions from cloud database to prevent overwriting with local empty array.");
       }
+      if ((payload.deletedItems || []).length === 0 && (existingData.deletedItems || existingData.deleted_items || []).length > 0) {
+        mergedDeletedItemsArr = existingData.deletedItems || existingData.deleted_items || [];
+        console.warn("[Sync Recovery Guard] Retained existing deletedItems from cloud database to prevent overwriting with local empty array.");
+      }
     }
   } catch (e) {
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
@@ -1494,6 +1522,8 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     contacts: mergedContactsArr,
     expenses: mergedExpensesArr,
     transactions: mergedTransactionsArr,
+    deletedItems: mergedDeletedItemsArr,
+    deleted_items: mergedDeletedItemsArr,
     businessInfo: serializedBusinessInfo,
     business_info: serializedBusinessInfo,
     updated_at: new Date().toISOString()

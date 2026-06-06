@@ -142,7 +142,8 @@ const KEYS = {
   EXPENSES: "barakah_expenses",
   TRANSACTIONS: "barakah_transactions",
   BUSINESS_INFO: "barakah_business_info",
-  PURCHASES: "barakah_purchases"
+  PURCHASES: "barakah_purchases",
+  DELETED_ITEMS: "barakah_deleted_items"
 };
 
 export function getDbKey(baseKey: string, customEmail?: string, uid?: string): string {
@@ -214,12 +215,14 @@ export const loadDB = (uid?: string) => {
     const transactionsStr = localStorage.getItem(getDbKey(KEYS.TRANSACTIONS, undefined, uid));
     const businessInfoStr = localStorage.getItem(getDbKey(KEYS.BUSINESS_INFO, undefined, uid));
     const purchasesStr = localStorage.getItem(getDbKey(KEYS.PURCHASES, undefined, uid));
+    const deletedItemsStr = localStorage.getItem(getDbKey(KEYS.DELETED_ITEMS, undefined, uid));
 
     let productsRaw = productsStr ? JSON.parse(productsStr) : null;
     let contactsRaw = contactsStr ? JSON.parse(contactsStr) : null;
     let expensesRaw = expensesStr ? JSON.parse(expensesStr) : null;
     let transactionsRaw = transactionsStr ? JSON.parse(transactionsStr) : null;
     let purchasesRaw = purchasesStr ? JSON.parse(purchasesStr) : null;
+    let deletedItemsRaw = deletedItemsStr ? JSON.parse(deletedItemsStr) : [];
 
     // Local Fail-safe backup check: if local storage keys are completely missing, self-heal from the fail-safe!
     if (productsStr === null && transactionsStr === null) {
@@ -234,6 +237,7 @@ export const loadDB = (uid?: string) => {
             expensesRaw = fs.expenses || [];
             transactionsRaw = fs.transactions || [];
             purchasesRaw = fs.purchases || [];
+            if (fs.deletedItems) deletedItemsRaw = fs.deletedItems;
             
             // Re-write back to standards instantly to stabilize system
             localStorage.setItem(getDbKey(KEYS.PRODUCTS, undefined, uid), JSON.stringify(productsRaw));
@@ -241,6 +245,7 @@ export const loadDB = (uid?: string) => {
             localStorage.setItem(getDbKey(KEYS.EXPENSES, undefined, uid), JSON.stringify(expensesRaw));
             localStorage.setItem(getDbKey(KEYS.TRANSACTIONS, undefined, uid), JSON.stringify(transactionsRaw));
             if (purchasesRaw) localStorage.setItem(getDbKey(KEYS.PURCHASES, undefined, uid), JSON.stringify(purchasesRaw));
+            localStorage.setItem(getDbKey(KEYS.DELETED_ITEMS, undefined, uid), JSON.stringify(deletedItemsRaw));
           }
         } catch (err) {
           console.warn("[Fail-safe Recovery] Error loading from local fail-safe backup copy:", err);
@@ -253,6 +258,7 @@ export const loadDB = (uid?: string) => {
     const expenses = cleanDemoExpenses(expensesRaw || INITIAL_EXPENSES);
     const transactions = cleanDemoTransactions(transactionsRaw || []);
     const purchases = cleanDemoPurchases(purchasesRaw || INITIAL_PURCHASES);
+    const deletedItems = Array.isArray(deletedItemsRaw) ? deletedItemsRaw : [];
 
     const businessInfo = businessInfoStr ? { ...INITIAL_BUSINESS_INFO, ...JSON.parse(businessInfoStr) } : INITIAL_BUSINESS_INFO;
 
@@ -262,7 +268,8 @@ export const loadDB = (uid?: string) => {
       expenses,
       transactions,
       businessInfo,
-      purchases
+      purchases,
+      deletedItems
     };
   } catch (e) {
     console.error("Failed to load offline database:", e);
@@ -272,7 +279,8 @@ export const loadDB = (uid?: string) => {
       expenses: INITIAL_EXPENSES,
       transactions: [],
       businessInfo: INITIAL_BUSINESS_INFO,
-      purchases: INITIAL_PURCHASES
+      purchases: INITIAL_PURCHASES,
+      deletedItems: []
     };
   }
 };
@@ -285,6 +293,7 @@ export const saveDB = (
     transactions: Transaction[];
     businessInfo: BusinessInfo;
     purchases: Purchase[];
+    deletedItems?: any[];
   },
   uid?: string
 ) => {
@@ -295,6 +304,7 @@ export const saveDB = (
     localStorage.setItem(getDbKey(KEYS.TRANSACTIONS, undefined, uid), JSON.stringify(data.transactions));
     localStorage.setItem(getDbKey(KEYS.BUSINESS_INFO, undefined, uid), JSON.stringify(data.businessInfo));
     localStorage.setItem(getDbKey(KEYS.PURCHASES, undefined, uid), JSON.stringify(data.purchases));
+    localStorage.setItem(getDbKey(KEYS.DELETED_ITEMS, undefined, uid), JSON.stringify(data.deletedItems || []));
 
     // Update the local fail-safe backup key only if the data has actual items, to prevent overwriting with blank states
     const totalItems = data.products.length + data.transactions.length;
@@ -304,7 +314,8 @@ export const saveDB = (
         contacts: data.contacts,
         expenses: data.expenses,
         transactions: data.transactions,
-        purchases: data.purchases
+        purchases: data.purchases,
+        deletedItems: data.deletedItems || []
       }));
     }
   } catch (e) {
