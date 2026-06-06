@@ -559,6 +559,22 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false) => {
   } catch (_) {}
 };
 
+export async function deleteCloudDocument(collectionName: string, id: string): Promise<void> {
+  const cleanEmail = (firebaseAuth.currentUser?.email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    console.warn("[Cloud Deletion] Ignored deletion because user is guest or not logged in.");
+    return;
+  }
+  const idUUID = toUUID(id, cleanEmail);
+  try {
+    const docRef = doc(db, collectionName, idUUID);
+    await deleteDoc(docRef);
+    console.log(`[Cloud Deletion] Cleanly deleted ${idUUID} from Firestore collection: ${collectionName}`);
+  } catch (err: any) {
+    console.warn(`[Cloud Deletion] Failed deleting document from Firestore collection ${collectionName}:`, err.message);
+  }
+}
+
 export function toUUID(str: string, email: string = ""): string {
   if (!str) {
     return "00000000-0000-0000-0000-000000000000";
@@ -1385,65 +1401,9 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
             console.warn("Direct collections wipe exception:", wipeErr);
           }
         } else {
-          // Normal up-sync smart pruning: delete any Firestore docs that were deleted/removed on the laptop
-          console.log("[Direct Sync Engine] Pruning deleted/orphaned cloud records to maintain 100% parity...");
-          try {
-            const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes, itemsRes] = await Promise.all([
-              getDocs(query(collection(db, "products"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "purchases"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)))
-            ]);
-
-            const targetProductsIds = new Set(productsToUpsert.map(p => p.id));
-            const targetCustomersIds = new Set(contactsToUpsert.map(c => c.id));
-            const targetExpensesIds = new Set(expensesToUpsert.map(e => e.id));
-            const targetTransactionsIds = new Set(transactionsToUpsert.map(tx => tx.id));
-            const targetPurchasesIds = new Set(purchasesToUpsert.map(pur => pur.id));
-            const targetItemsIds = new Set(transactionItemsToUpsert.map(item => item.id));
-
-            const prunePromises: Promise<void>[] = [];
-
-            productsRes.docs.forEach(docSnap => {
-              if (!targetProductsIds.has(docSnap.id)) {
-                prunePromises.push(deleteDoc(doc(db, "products", docSnap.id)));
-              }
-            });
-            customersRes.docs.forEach(docSnap => {
-              if (!targetCustomersIds.has(docSnap.id)) {
-                prunePromises.push(deleteDoc(doc(db, "customers", docSnap.id)));
-              }
-            });
-            expensesRes.docs.forEach(docSnap => {
-              if (!targetExpensesIds.has(docSnap.id)) {
-                prunePromises.push(deleteDoc(doc(db, "expenses", docSnap.id)));
-              }
-            });
-            transactionsRes.docs.forEach(docSnap => {
-              if (!targetTransactionsIds.has(docSnap.id)) {
-                prunePromises.push(deleteDoc(doc(db, "transactions", docSnap.id)));
-              }
-            });
-            purchasesRes.docs.forEach(docSnap => {
-              if (!targetPurchasesIds.has(docSnap.id)) {
-                prunePromises.push(deleteDoc(doc(db, "purchases", docSnap.id)));
-              }
-            });
-            itemsRes.docs.forEach(docSnap => {
-              if (!targetItemsIds.has(docSnap.id)) {
-                prunePromises.push(deleteDoc(doc(db, "transaction_items", docSnap.id)));
-              }
-            });
-
-            if (prunePromises.length > 0) {
-              await Promise.all(prunePromises);
-              console.log(`[Direct Sync Engine] Pruned ${prunePromises.length} legacy/deleted entries from Firestore.`);
-            }
-          } catch (gcErr) {
-            console.warn("Direct collections garbage collection exception:", gcErr);
-          }
+          // Normal up-sync smart pruning: disabled to maintain 100% data integrity and stability.
+          // Documents are only removed explicitly from sub-collections when deleted by an admin to prevent data loss.
+          console.log("[Direct Sync Engine] Smart pruning skipped to guarantee absolute data integrity.");
         }
 
         productsToUpsert.forEach(p => {
@@ -1495,13 +1455,45 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     purchases: normalizedPurchases
   };
 
+  let mergedProductsArr = normalizedProducts;
+  let mergedContactsArr = normalizedContacts;
+  let mergedExpensesArr = normalizedExpenses;
+  let mergedTransactionsArr = normalizedTransactions;
+
+  try {
+    const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
+    if (docSnap.exists() && !isExplicitReset) {
+      const existingData = docSnap.data();
+      
+      // If of a sudden incoming list is completely empty but cloud list is not empty, preserve the cloud list
+      if (normalizedProducts.length === 0 && (existingData.products || []).length > 0) {
+        mergedProductsArr = existingData.products;
+        console.warn("[Sync Recovery Guard] Retained existing products from cloud database to prevent overwriting with local empty array.");
+      }
+      if (normalizedContacts.length === 0 && (existingData.contacts || []).length > 0) {
+        mergedContactsArr = existingData.contacts;
+        console.warn("[Sync Recovery Guard] Retained existing contacts from cloud database to prevent overwriting with local empty array.");
+      }
+      if (normalizedExpenses.length === 0 && (existingData.expenses || []).length > 0) {
+        mergedExpensesArr = existingData.expenses;
+        console.warn("[Sync Recovery Guard] Retained existing expenses from cloud database to prevent overwriting with local empty array.");
+      }
+      if (normalizedTransactions.length === 0 && (existingData.transactions || []).length > 0) {
+        mergedTransactionsArr = existingData.transactions;
+        console.warn("[Sync Recovery Guard] Retained existing transactions from cloud database to prevent overwriting with local empty array.");
+      }
+    }
+  } catch (e) {
+    console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
+  }
+
   const body = {
     id: syncId,
     linked_email: cleanEmail,
-    products: normalizedProducts,
-    contacts: normalizedContacts,
-    expenses: normalizedExpenses,
-    transactions: normalizedTransactions,
+    products: mergedProductsArr,
+    contacts: mergedContactsArr,
+    expenses: mergedExpensesArr,
+    transactions: mergedTransactionsArr,
     businessInfo: serializedBusinessInfo,
     business_info: serializedBusinessInfo,
     updated_at: new Date().toISOString()

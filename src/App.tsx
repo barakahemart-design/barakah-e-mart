@@ -90,7 +90,8 @@ import {
   getPasscodeSyncId,
   selfHealDatabase,
   toUUID,
-  restoreLocalKeys
+  restoreLocalKeys,
+  deleteCloudDocument
 } from "./lib/supabase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./lib/firebase";
@@ -1030,7 +1031,12 @@ export default function App() {
   };
 
   const handleDeleteProduct = (id: string, name: string) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Security block: Only administrators are authorized to delete products! 🛑", "error");
+      return;
+    }
     setProducts(products.filter(p => p.id !== id));
+    deleteCloudDocument("products", id).catch(e => console.warn(e));
     triggerNotification(`Product '${name}' removed from catalog.`);
   };
 
@@ -1294,14 +1300,16 @@ export default function App() {
     triggerNotification(updated ? "Product negative stock marked as green / updated! 🟢" : "Product negative stock reset to red.", "success");
   };
 
-  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number) => {
+  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
     setTransactions(prev => prev.map(t => {
       if (t.id === txId) {
         const updatedItems = t.items.map((it, idx) => {
           if (idx === itemIdx) {
             return {
               ...it,
-              buyPrice: newBuyPrice
+              buyPrice: newBuyPrice,
+              isNegativeSaleApproved: isApproved !== undefined ? isApproved : it.isNegativeSaleApproved,
+              negativeSaleUpdated: isApproved !== undefined ? isApproved : it.negativeSaleUpdated
             };
           }
           return it;
@@ -1313,7 +1321,20 @@ export default function App() {
       }
       return t;
     }));
-    triggerNotification("Transaction purchase rate adjusted. Net profit recalculated!", "success");
+
+    if (productId && newBuyPrice > 0) {
+      setProducts(prev => prev.map(p => {
+        if (p.id === productId) {
+          return {
+            ...p,
+            buyPrice: newBuyPrice
+          };
+        }
+        return p;
+      }));
+    }
+
+    triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
   };
 
   const handleNavigateToCustomer = (customerName: string) => {
@@ -1368,9 +1389,14 @@ export default function App() {
   };
 
   const handleDeletePurchase = (id: string) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Security block: Only administrators are authorized to delete purchases! 🛑", "error");
+      return;
+    }
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
     setPurchases(purchases.filter(p => p.id !== id));
+    deleteCloudDocument("purchases", id).catch(e => console.warn(e));
     setProducts(products.map(p => {
       if (p.id === matchingPur.productId) {
         return {
@@ -1470,12 +1496,16 @@ export default function App() {
   };
 
   const handleDeleteTransaction = (id: string) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Security block: Only administrators are authorized to delete transactions / sales! 🛑", "error");
+      return;
+    }
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
     // Refund stock back to products catalog
     setProducts(products.map(prod => {
-      const soldItem = t.items.find(item => item.productId === prod.id);
+      const soldItem = t.items.find(item => item.productId === prod.id || item.id === prod.id);
       if (soldItem) {
         return {
           ...prod,
@@ -1487,10 +1517,15 @@ export default function App() {
 
     // Remove transaction
     setTransactions(transactions.filter(item => item.id !== id));
+    deleteCloudDocument("transactions", id).catch(e => console.warn(e));
     triggerNotification(`Invoice ${t.invoiceNo} successfully deleted. Product stock returned backward.`);
   };
 
   const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Security block: Only administrators are authorized to edit sales transactions! 🛑", "error");
+      return;
+    }
     const originalTx = transactions.find(t => t.id === id);
     if (!originalTx) return;
 
@@ -3185,7 +3220,7 @@ export default function App() {
                         <th className="py-3.5 px-4 text-right">Invoice Total</th>
                         <th className="py-3.5 px-4 text-right">Cash Received</th>
                         <th className="py-3.5 px-4 text-center">Status</th>
-                        <th className="py-3.5 px-4 text-center">Receipt Reprint Action</th>
+                        <th className="py-3.5 px-4 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
@@ -3250,23 +3285,38 @@ export default function App() {
                                 )}
                               </td>
                               <td className="py-4 px-4 text-center font-sans">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    generateInvoicePDF(t, listContact, businessInfo)
-                                      .then(() => {
-                                        triggerNotification(`Receipt reprinted & downloaded for ${t.invoiceNo}!`, "success");
-                                      })
-                                      .catch(err => {
-                                        console.error(err);
-                                        triggerNotification("Failed to reprint receipt", "error");
-                                      });
-                                  }}
-                                  className="px-3 py-1.5 bg-[#00E676] hover:bg-[#00D065] text-slate-950 font-black text-[10px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-[#00E676]/5 duration-150 flex items-center gap-1.5 mx-auto font-sans"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  Reprint Receipt
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      generateInvoicePDF(t, listContact, businessInfo)
+                                        .then(() => {
+                                          triggerNotification(`Receipt reprinted & downloaded for ${t.invoiceNo}!`, "success");
+                                        })
+                                        .catch(err => {
+                                          console.error(err);
+                                          triggerNotification("Failed to reprint receipt", "error");
+                                        });
+                                    }}
+                                    className="px-3 py-1.5 bg-[#00E676] hover:bg-[#00D065] text-slate-950 font-black text-[10px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-[#00E676]/5 duration-150 flex items-center gap-1.5 font-sans"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    Reprint Receipt
+                                  </button>
+                                  {currentPanel === "admin" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingTx(t);
+                                      }}
+                                      className="px-3 py-1.5 bg-[#00B0FF] hover:bg-[#0091EA] text-slate-950 font-black text-[10px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-[#00B0FF]/15 duration-150 flex items-center gap-1.5 font-sans"
+                                      title="Edit sale details, item rates, quantity, and cash metrics"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                      Edit Sale
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -3316,6 +3366,7 @@ export default function App() {
               contacts={contacts || []}
               onNavigateToCustomer={handleNavigateToCustomer}
               onNavigateToInvoice={handleNavigateToInvoice}
+              onUpdateTransactionItemPrice={handleUpdateTransactionItemBuyPrice}
             />
           )}
 
@@ -4092,46 +4143,48 @@ export default function App() {
                           )}
 
                           {/* Modify and Erase buttons */}
-                          <div className="flex items-center gap-1">
-                            {deleteTxId === t.id ? (
-                              <div className="flex items-center gap-1 justify-end bg-slate-900 p-1 border border-slate-800 rounded-xl h-10 animate-scaleIn">
-                                <span className="text-[8px] text-slate-400 font-mono uppercase px-1">Erase?</span>
-                                <button
-                                  onClick={() => {
-                                    handleDeleteTransaction(t.id);
-                                    setDeleteTxId(null);
-                                  }}
-                                  className="bg-[#FF5252] hover:bg-rose-500 text-[#121214] font-black p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  onClick={() => setDeleteTxId(null)}
-                                  className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-                                >
-                                  No
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => setEditingTx(t)}
-                                  className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
-                                  title="Edit Sale Details & Units"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                
-                                <button
-                                  onClick={() => setDeleteTxId(t.id)}
-                                  className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-450 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
-                                  title="Wipe transaction memo"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
+                          {currentPanel === "admin" && (
+                            <div className="flex items-center gap-1">
+                              {deleteTxId === t.id ? (
+                                <div className="flex items-center gap-1 justify-end bg-slate-900 p-1 border border-slate-800 rounded-xl h-10 animate-scaleIn">
+                                  <span className="text-[8px] text-slate-400 font-mono uppercase px-1">Erase?</span>
+                                  <button
+                                    onClick={() => {
+                                      handleDeleteTransaction(t.id);
+                                      setDeleteTxId(null);
+                                    }}
+                                    className="bg-[#FF5252] hover:bg-rose-500 text-[#121214] font-black p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteTxId(null)}
+                                    className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => setEditingTx(t)}
+                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
+                                    title="Edit Sale Details & Units"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => setDeleteTxId(t.id)}
+                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-455 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
+                                    title="Wipe transaction memo"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                         </div>
 
@@ -4855,7 +4908,13 @@ export default function App() {
                                   <div className="flex items-center gap-1 bg-rose-500/10 p-0.5 rounded border border-rose-500/20">
                                     <button
                                       onClick={() => {
+                                        if (currentPanel !== "admin") {
+                                          triggerNotification("Security block: Only administrators are authorized to delete contact profiles! 🛑", "error");
+                                          setDeleteContactId(null);
+                                          return;
+                                        }
                                         setContacts(contacts.filter(item => item.id !== c.id));
+                                        deleteCloudDocument("customers", c.id).catch(e => console.warn(e));
                                         triggerNotification(`Removed partner profile: ${c.name}`);
                                         setDeleteContactId(null);
                                       }}
@@ -6361,34 +6420,66 @@ export default function App() {
 
               <div className="border border-slate-150 rounded-xl overflow-hidden">
                 <div className="p-2.5 bg-slate-50 border-b border-slate-200 font-bold text-[10px] uppercase text-slate-500 font-mono">Invoice items</div>
-                <div className="divide-y divide-slate-100 max-h-36 overflow-y-auto">
+                <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
                   {editingTx.items.map((item, idx) => {
                     const matchedProd = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
                     return (
-                      <div key={idx} className="p-3 flex items-center justify-between gap-3 bg-white">
-                        <div className="space-y-0.5 font-sans">
+                      <div key={idx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white">
+                        <div className="space-y-0.5 font-sans min-w-[140px]">
                           <strong className="font-bold text-slate-800 block text-xs">{matchedProd ? matchedProd.name : (item.name || "Unknown Item")}</strong>
-                          <span className="text-[9px] text-slate-500 font-mono">Price: {businessInfo.currencySymbol || "৳"}{(item.price ?? 0).toLocaleString()}/unit</span>
+                          <span className="text-[9px] text-slate-500 font-mono block">
+                            Catalog rate: {businessInfo.currencySymbol || "৳"}{(matchedProd ? matchedProd.sellPrice : (item.price ?? 0)).toLocaleString()}/unit
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-450 font-bold font-mono">Qty</span>
-                          <input
-                            type="number"
-                            min={1}
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const updatedItems = [...editingTx.items];
-                              updatedItems[idx] = {
-                                ...item,
-                                quantity: Math.max(1, parseInt(e.target.value) || 1)
-                              };
-                              setEditingTx({
-                                ...editingTx,
-                                items: updatedItems
-                              });
-                            }}
-                            className="w-16 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-mono focus:border-emerald-500 outline-none"
-                          />
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-450 font-bold font-mono">Price</span>
+                            <div className="relative">
+                              <span className="absolute left-1.5 top-1 text-slate-400 font-mono text-[10px]">{businessInfo.currencySymbol || "৳"}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={item.price}
+                                onChange={(e) => {
+                                  const updatedItems = [...editingTx.items];
+                                  const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
+                                  updatedItems[idx] = {
+                                    ...item,
+                                    price: newPrice,
+                                    total: (item.quantity || 1) * newPrice
+                                  };
+                                  setEditingTx({
+                                    ...editingTx,
+                                    items: updatedItems
+                                  });
+                                }}
+                                className="w-20 pl-4 pr-1 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-left font-mono focus:border-emerald-500 outline-none text-[11px]"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-450 font-bold font-mono">Qty</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const updatedItems = [...editingTx.items];
+                                const newQty = Math.max(1, parseInt(e.target.value) || 1);
+                                updatedItems[idx] = {
+                                  ...item,
+                                  quantity: newQty,
+                                  total: newQty * (item.price || 0)
+                                };
+                                setEditingTx({
+                                  ...editingTx,
+                                  items: updatedItems
+                                });
+                              }}
+                              className="w-14 px-1 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-mono focus:border-emerald-500 outline-none text-[11px]"
+                            />
+                          </div>
                         </div>
                       </div>
                     );
@@ -6489,7 +6580,13 @@ export default function App() {
               <div className="flex items-center gap-3 pt-3 font-sans">
                 <button
                   onClick={() => {
+                    if (currentPanel !== "admin") {
+                      triggerNotification("Security block: Only administrators are authorized to delete expense vouchers! 🛑", "error");
+                      setDeleteExpenseId(null);
+                      return;
+                    }
                     setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
+                    deleteCloudDocument("expenses", expenseToDelete.id).catch(e => console.warn(e));
                     triggerNotification("Voucher entry discarded.", "success");
                     setDeleteExpenseId(null);
                   }}
