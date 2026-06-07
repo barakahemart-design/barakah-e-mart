@@ -793,7 +793,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               name: c.name,
               phone: c.phone || "",
               address: c.address || "",
-              type: "customer",
+              type: c.type || "customer",
               created_at: c.updated_at || new Date().toISOString()
             };
           });
@@ -1319,13 +1319,14 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         updated_at: new Date().toISOString()
       }));
 
-      const contactsToUpsert = (payload.contacts || []).map(c => ({
+       const contactsToUpsert = (payload.contacts || []).map(c => ({
         id: toUUID(c.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
         name: c.name,
         phone: c.phone || "",
         address: c.address || null,
+        type: c.type || "customer",
         updated_at: new Date().toISOString()
       }));
 
@@ -1489,26 +1490,28 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     if (docSnap.exists() && !isExplicitReset) {
       const existingData = docSnap.data();
       
-      // If of a sudden incoming list is completely empty but cloud list is not empty, preserve the cloud list
-      if (normalizedProducts.length === 0 && (existingData.products || []).length > 0) {
-        mergedProductsArr = existingData.products;
-        console.warn("[Sync Recovery Guard] Retained existing products from cloud database to prevent overwriting with local empty array.");
-      }
-      if (normalizedContacts.length === 0 && (existingData.contacts || []).length > 0) {
-        mergedContactsArr = existingData.contacts;
-        console.warn("[Sync Recovery Guard] Retained existing contacts from cloud database to prevent overwriting with local empty array.");
-      }
-      if (normalizedExpenses.length === 0 && (existingData.expenses || []).length > 0) {
-        mergedExpensesArr = existingData.expenses;
-        console.warn("[Sync Recovery Guard] Retained existing expenses from cloud database to prevent overwriting with local empty array.");
-      }
-      if (normalizedTransactions.length === 0 && (existingData.transactions || []).length > 0) {
-        mergedTransactionsArr = existingData.transactions;
-        console.warn("[Sync Recovery Guard] Retained existing transactions from cloud database to prevent overwriting with local empty array.");
-      }
-      if ((payload.deletedItems || []).length === 0 && (existingData.deletedItems || existingData.deleted_items || []).length > 0) {
-        mergedDeletedItemsArr = existingData.deletedItems || existingData.deleted_items || [];
-        console.warn("[Sync Recovery Guard] Retained existing deletedItems from cloud database to prevent overwriting with local empty array.");
+      // Since incomingTotal > 0 guarantees that the client has loaded its database securely,
+      // we can trust empty sub-arrays as intentional user actions rather than accidental empty wipes.
+      // However, we merge and keep deleted items (unless incoming is empty under a loaded state).
+      const existingDeleted = existingData.deletedItems || existingData.deleted_items || [];
+      const incomingDeleted = payload.deletedItems || [];
+      
+      if (incomingDeleted.length > 0) {
+        const mergedMap = new Map();
+        existingDeleted.forEach((item: any) => {
+          if (item && item.id) mergedMap.set(item.id, item);
+        });
+        incomingDeleted.forEach((item: any) => {
+          if (item && item.id) mergedMap.set(item.id, item);
+        });
+        mergedDeletedItemsArr = Array.from(mergedMap.values());
+      } else {
+        if (incomingTotal > 0) {
+          mergedDeletedItemsArr = [];
+          console.log("[Sync Engine] User successfully emptied the trash folder. Propagating to cloud.");
+        } else {
+          mergedDeletedItemsArr = existingDeleted;
+        }
       }
     }
   } catch (e) {
@@ -1529,11 +1532,9 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     updated_at: new Date().toISOString()
   };
 
-  try {
-    restoreLocalKeys(body, true);
-  } catch (err) {
-    console.warn("Instant offline memory refresh warning:", err);
-  }
+  // We DO NOT call restoreLocalKeys(body, true) here. Doing so would overwrite the local storage
+  // with stale in-flight variables, replacing transactions or contacts and causing silent data deletions!
+  console.log("[Sync Engine] Completed secure cloud sync upload.");
 
   try {
     const todayStr = new Date().toISOString().slice(0, 10);

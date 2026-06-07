@@ -49,7 +49,12 @@ import {
   Sun,
   Moon,
   Layers,
-  ShoppingBag
+  ShoppingBag,
+  Printer,
+  Share2,
+  Undo2,
+  Languages,
+  Sparkles
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format } from "date-fns";
@@ -138,7 +143,7 @@ export default function App() {
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
-    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "ledger" | "expenses" | "reports" | "staff" | "settings"
+    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "settings"
   >(() => {
     return typeof window !== "undefined" && window.innerWidth < 768 ? "dashboard" : "pos";
   });
@@ -200,6 +205,20 @@ export default function App() {
   const [showAdvancedPos, setShowAdvancedPos] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState("");
   const [contactTypeFilter, setContactTypeFilter] = useState<"all" | "customer" | "supplier">("all");
+
+  // --- DUE LIST STATE DEFINITIONS ---
+  const [duelistFilter, setDuelistFilter] = useState<"all" | "today" | "weekly" | "monthly" | "yearly">("all");
+  const [duelistSearch, setDuelistSearch] = useState("");
+  const [isAddingDue, setIsAddingDue] = useState(false);
+  const [dueSupplierId, setDueSupplierId] = useState("");
+  const [dueProductId, setDueProductId] = useState("");
+  const [dueQuantity, setDueQuantity] = useState("");
+  const [dueBuyRate, setDueBuyRate] = useState("");
+  const [duePaid, setDuePaid] = useState("");
+  const [dueNote, setDueNote] = useState("");
+  const [dueDateStr, setDueDateStr] = useState(() => new Date().toISOString().split("T")[0]);
+  const [dueInvoiceNo, setDueInvoiceNo] = useState("");
+  const [selectedSupplierReceipt, setSelectedSupplierReceipt] = useState<Purchase | null>(null);
 
   const hasSyncedOnMountRef = useRef(false);
 
@@ -376,7 +395,7 @@ export default function App() {
         setSyncStatus("reconciling");
 
         // Restore to localStorage
-        restoreLocalKeys(cloudData, true);
+        restoreLocalKeys(cloudData, false);
 
         // Load the new values from localStorage
         const refreshedDB = loadDB(activeUser?.uid);
@@ -932,7 +951,11 @@ export default function App() {
 
     // Deduct stock levels corresponding to invoice (allowing negative stock per requirements)
     const updatedProducts = products.map((p) => {
-      const soldItem = posCart.find(cartItem => cartItem.product.id === p.id);
+      const soldItem = posCart.find(cartItem => 
+        cartItem.product.id === p.id || 
+        (p.sku && cartItem.product.sku === p.sku) || 
+        (cartItem.product.name && cartItem.product.name.trim().toLowerCase() === p.name.trim().toLowerCase())
+      );
       if (soldItem) {
         const nextStock = p.stock - soldItem.quantity;
         if (nextStock < 0) {
@@ -1452,6 +1475,57 @@ export default function App() {
     triggerNotification("Purchase record corrected and stock level adjusted successfully.");
   };
 
+  const handleReturnPurchase = (id: string, returnQty: number) => {
+    const pur = purchases.find(p => p.id === id);
+    if (!pur) return;
+
+    const matchedProduct = products.find(p => p.id === pur.productId);
+    const availableStock = matchedProduct ? matchedProduct.stock : 0;
+    
+    if (returnQty > availableStock) {
+      triggerNotification(`Not enough item stock in warehouse! Available stock is ${availableStock} pcs, cannot return ${returnQty} pcs.`, "error");
+      return;
+    }
+
+    const returnVal = parseFloat((returnQty * pur.buyPrice).toFixed(2));
+    const oldDue = pur.dueAmount || 0;
+    const nextDue = Math.max(0, parseFloat((oldDue - returnVal).toFixed(2)));
+    const nextTotal = Math.max(0, parseFloat((pur.totalAmount - returnVal).toFixed(2)));
+    
+    // If return value exceeds outstanding credit debt, decrease cashPaid (representing a supplier refund)
+    const refundCash = Math.max(0, parseFloat((returnVal - oldDue).toFixed(2)));
+    const nextCashPaid = Math.max(0, parseFloat(((pur.cashPaid || 0) - refundCash).toFixed(2)));
+
+    // Update product stock
+    setProducts(products.map(p => {
+      if (p.id === pur.productId) {
+        return {
+          ...p,
+          stock: Math.max(0, p.stock - returnQty)
+        };
+      }
+      return p;
+    }));
+
+    // Update purchase logs
+    setPurchases(purchases.map(item => {
+      if (item.id === pur.id) {
+        const nextQty = Math.max(0, item.quantity - returnQty);
+        return {
+          ...item,
+          quantity: nextQty,
+          totalAmount: nextTotal,
+          dueAmount: nextDue,
+          cashPaid: nextCashPaid,
+          note: (item.note || "") + ` [Returned ${returnQty} pcs on ${format(new Date(), "dd-MM-yyyy")}]`
+        };
+      }
+      return item;
+    }));
+
+    triggerNotification(`Successfully returned ${returnQty} units of ${pur.productName}. Purchase/Due balance reduced by ${businessInfo.currencySymbol} ${returnVal.toLocaleString()}!`, "success");
+  };
+
   // -----------------------------------------------------------------
   // 3. LEDGER TRANSACTION ACCOUNTING WORKSPACE STATE
   // -----------------------------------------------------------------
@@ -1532,7 +1606,14 @@ export default function App() {
     }));
 
     // Soft delete transaction
-    softDeleteItem("sale", id, t, `Invoice #${t.invoiceNo} (Amount: ${businessInfo.currencySymbol || "৳"}${t.grandTotal?.toLocaleString() || "0"}, Customer: ${t.customerName || "Walk-in"})`);
+    const relatedCustomer = contacts.find(co => co.id === t.contactId);
+    const deleteCustName = relatedCustomer ? relatedCustomer.name : "Walk-in";
+    softDeleteItem(
+      "sale", 
+      id, 
+      t, 
+      `Invoice #${t.invoiceNo} (Amount: ${businessInfo.currencySymbol || "৳"}${t.total?.toLocaleString() || "0"}, Customer: ${deleteCustName})`
+    );
     setTransactions(transactions.filter(item => item.id !== id));
     triggerNotification(`Invoice ${t.invoiceNo} moved to Settings -> Deleted Filter.`);
   };
@@ -1786,10 +1867,93 @@ export default function App() {
   const [cPhone, setCPhone] = useState("");
   const [cAddress, setCAddress] = useState("");
   const [cType, setCType] = useState<"customer" | "supplier">("customer");
+  const [isTranslatingContact, setIsTranslatingContact] = useState(false);
 
-  const handleAddContact = (e: React.FormEvent) => {
+  const banglaToEnglishDigits = (str: string): string => {
+    const map: { [key: string]: string } = {
+      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+    };
+    return str.replace(/[০-৯]/g, (m) => map[m] || m);
+  };
+
+  const hasBengaliCharacters = (str: string): boolean => {
+    return /[\u0980-\u09FF]/.test(str);
+  };
+
+  const translateContactFields = async (customName?: string, customPhone?: string, customAddress?: string): Promise<{ name: string; phone: string; address: string } | null> => {
+    const targetName = customName ?? cName;
+    const targetPhone = banglaToEnglishDigits(customPhone ?? cPhone).replace(/[^0-9]/g, "");
+    const targetAddress = customAddress ?? cAddress;
+
+    if (!targetName.trim() && !targetPhone.trim() && !targetAddress.trim()) {
+      return null;
+    }
+
+    setIsTranslatingContact(true);
+    try {
+      const res = await fetch("/api/ai/translate-partner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: targetName, phone: targetPhone, address: targetAddress })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          return {
+            name: data.name || targetName,
+            phone: data.phone || targetPhone,
+            address: data.address || targetAddress
+          };
+        }
+      }
+    } catch (err) {
+      console.error("Translation API failed:", err);
+    } finally {
+      setIsTranslatingContact(false);
+    }
+    return null;
+  };
+
+  const runTranslationForUI = async () => {
+    const result = await translateContactFields();
+    if (result) {
+      setCName(result.name);
+      setCPhone(result.phone);
+      setCAddress(result.address);
+      triggerNotification("✨ সফলভাবে বাংলায় লিখিত কাস্টমার কার্ড English-এ নির্ভুল অনুবাদ করা হয়েছে!", "success");
+    } else {
+      triggerNotification("অনুবাদ সম্পন্ন করা যায়নি। অনুগ্রহ করে ম্যানুয়ালি চেক করুন।", "error");
+    }
+  };
+
+  const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cName || !cPhone) return;
+    
+    // Convert any Bangla digits in the phone input
+    let cleanPhone = banglaToEnglishDigits(cPhone).replace(/[^0-9]/g, "");
+    
+    // Enforce Bangladeshi mobile phone number: must be exactly 11 digits
+    if (cleanPhone.length !== 11) {
+      triggerNotification("⚠️ বাংলাদেশের মোবাইল ফোন নাম্বার অবশ্যই ১১ ডিজিটের হতে হবে! আপনারটি " + cleanPhone.length + " ডিজিট।", "error");
+      return;
+    }
+
+    let finalName = cName.trim();
+    let finalPhone = cleanPhone;
+    let finalAddress = cAddress.trim();
+
+    // If there is any Bengali character input in Name or Address, automatically translate it perfectly using Gemini!
+    if (hasBengaliCharacters(finalName) || hasBengaliCharacters(finalAddress)) {
+      triggerNotification("🔄 বাংলা লেখা সনাক্ত হয়েছে! নিখুঁত ও প্রপার ইংরেজি অনুবাদ করা হচ্ছে...", "info");
+      const translated = await translateContactFields(finalName, finalPhone, finalAddress);
+      if (translated) {
+        finalName = translated.name;
+        finalPhone = translated.phone;
+        finalAddress = translated.address;
+      }
+    }
 
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
 
@@ -1799,9 +1963,9 @@ export default function App() {
         if (c.id === editingContact.id) {
           return {
             ...c,
-            name: cName,
-            phone: cPhone,
-            address: cAddress,
+            name: finalName,
+            phone: finalPhone,
+            address: finalAddress || "Dhaka, Bangladesh",
             type: cType
           };
         }
@@ -1812,14 +1976,14 @@ export default function App() {
       setCName("");
       setCPhone("");
       setCAddress("");
-      triggerNotification(`Contact [${cName}] updated successfully!`, "success");
+      triggerNotification(`Contact [${finalName}] updated successfully in proper English!`, "success");
     } else {
       // Create new profile record
       const newContact: Contact = {
         id: toUUID(`c_${Date.now()}`, cleanEmail),
-        name: cName,
-        phone: cPhone,
-        address: cAddress || "Dhaka, Bangladesh",
+        name: finalName,
+        phone: finalPhone,
+        address: finalAddress || "Dhaka, Bangladesh",
         type: cType,
         created_at: new Date().toISOString()
       };
@@ -1828,8 +1992,238 @@ export default function App() {
       setCName("");
       setCPhone("");
       setCAddress("");
-      triggerNotification(`Contact [${cName}] successfully compiled.`, "success");
+      triggerNotification(`Contact [${finalName}] successfully registered in standard English!`, "success");
     }
+  };
+
+  const handleCopyReceipt = (pur: Purchase) => {
+    const due = pur.dueAmount ?? 0;
+    const isFullyPaid = due <= 0;
+    const statusStr = isFullyPaid ? "[পরিশোধিত / FULLY SETTLED]" : "[আংশিক বকেয়া / OUTSTANDING DUE]";
+    
+    const text = `
+------------------------------------------
+   ${businessInfo.name}
+   সাপ্লায়ার বকেয়া পরিশোধ রসিদ
+   Supplier Due Payment Receipt
+------------------------------------------
+তারিখ / Date: ${format(new Date(pur.date), "dd MMMM, yyyy")}
+মেমো নং / Voucher No: ${pur.invoiceNo || "N/A"}
+সাপ্লায়ার / Supplier: ${pur.supplierName}
+
+পণ্য / Items: ${pur.productName}
+পরিমাণ / Qty: ${pur.quantity} pcs
+ক্রয়মূল্য / Buy Rate: ${businessInfo.currencySymbol} ${(pur.buyPrice || 0).toLocaleString()} /unit
+মোট ক্রয়ের পরিমাণ / Total: ${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}
+
+------------------------------------------
+লেনদেন সারাংশ (Ledger Summary):
+মোট বিল / Net Total: ${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}
+পরিশোধিত / Cash Paid: ${businessInfo.currencySymbol} ${(pur.cashPaid || 0).toLocaleString()}
+বকেয়া / Outstanding Due: ${businessInfo.currencySymbol} ${due.toLocaleString()} 
+অবস্থা / Status : ${statusStr}
+
+ধন্যবাদান্তে,
+${businessInfo.name}
+ফোন: ${businessInfo.phone || "N/A"}
+ঠিকানা: ${businessInfo.address || "N/A"}
+------------------------------------------
+`.trim();
+
+    navigator.clipboard.writeText(text);
+    triggerNotification("Receipt summary copied successfully!", "success");
+  };
+
+  const handleWhatsAppShare = (pur: Purchase) => {
+    const due = pur.dueAmount ?? 0;
+    const isFullyPaid = due <= 0;
+    const statusStr = isFullyPaid ? "✅ পরিশোধিত / FULLY SETTLED" : "⚠️ বকেয়া / OUTSTANDING DUE";
+    
+    const text = `*${businessInfo.name}*
+*সাপ্লায়ার বকেয়া পরিশোধ রসিদ / Supplier Receipt*
+----------------------------------------
+*তারিখ/Date:* ${format(new Date(pur.date), "dd MMMM, yyyy")}
+*মেমো নং/Voucher:* ${pur.invoiceNo || "N/A"}
+*সাপ্লায়ার/Supplier:* ${pur.supplierName}
+
+*আইটেম/Item:* ${pur.productName}
+*পরিমাণ/Qty:* ${pur.quantity} pcs @ ${businessInfo.currencySymbol}${pur.buyPrice.toLocaleString()}
+*মোট মূল্য/Total Amount:* ${businessInfo.currencySymbol}${pur.totalAmount.toLocaleString()}
+
+----------------------------------------
+📊 *লেনদেন বিবরণী (Ledger):*
+*মোট বিল/Net Total:* ${businessInfo.currencySymbol}${pur.totalAmount.toLocaleString()}
+*পরিশোধিত/Cash Paid:* ${businessInfo.currencySymbol}${(pur.cashPaid || 0).toLocaleString()}
+*বকেয়া/Due Balance:* ${businessInfo.currencySymbol}${due.toLocaleString()}
+*অবস্থা/Status:* ${statusStr}
+
+Thank you!
+_${businessInfo.name}_`;
+
+    const encodedText = encodeURIComponent(text);
+    const link = document.createElement('a');
+    link.href = `https://api.whatsapp.com/send?text=${encodedText}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.click();
+  };
+
+  const handlePrintReceipt = (pur: Purchase) => {
+    const due = pur.dueAmount ?? 0;
+    const isFullyPaid = due <= 0;
+    const statusStr = isFullyPaid ? "FULLY SETTLED (পরিশোধিত)" : "OUTSTANDING DUE (বকেয়া)";
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+    
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!doc) return;
+    
+    doc.open();
+    doc.write(`
+      <html>
+        <head>
+          <title>Supplier Receipt - ${pur.invoiceNo || "N/A"}</title>
+          <style>
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              padding: 20px;
+              color: #000;
+              background: #fff;
+              max-width: 400px;
+              margin: 0 auto;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 15px;
+              margin-bottom: 15px;
+            }
+            .business-name {
+              font-size: 20px;
+              font-weight: bold;
+              text-transform: uppercase;
+              margin-bottom: 5px;
+            }
+            .meta-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 13px;
+              margin: 4px 0;
+            }
+            .divider {
+              border-top: 1px dashed #000;
+              margin: 12px 0;
+            }
+            .product-title {
+              font-weight: bold;
+              font-size: 14px;
+              margin-bottom: 5px;
+            }
+            .ledger-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 14px;
+              margin: 6px 0;
+            }
+            .ledger-row-bold {
+              font-weight: bold;
+              font-size: 16px;
+              border-top: 1px solid #000;
+              padding-top: 6px;
+              margin-top: 8px;
+            }
+            .status {
+              text-align: center;
+              font-size: 14px;
+              font-weight: bold;
+              border: 1px solid #000;
+              padding: 6px;
+              margin-top: 15px;
+              text-transform: uppercase;
+            }
+            .footer {
+              text-align: center;
+              margin-top: 30px;
+              font-size: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="business-name">${businessInfo.name}</div>
+            <div>Phone: ${businessInfo.phone || "N/A"}</div>
+            <div>Address: ${businessInfo.address || "N/A"}</div>
+            <div style="font-weight: bold; margin-top: 10px; font-size: 14px;">SUPPLIER TRANSACTION RECEIPT</div>
+            <div style="font-size: 11px;">সরবরাহকারী পেমেন্ট ও বকেয়া রসিদ</div>
+          </div>
+          
+          <div class="meta-row">
+            <span>Date / তারিখ:</span>
+            <span>${format(new Date(pur.date), "dd-MM-yyyy HH:mm")}</span>
+          </div>
+          <div class="meta-row">
+            <span>Voucher / মেমো নং:</span>
+            <span>${pur.invoiceNo || "N/A"}</span>
+          </div>
+          <div class="meta-row">
+            <span>Supplier / সরবরাহকারী:</span>
+            <span><strong>${pur.supplierName}</strong></span>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="product-title">Item Details / বিবরণ:</div>
+          <div class="meta-row font-bold">
+            <span>${pur.productName}</span>
+            <span>${pur.quantity} pcs</span>
+          </div>
+          <div class="meta-row" style="font-size: 12px; color: #555;">
+            <span>Rate / ক্রয়মূল্য:</span>
+            <span>${businessInfo.currencySymbol} ${(pur.buyPrice || 0).toLocaleString()} /unit</span>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="ledger-row">
+            <span>Net Total Amount / মোট বিল:</span>
+            <span>${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}</span>
+          </div>
+          <div class="ledger-row">
+            <span>Cash Paid / মোট পরিশোধ:</span>
+            <span>${businessInfo.currencySymbol} ${(pur.cashPaid || 0).toLocaleString()}</span>
+          </div>
+          
+          <div class="ledger-row ledger-row-bold">
+            <span>Outstanding Due / বকেয়া:</span>
+            <span>${businessInfo.currencySymbol} ${due.toLocaleString()}</span>
+          </div>
+          
+          <div class="status">
+            ${statusStr}
+          </div>
+          
+          <div class="footer">
+            <div>Thank you for your business!</div>
+            <div style="margin-top: 5px; font-size: 10px;">Generated via Smart Barakah POS</div>
+          </div>
+          
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() {
+                window.parent.document.body.removeChild(window.frameElement);
+              }, 1500);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    doc.close();
   };
 
   // -----------------------------------------------------------------
@@ -1971,8 +2365,12 @@ export default function App() {
   const projectedNetTerminalProfit = netProfitAmt;
 
   // Filter lists dynamically
+  const purchasedProductIds = new Set(purchases.filter(pur => (pur.quantity || 0) > 0).map(pur => pur.productId).filter(Boolean));
+
   const filteredProducts = products.filter(p => {
-    if (p.stock <= 0) return false;
+    // Only display products bought from a supplier (exists in purchases with qty > 0)
+    if (!purchasedProductIds.has(p.id)) return false;
+
     const query = inventorySearch.toLowerCase().trim();
     if (!query) return true;
     const searchTerms = query.split(/\s+/);
@@ -2148,6 +2546,15 @@ export default function App() {
                 >
                   <Bookmark className="w-4 h-4" />
                   Stock Management
+                </button>
+
+                <button
+                  id="tab-duelist-btn"
+                  onClick={() => setActiveTab("duelist")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'duelist' ? 'bg-amber-500/10 text-amber-400 border border-amber-550/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
+                >
+                  <History className="w-4 h-4" />
+                  Due List
                 </button>
 
                 <button
@@ -3344,9 +3751,8 @@ export default function App() {
               </div>
             </div>
           )}
-
-            </div>
-          )}
+        </div>
+      )}
 
           {/* -------------------- VIEW 1.1: MODULAR CATALOGS -------------------- */}
           {activeTab === "products" && (
@@ -3418,7 +3824,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                      {businessInfo.currencySymbol} {products.reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
+                      {businessInfo.currencySymbol} {products.filter(p => purchasedProductIds.has(p.id)).reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
                       Total cost basis of remaining physical inventory stocks. Selling items dynamically reduces both physical count and asset value automatically on the database server.
@@ -3435,11 +3841,11 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-black font-mono text-white tracking-tight flex items-baseline gap-2">
-                      <span>{products.filter(p => p.stock > 0).length}</span>
+                      <span>{products.filter(p => purchasedProductIds.has(p.id) && p.stock > 0).length}</span>
                       <span className="text-xs text-slate-500 font-medium font-sans">In-Stock Products</span>
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1.5 font-sans leading-relaxed">
-                      Total quantity: <span className="font-bold text-white font-mono">{products.reduce((acc, p) => acc + (p.stock > 0 ? p.stock : 0), 0)}</span> units currently across stock items.
+                      Total quantity: <span className="font-bold text-white font-mono">{products.filter(p => purchasedProductIds.has(p.id)).reduce((acc, p) => acc + (p.stock > 0 ? p.stock : 0), 0)}</span> units currently across stock items.
                     </p>
                   </div>
                 </div>
@@ -3648,19 +4054,57 @@ export default function App() {
                                   )}
                                 </td>
                                 <td className="py-3.5 px-4 text-center font-sans">
-                                  {isDue ? (
-                                    <button
-                                      onClick={() => {
-                                        setPurchases(prev => prev.map(item => item.id === pur.id ? { ...item, cashPaid: item.totalAmount, dueAmount: 0 } : item));
-                                        triggerNotification("Supplier due bill paid & fully settled in cash successfully! 🟢", "success");
-                                      }}
-                                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-200"
-                                    >
-                                      Settle Due
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-500 font-sans italic">Fully Settled</span>
-                                  )}
+                                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                                    {isDue ? (
+                                      <button
+                                        onClick={() => {
+                                          setPurchases(prev => prev.map(item => item.id === pur.id ? { ...item, cashPaid: item.totalAmount, dueAmount: 0 } : item));
+                                          triggerNotification("Supplier due bill paid & fully settled in cash successfully! 🟢", "success");
+                                        }}
+                                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-205"
+                                      >
+                                        Settle Due
+                                      </button>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-500 font-sans italic">Fully Settled</span>
+                                    )}
+                                    {pur.quantity > 0 && (
+                                      <button
+                                        onClick={() => {
+                                          const matchedProduct = products.find(p => p.id === pur.productId);
+                                          const availableStock = matchedProduct ? matchedProduct.stock : 0;
+                                          const maxReturnQty = Math.min(pur.quantity, availableStock);
+                                          
+                                          if (maxReturnQty <= 0) {
+                                            triggerNotification("Cannot return: No remaining warehouse stock left for this product!", "error");
+                                            return;
+                                          }
+                                          
+                                          const promptVal = prompt(
+                                            `Enter quantity of ${pur.productName} you want to return to ${pur.supplierName || 'supplier'}.\n` +
+                                            `• Purchased quantity in this batch: ${pur.quantity} pcs\n` +
+                                            `• Available physical stock: ${availableStock} pcs\n` +
+                                            `• Maximum returnable quantity: ${maxReturnQty} pcs`
+                                          );
+                                          if (promptVal === null) return;
+                                          const qtyToReturn = parseInt(promptVal);
+                                          if (isNaN(qtyToReturn) || qtyToReturn <= 0) {
+                                            triggerNotification("Please enter a valid positive number for returned items!", "error");
+                                            return;
+                                          }
+                                          if (qtyToReturn > maxReturnQty) {
+                                            triggerNotification(`Cannot return ${qtyToReturn} units. Maximum allowed is ${maxReturnQty} units!`, "error");
+                                            return;
+                                          }
+                                          handleReturnPurchase(pur.id, qtyToReturn);
+                                        }}
+                                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md duration-205 flex items-center gap-1 shrink-0"
+                                      >
+                                        <Undo2 className="w-3 h-3" />
+                                        <span>ফেরত (Return)</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -3778,61 +4222,99 @@ export default function App() {
                                     )}
                                   </td>
                                   <td className="py-4 px-4 text-center font-sans lg:min-w-[190px]">
-                                    {isFullyPaid ? (
-                                      <span className="text-[10px] text-emerald-500 font-bold font-mono">Completed Settlement &nbsp;✔</span>
-                                    ) : (
-                                      <div className="flex items-center justify-center gap-1.5">
-                                        <button
-                                          onClick={() => {
-                                            const payAmt = Math.min(due, unitCost);
-                                            setPurchases(prev => prev.map(item => {
-                                              if (item.id === pur.id) {
-                                                const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
-                                                return {
-                                                  ...item,
-                                                  cashPaid: nextPaid,
-                                                  dueAmount: Math.max(0, item.totalAmount - nextPaid)
-                                                };
+                                    <div className="flex flex-col gap-1.5 items-center justify-center">
+                                      {isFullyPaid ? (
+                                        <span className="text-[10px] text-emerald-500 font-bold font-mono">Completed Settlement &nbsp;✔</span>
+                                      ) : (
+                                        <div className="flex items-center justify-center gap-1.5 w-full">
+                                          <button
+                                            onClick={() => {
+                                              const payAmt = Math.min(due, unitCost);
+                                              setPurchases(prev => prev.map(item => {
+                                                if (item.id === pur.id) {
+                                                  const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
+                                                  return {
+                                                    ...item,
+                                                    cashPaid: nextPaid,
+                                                    dueAmount: Math.max(0, item.totalAmount - nextPaid)
+                                                  };
+                                                }
+                                                return item;
+                                              }));
+                                              triggerNotification(`Settled cost for 1 Unit (${businessInfo.currencySymbol} ${payAmt}) toward ${pur.productName}!`, "success");
+                                            }}
+                                            className="px-2 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-emerald-500/5 duration-150 font-sans"
+                                            title="Repay cost of exactly 1 item"
+                                          >
+                                            +1 Unit
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              const customInput = prompt(`Enter cash repayment in ${businessInfo.currencySymbol} (Active Debt: ${businessInfo.currencySymbol}${due}):`);
+                                              if (customInput === null) return;
+                                              const amt = parseFloat(customInput);
+                                              if (isNaN(amt) || amt <= 0) {
+                                                triggerNotification("Please enter a valid monetary amount!", "error");
+                                                return;
                                               }
-                                              return item;
-                                            }));
-                                            triggerNotification(`Settled cost for 1 Unit (${businessInfo.currencySymbol} ${payAmt}) toward ${pur.productName}!`, "success");
-                                          }}
-                                          className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-emerald-500/5 duration-150 font-sans"
-                                          title="Repay cost of exactly 1 item"
-                                        >
-                                          +1 Unit Cost
-                                        </button>
+                                              const payAmt = Math.min(due, amt);
+                                              setPurchases(prev => prev.map(item => {
+                                                if (item.id === pur.id) {
+                                                  const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
+                                                  return {
+                                                    ...item,
+                                                    cashPaid: nextPaid,
+                                                    dueAmount: Math.max(0, item.totalAmount - nextPaid)
+                                                  };
+                                                }
+                                                return item;
+                                              }));
+                                              triggerNotification(`Stepwise repayment of ${businessInfo.currencySymbol} ${payAmt} recorded successfully!`, "success");
+                                            }}
+                                            className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-150 font-sans"
+                                            title="Enter custom money amount"
+                                          >
+                                            Repay
+                                          </button>
+                                        </div>
+                                      )}
+                                      {qty > 0 && (
                                         <button
                                           onClick={() => {
-                                            const customInput = prompt(`Enter cash repayment in ${businessInfo.currencySymbol} (Active Debt: ${businessInfo.currencySymbol}${due}):`);
-                                            if (customInput === null) return;
-                                            const amt = parseFloat(customInput);
-                                            if (isNaN(amt) || amt <= 0) {
-                                              triggerNotification("Please enter a valid monetary amount!", "error");
+                                            const matchedProduct = products.find(p => p.id === pur.productId);
+                                            const availableStock = matchedProduct ? matchedProduct.stock : 0;
+                                            const maxReturnQty = Math.min(qty, availableStock);
+                                            
+                                            if (maxReturnQty <= 0) {
+                                              triggerNotification("Cannot return: No remaining warehouse stock left for this product!", "error");
                                               return;
                                             }
-                                            const payAmt = Math.min(due, amt);
-                                            setPurchases(prev => prev.map(item => {
-                                              if (item.id === pur.id) {
-                                                const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
-                                                return {
-                                                  ...item,
-                                                  cashPaid: nextPaid,
-                                                  dueAmount: Math.max(0, item.totalAmount - nextPaid)
-                                                };
-                                              }
-                                              return item;
-                                            }));
-                                            triggerNotification(`Stepwise repayment of ${businessInfo.currencySymbol} ${payAmt} recorded successfully!`, "success");
+                                            
+                                            const promptVal = prompt(
+                                              `Enter quantity of ${pur.productName} you want to return to ${pur.supplierName || 'supplier'}.\n` +
+                                              `• Purchased quantity in this batch: ${pur.quantity} pcs\n` +
+                                              `• Available physical stock: ${availableStock} pcs\n` +
+                                              `• Maximum returnable quantity: ${maxReturnQty} pcs`
+                                            );
+                                            if (promptVal === null) return;
+                                            const qtyToReturn = parseInt(promptVal);
+                                            if (isNaN(qtyToReturn) || qtyToReturn <= 0) {
+                                              triggerNotification("Please enter a valid positive number for returned items!", "error");
+                                              return;
+                                            }
+                                            if (qtyToReturn > maxReturnQty) {
+                                              triggerNotification(`Cannot return ${qtyToReturn} units. Maximum allowed is ${maxReturnQty} units!`, "error");
+                                              return;
+                                            }
+                                            handleReturnPurchase(pur.id, qtyToReturn);
                                           }}
-                                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-150 font-sans"
-                                          title="Enter custom money amount"
+                                          className="px-2.5 py-1 bg-rose-650 hover:bg-rose-500 text-white font-bold text-[9px] rounded-lg transition-all hover:scale-105 cursor-pointer shadow-md flex items-center gap-1 justify-center w-full"
                                         >
-                                          Custom Repay
+                                          <Undo2 className="w-3 h-3" />
+                                          <span>ফেরত (Return)</span>
                                         </button>
-                                      </div>
-                                    )}
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -3844,7 +4326,765 @@ export default function App() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+                    {/* -----------------------------------------------------------------
+              VIEW 2.5: BRAND NEW SUPPLIER DUE RECORD SHEET (Due List Tracker)
+              ----------------------------------------------------------------- */}
+          {activeTab === "duelist" && (
+            <div className="space-y-6 animate-fadeIn" id="view-duelist-container">
+              {/* 1. HEADER BANNER */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/40" id="duelist-header-block">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-amber-400 rounded-full animate-ping shrink-0" />
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2">
+                      Supplier Due List Tracker
+                    </h1>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1 font-medium font-sans">
+                    Real-time ledger tracking of credit procurement from suppliers. Monitor credit balance incoming (In), cash payment settlements outgoing (Out), and outstanding liabilities (Remaining).
+                  </p>
+                </div>
+              </div>
 
+              {/* 2. DATE HORIZON FILTERS */}
+              <div className="bg-[#0b0f19] border border-slate-800/80 p-3 rounded-2xl flex flex-col md:flex-row items-center gap-4 justify-between" id="duelist-period-menu-container">
+                <div className="flex flex-col gap-1 w-full md:w-auto">
+                  <span className="text-[10px] text-[#00E676] font-bold uppercase tracking-wider font-mono">Date Horizon Presets:</span>
+                  <div className="flex flex-wrap gap-1.5 font-sans" id="duelist-horizontal-pills">
+                    {[
+                      { id: "all", label: "All Time" },
+                      { id: "today", label: "Today" },
+                      { id: "weekly", label: "Last 7 Days" },
+                      { id: "monthly", label: "This Month" },
+                      { id: "yearly", label: "This Year" }
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => setDuelistFilter(preset.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer whitespace-nowrap ${
+                          duelistFilter === preset.id
+                            ? "bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold shadow-md"
+                            : "text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent"
+                        }`}
+                        id={`duelist-preset-key-${preset.id}`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 font-mono self-end">
+                  Due invoices are dynamically compiled according to the chosen timeline preset.
+                </div>
+              </div>
+
+              {/* Helper to calculate values */}
+              {(() => {
+                const isPurchaseInDateFilter = (purDateStr: string, filter: "all" | "today" | "weekly" | "monthly" | "yearly") => {
+                  if (filter === "all") return true;
+                  try {
+                    const pDate = new Date(purDateStr);
+                    const now = new Date();
+                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                    
+                    if (filter === "today") {
+                      return pDate >= todayStart && pDate <= todayEnd;
+                    }
+                    if (filter === "weekly") {
+                      const weeklyStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+                      return pDate >= weeklyStart && pDate <= todayEnd;
+                    }
+                    if (filter === "monthly") {
+                      const monthlyStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                      return pDate >= monthlyStart && pDate <= todayEnd;
+                    }
+                    if (filter === "yearly") {
+                      const yearlyStart = new Date(now.getFullYear(), 0, 1);
+                      return pDate >= yearlyStart && pDate <= todayEnd;
+                    }
+                  } catch (e) {
+                    console.error("Duelist Date match error:", e);
+                  }
+                  return true;
+                };
+
+                const dueInvoices = purchases.filter(p => {
+                  const isCredit = p.originallyCredit || (p.dueAmount || 0) > 0 || (p.totalAmount > (p.cashPaid || 0));
+                  return isCredit && isPurchaseInDateFilter(p.date, duelistFilter);
+                });
+
+                // Calculate total metrics
+                const totalIn = dueInvoices.reduce((acc, p) => acc + p.totalAmount, 0);
+                const totalOut = dueInvoices.reduce((acc, p) => acc + (p.cashPaid || 0), 0);
+                const totalRemaining = dueInvoices.reduce((acc, p) => acc + (p.dueAmount || 0), 0);
+
+                const finalFilteredInvoices = dueInvoices.filter(pur => {
+                  if (!duelistSearch.trim()) return true;
+                  const searchLower = duelistSearch.toLowerCase().trim();
+                  const supName = (pur.supplierName || "").toLowerCase();
+                  const prodName = (pur.productName || "").toLowerCase();
+                  return supName.includes(searchLower) || prodName.includes(searchLower);
+                });
+
+                return (
+                  <>
+                    {/* STATS SUMMARY CARDS */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="duelist-stats-deck">
+                      {/* CARD 1: IN */}
+                      <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-amber-500/25 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-duelist-in">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 font-mono">Procured Credit (Total In)</span>
+                          <TrendingUp className="w-4 h-4 text-amber-500" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-black font-mono text-white tracking-tight">
+                            {businessInfo.currencySymbol} {totalIn.toLocaleString()}
+                          </h3>
+                          <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
+                            Cumulative invoice value of inventory procured from vendors on credit.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* CARD 2: OUT */}
+                      <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-[#00E676]/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-duelist-out">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#00E676]/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#00E676] font-mono">Cash Disbursed (Total Out)</span>
+                          <TrendingDown className="w-4 h-4 text-[#00E676]" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-black font-mono text-[#00E676] tracking-tight">
+                            {businessInfo.currencySymbol} {totalOut.toLocaleString()}
+                          </h3>
+                          <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
+                            Total cumulative cash payments processed and cleared to suppliers.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* CARD 3: REMAINING */}
+                      <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-rose-500/25 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-duelist-remaining">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400 font-mono">Outstanding Balance (Remaining Due)</span>
+                          <Bookmark className="w-4 h-4 text-rose-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-black font-mono text-rose-400 tracking-tight">
+                            {businessInfo.currencySymbol} {totalRemaining.toLocaleString()}
+                          </h3>
+                          <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
+                            Active outstanding unpaid balance due to your suppliers.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ACTIONS & CONTROLS TOOLBAR */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-[#0a101f]/80 border border-slate-800 rounded-2xl" id="duelist-toolbar">
+                      <div className="relative w-full sm:w-80 font-sans" id="duelist-search-wrap">
+                        <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                        <input
+                          type="text"
+                          placeholder="Search by supplier or product name..."
+                          value={duelistSearch}
+                          onChange={(e) => setDuelistSearch(e.target.value)}
+                          className="w-full px-3 py-2 pl-9 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-amber-500 font-sans"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setIsAddingDue(!isAddingDue);
+                          setDueInvoiceNo(`REC-${Math.floor(1000 + Math.random() * 9000)}`);
+                        }}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.02]"
+                      >
+                        <PlusCircle className="w-4 h-4 text-slate-950" />
+                        <span>+ Add Due Procurement Entry</span>
+                      </button>
+                    </div>
+
+                    {/* inline due purchase logging drawer/panel */}
+                    {isAddingDue && (
+                      <div className="p-5 bg-[#050912] border border-amber-500/20 rounded-2xl space-y-4 animate-slideDown" id="add-duelist-entry-drawer">
+                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                          <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                            <PlusCircle className="w-3.5 h-3.5 text-amber-500" />
+                            New Supplier Credit Purchase Ledger Form
+                          </span>
+                          <button 
+                            onClick={() => setIsAddingDue(false)}
+                            className="text-[11px] text-slate-500 hover:text-white px-2.5 py-1 rounded bg-[#0c142c] border border-slate-850 hover:bg-slate-900 transition-colors font-sans cursor-pointer"
+                          >
+                            Close ✕
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-sans text-xs">
+                          {/* 1. Date */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Purchase Date:</label>
+                            <input
+                              type="date"
+                              value={dueDateStr}
+                              onChange={(e) => setDueDateStr(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white font-mono text-xs focus:border-amber-500 outline-none"
+                            />
+                          </div>
+
+                          {/* 2. Voucher Invoice ID */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Supplier Voucher Track No:</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. REC-5847"
+                              value={dueInvoiceNo}
+                              onChange={(e) => setDueInvoiceNo(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white font-mono text-xs focus:border-amber-500 outline-none"
+                            />
+                          </div>
+
+                          {/* 3. Supplier list */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Supplier / Vendor Account:</label>
+                            <select
+                              value={dueSupplierId}
+                              onChange={(e) => setDueSupplierId(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white text-xs focus:border-amber-500 outline-none"
+                            >
+                              <option value="">-- Choose Supplier --</option>
+                              {contacts.filter(c => c.type === "supplier").map(sup => (
+                                <option key={sup.id} value={sup.id}>{sup.name} ({sup.phone || 'no phone'})</option>
+                              ))}
+                              <option value="walk-in-supplier">Walk-in General Supplier</option>
+                            </select>
+                          </div>
+
+                          {/* 4. Products list */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Stock Product Purchased:</label>
+                            <select
+                              value={dueProductId}
+                              onChange={(e) => setDueProductId(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white text-xs focus:border-amber-500 outline-none"
+                            >
+                              <option value="">-- Select Registered Product --</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name} [{p.sku || 'No SKU'}] (Stock: {p.stock} pcs)</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* 5. Quantity */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Purchased Quantity (Pcs):</label>
+                            <input
+                              type="number"
+                              placeholder="e.g. 50"
+                              value={dueQuantity}
+                              onChange={(e) => setDueQuantity(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white font-mono text-xs focus:border-amber-500 outline-none"
+                            />
+                          </div>
+
+                          {/* 6. Buy Rate */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Procurement Buy Unit Price:</label>
+                            <input
+                              type="number"
+                              placeholder="e.g. 150"
+                              value={dueBuyRate}
+                              onChange={(e) => setDueBuyRate(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white font-mono text-xs focus:border-amber-500 outline-none"
+                            />
+                          </div>
+
+                          {/* 7. Total debit */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Total Invoice Purchase Price (Auto):</label>
+                            <div className="w-full px-3 py-2.5 bg-[#0a101f] border border-slate-800 rounded-lg text-amber-400 font-bold font-mono text-xs">
+                              {businessInfo.currencySymbol} {( (parseFloat(dueQuantity) || 0) * (parseFloat(dueBuyRate) || 0) ).toLocaleString()}
+                            </div>
+                          </div>
+
+                          {/* 8. Initial Payment */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Cash Settled Out (Paid Now):</label>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              value={duePaid}
+                              onChange={(e) => setDuePaid(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white font-mono text-xs focus:border-amber-500 outline-none"
+                            />
+                          </div>
+
+                          {/* 9. Remaining balance to pay */}
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-medium block">Remaining Balance Unpaid (Due Amount - Auto):</label>
+                            <div className="w-full px-3 py-2.5 bg-[#0a101f] border border-slate-800 rounded-lg text-rose-455 font-bold font-mono text-xs">
+                              {businessInfo.currencySymbol} {Math.max(0, ( (parseFloat(dueQuantity) || 0) * (parseFloat(dueBuyRate) || 0) ) - (parseFloat(duePaid) || 0)).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Note area */}
+                        <div className="space-y-1 font-sans text-xs">
+                          <label className="text-slate-400 font-medium block">Optional Transaction Notes:</label>
+                          <input
+                            type="text"
+                            placeholder="Enter transaction remarks or comments..."
+                            value={dueNote}
+                            onChange={(e) => setDueNote(e.target.value)}
+                            className="w-full px-3 py-2 bg-[#0a101f] border border-slate-800 rounded-lg text-white text-xs focus:border-amber-500 outline-none"
+                          />
+                        </div>
+
+                        {/* Save Button */}
+                        <div className="flex justify-end gap-3 font-sans">
+                          <button
+                            onClick={() => {
+                              if (!dueSupplierId) {
+                                triggerNotification("Please select a valid supplier!", "error");
+                                return;
+                              }
+                              if (!dueProductId) {
+                                triggerNotification("Please choose a product to log!", "error");
+                                return;
+                              }
+                              const qty = parseFloat(dueQuantity);
+                              const rate = parseFloat(dueBuyRate);
+                              if (isNaN(qty) || qty <= 0 || isNaN(rate) || rate <= 0) {
+                                triggerNotification("Please enter valid quantities and purchase prices!", "error");
+                                return;
+                              }
+
+                              const paid = parseFloat(duePaid) || 0;
+                              const total = qty * rate;
+                              if (paid > total) {
+                                triggerNotification("Paid cash cannot exceed the total purchase price!", "error");
+                                return;
+                              }
+
+                              const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+                              const prodObj = products.find(p => p.id === dueProductId);
+                              const supObj = contacts.find(c => c.id === dueSupplierId);
+
+                              // Build newly recorded Purchase
+                              const newPur: Purchase = {
+                                id: toUUID(`pur_${Date.now()}`, cleanEmail),
+                                productId: dueProductId,
+                                productName: prodObj ? prodObj.name : "Selected Product",
+                                supplierId: dueSupplierId,
+                                supplierName: supObj ? supObj.name : (dueSupplierId === "walk-in-supplier" ? "Walk-in Supplier" : "Unknown Supplier"),
+                                quantity: qty,
+                                buyPrice: rate,
+                                totalAmount: total,
+                                date: new Date(dueDateStr).toISOString(),
+                                cashPaid: paid,
+                                dueAmount: Math.max(0, total - paid),
+                                invoiceNo: dueInvoiceNo || `REC-${Math.floor(1000 + Math.random() * 9000)}`,
+                                note: dueNote || "Supplier Credit Entry Logs",
+                                originallyCredit: true
+                              };
+
+                              setPurchases([newPur, ...purchases]);
+                              setProducts(products.map(p => {
+                                if (p.id === dueProductId) {
+                                  return {
+                                    ...p,
+                                    stock: p.stock + qty,
+                                    buyPrice: rate
+                                  };
+                                }
+                                return p;
+                              }));
+
+                              // Reset input fields
+                              setDueQuantity("");
+                              setDueBuyRate("");
+                              setDuePaid("");
+                              setDueNote("");
+                              setDueProductId("");
+                              setIsAddingDue(false);
+
+                              triggerNotification("Success! New supplier procurement record registered and asset stock updated. 🟢", "success");
+                            }}
+                            className="px-5 py-2.5 bg-[#00E676] hover:bg-[#00c853] text-[#050912] font-black text-xs rounded-xl shadow-lg transition-all hover:scale-[1.02] cursor-pointer font-sans"
+                          >
+                            Save Due Entry
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TABLE LAYOUT */}
+                    <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl" id="due-items-registry-wrapper">
+                      <div className="p-4 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between" id="due-table-header">
+                        <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                          <History className="w-3.5 h-3.5 text-amber-500" />
+                          Active Supplier Procurement Due Ledger
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Total Records: {finalFilteredInvoices.length} Invoices</span>
+                      </div>
+
+                      <div className="overflow-x-auto" id="duelist-table-scroll">
+                        <table className="w-full text-left text-xs text-slate-300 font-sans">
+                          <thead>
+                            <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                              <th className="py-3 px-4 text-left">Date & Invoice</th>
+                              <th className="py-3 px-4 text-left">Supplier Name</th>
+                              <th className="py-3 px-4 text-right">Amount Procured (In)</th>
+                              <th className="py-3 px-4 text-right">Cash Paid (Out)</th>
+                              <th className="py-3 px-4 text-right">Outstanding Due</th>
+                              <th className="py-3 px-4">Inventory Specifications & Stock Audit Breakdown</th>
+                              <th className="py-3 px-4 text-center">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850/50 font-mono text-xs">
+                            {finalFilteredInvoices.length === 0 ? (
+                                <tr>
+                                  <td colSpan={7} className="py-16 text-center text-slate-500 font-sans">
+                                    No supplier credit records matching the current parameters were found in the local database.
+                                  </td>
+                                </tr>
+                            ) : (
+                              finalFilteredInvoices.map((pur) => {
+                                const due = pur.dueAmount || 0;
+                                const isFullyPaid = due <= 0;
+                                const matchedProduct = products.find(p => p.id === pur.productId);
+
+                                // calculate coverage pieces
+                                const qty = pur.quantity || 1;
+                                const unitCost = pur.buyPrice || 1;
+                                const eqPaidQty = Math.min(qty, parseFloat(((pur.cashPaid || 0) / unitCost).toFixed(2)));
+                                const eqDueQty = Math.max(0, parseFloat((qty - eqPaidQty).toFixed(2)));
+
+                                return (
+                                  <tr key={pur.id} className={`hover:bg-slate-900/10 text-slate-300 ${isFullyPaid ? 'bg-emerald-950/5' : ''}`}>
+                                    {/* 1. Date */}
+                                    <td className="py-4 px-4 text-slate-400 text-[11px] whitespace-nowrap">
+                                      {format(new Date(pur.date), "dd MMMM, yyyy")}
+                                      <span className="block text-[9px] text-[#A0A0A5] font-mono mt-0.5">Voucher No: {pur.invoiceNo || "N/A"}</span>
+                                    </td>
+
+                                    {/* 2. Supplier Name */}
+                                    <td className="py-4 px-4 font-sans text-white font-semibold">
+                                      {pur.supplierName || "Walk-In Supplier"}
+                                    </td>
+
+                                    {/* 3. In value */}
+                                    <td className="py-4 px-4 text-right text-slate-400 font-mono">
+                                      {businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}
+                                    </td>
+
+                                    {/* 4. Out value */}
+                                    <td className="py-4 px-4 text-right text-emerald-400 font-bold font-mono">
+                                      {businessInfo.currencySymbol} {(pur.cashPaid || 0).toLocaleString()}
+                                    </td>
+
+                                    {/* 5. Remaining value */}
+                                    <td className="py-4 px-4 text-right text-rose-455 font-extrabold font-mono">
+                                      {businessInfo.currencySymbol} {due.toLocaleString()}
+                                    </td>
+
+                                    {/* 6. Product breakdowns and stocks */}
+                                    <td className="py-4 px-4 font-sans text-[11px] text-slate-200">
+                                      <div className="bg-slate-950/60 p-2.5 border border-slate-800/80 rounded-xl space-y-1.5" id={`prod-breakdown-box-${pur.id}`}>
+                                        <div className="flex justify-between items-center text-white">
+                                          <span className="font-bold underline text-amber-300">{pur.productName || "Unknown Item"}</span>
+                                          <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-[#00E676]">Supplied: {qty} pcs</span>
+                                        </div>
+
+                                        <div className="flex select-none gap-2 text-[10px] text-slate-400 font-mono leading-tight">
+                                          <span>Equivalent Paid: <strong className="text-emerald-400">{eqPaidQty} pcs</strong></span>
+                                          <span>Equivalent Due: <strong className="text-rose-400">{eqDueQty} pcs</strong></span>
+                                        </div>
+
+                                        <div className="pt-1.5 text-[10px] border-t border-slate-900 leading-relaxed font-sans text-slate-350 space-y-0.5">
+                                          <div className="flex justify-between items-center text-rose-300 font-mono">
+                                            <span>Unpaid Stock Portion:</span>
+                                            <span className="font-bold text-rose-455">{(pur.dueAmount / pur.buyPrice).toFixed(1)} pcs</span>
+                                          </div>
+                                          <div className="flex justify-between items-center text-indigo-300 font-mono">
+                                            <span>Product Warehouse Stock:</span>
+                                            <span className="font-bold text-[#00E676]">{matchedProduct ? matchedProduct.stock : 0} {matchedProduct?.unit || 'pcs'}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* 7. Action button for repaying & dynamic receipt generation */}
+                                    <td className="py-4 px-4 text-center font-sans whitespace-nowrap min-w-[200px]">
+                                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 font-sans">
+                                        <button
+                                          onClick={() => setSelectedSupplierReceipt(pur)}
+                                          className="w-full sm:w-auto px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded-lg transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-md flex items-center gap-1 mt-1 sm:mt-0"
+                                        >
+                                          <FileText className="w-3.5 h-3.5" />
+                                          <span>Voucher Receipt</span>
+                                        </button>
+
+                                        {isFullyPaid ? (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-emerald-400">
+                                            Fully Settled ✔
+                                          </span>
+                                        ) : (
+                                          <button
+                                            onClick={() => {
+                                              const customInput = prompt(`Enter cash disbursement payment to clear supplier outstanding debt (Outstanding: ${businessInfo.currencySymbol}${due}):`);
+                                              if (customInput === null) return;
+                                              const repayAmt = parseFloat(customInput);
+                                              if (isNaN(repayAmt) || repayAmt <= 0) {
+                                                triggerNotification("Please enter a valid monetary amount!", "error");
+                                                return;
+                                              }
+                                              const finalPaidAmt = Math.min(due, repayAmt);
+                                              const nextCashPaid = parseFloat(((pur.cashPaid || 0) + finalPaidAmt).toFixed(2));
+                                              const nextDueAmount = Math.max(0, pur.totalAmount - nextCashPaid);
+                                              
+                                              const updatedPur = {
+                                                ...pur,
+                                                cashPaid: nextCashPaid,
+                                                dueAmount: nextDueAmount
+                                              };
+
+                                              setPurchases(prev => prev.map(item => {
+                                                if (item.id === pur.id) {
+                                                  return updatedPur;
+                                                }
+                                                return item;
+                                              }));
+
+                                              // Set as currently active receipt to immediately show the updated receipt modal to copy/print
+                                              setSelectedSupplierReceipt(updatedPur);
+                                              triggerNotification(`Success! Payment processed and supplier due balance calibrated!`, "success");
+                                            }}
+                                            className="w-full sm:w-auto px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-150 flex items-center gap-1 justify-center"
+                                          >
+                                            <TrendingDown className="w-3.5 h-3.5" />
+                                            <span>Repay</span>
+                                          </button>
+                                        )}
+
+                                        {qty > 0 && (
+                                          <button
+                                            onClick={() => {
+                                              const maxReturnQty = Math.min(qty, matchedProduct ? matchedProduct.stock : 0);
+                                              if (maxReturnQty <= 0) {
+                                                triggerNotification("Cannot return: No remaining warehouse stock left for this product!", "error");
+                                                return;
+                                              }
+
+                                              const promptVal = prompt(
+                                                `Enter quantity of ${pur.productName} you want to return to ${pur.supplierName || 'supplier'}.\n` +
+                                                `• Purchased quantity in this batch: ${pur.quantity} pcs\n` +
+                                                `• Available physical stock: ${matchedProduct ? matchedProduct.stock : 0} pcs\n` +
+                                                `• Maximum returnable quantity: ${maxReturnQty} pcs`
+                                              );
+                                              if (promptVal === null) return;
+                                              const qtyToReturn = parseInt(promptVal);
+                                              if (isNaN(qtyToReturn) || qtyToReturn <= 0) {
+                                                triggerNotification("Please enter a valid positive number for returned items!", "error");
+                                                return;
+                                              }
+                                              if (qtyToReturn > maxReturnQty) {
+                                                triggerNotification(`Cannot return ${qtyToReturn} units. Maximum allowed is ${maxReturnQty} units!`, "error");
+                                                return;
+                                              }
+                                              handleReturnPurchase(pur.id, qtyToReturn);
+                                            }}
+                                            className="w-full sm:w-auto px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] rounded-lg transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-1 mt-1 sm:mt-0"
+                                            title="Return items back to supplier"
+                                          >
+                                            <Undo2 className="w-3.5 h-3.5" />
+                                            <span>ফেরত (Return)</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* DYNAMIC SUPPLIER DUE RECEIPT INTERACTIVE POPUP / MODAL */}
+              {selectedSupplierReceipt && (() => {
+                const pur = selectedSupplierReceipt;
+                const due = pur.dueAmount ?? 0;
+                const isFullyPaid = due <= 0;
+                
+                // Match with contacts to fetch any stored phone numbers/address for this supplier
+                const supContact = contacts.find(c => c.id === pur.supplierId || c.name === pur.supplierName);
+                
+                return (
+                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn" id="supplier-receipt-modal-overlay">
+                    <div className="bg-[#0b0f19] border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col" id="supplier-receipt-modal-body">
+                      
+                      {/* Modal Header */}
+                      <div className="p-5 border-b border-slate-800 bg-slate-950/50 flex items-center justify-between" id="receipt-modal-titlebar">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-extrabold text-white text-sm tracking-tight">Supplier Transaction Voucher</h3>
+                            <p className="text-[10px] text-slate-400 font-medium">সাপ্লায়ার পেমেন্ট ও বকেয়া রসিদ (মেমো)</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedSupplierReceipt(null)}
+                          className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer"
+                          title="Close receipt popup"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* Scrollable Receipt Body */}
+                      <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh] text-slate-300 font-sans" id="receipt-modal-content-scroll">
+                        
+                        {/* Visual Stamp / Paid Badge */}
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="space-y-1">
+                            <h4 className="text-xl font-bold text-white tracking-tight">{businessInfo.name}</h4>
+                            <p className="text-xs text-slate-400 font-medium">{businessInfo.address || "No Address Saved"}</p>
+                            <p className="text-xs text-slate-400 font-medium">Phone: {businessInfo.phone || "No Phone Saved"}</p>
+                          </div>
+                          <div>
+                            {isFullyPaid ? (
+                              <span className="inline-flex flex-col items-center justify-center bg-emerald-500/10 border border-emerald-500/40 px-4 py-2 rounded-2xl text-[11px] font-extrabold text-emerald-400 tracking-wider">
+                                <span className="text-base">✔</span> FULLY SETTLED
+                                <span className="text-[9px] font-normal text-emerald-400/80">সম্পূর্ণ পরিশোধিত</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex flex-col items-center justify-center bg-amber-500/10 border border-amber-500/40 px-4 py-2 rounded-2xl text-[11px] font-extrabold text-amber-400 tracking-wider">
+                                <span>⚠️</span> ACTIVE CREDIT
+                                <span className="text-[9px] font-normal text-amber-400/80">বকেয়া রয়েছে</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-dashed border-slate-850 my-4" />
+
+                        {/* Voucher Metadata Grid */}
+                        <div className="grid grid-cols-2 gap-4 text-xs bg-slate-950/40 p-4 border border-slate-800/80 rounded-2xl" id="receipt-meta-grid">
+                          <div>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Voucher No / মেমো নং</span>
+                            <strong className="text-white text-sm font-mono">{pur.invoiceNo || "N/A"}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Date / তারিখ</span>
+                            <strong className="text-white text-sm">{format(new Date(pur.date), "dd MMMM, yyyy")}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Name / সরবরাহকারী</span>
+                            <strong className="text-amber-400 text-sm font-semibold">{pur.supplierName}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Phone / ফোন নম্বর</span>
+                            <strong className="text-slate-300 text-sm font-mono">{supContact?.phone || "N/A"}</strong>
+                          </div>
+                        </div>
+
+                        {/* Item details */}
+                        <div>
+                          <h5 className="text-[11px] uppercase font-mono font-bold text-slate-400 tracking-wider mb-2">Purchase & Product Breakdown / পণ্যের বিবরণ</h5>
+                          <div className="bg-[#050912] border border-slate-800/50 rounded-2xl overflow-hidden">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="bg-slate-950/60 border-b border-slate-800 text-slate-400">
+                                  <th className="py-2 px-4 font-semibold">Product Name</th>
+                                  <th className="py-2 px-4 text-right font-semibold">Qty</th>
+                                  <th className="py-2 px-4 text-right font-semibold">Buy Rate</th>
+                                  <th className="py-2 px-4 text-right font-semibold">Subtotal</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr className="text-slate-300">
+                                  <td className="py-3 px-4 font-medium text-white">{pur.productName || "Unknown Item"}</td>
+                                  <td className="py-3 px-4 text-right font-mono">{pur.quantity} pcs</td>
+                                  <td className="py-3 px-4 text-right font-mono">{businessInfo.currencySymbol} {(pur.buyPrice || 0).toLocaleString()}</td>
+                                  <td className="py-3 px-4 text-right font-mono font-bold text-white">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Outstanding Balance Ledger Summary */}
+                        <div className="bg-[#050912] border border-slate-800 rounded-2xl p-4 space-y-2.5 font-sans" id="receipt-financials-ledger">
+                          <div className="flex justify-between items-center text-xs text-slate-400">
+                            <span>Original Purchase Total / মোট বিল:</span>
+                            <span className="font-mono text-white text-sm font-semibold">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs text-slate-400">
+                            <span>Disbursed Paid / এ পর্যন্ত পরিশোধিত:</span>
+                            <span className="font-mono text-emerald-400 text-sm font-black">{businessInfo.currencySymbol} {(pur.cashPaid || 0).toLocaleString()}</span>
+                          </div>
+                          
+                          <div className="border-t border-slate-800/80 pt-2.5 flex justify-between items-center">
+                            <div className="space-y-0.5">
+                              <span className="font-extrabold text-xs text-white block">Outstanding Due / বর্তমান বকেয়া:</span>
+                              <span className="text-[9px] text-slate-400 block font-normal">Remaining outstanding due balance</span>
+                            </div>
+                            <span className={`font-mono text-lg font-black ${due <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {businessInfo.currencySymbol} {due.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-slate-500 text-center font-normal italic">
+                          রসিদটি আপনার রেকর্ড হিসেবে সংরক্ষণ অথবা সাপ্লায়ারকে শেয়ার করতে নিচের বাটনগুলো ব্যবহার করুন।
+                        </p>
+                      </div>
+
+                      {/* Modal Footer / Share and Actions Sheet */}
+                      <div className="p-5 border-t border-slate-800 bg-slate-950/70 grid grid-cols-1 sm:grid-cols-3 gap-2.5" id="receipt-actions-footer">
+                        <button
+                          onClick={() => handlePrintReceipt(pur)}
+                          className="w-full py-2.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-all hover:scale-102 active:scale-98 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-indigo-500/10"
+                        >
+                          <Printer className="w-4 h-4" />
+                          <span>Print / PDF</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleWhatsAppShare(pur)}
+                          className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all hover:scale-102 active:scale-98 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
+                        >
+                          <Phone className="w-4 h-4" />
+                          <span>Send WhatsApp</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleCopyReceipt(pur)}
+                          className="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-all hover:scale-102 active:scale-98 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span>Copy Text</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -4562,8 +5802,8 @@ export default function App() {
               
               const clientTxs = transactions.filter(t => t.contactId === c.id);
               const totalOutstandingDue = clientTxs.reduce((sum, t) => {
-                const due = (t.grandTotal || 0) - (t.amountPaid || 0);
-                return sum + (due > 0 ? due : 0);
+                const due = t.dueBalance || 0;
+                return sum + due;
               }, 0);
               
               if (totalOutstandingDue > 0) {
@@ -4614,16 +5854,36 @@ export default function App() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Primary Mobile Number *</label>
+                      <div className="flex justify-between items-center pr-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Primary Mobile Number *</label>
+                        {cPhone.length > 0 && (
+                          <span className={`text-[10px] font-mono font-bold ${cPhone.length === 11 ? "text-emerald-400" : "text-rose-500 animate-pulse"}`}>
+                            {cPhone.length}/11 Digits
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="tel"
                         required
                         maxLength={11}
                         placeholder="017xxxxxxxx"
                         value={cPhone}
-                        onChange={(e) => setCPhone(e.target.value.replace(/[^0-9]/g, ""))}
-                        className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] font-mono focus:ring-1 focus:ring-[#00E676]/30 transition-all"
+                        onChange={(e) => {
+                          const converted = banglaToEnglishDigits(e.target.value);
+                          const numericOnly = converted.replace(/[^0-9]/g, "");
+                          setCPhone(numericOnly);
+                        }}
+                        className={`w-full px-3 py-2.5 bg-[#121214] border rounded-xl text-white text-xs outline-none focus:ring-1 transition-all font-mono ${
+                          cPhone.length > 0 && cPhone.length !== 11
+                            ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/30 text-rose-300"
+                            : "border-[#2D2D35] focus:border-[#00E676] focus:ring-[#00E676]/30"
+                        }`}
                       />
+                      {cPhone.length > 0 && cPhone.length !== 11 && (
+                        <p className="text-[10px] text-rose-500 font-bold pl-1 mt-0.5 min-h-[14px]">
+                          ⚠️ বাংলাদেশের মোবাইল নাম্বার অবশ্যই ১১ ডিজিট হতে হবে! (বর্তমানে {cPhone.length} ডিজিট)
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-1.5">
@@ -4636,6 +5896,39 @@ export default function App() {
                         className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] font-sans focus:ring-1 focus:ring-[#00E676]/30 transition-all"
                       />
                     </div>
+
+                    {/* Highly polished AI translation alert container for Bangla Inputs */}
+                    {(hasBengaliCharacters(cName) || hasBengaliCharacters(cAddress)) && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 space-y-2 text-xs text-amber-200 animate-fade-in">
+                        <div className="flex items-start gap-2">
+                          <Languages className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="font-extrabold text-amber-400 tracking-wide">বাংলা লেখা সনাক্ত করা হয়েছে!</p>
+                            <p className="text-[10px] text-amber-300/90 leading-relaxed font-sans">
+                              নাম বা ঠিকানায় বাংলা ইনপুট করা হয়েছে। ব্যবসার হিসাব-নিকাশ পরিষ্কার রাখতে Gemini AI ব্যবহার করে নিমিষেই সঠিক এবং নির্ভুল ইংরেজি রূপান্তর (Transliteration) করে নিন।
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={runTranslationForUI}
+                          disabled={isTranslatingContact}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider rounded-lg cursor-pointer transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        >
+                          {isTranslatingContact ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                              <span>অনুবাদ হচ্ছে (AI Translating)...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3 h-3 text-slate-950" />
+                              <span>ইংরেজিতে রূপান্তর করুন (Translate to English)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
 
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1 block">Profile Relationship Type</label>
@@ -4666,7 +5959,12 @@ export default function App() {
                     <button
                       type="submit"
                       id="save-contact-btn"
-                      className="w-full py-3.5 bg-[#00E676] hover:bg-[#00D065] text-[#121214] font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-[#00E676]/10"
+                      disabled={cPhone.length !== 11 || !cName.trim() || isTranslatingContact}
+                      className={`w-full py-3.5 text-[#121214] font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg ${
+                        cPhone.length !== 11 || !cName.trim() || isTranslatingContact
+                          ? "bg-slate-700/50 text-slate-400 cursor-not-allowed border border-slate-700/30 shadow-none hover:scale-100"
+                          : "bg-[#00E676] hover:bg-[#00D065] hover:scale-[1.02] active:scale-[0.98] shadow-[#00E676]/10"
+                      }`}
                     >
                       <PlusCircle className="w-4 h-4" />
                       {editingContact ? "Save Profile Changes" : "Register Profile"}

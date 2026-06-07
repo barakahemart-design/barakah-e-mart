@@ -502,6 +502,84 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
     }
   });
 
+  // Fallback translation and digit conversion helpers
+  function cleanBanglaDigits(str: string): string {
+    if (!str) return "";
+    const map: { [key: string]: string } = {
+      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+    };
+    return str.replace(/[০-৯]/g, (m) => map[m] || m).replace(/[^0-9]/g, "");
+  }
+
+  function fallbackTranslateText(str: string): string {
+    if (!str) return "";
+    return str; // Fallback directly if no API has run
+  }
+
+  // API Endpoint: Translate and Transliterate Customer/Partner Bengali Info to English
+  app.post("/api/ai/translate-partner", async (req: Request, res: Response) => {
+    const { name, phone, address } = req.body;
+    try {
+      let ai: GoogleGenAI;
+      try {
+        ai = getGeminiClient();
+      } catch (err: any) {
+        res.json({
+          name: fallbackTranslateText(name),
+          phone: cleanBanglaDigits(phone),
+          address: fallbackTranslateText(address)
+        });
+        return;
+      }
+
+      const prompt = `You are a professional Bangladeshi bilingual translator and transliterator.
+Your task is to translate and transliterate the given customer information to standard, professional English.
+
+Input Data:
+- Name: "${name}"
+- Phone: "${phone}"
+- Address: "${address}"
+
+Instructions:
+1. Transliterate or translate the Bengali name to standard English letters (e.g., "মোঃ রফিকুল ইসলাম" -> "Md. Rofiqul Islam", "সাকিব হাসান" -> "Sakib Hasan", "সজীব সিকদার" -> "Sajib Shikder").
+2. Translate/transliterate the address details to professional English (e.g., "গুলশান-২, রোড ৪, ঢাকা" -> "Gulshan-2, Road 4, Dhaka", "মিরপুর ২" -> "Mirpur 2").
+3. Convert all Bengali digits (০-৯) to standard English digits (0-9) in the phone number and remove any character except numbers.
+4. Response MUST strictly be a direct JSON object containing ONLY keys: "name", "phone", and "address". No explanations, no markdown block tickers.
+
+Example response structure:
+{
+  "name": "Translated Name",
+  "phone": "01712345678",
+  "address": "Translated Address"
+}`;
+
+      let resultObj = { name, phone, address };
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt
+        });
+        const text = response.text?.trim() || "";
+        const cleanJson = text.replace(/```json/i, "").replace(/```/g, "").trim();
+        resultObj = JSON.parse(cleanJson);
+      } catch (geminiErr) {
+        resultObj = {
+          name: fallbackTranslateText(name),
+          phone: cleanBanglaDigits(phone),
+          address: fallbackTranslateText(address)
+        };
+      }
+      res.json(resultObj);
+    } catch (error: any) {
+      res.json({
+        name: fallbackTranslateText(name),
+        phone: cleanBanglaDigits(phone),
+        address: fallbackTranslateText(address)
+      });
+    }
+  });
+
   // Serve static assets or use Vite dev server
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
