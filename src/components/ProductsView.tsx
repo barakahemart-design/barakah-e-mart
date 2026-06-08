@@ -506,7 +506,8 @@ export function ProductsView({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-12" id="products-bento-grid">
           {filtered.map((prod) => {
-            const isLowStock = prod.stock <= 5;
+            const isNegativeStock = prod.stock <= 0;
+            const isLowStock = prod.stock > 0 && prod.stock <= 5;
             const profitMargin = prod.sellPrice - prod.buyPrice;
 
             // Determine specific visual media categories configuration
@@ -532,9 +533,9 @@ export function ProductsView({
                 className="bg-[#1E1E24] hover:border-[#00E676]/25 border border-[#2D2D35] p-5 rounded-2xl shadow-lg transition-all duration-300 relative overflow-hidden group flex flex-col justify-between space-y-4"
                 id={`product-catalog-card-${prod.id}`}
               >
-                {/* Visual accent top edge for low stock or luxury items using solid Coral Red of #FF3333 */}
+                {/* Visual accent top edge for product catalog card stock categories */}
                 <div className={`absolute top-0 left-0 right-0 h-1 transition-colors ${
-                  isLowStock ? "bg-[#FF3333]" : "bg-[#00E676]/30 group-hover:bg-[#00E676]"
+                  isNegativeStock ? "bg-[#FF3333]" : isLowStock ? "bg-amber-500" : "bg-[#00E676]/30 group-hover:bg-[#00E676]"
                 }`}></div>
 
                 {/* HIGH-QUALITY MODERN ROUNDED IMAGE CONTAINER */}
@@ -608,13 +609,23 @@ export function ProductsView({
                 <div className="pt-2 border-t border-[#2D2D35]/40 flex items-center justify-between gap-2">
                   {/* Stock counter tag status with static high contrast Neon Coral Red */}
                   <div>
-                    {isLowStock ? (
+                    {isNegativeStock ? (
                       <div className="flex flex-col">
                         <span className="px-2.5 py-1 bg-[#FF3333] text-white border border-[#FF3333]/45 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow">
                           <AlertCircle className="w-2.5 h-2.5 text-white" />
-                          Minus Stock / Reorder Alert
+                          Minus Stock / Out of Stock
                         </span>
-                        <span className="text-[9px] font-mono text-rose-400 pr-1 pl-1 mt-1 block font-extrabold">
+                        <span className="text-[9px] font-mono text-rose-400 pr-1 pl-1 mt-1 block font-extrabold animate-pulse">
+                          {prod.stock < 0 ? `Deficit: ${prod.stock} ${prod.unit}` : `Out of Stock: ${prod.stock} ${prod.unit}`}
+                        </span>
+                      </div>
+                    ) : isLowStock ? (
+                      <div className="flex flex-col">
+                        <span className="px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow">
+                          <AlertCircle className="w-2.5 h-2.5 text-amber-400" />
+                          Low Stock / Reorder Alert
+                        </span>
+                        <span className="text-[9px] font-mono text-amber-400/80 pr-1 pl-1 mt-1 block font-extrabold">
                           Only {prod.stock} {prod.unit} left on rack
                         </span>
                       </div>

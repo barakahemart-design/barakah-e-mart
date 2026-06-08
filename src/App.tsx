@@ -221,6 +221,72 @@ export default function App() {
   const [selectedSupplierReceipt, setSelectedSupplierReceipt] = useState<Purchase | null>(null);
 
   const hasSyncedOnMountRef = useRef(false);
+  const hasHealedRef = useRef(false);
+
+  const runAutoRecovery = () => {
+    let updatedContacts = [...contacts];
+    let changed = false;
+    const recoveredNames: string[] = [];
+
+    // 1. Scan transactions and purchases for any contactId/supplierId that does not exist in contacts
+    const activeContactIds = new Set<string>();
+    transactions.forEach(t => {
+      if (t.contactId) activeContactIds.add(t.contactId);
+    });
+    purchases.forEach(p => {
+      if (p.supplierId) activeContactIds.add(p.supplierId);
+    });
+
+    // Check if we can find them in deletedItems
+    activeContactIds.forEach(id => {
+      const exists = updatedContacts.some(c => c.id === id);
+      if (!exists) {
+        const foundTrash = deletedItems.find(item => 
+          (item.type === "customer" || item.type === "supplier") && (item.originalId === id || item.data?.id === id)
+        );
+        if (foundTrash && foundTrash.data) {
+          updatedContacts.push(foundTrash.data);
+          recoveredNames.push(foundTrash.data.name);
+          changed = true;
+        }
+      }
+    });
+
+    // 2. Scan deletedItems for any other "customer" or "supplier" that might have been deleted
+    deletedItems.forEach(item => {
+      if ((item.type === "customer" || item.type === "supplier") && item.data) {
+        const exists = updatedContacts.some(c => c.id === item.originalId || c.id === item.data.id);
+        if (!exists) {
+          updatedContacts.push(item.data);
+          recoveredNames.push(item.data.name);
+          changed = true;
+        }
+      }
+    });
+
+    if (changed) {
+      setContacts(updatedContacts);
+      const recoveredIds = new Set(updatedContacts.map(c => c.id));
+      setDeletedItems(prev => prev.filter(item => 
+        !((item.type === "customer" || item.type === "supplier") && (recoveredIds.has(item.originalId) || recoveredIds.has(item.data?.id)))
+      ));
+      
+      const successMsg = recoveredNames.length > 0 
+        ? `✨ Successfully recovered ${recoveredNames.length} profile(s) (${recoveredNames.slice(0, 3).join(", ")}${recoveredNames.length > 3 ? "..." : ""}) back to the CRM directory!`
+        : "✨ All parent directories and customer profiles completely restored!";
+      triggerNotification(successMsg, "success");
+    } else {
+      triggerNotification("🔍 No profiles found for recovery. Your database is fully synchronized!", "info");
+    }
+  };
+
+  // Run auto recovery once on database final load
+  useEffect(() => {
+    if (initialLoadedRef.current && !hasHealedRef.current && (contacts.length > 0 || transactions.length > 0)) {
+      hasHealedRef.current = true;
+      runAutoRecovery();
+    }
+  }, [initialLoadedRef.current, contacts.length, transactions.length]);
 
   // Load Offline initial database state and sync latest from cloud safely
   useEffect(() => {
@@ -395,7 +461,7 @@ export default function App() {
         setSyncStatus("reconciling");
 
         // Restore to localStorage
-        restoreLocalKeys(cloudData, false);
+        restoreLocalKeys(cloudData, false, activeUser?.uid);
 
         // Load the new values from localStorage
         const refreshedDB = loadDB(activeUser?.uid);
@@ -542,7 +608,7 @@ export default function App() {
 
   // Handler for importing local JSON data upload/backup file
   const handleDataImport = (data: any) => {
-    restoreLocalKeys(data, true);
+    restoreLocalKeys(data, true, activeUser?.uid);
     // Reload states from newly restored localStorage DB
     const dbData = loadDB(activeUser?.uid);
     setProducts(dbData.products);
@@ -1921,9 +1987,9 @@ export default function App() {
       setCName(result.name);
       setCPhone(result.phone);
       setCAddress(result.address);
-      triggerNotification("✨ সফলভাবে বাংলায় লিখিত কাস্টমার কার্ড English-এ নির্ভুল অনুবাদ করা হয়েছে!", "success");
+      triggerNotification("✨ Customer details translated to English successfully!", "success");
     } else {
-      triggerNotification("অনুবাদ সম্পন্ন করা যায়নি। অনুগ্রহ করে ম্যানুয়ালি চেক করুন।", "error");
+      triggerNotification("Translation failed. Please check and translate manually.", "error");
     }
   };
 
@@ -1936,7 +2002,7 @@ export default function App() {
     
     // Enforce Bangladeshi mobile phone number: must be exactly 11 digits
     if (cleanPhone.length !== 11) {
-      triggerNotification("⚠️ বাংলাদেশের মোবাইল ফোন নাম্বার অবশ্যই ১১ ডিজিটের হতে হবে! আপনারটি " + cleanPhone.length + " ডিজিট।", "error");
+      triggerNotification("⚠️ Bangladeshi mobile phone numbers must be exactly 11 digits! Yours is " + cleanPhone.length + " digits.", "error");
       return;
     }
 
@@ -1946,7 +2012,7 @@ export default function App() {
 
     // If there is any Bengali character input in Name or Address, automatically translate it perfectly using Gemini!
     if (hasBengaliCharacters(finalName) || hasBengaliCharacters(finalAddress)) {
-      triggerNotification("🔄 বাংলা লেখা সনাক্ত হয়েছে! নিখুঁত ও প্রপার ইংরেজি অনুবাদ করা হচ্ছে...", "info");
+      triggerNotification("🔄 Bengali input detected! Automatically transliterating to English...", "info");
       const translated = await translateContactFields(finalName, finalPhone, finalAddress);
       if (translated) {
         finalName = translated.name;
@@ -1999,34 +2065,33 @@ export default function App() {
   const handleCopyReceipt = (pur: Purchase) => {
     const due = pur.dueAmount ?? 0;
     const isFullyPaid = due <= 0;
-    const statusStr = isFullyPaid ? "[পরিশোধিত / FULLY SETTLED]" : "[আংশিক বকেয়া / OUTSTANDING DUE]";
+    const statusStr = isFullyPaid ? "[FULLY SETTLED]" : "[OUTSTANDING DUE]";
     
     const text = `
 ------------------------------------------
    ${businessInfo.name}
-   সাপ্লায়ার বকেয়া পরিশোধ রসিদ
    Supplier Due Payment Receipt
 ------------------------------------------
-তারিখ / Date: ${format(new Date(pur.date), "dd MMMM, yyyy")}
-মেমো নং / Voucher No: ${pur.invoiceNo || "N/A"}
-সাপ্লায়ার / Supplier: ${pur.supplierName}
+Date: ${format(new Date(pur.date), "dd MMMM, yyyy")}
+Voucher No: ${pur.invoiceNo || "N/A"}
+Supplier: ${pur.supplierName}
 
-পণ্য / Items: ${pur.productName}
-পরিমাণ / Qty: ${pur.quantity} pcs
-ক্রয়মূল্য / Buy Rate: ${businessInfo.currencySymbol} ${(pur.buyPrice || 0).toLocaleString()} /unit
-মোট ক্রয়ের পরিমাণ / Total: ${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}
+Items: ${pur.productName}
+Qty: ${pur.quantity} pcs
+Buy Rate: ${businessInfo.currencySymbol} ${(pur.buyPrice || 0).toLocaleString()} /unit
+Total: ${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}
 
 ------------------------------------------
-লেনদেন সারাংশ (Ledger Summary):
-মোট বিল / Net Total: ${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}
-পরিশোধিত / Cash Paid: ${businessInfo.currencySymbol} ${(pur.cashPaid || 0).toLocaleString()}
-বকেয়া / Outstanding Due: ${businessInfo.currencySymbol} ${due.toLocaleString()} 
-অবস্থা / Status : ${statusStr}
+Ledger Summary:
+Net Total: ${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}
+Cash Paid: ${businessInfo.currencySymbol} ${(pur.cashPaid || 0).toLocaleString()}
+Outstanding Due: ${businessInfo.currencySymbol} ${due.toLocaleString()} 
+Status: ${statusStr}
 
-ধন্যবাদান্তে,
+With Best Regards,
 ${businessInfo.name}
-ফোন: ${businessInfo.phone || "N/A"}
-ঠিকানা: ${businessInfo.address || "N/A"}
+Phone: ${businessInfo.phone || "N/A"}
+Address: ${businessInfo.address || "N/A"}
 ------------------------------------------
 `.trim();
 
@@ -2037,25 +2102,25 @@ ${businessInfo.name}
   const handleWhatsAppShare = (pur: Purchase) => {
     const due = pur.dueAmount ?? 0;
     const isFullyPaid = due <= 0;
-    const statusStr = isFullyPaid ? "✅ পরিশোধিত / FULLY SETTLED" : "⚠️ বকেয়া / OUTSTANDING DUE";
+    const statusStr = isFullyPaid ? "✅ FULLY SETTLED" : "⚠️ OUTSTANDING DUE";
     
     const text = `*${businessInfo.name}*
-*সাপ্লায়ার বকেয়া পরিশোধ রসিদ / Supplier Receipt*
+*Supplier Due Payment Receipt*
 ----------------------------------------
-*তারিখ/Date:* ${format(new Date(pur.date), "dd MMMM, yyyy")}
-*মেমো নং/Voucher:* ${pur.invoiceNo || "N/A"}
-*সাপ্লায়ার/Supplier:* ${pur.supplierName}
+*Date:* ${format(new Date(pur.date), "dd MMMM, yyyy")}
+*Voucher No:* ${pur.invoiceNo || "N/A"}
+*Supplier:* ${pur.supplierName}
 
-*আইটেম/Item:* ${pur.productName}
-*পরিমাণ/Qty:* ${pur.quantity} pcs @ ${businessInfo.currencySymbol}${pur.buyPrice.toLocaleString()}
-*মোট মূল্য/Total Amount:* ${businessInfo.currencySymbol}${pur.totalAmount.toLocaleString()}
+*Item:* ${pur.productName}
+*Qty:* ${pur.quantity} pcs @ ${businessInfo.currencySymbol}${pur.buyPrice.toLocaleString()}
+*Total Amount:* ${businessInfo.currencySymbol}${pur.totalAmount.toLocaleString()}
 
 ----------------------------------------
-📊 *লেনদেন বিবরণী (Ledger):*
-*মোট বিল/Net Total:* ${businessInfo.currencySymbol}${pur.totalAmount.toLocaleString()}
-*পরিশোধিত/Cash Paid:* ${businessInfo.currencySymbol}${(pur.cashPaid || 0).toLocaleString()}
-*বকেয়া/Due Balance:* ${businessInfo.currencySymbol}${due.toLocaleString()}
-*অবস্থা/Status:* ${statusStr}
+📊 *Ledger Details:*
+*Net Total:* ${businessInfo.currencySymbol}${pur.totalAmount.toLocaleString()}
+*Cash Paid:* ${businessInfo.currencySymbol}${(pur.cashPaid || 0).toLocaleString()}
+*Due Balance:* ${businessInfo.currencySymbol}${due.toLocaleString()}
+*Status:* ${statusStr}
 
 Thank you!
 _${businessInfo.name}_`;
@@ -2071,7 +2136,7 @@ _${businessInfo.name}_`;
   const handlePrintReceipt = (pur: Purchase) => {
     const due = pur.dueAmount ?? 0;
     const isFullyPaid = due <= 0;
-    const statusStr = isFullyPaid ? "FULLY SETTLED (পরিশোধিত)" : "OUTSTANDING DUE (বকেয়া)";
+    const statusStr = isFullyPaid ? "FULLY SETTLED" : "OUTSTANDING DUE";
     
     const iframe = document.createElement('iframe');
     iframe.style.position = 'absolute';
@@ -2159,47 +2224,47 @@ _${businessInfo.name}_`;
             <div>Phone: ${businessInfo.phone || "N/A"}</div>
             <div>Address: ${businessInfo.address || "N/A"}</div>
             <div style="font-weight: bold; margin-top: 10px; font-size: 14px;">SUPPLIER TRANSACTION RECEIPT</div>
-            <div style="font-size: 11px;">সরবরাহকারী পেমেন্ট ও বকেয়া রসিদ</div>
+            <div style="font-size: 11px;">Payment & Ledger Balance Receipt</div>
           </div>
           
           <div class="meta-row">
-            <span>Date / তারিখ:</span>
+            <span>Date:</span>
             <span>${format(new Date(pur.date), "dd-MM-yyyy HH:mm")}</span>
           </div>
           <div class="meta-row">
-            <span>Voucher / মেমো নং:</span>
+            <span>Voucher No:</span>
             <span>${pur.invoiceNo || "N/A"}</span>
           </div>
           <div class="meta-row">
-            <span>Supplier / সরবরাহকারী:</span>
+            <span>Supplier:</span>
             <span><strong>${pur.supplierName}</strong></span>
           </div>
           
           <div class="divider"></div>
           
-          <div class="product-title">Item Details / বিবরণ:</div>
+          <div class="product-title">Description / Item Details:</div>
           <div class="meta-row font-bold">
             <span>${pur.productName}</span>
             <span>${pur.quantity} pcs</span>
           </div>
           <div class="meta-row" style="font-size: 12px; color: #555;">
-            <span>Rate / ক্রয়মূল্য:</span>
+            <span>Rate / Cost Price:</span>
             <span>${businessInfo.currencySymbol} ${(pur.buyPrice || 0).toLocaleString()} /unit</span>
           </div>
           
           <div class="divider"></div>
           
           <div class="ledger-row">
-            <span>Net Total Amount / মোট বিল:</span>
+            <span>Net Bill Total:</span>
             <span>${businessInfo.currencySymbol} ${pur.totalAmount.toLocaleString()}</span>
           </div>
           <div class="ledger-row">
-            <span>Cash Paid / মোট পরিশোধ:</span>
+            <span>Cash Paid:</span>
             <span>${businessInfo.currencySymbol} ${(pur.cashPaid || 0).toLocaleString()}</span>
           </div>
           
           <div class="ledger-row ledger-row-bold">
-            <span>Outstanding Due / বকেয়া:</span>
+            <span>Outstanding Due:</span>
             <span>${businessInfo.currencySymbol} ${due.toLocaleString()}</span>
           </div>
           
@@ -4101,7 +4166,7 @@ _${businessInfo.name}_`;
                                         className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md duration-205 flex items-center gap-1 shrink-0"
                                       >
                                         <Undo2 className="w-3 h-3" />
-                                        <span>ফেরত (Return)</span>
+                                        <span>Return</span>
                                       </button>
                                     )}
                                   </div>
@@ -4311,7 +4376,7 @@ _${businessInfo.name}_`;
                                           className="px-2.5 py-1 bg-rose-650 hover:bg-rose-500 text-white font-bold text-[9px] rounded-lg transition-all hover:scale-105 cursor-pointer shadow-md flex items-center gap-1 justify-center w-full"
                                         >
                                           <Undo2 className="w-3 h-3" />
-                                          <span>ফেরত (Return)</span>
+                                          <span>Return</span>
                                         </button>
                                       )}
                                     </div>
@@ -4905,7 +4970,7 @@ _${businessInfo.name}_`;
                                             title="Return items back to supplier"
                                           >
                                             <Undo2 className="w-3.5 h-3.5" />
-                                            <span>ফেরত (Return)</span>
+                                            <span>Return</span>
                                           </button>
                                         )}
                                       </div>
@@ -4943,7 +5008,7 @@ _${businessInfo.name}_`;
                           </div>
                           <div>
                             <h3 className="font-extrabold text-white text-sm tracking-tight">Supplier Transaction Voucher</h3>
-                            <p className="text-[10px] text-slate-400 font-medium">সাপ্লায়ার পেমেন্ট ও বকেয়া রসিদ (মেমো)</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Supplier Due Payment Receipt (Voucher Memo)</p>
                           </div>
                         </div>
                         <button
@@ -4969,12 +5034,12 @@ _${businessInfo.name}_`;
                             {isFullyPaid ? (
                               <span className="inline-flex flex-col items-center justify-center bg-emerald-500/10 border border-emerald-500/40 px-4 py-2 rounded-2xl text-[11px] font-extrabold text-emerald-400 tracking-wider">
                                 <span className="text-base">✔</span> FULLY SETTLED
-                                <span className="text-[9px] font-normal text-emerald-400/80">সম্পূর্ণ পরিশোধিত</span>
+                                <span className="text-[9px] font-normal text-emerald-400/80">FULLY PAID</span>
                               </span>
                             ) : (
                               <span className="inline-flex flex-col items-center justify-center bg-amber-500/10 border border-amber-500/40 px-4 py-2 rounded-2xl text-[11px] font-extrabold text-amber-400 tracking-wider">
                                 <span>⚠️</span> ACTIVE CREDIT
-                                <span className="text-[9px] font-normal text-amber-400/80">বকেয়া রয়েছে</span>
+                                <span className="text-[9px] font-normal text-amber-400/80">HAS OUTSTANDING DUE</span>
                               </span>
                             )}
                           </div>
@@ -4985,26 +5050,26 @@ _${businessInfo.name}_`;
                         {/* Voucher Metadata Grid */}
                         <div className="grid grid-cols-2 gap-4 text-xs bg-slate-950/40 p-4 border border-slate-800/80 rounded-2xl" id="receipt-meta-grid">
                           <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Voucher No / মেমো নং</span>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Voucher No</span>
                             <strong className="text-white text-sm font-mono">{pur.invoiceNo || "N/A"}</strong>
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Date / তারিখ</span>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Date</span>
                             <strong className="text-white text-sm">{format(new Date(pur.date), "dd MMMM, yyyy")}</strong>
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Name / সরবরাহকারী</span>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Name</span>
                             <strong className="text-amber-400 text-sm font-semibold">{pur.supplierName}</strong>
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Phone / ফোন নম্বর</span>
+                            <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Phone</span>
                             <strong className="text-slate-300 text-sm font-mono">{supContact?.phone || "N/A"}</strong>
                           </div>
                         </div>
 
                         {/* Item details */}
                         <div>
-                          <h5 className="text-[11px] uppercase font-mono font-bold text-slate-400 tracking-wider mb-2">Purchase & Product Breakdown / পণ্যের বিবরণ</h5>
+                          <h5 className="text-[11px] uppercase font-mono font-bold text-slate-400 tracking-wider mb-2">Purchase & Product Breakdown</h5>
                           <div className="bg-[#050912] border border-slate-800/50 rounded-2xl overflow-hidden">
                             <table className="w-full text-left text-xs">
                               <thead>
@@ -5030,17 +5095,17 @@ _${businessInfo.name}_`;
                         {/* Outstanding Balance Ledger Summary */}
                         <div className="bg-[#050912] border border-slate-800 rounded-2xl p-4 space-y-2.5 font-sans" id="receipt-financials-ledger">
                           <div className="flex justify-between items-center text-xs text-slate-400">
-                            <span>Original Purchase Total / মোট বিল:</span>
+                            <span>Original Purchase Total:</span>
                             <span className="font-mono text-white text-sm font-semibold">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</span>
                           </div>
                           <div className="flex justify-between items-center text-xs text-slate-400">
-                            <span>Disbursed Paid / এ পর্যন্ত পরিশোধিত:</span>
+                            <span>Total Disbursed Paid:</span>
                             <span className="font-mono text-emerald-400 text-sm font-black">{businessInfo.currencySymbol} {(pur.cashPaid || 0).toLocaleString()}</span>
                           </div>
                           
                           <div className="border-t border-slate-800/80 pt-2.5 flex justify-between items-center">
                             <div className="space-y-0.5">
-                              <span className="font-extrabold text-xs text-white block">Outstanding Due / বর্তমান বকেয়া:</span>
+                              <span className="font-extrabold text-xs text-white block">Outstanding Due:</span>
                               <span className="text-[9px] text-slate-400 block font-normal">Remaining outstanding due balance</span>
                             </div>
                             <span className={`font-mono text-lg font-black ${due <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -5050,7 +5115,7 @@ _${businessInfo.name}_`;
                         </div>
 
                         <p className="text-[11px] text-slate-500 text-center font-normal italic">
-                          রসিদটি আপনার রেকর্ড হিসেবে সংরক্ষণ অথবা সাপ্লায়ারকে শেয়ার করতে নিচের বাটনগুলো ব্যবহার করুন।
+                          Use the buttons below to print or share this receipt with the supplier for your business record.
                         </p>
                       </div>
 
@@ -5881,7 +5946,7 @@ _${businessInfo.name}_`;
                       />
                       {cPhone.length > 0 && cPhone.length !== 11 && (
                         <p className="text-[10px] text-rose-500 font-bold pl-1 mt-0.5 min-h-[14px]">
-                          ⚠️ বাংলাদেশের মোবাইল নাম্বার অবশ্যই ১১ ডিজিট হতে হবে! (বর্তমানে {cPhone.length} ডিজিট)
+                          ⚠️ Bangladeshi mobile numbers must be exactly 11 digits! (Current: {cPhone.length} digits)
                         </p>
                       )}
                     </div>
@@ -5903,9 +5968,9 @@ _${businessInfo.name}_`;
                         <div className="flex items-start gap-2">
                           <Languages className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                           <div>
-                            <p className="font-extrabold text-amber-400 tracking-wide">বাংলা লেখা সনাক্ত করা হয়েছে!</p>
+                            <p className="font-extrabold text-amber-400 tracking-wide">Bengali Input Detected!</p>
                             <p className="text-[10px] text-amber-300/90 leading-relaxed font-sans">
-                              নাম বা ঠিকানায় বাংলা ইনপুট করা হয়েছে। ব্যবসার হিসাব-নিকাশ পরিষ্কার রাখতে Gemini AI ব্যবহার করে নিমিষেই সঠিক এবং নির্ভুল ইংরেজি রূপান্তর (Transliteration) করে নিন।
+                              Name or Address is written in Bengali. To maintain clean accounting, click the button below to translate them auto-magically to English using Gemini AI.
                             </p>
                           </div>
                         </div>
@@ -5918,12 +5983,12 @@ _${businessInfo.name}_`;
                           {isTranslatingContact ? (
                             <>
                               <span className="w-3 h-3 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                              <span>অনুবাদ হচ্ছে (AI Translating)...</span>
+                              <span>Translating...</span>
                             </>
                           ) : (
                             <>
                               <Sparkles className="w-3 h-3 text-slate-950" />
-                              <span>ইংরেজিতে রূপান্তর করুন (Translate to English)</span>
+                              <span>Translate to English</span>
                             </>
                           )}
                         </button>
@@ -6024,6 +6089,37 @@ _${businessInfo.name}_`;
                       </button>
                     </div>
                   </div>
+
+                  {/* Highly polished active Self-Healing & Data Recovery banner */}
+                  {(deletedItems.some(item => item.type === "customer" || item.type === "supplier") || 
+                    transactions.some(t => t.contactId && !contacts.some(c => c.id === t.contactId)) ||
+                    purchases.some(p => p.supplierId && !contacts.some(c => c.id === p.supplierId))) && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4.5 space-y-3.5 animate-fade-in" id="crm-recovery-banner">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-emerald-500/20 text-[#00E676] rounded-xl border border-emerald-500/30 shrink-0 mt-0.5">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                            Customer & Supplier Data Recovery Center (Self-Healing Active)
+                          </h4>
+                          <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-none">
+                            We detected some customer/supplier profiles were deleted from the CRM directory, but their entries remain secure in the transaction ledger and Trash. Click the button below to restore them instantly.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 pl-1 md:pl-12 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={runAutoRecovery}
+                          className="px-4 py-2.5 bg-[#00E676] hover:bg-[#00D065] text-slate-950 font-extrabold text-[10px] uppercase tracking-wider rounded-xl cursor-pointer active:scale-95 transition-all shadow-lg shadow-emerald-500/15 flex items-center gap-1.5 font-sans"
+                        >
+                          <Undo2 className="w-3.5 h-3.5 text-slate-950" />
+                          Restore Lost Partner Profiles
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Responsive grid of Customer Cards */}
                   {filteredContacts.length === 0 ? (
