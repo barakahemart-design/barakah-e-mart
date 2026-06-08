@@ -98,7 +98,7 @@ import {
   restoreLocalKeys,
   deleteCloudDocument
 } from "./lib/supabase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "./lib/firebase";
 import { 
   generateInvoicePDF,
@@ -223,12 +223,12 @@ export default function App() {
   const hasSyncedOnMountRef = useRef(false);
   const hasHealedRef = useRef(false);
 
-  const runAutoRecovery = () => {
+  const runAutoRecovery = async () => {
     let updatedContacts = [...contacts];
     let changed = false;
     const recoveredNames: string[] = [];
 
-    // 1. Scan transactions and purchases for any contactId/supplierId that does not exist in contacts
+    // --- PHASE 1: Scan transactions and purchases for missing contact profiles ---
     const activeContactIds = new Set<string>();
     transactions.forEach(t => {
       if (t.contactId) activeContactIds.add(t.contactId);
@@ -237,7 +237,7 @@ export default function App() {
       if (p.supplierId) activeContactIds.add(p.supplierId);
     });
 
-    // Check if we can find them in deletedItems
+    // 1. Try to find missing contacts in local `deletedItems` (soft-deleted trash) first
     activeContactIds.forEach(id => {
       const exists = updatedContacts.some(c => c.id === id);
       if (!exists) {
@@ -252,7 +252,78 @@ export default function App() {
       }
     });
 
-    // 2. Scan deletedItems for any other "customer" or "supplier" that might have been deleted
+    // 2. Try to find missing contacts directly in Firestore "customers" collection (Cloud Recovery)
+    if (activeUser && !activeUser.isGuest) {
+      try {
+        const activeUserId = activeUser.uid;
+        const q = query(collection(db, "customers"), where("user_id", "==", activeUserId));
+        const querySnap = await getDocs(q);
+        
+        if (!querySnap.empty) {
+          querySnap.docs.forEach(docSnap => {
+            const c = docSnap.data();
+            const exists = updatedContacts.some(existing => existing.id === c.id);
+            if (!exists && activeContactIds.has(c.id)) {
+              const restoredContact: Contact = {
+                id: c.id,
+                name: c.name,
+                phone: c.phone || "",
+                address: c.address || "",
+                type: (c.type as "customer" | "supplier") || "customer",
+                created_at: c.updated_at || new Date().toISOString()
+              };
+              updatedContacts.push(restoredContact);
+              recoveredNames.push(restoredContact.name);
+              changed = true;
+            }
+          });
+        }
+      } catch (cloudErr) {
+        console.warn("Could not query cloud customers directly for recovery:", cloudErr);
+      }
+    }
+
+    // 3. Fallback: Synthesize supplier contacts using supplierName embedded in `purchases`
+    purchases.forEach(p => {
+      if (p.supplierId) {
+        const exists = updatedContacts.some(c => c.id === p.supplierId);
+        if (!exists) {
+          const synthesizedContact: Contact = {
+            id: p.supplierId,
+            name: p.supplierName || "Unknown Supplier",
+            phone: "",
+            address: "",
+            type: "supplier",
+            created_at: p.date || new Date().toISOString()
+          };
+          updatedContacts.push(synthesizedContact);
+          recoveredNames.push(synthesizedContact.name);
+          changed = true;
+        }
+      }
+    });
+
+    // 4. Fallback: Synthesize customer contacts using placeholder if they are still completely missing
+    transactions.forEach(t => {
+      if (t.contactId) {
+        const exists = updatedContacts.some(c => c.id === t.contactId);
+        if (!exists) {
+          const synthesizedContact: Contact = {
+            id: t.contactId,
+            name: `Recovered Customer (${t.invoiceNo})`,
+            phone: "",
+            address: "Auto-Recovered from transaction ledger",
+            type: "customer",
+            created_at: t.date || new Date().toISOString()
+          };
+          updatedContacts.push(synthesizedContact);
+          recoveredNames.push(synthesizedContact.name);
+          changed = true;
+        }
+      }
+    });
+
+    // --- PHASE 2: Scan remaining deletedItems for any other "customer" or "supplier" that might have been deleted ---
     deletedItems.forEach(item => {
       if ((item.type === "customer" || item.type === "supplier") && item.data) {
         const exists = updatedContacts.some(c => c.id === item.originalId || c.id === item.data.id);

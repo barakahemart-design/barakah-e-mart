@@ -70,16 +70,25 @@ class SupabaseService {
     client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
     
     try {
+      await _loadSession();
       final uri = Uri.parse('$_baseUrl$path');
       HttpClientRequest request;
       if (method == 'POST') {
         request = await client.postUrl(uri);
         request.headers.set('content-type', 'application/json; charset=utf-8');
+        if (_cachedSession != null) {
+          request.headers.set('x-user-uid', _cachedSession!['id'] ?? '');
+          request.headers.set('x-user-email', _cachedSession!['email'] ?? '');
+        }
         if (body != null) {
           request.add(utf8.encode(json.encode(body)));
         }
       } else {
         request = await client.getUrl(uri);
+        if (_cachedSession != null) {
+          request.headers.set('x-user-uid', _cachedSession!['id'] ?? '');
+          request.headers.set('x-user-email', _cachedSession!['email'] ?? '');
+        }
       }
       
       final response = await request.close();
@@ -141,6 +150,9 @@ class SupabaseService {
     
     final String userId = res['user']['id'] ?? res['user']['uid'] ?? 'gen_${DateTime.now().millisecondsSinceEpoch}';
     
+    // Save session FIRST so subsequent DB requests are fully authorized
+    await _saveSession(userId, cleanEmail);
+    
     final profile = {
       'id': userId,
       'email': cleanEmail,
@@ -152,13 +164,18 @@ class SupabaseService {
       'show_logo_in_invoice': true,
     };
     
-    await _makeRequest('POST', '/api/db/upsert', body: {
-      'table': 'profiles',
-      'id': userId,
-      'data': profile,
-    });
+    try {
+      await _makeRequest('POST', '/api/db/upsert', body: {
+        'table': 'profiles',
+        'id': userId,
+        'data': profile,
+      });
+    } catch (e) {
+      // In case profile creation fails, clear the session as cleanup
+      await _clearSession();
+      rethrow;
+    }
     
-    await _saveSession(userId, cleanEmail);
     return UserProfile.fromJson(profile);
   }
 
@@ -178,6 +195,9 @@ class SupabaseService {
     }
     
     final String userId = res['user']['id'] ?? res['user']['uid'] ?? '';
+    
+    // Save session FIRST so subsequent DB requests are fully authorized
+    await _saveSession(userId, cleanEmail);
     
     final profilesList = await _makeRequest('GET', '/api/db/fetch?table=profiles&owner_email=$userId');
     
@@ -202,7 +222,6 @@ class SupabaseService {
       });
     }
     
-    await _saveSession(userId, cleanEmail);
     return UserProfile.fromJson(rawProfile);
   }
 
