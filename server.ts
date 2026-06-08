@@ -222,6 +222,235 @@ async function startServer() {
     }
   });
 
+  // Helper to dynamically resolve all user/profile IDs associated with user's verified identity
+  async function resolveAllUserIdsForEmail(email: string, defaultUid: string): Promise<string[]> {
+    const ids = new Set<string>();
+    ids.add(defaultUid);
+
+    const cleanEmail = (email || "").trim().toLowerCase();
+    if (cleanEmail) {
+      // 1. Get profile document IDs (the primary Firebase Auth UIDs)
+      try {
+        const profilesQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
+        const profilesSnap = await getDocs(profilesQ);
+        profilesSnap.forEach(docSnap => {
+          ids.add(docSnap.id);
+          const data = docSnap.data();
+          if (data.id) ids.add(String(data.id));
+          if (data.user_id) ids.add(String(data.user_id));
+          if (data.userId) ids.add(String(data.userId));
+          if (data.owner_id) ids.add(String(data.owner_id));
+        });
+      } catch (err) {
+        console.warn("resolveAllUserIdsForEmail profile fetch error:", err);
+      }
+
+      // 2. Get passcode_syncs document IDs (the Passcode / PIN Vault Sync IDs)
+      try {
+        const syncsQ = query(collection(db, "passcode_syncs"), where("linked_email", "==", cleanEmail));
+        const syncsSnap = await getDocs(syncsQ);
+        syncsSnap.forEach(docSnap => {
+          ids.add(docSnap.id);
+          const data = docSnap.data();
+          if (data.id) ids.add(String(data.id));
+          if (data.user_id) ids.add(String(data.user_id));
+          if (data.userId) ids.add(String(data.userId));
+          if (data.owner_id) ids.add(String(data.owner_id));
+        });
+      } catch (err) {
+        console.warn("resolveAllUserIdsForEmail sync fetch error:", err);
+      }
+    }
+
+    return Array.from(ids);
+  }
+
+  // Helper to sync REST updates from the phone directly back to the passcode_syncs backing document on Firestore
+  async function syncCollectionAndPasscodeVault(
+    verified: { uid: string; email: string },
+    table: string,
+    id: string,
+    data: any,
+    isDelete: boolean = false
+  ) {
+    const email = (verified.email || "").trim().toLowerCase();
+    if (!email) return;
+
+    try {
+      // Find all passcode_syncs documents linked to this email
+      const syncsQ = query(collection(db, "passcode_syncs"), where("linked_email", "==", email));
+      const syncsSnap = await getDocs(syncsQ);
+
+      if (syncsSnap.empty) {
+        console.log(`[Sync Engine server] No passcode_syncs document found for ${email}. No backup to propagate.`);
+        return;
+      }
+
+      const promises = syncsSnap.docs.map(async (docSnap) => {
+        const syncId = docSnap.id;
+        const syncData = docSnap.data();
+
+        let arrayFieldName = "";
+        const tableStr = String(table);
+        if (tableStr === "products") arrayFieldName = "products";
+        else if (tableStr === "customers" || tableStr === "contacts") arrayFieldName = "contacts";
+        else if (tableStr === "expenses") arrayFieldName = "expenses";
+        else if (tableStr === "transactions") arrayFieldName = "transactions";
+        else if (tableStr === "purchases") arrayFieldName = "purchases";
+
+        const updatedFields: any = {
+          updated_at: new Date().toISOString()
+        };
+
+        if (arrayFieldName) {
+          let currentArray = syncData[arrayFieldName] || [];
+          if (!Array.isArray(currentArray)) currentArray = [];
+
+          if (isDelete) {
+            currentArray = currentArray.filter((item: any) => item && item.id !== id);
+          } else {
+            let itemObj: any = { ...data, id };
+
+            if (tableStr === "products") {
+              itemObj = {
+                id: data.id || id,
+                name: data.name,
+                sku: data.sku || "",
+                stock: Number(data.stock) || 0,
+                buyPrice: Number(data.buy_price) || 0,
+                sellPrice: Number(data.sell_price) || 0,
+                category: data.category || "Electronics",
+                unit: data.unit || "piece",
+                imageUrl: data.image_url || undefined
+              };
+            } else if (tableStr === "customers" || tableStr === "contacts") {
+              itemObj = {
+                id: data.id || id,
+                name: data.name,
+                phone: data.phone || "",
+                address: data.address || "",
+                type: data.type || "customer",
+                created_at: data.created_at || data.updated_at || new Date().toISOString()
+              };
+            } else if (tableStr === "expenses") {
+              itemObj = {
+                id: data.id || id,
+                category: data.category || "Others",
+                amount: Number(data.amount) || 0,
+                description: data.description || "",
+                date: data.created_at || data.date || new Date().toISOString()
+              };
+            } else if (tableStr === "purchases") {
+              itemObj = {
+                id: data.id || id,
+                productId: data.product_id || data.productId,
+                productName: data.product_name || "Purchase Item",
+                supplierId: data.supplier_id || "",
+                supplierName: data.supplier_name || "Main Depot",
+                quantity: Number(data.quantity) || 0,
+                buyPrice: Number(data.buy_price) || 0,
+                totalAmount: Number(data.quantity * data.buy_price) || 0,
+                date: data.created_at || data.date || new Date().toISOString()
+              };
+            } else if (tableStr === "transactions") {
+              let mappedItems: any[] = [];
+              try {
+                const itemsSnap = await getDocs(query(collection(db, "transaction_items"), where("transaction_id", "==", id)));
+                itemsSnap.forEach(itemDoc => {
+                  const item = itemDoc.data();
+                  mappedItems.push({
+                    id: item.id || itemDoc.id,
+                    name: item.product_name || "Product Item",
+                    quantity: Number(item.quantity) || 0,
+                    price: Number(item.sell_price) || 0,
+                    total: Number(item.quantity * item.sell_price) || 0,
+                    productId: item.product_id || undefined,
+                    buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+                  });
+                });
+              } catch (itmErr) {
+                console.warn("Error fetching transaction items during sync:", itmErr);
+              }
+
+              if (mappedItems.length === 0 && data.items) {
+                mappedItems = data.items;
+              }
+
+              itemObj = {
+                id: data.id || id,
+                invoiceNo: data.invoice_no || data.invoiceNo,
+                date: data.created_at || data.date || new Date().toISOString(),
+                items: mappedItems,
+                subtotal: Number(data.total_amount || data.subtotal) || 0,
+                tax: Number(data.tax) || 0,
+                discount: Number(data.discount) || 0,
+                total: Number(data.total_amount || data.total) || 0,
+                paymentMethod: data.payment_method || data.paymentMethod || "Cash",
+                status: data.paid_amount >= data.total_amount ? "paid" : (data.paid_amount > 0 ? "partial" : "due"),
+                paidAmount: Number(data.paid_amount || data.paidAmount) || 0,
+                dueBalance: Math.max(0, Number(data.total_amount || data.total) - Number(data.paid_amount || data.paidAmount)) || 0,
+                contactId: data.customer_id || data.contactId || undefined,
+                customerSignature: data.signature_svg || data.customerSignature || undefined
+              };
+            }
+
+            const existingIndex = currentArray.findIndex((item: any) => item && item.id === id);
+            if (existingIndex >= 0) {
+              currentArray[existingIndex] = { ...currentArray[existingIndex], ...itemObj };
+            } else {
+              currentArray.push(itemObj);
+            }
+          }
+
+          updatedFields[arrayFieldName] = currentArray;
+
+          if (tableStr === "purchases") {
+            const bizData = syncData.businessInfo || syncData.business_info || {};
+            const currentBizPurchases = bizData.purchases || [];
+            let updatedBizPurchases = Array.isArray(currentBizPurchases) ? [...currentBizPurchases] : [];
+            if (isDelete) {
+              updatedBizPurchases = updatedBizPurchases.filter((item: any) => item && item.id !== id);
+            } else {
+              const itemObj = {
+                id: data.id || id,
+                productId: data.product_id || data.productId,
+                productName: data.product_name || "Purchase Item",
+                supplierId: data.supplier_id || "",
+                supplierName: data.supplier_name || "Main Depot",
+                quantity: Number(data.quantity) || 0,
+                buyPrice: Number(data.buy_price) || 0,
+                totalAmount: Number(data.quantity * data.buy_price) || 0,
+                date: data.created_at || data.date || new Date().toISOString()
+              };
+              const existingIdx = updatedBizPurchases.findIndex((item: any) => item && item.id === id);
+              if (existingIdx >= 0) {
+                updatedBizPurchases[existingIdx] = { ...updatedBizPurchases[existingIdx], ...itemObj };
+              } else {
+                updatedBizPurchases.push(itemObj);
+              }
+            }
+            updatedFields.businessInfo = {
+              ...bizData,
+              purchases: updatedBizPurchases
+            };
+            updatedFields.business_info = updatedFields.businessInfo;
+          }
+        }
+
+        await setDoc(doc(db, "passcode_syncs", syncId), {
+          ...syncData,
+          ...updatedFields
+        }, { merge: true });
+
+        console.log(`[Sync Engine server] Successfully propagated ${isDelete ? 'delete' : 'upsert'} of table=${tableStr}, id=${id} to passcode_syncs/${syncId}`);
+      });
+
+      await Promise.all(promises);
+    } catch (err: any) {
+      console.warn("[Sync Engine server] Failed to propagate changes to passcode_syncs document:", err.message);
+    }
+  }
+
   app.get("/api/db/fetch", async (req: Request, res: Response) => {
     const { table, owner_email } = req.query;
     try {
@@ -230,14 +459,22 @@ async function startServer() {
         return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
       }
 
-      let q;
-      if (table === "business_info") {
-        q = query(collection(db, String(table)), where("user_id", "==", verified.uid));
-      } else {
-        q = query(collection(db, String(table)), where("user_id", "==", verified.uid));
+      const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
+      const recordsMap = new Map<string, any>();
+      const tableStr = String(table);
+
+      // Point query each allowed identity to bypass Firestore "in" index limits and merge them gracefully
+      for (const uid of allowedIds) {
+        const q = query(collection(db, tableStr), where("user_id", "==", uid));
+        const docsSnap = await getDocs(q);
+        docsSnap.forEach(docSnapshot => {
+          const data = docSnapshot.data();
+          const docId = data.id || docSnapshot.id;
+          recordsMap.set(docId, data);
+        });
       }
-      const docsSnap = await getDocs(q);
-      const records = docsSnap.docs.map(docSnapshot => docSnapshot.data());
+
+      const records = Array.from(recordsMap.values());
       res.json(records);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -252,16 +489,23 @@ async function startServer() {
         return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
       }
 
+      const tableStr = String(table);
+      const docId = String(id || data.id);
+
       const enrichedData = {
         ...data,
-        id: id || data.id,
+        id: docId,
         user_id: verified.uid,
         userId: verified.uid,
         owner_id: verified.uid,
         updated_at: new Date().toISOString()
       };
 
-      await setDoc(doc(db, String(table), String(id)), enrichedData);
+      await setDoc(doc(db, tableStr, docId), enrichedData);
+
+      // Async propagate upsert to the user's passcode_syncs file backing so PC onSnapshot captures it
+      await syncCollectionAndPasscodeVault(verified, tableStr, docId, enrichedData, false);
+
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -276,16 +520,25 @@ async function startServer() {
         return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
       }
 
-      const docRef = doc(db, String(table), String(id));
+      const tableStr = String(table);
+      const docId = String(id);
+      const docRef = doc(db, tableStr, docId);
       const docSnap = await getDoc(docRef);
+
       if (docSnap.exists()) {
         const docData = docSnap.data();
-        if (docData.user_id && docData.user_id !== verified.uid) {
+        const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
+        
+        if (docData.user_id && !allowedIds.includes(docData.user_id)) {
           return res.status(403).json({ error: "Access Forbidden: Document belongs to another user." });
         }
       }
 
       await deleteDoc(docRef);
+
+      // Async propagate deletion to user's passcode_syncs file backing so PC onSnapshot captures it
+      await syncCollectionAndPasscodeVault(verified, tableStr, docId, {}, true);
+
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
