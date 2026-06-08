@@ -418,27 +418,52 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
   const cleanCloudPurchases = p ? cleanDemoPurchases(p).map(pur => normalizePurchase(pur)) : [];
   const cleanCloudDeletedItems = data.deletedItems || data.deleted_items || [];
 
+  // Parse soft-deleted items sets to avoid creating zombies
+  const deletedProducts = new Set<string>();
+  const deletedContacts = new Set<string>();
+  const deletedExpenses = new Set<string>();
+  const deletedPurchases = new Set<string>();
+  const deletedTransactions = new Set<string>();
+
+  cleanCloudDeletedItems.forEach((item: any) => {
+    if (!item) return;
+    const origId = (item.originalId || "").trim();
+    if (!origId) return;
+    const type = String(item.type).toLowerCase();
+    if (type === "product") deletedProducts.add(origId);
+    else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(origId);
+    else if (type === "expense") deletedExpenses.add(origId);
+    else if (type === "purchase") deletedPurchases.add(origId);
+    else if (type === "sale" || type === "transaction") deletedTransactions.add(origId);
+  });
+
+  const filteredCloudProducts = cleanCloudProducts.filter((item: any) => item && !deletedProducts.has(item.id));
+  const filteredCloudContacts = cleanCloudContacts.filter((item: any) => item && !deletedContacts.has(item.id));
+  const filteredCloudExpenses = cleanCloudExpenses.filter((item: any) => item && !deletedExpenses.has(item.id));
+  const filteredCloudTransactions = cleanCloudTransactions.filter((item: any) => item && !deletedTransactions.has(item.id));
+  const filteredCloudPurchases = cleanCloudPurchases.filter((item: any) => item && !deletedPurchases.has(item.id));
+
   if (overwrite) {
     // 1. PRODUCTS OVERWRITE
     if (data.products) {
-      localStorage.setItem(getDbKey('barakah_products', email, uid), JSON.stringify(cleanCloudProducts));
+      localStorage.setItem(getDbKey('barakah_products', email, uid), JSON.stringify(filteredCloudProducts));
     }
     // 2. CONTACTS OVERWRITE
     if (data.contacts) {
-      localStorage.setItem(getDbKey('barakah_contacts', email, uid), JSON.stringify(cleanCloudContacts));
+      localStorage.setItem(getDbKey('barakah_contacts', email, uid), JSON.stringify(filteredCloudContacts));
     }
     // 3. EXPENSES OVERWRITE
     if (data.expenses) {
-      localStorage.setItem(getDbKey('barakah_expenses', email, uid), JSON.stringify(cleanCloudExpenses));
+      localStorage.setItem(getDbKey('barakah_expenses', email, uid), JSON.stringify(filteredCloudExpenses));
     }
     // 4. TRANSACTIONS OVERWRITE
     if (data.transactions) {
-      cleanCloudTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-      localStorage.setItem(getDbKey('barakah_transactions', email, uid), JSON.stringify(cleanCloudTransactions));
+      filteredCloudTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+      localStorage.setItem(getDbKey('barakah_transactions', email, uid), JSON.stringify(filteredCloudTransactions));
     }
     // 5. PURCHASES OVERWRITE
     if (p) {
-      localStorage.setItem(getDbKey('barakah_purchases', email, uid), JSON.stringify(cleanCloudPurchases));
+      localStorage.setItem(getDbKey('barakah_purchases', email, uid), JSON.stringify(filteredCloudPurchases));
     }
     // 6. BUSINESS SETTINGS OVERWRITE
     if (bizData) {
@@ -461,8 +486,10 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
           if (!Array.isArray(localProducts)) localProducts = [];
         } catch (e) {}
       }
-      const normalizedLocalProducts = localProducts.map(p => normalizeProduct(p));
-      const mergedProducts = deduplicateProducts([...cleanCloudProducts, ...normalizedLocalProducts]);
+      const normalizedLocalProducts = localProducts.map(p => normalizeProduct(p))
+        .filter((item: any) => item && !deletedProducts.has(item.id));
+      const mergedProducts = deduplicateProducts([...filteredCloudProducts, ...normalizedLocalProducts])
+        .filter((item: any) => item && !deletedProducts.has(item.id));
       localStorage.setItem(getDbKey('barakah_products', email, uid), JSON.stringify(mergedProducts));
     } else {
       const rawLocalProducts = localStorage.getItem(getDbKey('barakah_products', email, uid));
@@ -481,8 +508,10 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
           if (!Array.isArray(localContacts)) localContacts = [];
         } catch (e) {}
       }
-      const normalizedLocalContacts = localContacts.map(c => normalizeContact(c));
-      const mergedContacts = deduplicateContacts([...cleanCloudContacts, ...normalizedLocalContacts]);
+      const normalizedLocalContacts = localContacts.map(c => normalizeContact(c))
+        .filter((item: any) => item && !deletedContacts.has(item.id));
+      const mergedContacts = deduplicateContacts([...filteredCloudContacts, ...normalizedLocalContacts])
+        .filter((item: any) => item && !deletedContacts.has(item.id));
       localStorage.setItem(getDbKey('barakah_contacts', email, uid), JSON.stringify(mergedContacts));
     } else {
       const rawLocalContacts = localStorage.getItem(getDbKey('barakah_contacts', email, uid));
@@ -501,8 +530,10 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
           if (!Array.isArray(localExpenses)) localExpenses = [];
         } catch (e) {}
       }
-      const normalizedLocalExpenses = localExpenses.map(e => normalizeExpense(e));
-      const mergedExpenses = deduplicateExpenses([...cleanCloudExpenses, ...normalizedLocalExpenses]);
+      const normalizedLocalExpenses = localExpenses.map(e => normalizeExpense(e))
+        .filter((item: any) => item && !deletedExpenses.has(item.id));
+      const mergedExpenses = deduplicateExpenses([...filteredCloudExpenses, ...normalizedLocalExpenses])
+        .filter((item: any) => item && !deletedExpenses.has(item.id));
       localStorage.setItem(getDbKey('barakah_expenses', email, uid), JSON.stringify(mergedExpenses));
     } else {
       const rawLocalExpenses = localStorage.getItem(getDbKey('barakah_expenses', email, uid));
@@ -521,8 +552,10 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
           if (!Array.isArray(localTransactions)) localTransactions = [];
         } catch (e) {}
       }
-      const normalizedLocalTransactions = localTransactions.map(t => normalizeTransaction(t));
-      const mergedTransactions = deduplicateTransactions([...cleanCloudTransactions, ...normalizedLocalTransactions]);
+      const normalizedLocalTransactions = localTransactions.map(t => normalizeTransaction(t))
+        .filter((item: any) => item && !deletedTransactions.has(item.id));
+      const mergedTransactions = deduplicateTransactions([...filteredCloudTransactions, ...normalizedLocalTransactions])
+        .filter((item: any) => item && !deletedTransactions.has(item.id));
       mergedTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
       localStorage.setItem(getDbKey('barakah_transactions', email, uid), JSON.stringify(mergedTransactions));
     } else {
@@ -542,8 +575,10 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
           if (!Array.isArray(localPurchases)) localPurchases = [];
         } catch (e) {}
       }
-      const normalizedLocalPurchases = localPurchases.map(pur => normalizePurchase(pur));
-      const mergedPurchases = deduplicatePurchases([...cleanCloudPurchases, ...normalizedLocalPurchases]);
+      const normalizedLocalPurchases = localPurchases.map(pur => normalizePurchase(pur))
+        .filter((item: any) => item && !deletedPurchases.has(item.id));
+      const mergedPurchases = deduplicatePurchases([...filteredCloudPurchases, ...normalizedLocalPurchases])
+        .filter((item: any) => item && !deletedPurchases.has(item.id));
       localStorage.setItem(getDbKey('barakah_purchases', email, uid), JSON.stringify(mergedPurchases));
     } else {
       const rawLocalPurchases = localStorage.getItem(getDbKey('barakah_purchases', email, uid));
@@ -684,7 +719,19 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
           const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
           return t2 - t1;
         });
-        finalData = docs[0];
+        
+        // Fail-safe check: If the latest document is completely empty of products and transactions,
+        // search sorted docs to find the most recent non-empty candidate backup so we don't restore blank/wiped states.
+        let selectedCandidate = docs[0];
+        for (const candidate of docs) {
+          const prodCount = (candidate.products || []).length;
+          const transCount = (candidate.transactions || []).length;
+          if (prodCount > 0 || transCount > 0) {
+            selectedCandidate = candidate;
+            break;
+          }
+        }
+        finalData = selectedCandidate;
       } else {
         const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
         if (docSnap.exists()) {
@@ -923,7 +970,8 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }));
       }
 
-      restoreLocalKeys(finalData, overwrite, activeUserId);
+      const localTargetUid = currentSupabaseUser?.uid || activeUserId;
+      restoreLocalKeys(finalData, overwrite, localTargetUid);
       return true;
     }
   } catch (err) {
@@ -1499,29 +1547,81 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     if (docSnap.exists() && !isExplicitReset) {
       const existingData = docSnap.data();
       
-      // Since incomingTotal > 0 guarantees that the client has loaded its database securely,
-      // we can trust empty sub-arrays as intentional user actions rather than accidental empty wipes.
-      // However, we merge and keep deleted items (unless incoming is empty under a loaded state).
+      // Avoid accidental stomp/wiping of other devices' active records:
+      // Merge products
+      const productsMap = new Map();
+      (existingData.products || []).forEach((item: any) => {
+        if (item && item.id) productsMap.set(item.id, item);
+      });
+      normalizedProducts.forEach((item: any) => {
+        if (item && item.id) productsMap.set(item.id, item);
+      });
+      mergedProductsArr = Array.from(productsMap.values());
+
+      // Merge contacts
+      const contactsMap = new Map();
+      (existingData.contacts || []).forEach((item: any) => {
+        if (item && item.id) contactsMap.set(item.id, item);
+      });
+      normalizedContacts.forEach((item: any) => {
+        if (item && item.id) contactsMap.set(item.id, item);
+      });
+      mergedContactsArr = Array.from(contactsMap.values());
+
+      // Merge expenses
+      const expensesMap = new Map();
+      (existingData.expenses || []).forEach((item: any) => {
+        if (item && item.id) expensesMap.set(item.id, item);
+      });
+      normalizedExpenses.forEach((item: any) => {
+        if (item && item.id) expensesMap.set(item.id, item);
+      });
+      mergedExpensesArr = Array.from(expensesMap.values());
+
+      // Merge transactions
+      const transactionsMap = new Map();
+      (existingData.transactions || []).forEach((item: any) => {
+        if (item && item.id) transactionsMap.set(item.id, item);
+      });
+      normalizedTransactions.forEach((item: any) => {
+        if (item && item.id) transactionsMap.set(item.id, item);
+      });
+      mergedTransactionsArr = Array.from(transactionsMap.values());
+
       const existingDeleted = existingData.deletedItems || existingData.deleted_items || [];
       const incomingDeleted = payload.deletedItems || [];
-      
-      if (incomingDeleted.length > 0) {
-        const mergedMap = new Map();
-        existingDeleted.forEach((item: any) => {
-          if (item && item.id) mergedMap.set(item.id, item);
-        });
-        incomingDeleted.forEach((item: any) => {
-          if (item && item.id) mergedMap.set(item.id, item);
-        });
-        mergedDeletedItemsArr = Array.from(mergedMap.values());
-      } else {
-        if (incomingTotal > 0) {
-          mergedDeletedItemsArr = [];
-          console.log("[Sync Engine] User successfully emptied the trash folder. Propagating to cloud.");
-        } else {
-          mergedDeletedItemsArr = existingDeleted;
-        }
-      }
+      const deletedMap = new Map();
+      existingDeleted.forEach((item: any) => {
+        if (item && item.id) deletedMap.set(item.id, item);
+      });
+      incomingDeleted.forEach((item: any) => {
+        if (item && item.id) deletedMap.set(item.id, item);
+      });
+      mergedDeletedItemsArr = Array.from(deletedMap.values());
+
+      // Propagate soft deletions by removing deleted items from the merged lists on cloud sync payload too
+      const deletedProducts = new Set<string>();
+      const deletedContacts = new Set<string>();
+      const deletedExpenses = new Set<string>();
+      const deletedPurchases = new Set<string>();
+      const deletedTransactions = new Set<string>();
+
+      mergedDeletedItemsArr.forEach((item: any) => {
+        if (!item) return;
+        const origId = (item.originalId || "").trim();
+        if (!origId) return;
+        const type = String(item.type).toLowerCase();
+        if (type === "product") deletedProducts.add(origId);
+        else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(origId);
+        else if (type === "expense") deletedExpenses.add(origId);
+        else if (type === "purchase") deletedPurchases.add(origId);
+        else if (type === "sale" || type === "transaction") deletedTransactions.add(origId);
+      });
+
+      mergedProductsArr = mergedProductsArr.filter((item: any) => item && !deletedProducts.has(item.id));
+      mergedContactsArr = mergedContactsArr.filter((item: any) => item && !deletedContacts.has(item.id));
+      mergedExpensesArr = mergedExpensesArr.filter((item: any) => item && !deletedExpenses.has(item.id));
+      mergedTransactionsArr = mergedTransactionsArr.filter((item: any) => item && !deletedTransactions.has(item.id));
     }
   } catch (e) {
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
