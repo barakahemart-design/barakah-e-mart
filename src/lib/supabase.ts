@@ -648,6 +648,27 @@ export function toUUID(str: string, email: string = ""): string {
   if (uuidRegex.test(str)) {
     return str;
   }
+  
+  // Custom prefix protection for clean cross-device synchronization:
+  // If the ID already has a clean custom prefix, preserve it to prevent duplicates
+  const lower = str.toLowerCase();
+  if (
+    lower.startsWith("cust_") ||
+    lower.startsWith("prod_") ||
+    lower.startsWith("exp_") ||
+    lower.startsWith("pur_") ||
+    lower.startsWith("tx_") ||
+    lower.startsWith("txi_") ||
+    lower.startsWith("gen_") ||
+    lower.startsWith("c_") ||
+    lower.startsWith("p_") ||
+    lower.startsWith("e_") ||
+    lower.startsWith("t_") ||
+    lower.startsWith("ti_")
+  ) {
+    return str;
+  }
+
   const cleanEmail = email ? email.trim().toLowerCase() : "";
   const saltedStr = cleanEmail ? `${cleanEmail}_${str}` : str;
   let hash = 0;
@@ -1384,6 +1405,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         phone: c.phone || "",
         address: c.address || null,
         type: c.type || "customer",
+        created_at: c.created_at || c.createdAt || new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
 
