@@ -578,6 +578,40 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
         .filter((item: any) => item && !deletedTransactions.has(item.id));
       mergedTransactions.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
       localStorage.setItem(getDbKey('barakah_transactions', email, uid), JSON.stringify(mergedTransactions));
+
+      // Also flatten and save to barakah_flat_transactions and barakah_flat_transaction_items to support collection-level real-time subscription
+      const flatTx: any[] = [];
+      const flatItems: any[] = [];
+      mergedTransactions.forEach((tx: any) => {
+        flatTx.push({
+          id: tx.id,
+          invoice_no: tx.invoiceNo || "INV-000",
+          customer_id: tx.contactId || null,
+          total_amount: Number(tx.total) || 0,
+          discount: Number(tx.discount) || 0,
+          vat_rate: tx.tax && tx.total ? Math.round((tx.tax * 100) / tx.total) : 0,
+          paid_amount: Number(tx.paidAmount) || 0,
+          payment_method: tx.paymentMethod || "Cash",
+          signature_svg: tx.customerSignature || null,
+          created_at: tx.date || new Date().toISOString()
+        });
+
+        if (tx.items && Array.isArray(tx.items)) {
+          tx.items.forEach((item: any) => {
+            flatItems.push({
+              id: item.id,
+              transaction_id: tx.id,
+              product_id: item.productId || null,
+              product_name: item.name || "Product Item",
+              quantity: Number(item.quantity) || 0,
+              sell_price: Number(item.price) || 0,
+              cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : Number(item.price)
+            });
+          });
+        }
+      });
+      localStorage.setItem(getDbKey('barakah_flat_transactions', email, uid), JSON.stringify(flatTx));
+      localStorage.setItem(getDbKey('barakah_flat_transaction_items', email, uid), JSON.stringify(flatItems));
     } else {
       const rawLocalTransactions = localStorage.getItem(getDbKey('barakah_transactions', email, uid));
       if (!rawLocalTransactions) {
@@ -749,30 +783,37 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
 
     // 1. Fetch cloud backups matching this email
     try {
-      const passcodeRef = collection(db, "passcode_syncs");
-      const q = query(passcodeRef, where("linked_email", "==", cleanEmail));
-      const querySnap = await fetchDocsFresh(q);
-      
-      if (!querySnap.empty) {
-        const docs = querySnap.docs.map(docSnap => docSnap.data());
-        docs.sort((a: any, b: any) => {
-          const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-          const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-          return t2 - t1;
-        });
+      if (cleanEmail) {
+        const passcodeRef = collection(db, "passcode_syncs");
+        const q = query(passcodeRef, where("linked_email", "==", cleanEmail));
+        const querySnap = await fetchDocsFresh(q);
         
-        // Fail-safe check: If the latest document is completely empty of products and transactions,
-        // search sorted docs to find the most recent non-empty candidate backup so we don't restore blank/wiped states.
-        let selectedCandidate = docs[0];
-        for (const candidate of docs) {
-          const prodCount = (candidate.products || []).length;
-          const transCount = (candidate.transactions || []).length;
-          if (prodCount > 0 || transCount > 0) {
-            selectedCandidate = candidate;
-            break;
+        if (!querySnap.empty) {
+          const docs = querySnap.docs.map(docSnap => docSnap.data());
+          docs.sort((a: any, b: any) => {
+            const t1 = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+            const t2 = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+            return t2 - t1;
+          });
+          
+          // Fail-safe check: If the latest document is completely empty of products and transactions,
+          // search sorted docs to find the most recent non-empty candidate backup so we don't restore blank/wiped states.
+          let selectedCandidate = docs[0];
+          for (const candidate of docs) {
+            const prodCount = (candidate.products || []).length;
+            const transCount = (candidate.transactions || []).length;
+            if (prodCount > 0 || transCount > 0) {
+              selectedCandidate = candidate;
+              break;
+            }
+          }
+          finalData = selectedCandidate;
+        } else {
+          const docSnap = await fetchDocFresh(doc(db, "passcode_syncs", syncId));
+          if (docSnap.exists()) {
+            finalData = docSnap.data();
           }
         }
-        finalData = selectedCandidate;
       } else {
         const docSnap = await fetchDocFresh(doc(db, "passcode_syncs", syncId));
         if (docSnap.exists()) {
@@ -813,7 +854,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
           const profileSnap = await fetchDocFresh(doc(db, "profiles", syncId));
           if (profileSnap.exists()) {
             activeUserId = profileSnap.id;
-          } else {
+          } else if (cleanEmail) {
             const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
             const profileSnapQ = await fetchDocsFresh(profileQ);
             if (!profileSnapQ.empty) {
@@ -1391,7 +1432,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   // Real-time table synchronizer mapping
   try {
     let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
-    if (!activeUserId) {
+    if (!activeUserId && cleanEmail) {
       const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
       const profileSnap = await fetchDocsFresh(profileQ);
       if (!profileSnap.empty) {
@@ -1547,6 +1588,29 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         purchasesToUpsert.forEach(pur => {
           upsertPromises.push(setDoc(doc(db, "purchases", pur.id), pur));
         });
+
+        // Propagate soft-deleted items to physical Firestore document deletions so real-time sub-collection listeners receive 'removed' events
+        if (payload.deletedItems && Array.isArray(payload.deletedItems)) {
+          payload.deletedItems.forEach(item => {
+            if (!item) return;
+            const origId = (item.originalId || "").trim();
+            if (!origId) return;
+            const type = String(item.type).toLowerCase();
+            const idUUID = toUUID(origId, cleanEmail);
+
+            if (type === "product") {
+              upsertPromises.push(deleteDoc(doc(db, "products", idUUID)));
+            } else if (type === "customer" || type === "supplier" || type === "contact") {
+              upsertPromises.push(deleteDoc(doc(db, "customers", idUUID)));
+            } else if (type === "expense") {
+              upsertPromises.push(deleteDoc(doc(db, "expenses", idUUID)));
+            } else if (type === "purchase") {
+              upsertPromises.push(deleteDoc(doc(db, "purchases", idUUID)));
+            } else if (type === "sale" || type === "transaction") {
+              upsertPromises.push(deleteDoc(doc(db, "transactions", idUUID)));
+            }
+          });
+        }
 
         await Promise.all(upsertPromises);
         console.log("[Direct FirestoreSync Engine] All individual store files successfully saved.");
@@ -1823,10 +1887,12 @@ export const fetchUserCollection = async (table: string, ownerEmail: string) => 
 
   try {
     let q;
-    q = query(collection(db, table), where("user_id", "==", queryIdentifier));
-    const docsSnap = await fetchDocsFresh(q);
-    if (!docsSnap.empty) {
-      return docsSnap.docs.map(docSnapshot => docSnapshot.data());
+    if (queryIdentifier) {
+      q = query(collection(db, table), where("user_id", "==", queryIdentifier));
+      const docsSnap = await fetchDocsFresh(q);
+      if (!docsSnap.empty) {
+        return docsSnap.docs.map(docSnapshot => docSnapshot.data());
+      }
     }
   } catch (e) {
     console.warn(`Local direct query for table ${table} failed, retrying server fallbacks...`, e);

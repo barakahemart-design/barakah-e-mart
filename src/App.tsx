@@ -254,7 +254,7 @@ export default function App() {
     });
 
     // 2. Try to find missing contacts directly in Firestore "customers" collection (Cloud Recovery)
-    if (activeUser && !activeUser.isGuest) {
+    if (activeUser && !activeUser.isGuest && activeUser.uid) {
       try {
         const activeUserId = activeUser.uid;
         const q = query(collection(db, "customers"), where("user_id", "==", activeUserId));
@@ -491,9 +491,9 @@ export default function App() {
     }
   }, [products, contacts, expenses, transactions, businessInfo, purchases, deletedItems, staffList, activeUser]);
 
-  // Set up real-time multi-device cloud subscription
+  // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
-    if (!activeUser || activeUser.isGuest) {
+    if (!activeUser || activeUser.isGuest || !activeUser.uid) {
       setSyncStatus("offline");
       return;
     }
@@ -502,20 +502,344 @@ export default function App() {
 
     const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
     const syncId = getPasscodeSyncId(activeUser.email, passcode);
+    const activeUserId = activeUser.uid;
 
-    console.log(`[Realtime Sync] Subscribing to cloud document: passcode_syncs/${syncId}`);
+    console.log(`[Realtime Sync Engine] Subscribing in real-time to granular Firestore collections for user: ${activeUserId}`);
 
-    let lastUpdatedAt = "";
+    // Helper to rebuild nested transactions from flat transaction and flat items lists
+    const rebuildTransactions = (flatTx: any[], flatItems: any[]) => {
+      return flatTx.map(t => {
+        const relatedItems = flatItems.filter((item: any) => item.transaction_id === t.id);
+        const mappedItems = relatedItems.map((item: any) => ({
+          id: item.id,
+          name: item.product_name || "Product Item",
+          quantity: Number(item.quantity) || 0,
+          price: Number(item.sell_price) || 0,
+          total: Number(item.quantity * item.sell_price) || 0,
+          productId: item.product_id || undefined,
+          buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+        }));
 
-    const unsub = onSnapshot(doc(db, "passcode_syncs", syncId), { includeMetadataChanges: true }, (docSnap) => {
-      // Document may not exist yet, but subscription connected successfully
-      if (!docSnap.exists()) {
+        return {
+          id: t.id,
+          invoiceNo: t.invoice_no,
+          date: t.created_at || new Date().toISOString(),
+          items: mappedItems,
+          subtotal: Number(t.total_amount) || 0,
+          tax: t.vat_rate ? Number(((t.total_amount * t.vat_rate) / 100).toFixed(2)) : 0,
+          discount: Number(t.discount) || 0,
+          total: Number(t.total_amount) || 0,
+          paymentMethod: t.payment_method || "Cash",
+          status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
+          paidAmount: Number(t.paid_amount) || 0,
+          dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
+          contactId: t.customer_id || undefined,
+          customerSignature: t.signature_svg || undefined
+        };
+      });
+    };
+
+    // 1. PRODUCTS SUBSCRIBER
+    const qProducts = query(collection(db, "products"), where("user_id", "==", activeUserId));
+    const unsubProducts = onSnapshot(qProducts, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
         setSyncStatus("connected");
         return;
       }
 
-      // Skip local unwritten updates to prevent stomping on in-progress edits
-      if (docSnap.metadata.hasPendingWrites) {
+      const currentLocal = loadDB(activeUserId).products || [];
+      const updatedList = [...currentLocal];
+
+      snapshot.docChanges().forEach((change) => {
+        const docData = change.doc.data();
+        const item = {
+          id: docData.id,
+          name: docData.name || "Unnamed Product",
+          sku: docData.sku || "",
+          stock: Number(docData.stock) || 0,
+          buyPrice: Number(docData.buy_price) || 0,
+          sellPrice: Number(docData.sell_price) || 0,
+          category: docData.category || "Electronics",
+          unit: docData.unit || "piece",
+          imageUrl: docData.image_url || undefined
+        };
+
+        const idx = updatedList.findIndex(x => x.id === item.id);
+        if (change.type === "added" || change.type === "modified") {
+          if (idx >= 0) {
+            updatedList[idx] = item;
+          } else {
+            updatedList.push(item);
+          }
+        } else if (change.type === "removed") {
+          if (idx >= 0) {
+            updatedList.splice(idx, 1);
+          }
+        }
+      });
+
+      localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
+      initialLoadedRef.current = false;
+      setProducts(updatedList);
+      setTimeout(() => { initialLoadedRef.current = true; }, 100);
+      setSyncStatus("connected");
+    }, (err) => {
+      console.warn("[Realtime Sync] Products snapshot failed:", err);
+    });
+
+    // 2. CUSTOMERS SUBSCRIBER
+    const qCustomers = query(collection(db, "customers"), where("user_id", "==", activeUserId));
+    const unsubCustomers = onSnapshot(qCustomers, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const currentLocal = loadDB(activeUserId).contacts || [];
+      const updatedList = [...currentLocal];
+
+      snapshot.docChanges().forEach((change) => {
+        const docData = change.doc.data();
+        const item = {
+          id: docData.id,
+          name: docData.name || "Unnamed Contact",
+          phone: docData.phone || "",
+          address: docData.address || "",
+          type: docData.type || "customer",
+          created_at: docData.created_at || docData.updated_at || new Date().toISOString()
+        };
+
+        const idx = updatedList.findIndex(x => x.id === item.id);
+        if (change.type === "added" || change.type === "modified") {
+          if (idx >= 0) {
+            updatedList[idx] = item;
+          } else {
+            updatedList.push(item);
+          }
+        } else if (change.type === "removed") {
+          if (idx >= 0) {
+            updatedList.splice(idx, 1);
+          }
+        }
+      });
+
+      localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
+      initialLoadedRef.current = false;
+      setContacts(updatedList);
+      setTimeout(() => { initialLoadedRef.current = true; }, 100);
+      setSyncStatus("connected");
+    }, (err) => {
+      console.warn("[Realtime Sync] Customers snapshot failed:", err);
+    });
+
+    // 3. EXPENSES SUBSCRIBER
+    const qExpenses = query(collection(db, "expenses"), where("user_id", "==", activeUserId));
+    const unsubExpenses = onSnapshot(qExpenses, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const currentLocal = loadDB(activeUserId).expenses || [];
+      const updatedList = [...currentLocal];
+
+      snapshot.docChanges().forEach((change) => {
+        const docData = change.doc.data();
+        const item = {
+          id: docData.id,
+          category: docData.category || "Others",
+          amount: Number(docData.amount) || 0,
+          description: docData.description || "",
+          date: docData.created_at || docData.date || new Date().toISOString()
+        };
+
+        const idx = updatedList.findIndex(x => x.id === item.id);
+        if (change.type === "added" || change.type === "modified") {
+          if (idx >= 0) {
+            updatedList[idx] = item;
+          } else {
+            updatedList.push(item);
+          }
+        } else if (change.type === "removed") {
+          if (idx >= 0) {
+            updatedList.splice(idx, 1);
+          }
+        }
+      });
+
+      localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
+      initialLoadedRef.current = false;
+      setExpenses(updatedList);
+      setTimeout(() => { initialLoadedRef.current = true; }, 100);
+      setSyncStatus("connected");
+    }, (err) => {
+      console.warn("[Realtime Sync] Expenses snapshot failed:", err);
+    });
+
+    // 4. PURCHASES SUBSCRIBER
+    const qPurchases = query(collection(db, "purchases"), where("user_id", "==", activeUserId));
+    const unsubPurchases = onSnapshot(qPurchases, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const currentLocal = loadDB(activeUserId).purchases || [];
+      const updatedList = [...currentLocal];
+
+      snapshot.docChanges().forEach((change) => {
+        const docData = change.doc.data();
+        const item = {
+          id: docData.id,
+          productId: docData.product_id,
+          productName: "Purchase Item",
+          supplierId: "",
+          supplierName: "Main Depot",
+          quantity: Number(docData.quantity) || 0,
+          buyPrice: Number(docData.buy_price) || 0,
+          totalAmount: Number(docData.quantity * docData.buy_price) || 0,
+          date: docData.created_at || new Date().toISOString()
+        };
+
+        const idx = updatedList.findIndex(x => x.id === item.id);
+        if (change.type === "added" || change.type === "modified") {
+          if (idx >= 0) {
+            updatedList[idx] = item;
+          } else {
+            updatedList.push(item);
+          }
+        } else if (change.type === "removed") {
+          if (idx >= 0) {
+            updatedList.splice(idx, 1);
+          }
+        }
+      });
+
+      localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
+      initialLoadedRef.current = false;
+      setPurchases(updatedList);
+      setTimeout(() => { initialLoadedRef.current = true; }, 100);
+      setSyncStatus("connected");
+    }, (err) => {
+      console.warn("[Realtime Sync] Purchases snapshot failed:", err);
+    });
+
+    // Helper to merge and trigger transaction state rebuild
+    const handleTransactionsChange = (newFlatTx?: any[], newFlatItems?: any[]) => {
+      const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
+      let flatTx = newFlatTx || JSON.parse(rawLocalTx);
+      if (!Array.isArray(flatTx)) flatTx = [];
+
+      const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+      let flatItems = newFlatItems || JSON.parse(rawLocalItems);
+      if (!Array.isArray(flatItems)) flatItems = [];
+
+      const nestedTx = rebuildTransactions(flatTx, flatItems);
+      nestedTx.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(nestedTx));
+
+      initialLoadedRef.current = false;
+      setTransactions(nestedTx);
+      setTimeout(() => { initialLoadedRef.current = true; }, 100);
+      setSyncStatus("connected");
+    };
+
+    // 5. TRANSACTIONS SUBSCRIBER
+    const qTransactions = query(collection(db, "transactions"), where("user_id", "==", activeUserId));
+    const unsubTransactions = onSnapshot(qTransactions, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
+      let flatTransactions = JSON.parse(rawLocalTx);
+      if (!Array.isArray(flatTransactions)) flatTransactions = [];
+
+      snapshot.docChanges().forEach((change) => {
+        const docData = change.doc.data();
+        const item = {
+          id: docData.id,
+          invoice_no: docData.invoice_no,
+          customer_id: docData.customer_id || null,
+          total_amount: Number(docData.total_amount) || 0,
+          discount: Number(docData.discount) || 0,
+          vat_rate: Number(docData.vat_rate) || 0,
+          paid_amount: Number(docData.paid_amount) || 0,
+          payment_method: docData.payment_method || "Cash",
+          signature_svg: docData.signature_svg || null,
+          created_at: docData.created_at || new Date().toISOString()
+        };
+
+        const idx = flatTransactions.findIndex((x: any) => x.id === item.id);
+        if (change.type === "added" || change.type === "modified") {
+          if (idx >= 0) {
+            flatTransactions[idx] = item;
+          } else {
+            flatTransactions.push(item);
+          }
+        } else if (change.type === "removed") {
+          if (idx >= 0) {
+            flatTransactions.splice(idx, 1);
+          }
+        }
+      });
+
+      localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTransactions));
+      handleTransactionsChange(flatTransactions, undefined);
+    }, (err) => {
+      console.warn("[Realtime Sync] Transactions snapshot failed:", err);
+    });
+
+    // 6. TRANSACTION ITEMS SUBSCRIBER
+    const qItems = query(collection(db, "transaction_items"), where("user_id", "==", activeUserId));
+    const unsubItems = onSnapshot(qItems, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+      let flatItems = JSON.parse(rawLocalItems);
+      if (!Array.isArray(flatItems)) flatItems = [];
+
+      snapshot.docChanges().forEach((change) => {
+        const docData = change.doc.data();
+        const item = {
+          id: docData.id,
+          transaction_id: docData.transaction_id,
+          product_id: docData.product_id || null,
+          product_name: docData.product_name || "Product Item",
+          quantity: Number(docData.quantity) || 0,
+          sell_price: Number(docData.sell_price) || 0,
+          cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
+        };
+
+        const idx = flatItems.findIndex((x: any) => x.id === item.id);
+        if (change.type === "added" || change.type === "modified") {
+          if (idx >= 0) {
+            flatItems[idx] = item;
+          } else {
+            flatItems.push(item);
+          }
+        } else if (change.type === "removed") {
+          if (idx >= 0) {
+            flatItems.splice(idx, 1);
+          }
+        }
+      });
+
+      localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+      handleTransactionsChange(undefined, flatItems);
+    }, (err) => {
+      console.warn("[Realtime Sync] Transaction Items snapshot failed:", err);
+    });
+
+    // 7. SETTINGS & METADATA SUBSCRIBER
+    let lastUpdatedAt = "";
+    const unsubCentral = onSnapshot(doc(db, "passcode_syncs", syncId), { includeMetadataChanges: true }, (docSnap) => {
+      if (!docSnap.exists() || docSnap.metadata.hasPendingWrites) {
         setSyncStatus("connected");
         return;
       }
@@ -523,64 +847,46 @@ export default function App() {
       const cloudData = docSnap.data();
       const cloudUpdatedAt = cloudData.updated_at || "";
 
-      // Avoid self-refresh loops or stale values
       if (cloudUpdatedAt === lastUpdatedAt || (lastUploadedAtRef.current && cloudUpdatedAt === lastUploadedAtRef.current)) {
         setSyncStatus("connected");
         return;
       }
 
-      const cloudProducts = cloudData.products || [];
-      const cloudTransactions = cloudData.transactions || [];
-
-      // Protect local state if cloud data has not been initialized
-      if (cloudProducts.length === 0 && cloudTransactions.length === 0) {
-        setSyncStatus("connected");
-        return;
-      }
-
       try {
-        console.log(`[Realtime Sync] Remote database updated at ${cloudUpdatedAt}. Synchronizing...`);
+        console.log(`[Realtime Sync] Remote settings updated. Syncing meta...`);
         lastUpdatedAt = cloudUpdatedAt;
-        setSyncStatus("reconciling");
 
-        // Restore to localStorage
-        restoreLocalKeys(cloudData, false, activeUser?.uid);
-
-        // Load the new values from localStorage
-        const refreshedDB = loadDB(activeUser?.uid);
-
-        // Momentarily pause backup triggers during React state updates
-        initialLoadedRef.current = false;
-
-        setProducts(refreshedDB.products);
-        setContacts(refreshedDB.contacts);
-        setExpenses(refreshedDB.expenses);
-        setTransactions(refreshedDB.transactions);
-        setBusinessInfo(refreshedDB.businessInfo);
-        setPurchases(refreshedDB.purchases || []);
-        setDeletedItems(refreshedDB.deletedItems || []);
-
-        if (refreshedDB.businessInfo && refreshedDB.businessInfo.staffList && Array.isArray(refreshedDB.businessInfo.staffList)) {
-          setStaffList(refreshedDB.businessInfo.staffList);
+        const incomingBizInfo = cloudData.businessInfo || cloudData.business_info || null;
+        if (incomingBizInfo) {
+          localStorage.setItem(getDbKey("barakah_business_info", undefined, activeUserId), JSON.stringify(incomingBizInfo));
+          setBusinessInfo(incomingBizInfo);
+          if (incomingBizInfo.staffList && Array.isArray(incomingBizInfo.staffList)) {
+            setStaffList(incomingBizInfo.staffList);
+          }
         }
 
-        setTimeout(() => {
-          initialLoadedRef.current = true;
-          setSyncStatus("connected");
-          console.log("[Realtime Sync] Complete database and store settings synchronized in real-time.");
-        }, 300);
+        const incomingDeleted = cloudData.deletedItems || cloudData.deleted_items || [];
+        if (incomingDeleted.length > 0) {
+          localStorage.setItem(getDbKey("barakah_deleted_items", undefined, activeUserId), JSON.stringify(incomingDeleted));
+          setDeletedItems(incomingDeleted);
+        }
 
+        setSyncStatus("connected");
       } catch (err) {
-        console.error("[Realtime Sync] Error syncing cloud snapshot locally:", err);
-        setSyncStatus("error");
+        console.warn("[Realtime Sync] Central snapshot failed parsing:", err);
       }
-    }, (error) => {
-      console.warn("[Realtime Sync] Firestore snapshot subscription failed:", error);
-      setSyncStatus("error");
+    }, (err) => {
+      console.warn("[Realtime Sync] Central snapshot failed:", err);
     });
 
     return () => {
-      unsub();
+      unsubProducts();
+      unsubCustomers();
+      unsubExpenses();
+      unsubPurchases();
+      unsubTransactions();
+      unsubItems();
+      unsubCentral();
       setSyncStatus("offline");
     };
   }, [activeUser]);
@@ -2929,14 +3235,14 @@ _${businessInfo.name}_`;
                    onClick={triggerCloudBackupSync}
                    disabled={isBackingUp || isRestoring}
                    className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:bg-slate-900 rounded-lg text-[10px] md:text-xs font-mono font-bold tracking-wide transition-colors cursor-pointer"
-                   title="Sync local data up to cloud"
+                   title="Force push local database up to cloud (Emergency Force Backup)"
                  >
                    {isBackingUp ? (
                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                    ) : (
                      <>
                        <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
-                       <span className="hidden lg:inline">{activeUser.isPasscodeUser ? "Sync PIN" : "Sync Cloud"}</span>
+                       <span className="hidden lg:inline">Force Push</span>
                      </>
                    )}
                  </button>
@@ -2946,14 +3252,14 @@ _${businessInfo.name}_`;
                    onClick={triggerCloudBackupRestore}
                    disabled={isBackingUp || isRestoring}
                    className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 disabled:bg-slate-900 rounded-lg text-[10px] md:text-xs font-mono font-bold tracking-wide transition-colors cursor-pointer"
-                   title="Restore backup down from cloud"
+                   title="Force pull database down from cloud (Emergency Overwrite)"
                  >
                    {isRestoring ? (
                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
                    ) : (
                      <>
                        <CloudDownload className="w-3.5 h-3.5 text-sky-400" />
-                       <span className="hidden lg:inline">{activeUser.isPasscodeUser ? "Restore PIN" : "Restore Cloud"}</span>
+                       <span className="hidden lg:inline">Force Pull</span>
                      </>
                    )}
                  </button>
