@@ -117,6 +117,8 @@ export default function App() {
 
    const initialLoadedRef = useRef(false);
    const lastUploadedAtRef = useRef("");
+   const isRemoteUpdateActiveRef = useRef(false);
+   const remoteTimeoutRef = useRef<any>(null);
  
    // Active Core Database State (Merged loaded state)
    const [products, setProducts] = useState<Product[]>(() => loadDB().products);
@@ -432,6 +434,10 @@ export default function App() {
   // Sync state to local storage automatically when changed and auto backup to cloud on changes
   useEffect(() => {
     if (!initialLoadedRef.current) return;
+    if (isRemoteUpdateActiveRef.current) {
+      console.log("[Auto Backup Guard] Skipping auto-backup of remote-initiated state changes.");
+      return;
+    }
 
     if (activeUser) {
       const compiledBusinessInfo = {
@@ -504,6 +510,17 @@ export default function App() {
     const syncId = getPasscodeSyncId(activeUser.email, passcode);
     const activeUserId = activeUser.uid;
 
+    const markRemoteUpdateActive = () => {
+      isRemoteUpdateActiveRef.current = true;
+      if (remoteTimeoutRef.current) {
+        clearTimeout(remoteTimeoutRef.current);
+      }
+      remoteTimeoutRef.current = setTimeout(() => {
+        isRemoteUpdateActiveRef.current = false;
+        console.log("[Auto Backup Guard] Remote sync quiet period ended. Auto-backup restored.");
+      }, 2500);
+    };
+
     console.log(`[Realtime Sync Engine] Subscribing in real-time to granular Firestore collections for user: ${activeUserId}`);
 
     // Helper to rebuild nested transactions from flat transaction and flat items lists
@@ -546,6 +563,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const currentLocal = loadDB(activeUserId).products || [];
       const updatedList = [...currentLocal];
@@ -594,6 +612,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const currentLocal = loadDB(activeUserId).contacts || [];
       const updatedList = [...currentLocal];
@@ -639,6 +658,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const currentLocal = loadDB(activeUserId).expenses || [];
       const updatedList = [...currentLocal];
@@ -683,6 +703,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const currentLocal = loadDB(activeUserId).purchases || [];
       const updatedList = [...currentLocal];
@@ -752,6 +773,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
       let flatTransactions = JSON.parse(rawLocalTx);
@@ -799,6 +821,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
       let flatItems = JSON.parse(rawLocalItems);
@@ -843,6 +866,7 @@ export default function App() {
         setSyncStatus("connected");
         return;
       }
+      markRemoteUpdateActive();
 
       const cloudData = docSnap.data();
       const cloudUpdatedAt = cloudData.updated_at || "";

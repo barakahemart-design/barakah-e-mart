@@ -1423,6 +1423,14 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
           console.warn(`[Sync Guard] Protected empty backup write for ID: ${syncId}`);
           return { success: true, ignored: true };
         }
+        if (existingProductsCount > 0 && incomingProductsLength === 0) {
+          console.warn(`[Sync Guard] Protected empty products backup write for ID: ${syncId}. Guarding products from overwrite.`);
+          return { success: true, ignored: true };
+        }
+        if (existingTransactionsCount > 0 && incomingTransactionsLength === 0) {
+          console.warn(`[Sync Guard] Protected empty transactions backup write for ID: ${syncId}. Guarding transactions from overwrite.`);
+          return { success: true, ignored: true };
+        }
       }
     }
   } catch (e) {
