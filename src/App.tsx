@@ -116,6 +116,7 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
    const initialLoadedRef = useRef(false);
+   const lastUploadedAtRef = useRef("");
  
    // Active Core Database State (Merged loaded state)
    const [products, setProducts] = useState<Product[]>(() => loadDB().products);
@@ -469,7 +470,7 @@ export default function App() {
         const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
         const delayDebounceFn = setTimeout(async () => {
           try {
-            await uploadPasscodeBackup(activeUser.email, passcode, {
+            const res = await uploadPasscodeBackup(activeUser.email, passcode, {
               products,
               contacts,
               expenses,
@@ -478,6 +479,9 @@ export default function App() {
               purchases,
               deletedItems
             });
+            if (res && res.success && res.updatedAt) {
+              lastUploadedAtRef.current = res.updatedAt;
+            }
           } catch (e) {
             console.warn("Auto-backup failed silently in background:", e);
           }
@@ -503,9 +507,15 @@ export default function App() {
 
     let lastUpdatedAt = "";
 
-    const unsub = onSnapshot(doc(db, "passcode_syncs", syncId), (docSnap) => {
+    const unsub = onSnapshot(doc(db, "passcode_syncs", syncId), { includeMetadataChanges: true }, (docSnap) => {
       // Document may not exist yet, but subscription connected successfully
       if (!docSnap.exists()) {
+        setSyncStatus("connected");
+        return;
+      }
+
+      // Skip local unwritten updates to prevent stomping on in-progress edits
+      if (docSnap.metadata.hasPendingWrites) {
         setSyncStatus("connected");
         return;
       }
@@ -514,7 +524,7 @@ export default function App() {
       const cloudUpdatedAt = cloudData.updated_at || "";
 
       // Avoid self-refresh loops or stale values
-      if (cloudUpdatedAt === lastUpdatedAt) {
+      if (cloudUpdatedAt === lastUpdatedAt || (lastUploadedAtRef.current && cloudUpdatedAt === lastUploadedAtRef.current)) {
         setSyncStatus("connected");
         return;
       }
@@ -574,6 +584,41 @@ export default function App() {
       setSyncStatus("offline");
     };
   }, [activeUser]);
+
+  // Periodic PWA update check and network status monitoring
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const checkUpdate = async () => {
+        try {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) {
+            console.log("[PWA Update Check] Checking for service worker updates...");
+            await reg.update();
+          }
+        } catch (err) {
+          console.warn("[PWA Update Check] Error checking for updates:", err);
+        }
+      };
+
+      // Check on mount
+      checkUpdate();
+
+      // Check every 5 minutes
+      const interval = setInterval(checkUpdate, 5 * 60 * 1000);
+
+      // Check when online status returns
+      const handleOnline = () => {
+        console.log("[Network] Device is back online. Checking for PWA updates & sync refresh...");
+        checkUpdate();
+      };
+      window.addEventListener('online', handleOnline);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('online', handleOnline);
+      };
+    }
+  }, []);
 
   // Synchronize staff list on cloud restore or config resets
   useEffect(() => {

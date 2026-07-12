@@ -27,12 +27,32 @@ import {
   doc, 
   getDoc, 
   getDocs, 
+  getDocFromServer,
+  getDocsFromServer,
   setDoc, 
   deleteDoc, 
   collection, 
   query, 
   where 
 } from 'firebase/firestore';
+
+export async function fetchDocFresh(docRef: any): Promise<any> {
+  try {
+    return await getDocFromServer(docRef);
+  } catch (err) {
+    console.log("[Firestore fresh-fetch] getDocFromServer failed, using cached fallback:", err);
+    return await getDoc(docRef);
+  }
+}
+
+export async function fetchDocsFresh(q: any): Promise<any> {
+  try {
+    return await getDocsFromServer(q);
+  } catch (err) {
+    console.log("[Firestore fresh-fetch] getDocsFromServer failed, using cached fallback:", err);
+    return await getDocs(q);
+  }
+}
 
 export const isSupabaseConfigured = true;
 export const supabase = null as any; // Mock for any uncalled references
@@ -731,7 +751,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
     try {
       const passcodeRef = collection(db, "passcode_syncs");
       const q = query(passcodeRef, where("linked_email", "==", cleanEmail));
-      const querySnap = await getDocs(q);
+      const querySnap = await fetchDocsFresh(q);
       
       if (!querySnap.empty) {
         const docs = querySnap.docs.map(docSnap => docSnap.data());
@@ -754,7 +774,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }
         finalData = selectedCandidate;
       } else {
-        const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
+        const docSnap = await fetchDocFresh(doc(db, "passcode_syncs", syncId));
         if (docSnap.exists()) {
           finalData = docSnap.data();
         }
@@ -790,12 +810,12 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
       activeUserId = firebaseAuth.currentUser?.uid || "";
       if (!activeUserId) {
         try {
-          const profileSnap = await getDoc(doc(db, "profiles", syncId));
+          const profileSnap = await fetchDocFresh(doc(db, "profiles", syncId));
           if (profileSnap.exists()) {
             activeUserId = profileSnap.id;
           } else {
             const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
-            const profileSnapQ = await getDocs(profileQ);
+            const profileSnapQ = await fetchDocsFresh(profileQ);
             if (!profileSnapQ.empty) {
               activeUserId = profileSnapQ.docs[0].id;
             }
@@ -836,11 +856,11 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }
 
         const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes] = await Promise.all([
-          getDocs(query(collection(db, "products"), where("user_id", "==", activeUserId))),
-          getDocs(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
-          getDocs(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
-          getDocs(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
-          getDocs(query(collection(db, "purchases"), where("user_id", "==", activeUserId)))
+          fetchDocsFresh(query(collection(db, "products"), where("user_id", "==", activeUserId))),
+          fetchDocsFresh(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
+          fetchDocsFresh(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
+          fetchDocsFresh(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
+          fetchDocsFresh(query(collection(db, "purchases"), where("user_id", "==", activeUserId)))
         ]);
 
         if (!productsRes.empty) {
@@ -894,7 +914,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }
 
         if (!transactionsRes.empty) {
-          const itemsRes = await getDocs(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)));
+          const itemsRes = await fetchDocsFresh(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)));
           const itemRows = itemsRes.empty ? [] : itemsRes.docs.map(docSnapshot => docSnapshot.data());
 
           const sqlTransactions = transactionsRes.docs.map(docSnapshot => {
@@ -1350,7 +1370,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   const isExplicitReset = payload.businessInfo?.isExplicitReset === true;
 
   try {
-    const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
+    const docSnap = await fetchDocFresh(doc(db, "passcode_syncs", syncId));
     if (docSnap.exists() && !isExplicitReset) {
       const existingSync = docSnap.data();
       const existingProductsCount = (existingSync.products || []).length;
@@ -1373,7 +1393,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
     if (!activeUserId) {
       const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
-      const profileSnap = await getDocs(profileQ);
+      const profileSnap = await fetchDocsFresh(profileQ);
       if (!profileSnap.empty) {
         activeUserId = profileSnap.docs[0].id;
       }
@@ -1482,12 +1502,12 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
           console.log("[Direct Sync Engine] Explicit Reset Triggered! Wiping individual firestore tables first...");
           try {
             const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes, itemsRes] = await Promise.all([
-              getDocs(query(collection(db, "products"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "purchases"), where("user_id", "==", activeUserId))),
-              getDocs(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)))
+              fetchDocsFresh(query(collection(db, "products"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "purchases"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)))
             ]);
 
             const deletePromises: Promise<void>[] = [];
@@ -1565,7 +1585,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
   let mergedDeletedItemsArr = payload.deletedItems || [];
 
   try {
-    const docSnap = await getDoc(doc(db, "passcode_syncs", syncId));
+    const docSnap = await fetchDocFresh(doc(db, "passcode_syncs", syncId));
     if (docSnap.exists() && !isExplicitReset) {
       const existingData = docSnap.data();
       
@@ -1649,8 +1669,13 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
   }
 
+  const activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id || "";
+  const updatedAt = new Date().toISOString();
+
   const body = {
     id: syncId,
+    user_id: activeUserId,
+    owner_id: activeUserId,
     linked_email: cleanEmail,
     products: mergedProductsArr,
     contacts: mergedContactsArr,
@@ -1660,7 +1685,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     deleted_items: mergedDeletedItemsArr,
     businessInfo: serializedBusinessInfo,
     business_info: serializedBusinessInfo,
-    updated_at: new Date().toISOString()
+    updated_at: updatedAt
   };
 
   // We DO NOT call restoreLocalKeys(body, true) here. Doing so would overwrite the local storage
@@ -1681,7 +1706,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
 
   try {
     await setDoc(doc(db, "passcode_syncs", syncId), body);
-    return { success: true };
+    return { success: true, updatedAt: body.updated_at };
   } catch (directError: any) {
     console.warn("Direct firestore passcode sync document write backup failed. Retrying Server Route...", directError.message);
   }
@@ -1694,7 +1719,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       body: JSON.stringify({ payload: body })
     });
     if (response.ok) {
-      return { success: true };
+      return { success: true, updatedAt: body.updated_at };
     }
     const errText = await response.text();
     return { success: false, error: errText || "Passcode cloud back up transmission error." };
@@ -1799,7 +1824,7 @@ export const fetchUserCollection = async (table: string, ownerEmail: string) => 
   try {
     let q;
     q = query(collection(db, table), where("user_id", "==", queryIdentifier));
-    const docsSnap = await getDocs(q);
+    const docsSnap = await fetchDocsFresh(q);
     if (!docsSnap.empty) {
       return docsSnap.docs.map(docSnapshot => docSnapshot.data());
     }

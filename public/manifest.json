@@ -1,0 +1,22 @@
+{
+  "name": "Barakah Mart Billing",
+  "short_name": "Barakah Mart",
+  "description": "Progressive Web App for Barakah Mart business billing, transactions, and inventories",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/shopping-bag.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/shopping-bag.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
