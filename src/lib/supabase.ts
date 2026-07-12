@@ -1386,12 +1386,12 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         id: toUUID(p.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
-        name: p.name,
+        name: p.name || "Unnamed Product",
         sku: p.sku || null,
         category: p.category || "Electronics",
-        buy_price: p.buyPrice || 0.0,
-        sell_price: p.sellPrice || 0.0,
-        stock: p.stock || 0.0,
+        buy_price: p.buyPrice !== undefined && p.buyPrice !== null ? Number(p.buyPrice) : 0.0,
+        sell_price: p.sellPrice !== undefined && p.sellPrice !== null ? Number(p.sellPrice) : 0.0,
+        stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0.0,
         unit: p.unit || "piece",
         image_url: p.imageUrl || null,
         updated_at: new Date().toISOString()
@@ -1401,7 +1401,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         id: toUUID(c.id, cleanEmail),
         owner_id: activeUserId,
         user_id: activeUserId,
-        name: c.name,
+        name: c.name || "Unnamed Contact",
         phone: c.phone || "",
         address: c.address || null,
         type: c.type || "customer",
@@ -1415,7 +1415,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         user_id: activeUserId,
         description: e.description || "",
         category: e.category || "Others",
-        amount: e.amount || 0.0,
+        amount: e.amount !== undefined && e.amount !== null ? Number(e.amount) : 0.0,
         created_at: e.date || new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
@@ -1433,10 +1433,10 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
           user_id: activeUserId,
           invoice_no: t.invoiceNo,
           customer_id: customerUUID,
-          total_amount: t.total || 0.0,
-          discount: t.discount || 0.0,
-          vat_rate: t.tax && t.subtotal ? Number(((t.tax / t.subtotal) * 100).toFixed(2)) : 0.0,
-          paid_amount: t.paidAmount || 0.0,
+          total_amount: t.total !== undefined && t.total !== null ? Number(t.total) : 0.0,
+          discount: t.discount !== undefined && t.discount !== null ? Number(t.discount) : 0.0,
+          vat_rate: t.tax && t.subtotal ? Number(((Number(t.tax) / Number(t.subtotal)) * 100).toFixed(2)) : 0.0,
+          paid_amount: t.paidAmount !== undefined && t.paidAmount !== null ? Number(t.paidAmount) : 0.0,
           payment_method: t.paymentMethod || "Cash",
           signature_svg: t.customerSignature || null,
           created_at: t.date || new Date().toISOString(),
@@ -1454,9 +1454,9 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
             transaction_id: txUUID,
             product_id: productUUID,
             product_name: item.name || (item.product ? item.product.name : "Product Item"),
-            quantity: item.quantity || 0.0,
-            sell_price: item.price || 0.0,
-            cost_price: item.buyPrice || item.price || 0.0,
+            quantity: item.quantity !== undefined && item.quantity !== null ? Number(item.quantity) : 0.0,
+            sell_price: item.price !== undefined && item.price !== null ? Number(item.price) : 0.0,
+            cost_price: item.buyPrice !== undefined && item.buyPrice !== null ? Number(item.buyPrice) : (item.price !== undefined && item.price !== null ? Number(item.price) : 0.0),
             is_negative_sale: item.isNegativeSale || false
           });
         });
@@ -1468,8 +1468,8 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         user_id: activeUserId,
         invoice_no: pur.invoiceNo || "PUR-000",
         product_id: toUUID(pur.productId, cleanEmail),
-        quantity: pur.quantity || 0.0,
-        buy_price: pur.buyPrice || 0.0,
+        quantity: pur.quantity !== undefined && pur.quantity !== null ? Number(pur.quantity) : 0.0,
+        buy_price: pur.buyPrice !== undefined && pur.buyPrice !== null ? Number(pur.buyPrice) : 0.0,
         created_at: pur.date || new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));

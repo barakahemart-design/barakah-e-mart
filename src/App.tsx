@@ -323,7 +323,8 @@ export default function App() {
       }
     });
 
-    // --- PHASE 2: Scan remaining deletedItems for any other "customer" or "supplier" that might have been deleted ---
+    // --- PHASE 2: Disabled to prevent auto-resurrecting explicitly soft-deleted contacts from trash ---
+    /*
     deletedItems.forEach(item => {
       if ((item.type === "customer" || item.type === "supplier") && item.data) {
         const exists = updatedContacts.some(c => c.id === item.originalId || c.id === item.data.id);
@@ -334,6 +335,7 @@ export default function App() {
         }
       }
     });
+    */
 
     if (changed) {
       setContacts(updatedContacts);
@@ -390,7 +392,7 @@ export default function App() {
 
         try {
           const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
-          const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, true);
+          const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false);
           if (wasRestored) {
             console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount.");
           }
