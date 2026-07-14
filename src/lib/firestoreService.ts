@@ -44,7 +44,13 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
         if (collName === "customers") {
           alert(`userId: ${userId}\ndocData.user_id: ${docData.user_id}\nid: ${id}`);
         }
+        alert(JSON.stringify({
+          userId,
+          docData,
+          id
+        }, null, 2));
         await setDoc(doc(db, collName, id), docData, { merge: true });
+        alert("SAVE SUCCESS");
         if (collName === "customers") {
           console.log("SAVE SUCCESS");
         }
@@ -64,6 +70,10 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
       return docRef.id;
     }
   } catch (error) {
+    alert("SAVE ERROR\n\n" + JSON.stringify({
+      code: (error as any)?.code,
+      message: (error as any)?.message
+    }, null, 2));
     handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, `${collName}/${id || 'new'}`);
     throw error;
   }
