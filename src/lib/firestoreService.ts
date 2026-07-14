@@ -9,7 +9,7 @@ import {
   doc,
   setDoc
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
 // Helper function to create standard user-filtered collections subscriptions
 function createSubscription(collName: string) {
@@ -33,14 +33,30 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
   try {
     if (id) {
       if (collName === "customers") {
-        console.log("ACTIVE USER:", userId);
-        console.log("CUSTOMER OBJECT:", data);
-        console.log("DOCUMENT ID:", id);
-        console.log("DOCUMENT PATH:", `customers/${id}`);
+        console.log("auth.currentUser.uid =", auth.currentUser?.uid);
+        console.log("received userId =", userId);
+        console.log("docData =", docData);
+        if (auth.currentUser?.uid !== userId) {
+          console.error("UID MISMATCH");
+        }
       }
-      await setDoc(doc(db, collName, id), docData, { merge: true });
-      if (collName === "customers") {
-        console.log("SAVE SUCCESS");
+      try {
+        if (collName === "customers") {
+          alert(`userId: ${userId}\ndocData.user_id: ${docData.user_id}\nid: ${id}`);
+        }
+        await setDoc(doc(db, collName, id), docData, { merge: true });
+        if (collName === "customers") {
+          console.log("SAVE SUCCESS");
+        }
+      } catch (err: any) {
+        if (collName === "customers") {
+          console.error("setDoc FAILED:", err);
+          if (err && typeof err === 'object') {
+            console.error("Firebase error code:", err.code);
+            console.error("Firebase error message:", err.message);
+          }
+        }
+        throw err;
       }
       return id;
     } else {
@@ -48,9 +64,6 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
       return docRef.id;
     }
   } catch (error) {
-    if (collName === "customers") {
-      console.error("Firestore saveCustomer ERROR:", error);
-    }
     handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, `${collName}/${id || 'new'}`);
     throw error;
   }
