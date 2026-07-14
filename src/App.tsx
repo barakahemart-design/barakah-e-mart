@@ -525,19 +525,48 @@ export default function App() {
 
     // Helper to rebuild nested transactions from flat transaction and flat items lists
     const rebuildTransactions = (flatTx: any[], flatItems: any[]) => {
-      return flatTx.map(t => {
-        const relatedItems = flatItems.filter((item: any) => item.transaction_id === t.id);
-        const mappedItems = relatedItems.map((item: any) => ({
-          id: item.id,
-          name: item.product_name || "Product Item",
-          quantity: Number(item.quantity) || 0,
-          price: Number(item.sell_price) || 0,
-          total: Number(item.quantity * item.sell_price) || 0,
-          productId: item.product_id || undefined,
-          buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
-        }));
+      let localNested: any[] = [];
+      try {
+        const rawLocal = localStorage.getItem(getDbKey("barakah_transactions", undefined, activeUserId));
+        if (rawLocal) {
+          localNested = JSON.parse(rawLocal);
+          if (!Array.isArray(localNested)) localNested = [];
+        }
+      } catch (e) {
+        console.warn("[rebuildTransactions] Error parsing local nested:", e);
+      }
 
-        return {
+      const rebuiltList: any[] = [];
+
+      flatTx.forEach(t => {
+        const relatedItems = flatItems.filter((item: any) => item.transaction_id === t.id);
+        let mappedItems: any[] = [];
+
+        if (relatedItems.length > 0) {
+          mappedItems = relatedItems.map((item: any) => ({
+            id: item.id,
+            name: item.product_name || "Product Item",
+            quantity: Number(item.quantity) || 0,
+            price: Number(item.sell_price) || 0,
+            total: Number(item.quantity * item.sell_price) || 0,
+            productId: item.product_id || undefined,
+            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+          }));
+        } else {
+          // Keep existing items if present locally to protect against incomplete collections snapshot
+          const existing = localNested.find((x: any) => x.id === t.id);
+          if (existing && Array.isArray(existing.items) && existing.items.length > 0) {
+            mappedItems = existing.items;
+          }
+        }
+
+        // Safe synchronization fallback: If a transaction is brand new and contains no items yet,
+        // we temporarily skip it from the rebuilt array. It will be added once the transaction_items listener receives them.
+        if (Number(t.total_amount) > 0 && mappedItems.length === 0) {
+          return;
+        }
+
+        rebuiltList.push({
           id: t.id,
           invoiceNo: t.invoice_no,
           date: t.created_at || new Date().toISOString(),
@@ -552,8 +581,10 @@ export default function App() {
           dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
           contactId: t.customer_id || undefined,
           customerSignature: t.signature_svg || undefined
-        };
+        });
       });
+
+      return rebuiltList;
     };
 
     // 1. PRODUCTS SUBSCRIBER
@@ -877,23 +908,31 @@ export default function App() {
       }
 
       try {
-        console.log(`[Realtime Sync] Remote settings updated. Syncing meta...`);
+        console.log(`[Realtime Sync] Remote state updated. Syncing all records atomically...`);
         lastUpdatedAt = cloudUpdatedAt;
 
-        const incomingBizInfo = cloudData.businessInfo || cloudData.business_info || null;
-        if (incomingBizInfo) {
-          localStorage.setItem(getDbKey("barakah_business_info", undefined, activeUserId), JSON.stringify(incomingBizInfo));
-          setBusinessInfo(incomingBizInfo);
-          if (incomingBizInfo.staffList && Array.isArray(incomingBizInfo.staffList)) {
-            setStaffList(incomingBizInfo.staffList);
-          }
+        // Perform safe non-overwrite merge into local storage first to prevent stomping on in-flight data
+        restoreLocalKeys(cloudData, false, activeUserId);
+
+        // Load complete consolidated state from local storage
+        const dbData = loadDB(activeUserId);
+
+        initialLoadedRef.current = false;
+        
+        setProducts(dbData.products);
+        setContacts(dbData.contacts);
+        setExpenses(dbData.expenses);
+        setTransactions(dbData.transactions);
+        setBusinessInfo(dbData.businessInfo);
+        setPurchases(dbData.purchases || []);
+        setDeletedItems(dbData.deletedItems || []);
+        if (dbData.businessInfo && (dbData.businessInfo as any).staffList && Array.isArray((dbData.businessInfo as any).staffList)) {
+          setStaffList((dbData.businessInfo as any).staffList);
         }
 
-        const incomingDeleted = cloudData.deletedItems || cloudData.deleted_items || [];
-        if (incomingDeleted.length > 0) {
-          localStorage.setItem(getDbKey("barakah_deleted_items", undefined, activeUserId), JSON.stringify(incomingDeleted));
-          setDeletedItems(incomingDeleted);
-        }
+        setTimeout(() => {
+          initialLoadedRef.current = true;
+        }, 500);
 
         setSyncStatus("connected");
       } catch (err) {
