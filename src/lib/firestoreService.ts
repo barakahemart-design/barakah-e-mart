@@ -32,13 +32,25 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
 
   try {
     if (id) {
+      if (collName === "customers") {
+        console.log("ACTIVE USER:", userId);
+        console.log("CUSTOMER OBJECT:", data);
+        console.log("DOCUMENT ID:", id);
+        console.log("DOCUMENT PATH:", `customers/${id}`);
+      }
       await setDoc(doc(db, collName, id), docData, { merge: true });
+      if (collName === "customers") {
+        console.log("SAVE SUCCESS");
+      }
       return id;
     } else {
       const docRef = await addDoc(collection(db, collName), docData);
       return docRef.id;
     }
   } catch (error) {
+    if (collName === "customers") {
+      console.error("Firestore saveCustomer ERROR:", error);
+    }
     handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, `${collName}/${id || 'new'}`);
     throw error;
   }
