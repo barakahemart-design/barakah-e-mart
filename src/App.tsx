@@ -68,22 +68,162 @@ import { NegativeSalesView } from "./components/NegativeSalesView";
 import { PurchasesView } from "./components/PurchasesView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { 
-  Product, 
-  Expense, 
-  Contact, 
-  Transaction, 
-  TransactionItem, 
-  BusinessInfo, 
-  Purchase,
-  loadDB, 
-  saveDB,
   INITIAL_PRODUCTS,
   INITIAL_CONTACTS,
   INITIAL_EXPENSES,
   INITIAL_BUSINESS_INFO,
-  INITIAL_PURCHASES,
-  getDbKey
+  INITIAL_PURCHASES
 } from "./lib/mockDB";
+import {
+  subscribeProducts,
+  subscribeCustomers,
+  subscribeTransactions,
+  subscribeExpenses,
+  subscribePurchases,
+  saveCustomer
+} from "./lib/firestoreService";
+
+export interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  stock: number;
+  buyPrice: number;
+  sellPrice: number;
+  category: string;
+  unit: string;
+  imageUrl?: string;
+}
+
+export interface Purchase {
+  id: string;
+  productId: string;
+  productName: string;
+  supplierId: string;
+  supplierName: string;
+  quantity: number;
+  buyPrice: number;
+  totalAmount: number;
+  date: string;
+  cashPaid?: number;
+  dueAmount?: number;
+  invoiceNo?: string;
+  note?: string;
+  originallyCredit?: boolean;
+}
+
+export interface Expense {
+  id: string;
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  type: "customer" | "supplier";
+  created_at: string;
+}
+
+export interface TransactionItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+  productId?: string;
+  buyPrice?: number;
+  isNegativeSale?: boolean;
+}
+
+export interface Transaction {
+  id: string;
+  invoiceNo: string;
+  date: string;
+  items: TransactionItem[];
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  paymentMethod: string;
+  status: "paid" | "partial" | "due";
+  paidAmount: number;
+  dueBalance: number;
+  contactId?: string;
+  customerSignature?: string;
+}
+
+export interface BusinessInfo {
+  name: string;
+  address: string;
+  phoneNumber: string;
+  vatRegNo: string;
+  currencySymbol: string;
+  email?: string;
+  adminPasscode?: string;
+  salesPasscode?: string;
+  companyLogo?: string;
+  showLogoInInvoice?: boolean;
+  logoAlignment?: "left" | "center" | "right";
+  startingInvoiceNumber?: number;
+  showCustomerSignature?: boolean;
+  showAuthorizedSignature?: boolean;
+  termsConditions?: string;
+  selectedFont?: string;
+  selectedInvoiceTemplate?: string;
+  showPartnerLogos?: boolean;
+  partnerLogos?: string[];
+  presetBrands?: string[];
+  salesmanPermissions?: {
+    canEditSales: boolean;
+    canDeleteSales: boolean;
+    canOverridePrices: boolean;
+  };
+}
+
+export function getDbKey(baseKey: string, customEmail?: string, uid?: string): string {
+  let finalUid = uid;
+  let email = customEmail;
+
+  if (!email && !finalUid) {
+    try {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        email = parsed?.email;
+        finalUid = parsed?.uid;
+      }
+    } catch (_) {}
+  } else if (email && !finalUid) {
+    try {
+      const cached = localStorage.getItem('barakah_local_active_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.email?.trim().toLowerCase() === email.trim().toLowerCase()) {
+          finalUid = parsed?.uid;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Use user-specific prefix BARAKAH_DB_${uid} if uid is available
+  if (finalUid) {
+    const cleanKeyName = baseKey.replace(/^barakah_/, "");
+    return `BARAKAH_DB_${finalUid}_${cleanKeyName}`;
+  }
+
+  if (email) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail) {
+      return `${baseKey}_${cleanEmail}`;
+    }
+  }
+  return baseKey;
+}
 import { 
   subscribeToAuthChanges, 
   signOut, 
@@ -97,7 +237,7 @@ import {
   toUUID,
   restoreLocalKeys,
   deleteCloudDocument
-} from "./lib/supabase";
+} from "./lib/firebase-helpers";
 import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "./lib/firebase";
 import { 
@@ -121,13 +261,13 @@ export default function App() {
    const remoteTimeoutRef = useRef<any>(null);
  
    // Active Core Database State (Merged loaded state)
-   const [products, setProducts] = useState<Product[]>(() => loadDB().products);
-   const [contacts, setContacts] = useState<Contact[]>(() => loadDB().contacts);
-   const [expenses, setExpenses] = useState<Expense[]>(() => loadDB().expenses);
-   const [transactions, setTransactions] = useState<Transaction[]>(() => loadDB().transactions);
-   const [purchases, setPurchases] = useState<Purchase[]>(() => loadDB().purchases || []);
-   const [deletedItems, setDeletedItems] = useState<any[]>(() => loadDB().deletedItems || []);
-   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(() => loadDB().businessInfo);
+   const [products, setProducts] = useState<Product[]>([]);
+   const [contacts, setContacts] = useState<Contact[]>([]);
+   const [expenses, setExpenses] = useState<Expense[]>([]);
+   const [transactions, setTransactions] = useState<Transaction[]>([]);
+   const [purchases, setPurchases] = useState<Purchase[]>([]);
+   const [deletedItems, setDeletedItems] = useState<any[]>([]);
+   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(INITIAL_BUSINESS_INFO);
  
    const softDeleteItem = (type: 'sale' | 'customer' | 'expense' | 'purchase' | 'product', originalId: string, itemData: any, label: string) => {
      const newItem = {
@@ -154,10 +294,6 @@ export default function App() {
   // Staff members state
   const [staffList, setStaffList] = useState<Staff[]>(() => {
     try {
-      const db = loadDB();
-      if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
-        return (db.businessInfo as any).staffList;
-      }
       const savedStr = localStorage.getItem(getDbKey("barakah_staff_list"));
       return savedStr ? JSON.parse(savedStr) : [];
     } catch (_) {
@@ -405,16 +541,33 @@ export default function App() {
       }
 
       // Reload database from custom localStorage storage corresponding to the session mode
-      const db = loadDB(user.uid);
-      setProducts(db.products);
-      setContacts(db.contacts);
-      setExpenses(db.expenses);
-      setTransactions(db.transactions);
-      setBusinessInfo(db.businessInfo);
-      setPurchases(db.purchases || []);
-      setDeletedItems(db.deletedItems || []);
-      if (db.businessInfo && (db.businessInfo as any).staffList && Array.isArray((db.businessInfo as any).staffList)) {
-        setStaffList((db.businessInfo as any).staffList);
+      const getStored = (key: string, fallback: any) => {
+        try {
+          const val = localStorage.getItem(getDbKey(key, undefined, user.uid));
+          return val ? JSON.parse(val) : fallback;
+        } catch (_) {
+          return fallback;
+        }
+      };
+
+      const storedProducts = getStored("barakah_products", INITIAL_PRODUCTS);
+      const storedContacts = getStored("barakah_contacts", INITIAL_CONTACTS);
+      const storedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
+      const storedTransactions = getStored("barakah_transactions", []);
+      const storedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
+      const storedDeletedItems = getStored("barakah_deleted_items", []);
+      const storedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
+
+      setProducts(storedProducts);
+      setContacts(storedContacts);
+      setExpenses(storedExpenses);
+      setTransactions(storedTransactions);
+      setBusinessInfo(storedBusinessInfo);
+      setPurchases(storedPurchases);
+      setDeletedItems(storedDeletedItems);
+
+      if (storedBusinessInfo && (storedBusinessInfo as any).staffList && Array.isArray((storedBusinessInfo as any).staffList)) {
+        setStaffList((storedBusinessInfo as any).staffList);
       } else {
         try {
           const lstr = localStorage.getItem(getDbKey("barakah_staff_list"));
@@ -445,15 +598,27 @@ export default function App() {
         staffList
       };
 
-      saveDB({
-        products,
-        contacts,
-        expenses,
-        transactions,
-        businessInfo: compiledBusinessInfo,
-        purchases,
-        deletedItems
-      }, activeUser.uid);
+      // localStorage.setItem(getDbKey("barakah_products", undefined, activeUser.uid), JSON.stringify(products));
+      // localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUser.uid), JSON.stringify(contacts));
+      // localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUser.uid), JSON.stringify(expenses));
+      // localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUser.uid), JSON.stringify(transactions));
+      // localStorage.setItem(getDbKey("barakah_business_info", undefined, activeUser.uid), JSON.stringify(compiledBusinessInfo));
+      // localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUser.uid), JSON.stringify(purchases));
+      // localStorage.setItem(getDbKey("barakah_deleted_items", undefined, activeUser.uid), JSON.stringify(deletedItems));
+
+      const totalItems = products.length + transactions.length;
+      if (totalItems > 0) {
+        /*
+        localStorage.setItem(getDbKey("barakah_fail_safe_backup", undefined, activeUser.uid), JSON.stringify({
+          products,
+          contacts,
+          expenses,
+          transactions,
+          purchases,
+          deletedItems
+        }));
+        */
+      }
 
       // Also persist separately in localStorage just in case
       localStorage.setItem(getDbKey("barakah_staff_list"), JSON.stringify(staffList));
@@ -588,192 +753,88 @@ export default function App() {
     };
 
     // 1. PRODUCTS SUBSCRIBER
-    const qProducts = query(collection(db, "products"), where("user_id", "==", activeUserId));
-    const unsubProducts = onSnapshot(qProducts, { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-        return;
-      }
+    const unsubProducts = subscribeProducts(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const currentLocal = loadDB(activeUserId).products || [];
-      const updatedList = [...currentLocal];
+      const updatedList = items.map(docData => ({
+        id: docData.id,
+        name: docData.name || "Unnamed Product",
+        sku: docData.sku || "",
+        stock: Number(docData.stock) || 0,
+        buyPrice: Number(docData.buy_price) || 0,
+        sellPrice: Number(docData.sell_price) || 0,
+        category: docData.category || "Electronics",
+        unit: docData.unit || "piece",
+        imageUrl: docData.image_url || undefined
+      }));
 
-      snapshot.docChanges().forEach((change) => {
-        const docData = change.doc.data();
-        const item = {
-          id: docData.id,
-          name: docData.name || "Unnamed Product",
-          sku: docData.sku || "",
-          stock: Number(docData.stock) || 0,
-          buyPrice: Number(docData.buy_price) || 0,
-          sellPrice: Number(docData.sell_price) || 0,
-          category: docData.category || "Electronics",
-          unit: docData.unit || "piece",
-          imageUrl: docData.image_url || undefined
-        };
-
-        const idx = updatedList.findIndex(x => x.id === item.id);
-        if (change.type === "added" || change.type === "modified") {
-          if (idx >= 0) {
-            updatedList[idx] = item;
-          } else {
-            updatedList.push(item);
-          }
-        } else if (change.type === "removed") {
-          if (idx >= 0) {
-            updatedList.splice(idx, 1);
-          }
-        }
-      });
-
-      localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
+      // localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setProducts(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
       setSyncStatus("connected");
-    }, (err) => {
-      console.warn("[Realtime Sync] Products snapshot failed:", err);
     });
 
     // 2. CUSTOMERS SUBSCRIBER
-    const qCustomers = query(collection(db, "customers"), where("user_id", "==", activeUserId));
-    const unsubCustomers = onSnapshot(qCustomers, { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-        return;
-      }
+    const unsubCustomers = subscribeCustomers(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const currentLocal = loadDB(activeUserId).contacts || [];
-      const updatedList = [...currentLocal];
+      const updatedList = items.map(docData => ({
+        id: docData.id,
+        name: docData.name || "Unnamed Contact",
+        phone: docData.phone || "",
+        address: docData.address || "",
+        type: docData.type || "customer",
+        created_at: docData.created_at || docData.updated_at || new Date().toISOString()
+      }));
 
-      snapshot.docChanges().forEach((change) => {
-        const docData = change.doc.data();
-        const item = {
-          id: docData.id,
-          name: docData.name || "Unnamed Contact",
-          phone: docData.phone || "",
-          address: docData.address || "",
-          type: docData.type || "customer",
-          created_at: docData.created_at || docData.updated_at || new Date().toISOString()
-        };
-
-        const idx = updatedList.findIndex(x => x.id === item.id);
-        if (change.type === "added" || change.type === "modified") {
-          if (idx >= 0) {
-            updatedList[idx] = item;
-          } else {
-            updatedList.push(item);
-          }
-        } else if (change.type === "removed") {
-          if (idx >= 0) {
-            updatedList.splice(idx, 1);
-          }
-        }
-      });
-
-      localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
+      // localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setContacts(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
       setSyncStatus("connected");
-    }, (err) => {
-      console.warn("[Realtime Sync] Customers snapshot failed:", err);
     });
 
     // 3. EXPENSES SUBSCRIBER
-    const qExpenses = query(collection(db, "expenses"), where("user_id", "==", activeUserId));
-    const unsubExpenses = onSnapshot(qExpenses, { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-        return;
-      }
+    const unsubExpenses = subscribeExpenses(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const currentLocal = loadDB(activeUserId).expenses || [];
-      const updatedList = [...currentLocal];
+      const updatedList = items.map(docData => ({
+        id: docData.id,
+        category: docData.category || "Others",
+        amount: Number(docData.amount) || 0,
+        description: docData.description || "",
+        date: docData.created_at || docData.date || new Date().toISOString()
+      }));
 
-      snapshot.docChanges().forEach((change) => {
-        const docData = change.doc.data();
-        const item = {
-          id: docData.id,
-          category: docData.category || "Others",
-          amount: Number(docData.amount) || 0,
-          description: docData.description || "",
-          date: docData.created_at || docData.date || new Date().toISOString()
-        };
-
-        const idx = updatedList.findIndex(x => x.id === item.id);
-        if (change.type === "added" || change.type === "modified") {
-          if (idx >= 0) {
-            updatedList[idx] = item;
-          } else {
-            updatedList.push(item);
-          }
-        } else if (change.type === "removed") {
-          if (idx >= 0) {
-            updatedList.splice(idx, 1);
-          }
-        }
-      });
-
-      localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
+      // localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setExpenses(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
       setSyncStatus("connected");
-    }, (err) => {
-      console.warn("[Realtime Sync] Expenses snapshot failed:", err);
     });
 
     // 4. PURCHASES SUBSCRIBER
-    const qPurchases = query(collection(db, "purchases"), where("user_id", "==", activeUserId));
-    const unsubPurchases = onSnapshot(qPurchases, { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-        return;
-      }
+    const unsubPurchases = subscribePurchases(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const currentLocal = loadDB(activeUserId).purchases || [];
-      const updatedList = [...currentLocal];
+      const updatedList = items.map(docData => ({
+        id: docData.id,
+        productId: docData.product_id,
+        productName: "Purchase Item",
+        supplierId: "",
+        supplierName: "Main Depot",
+        quantity: Number(docData.quantity) || 0,
+        buyPrice: Number(docData.buy_price) || 0,
+        totalAmount: Number(docData.quantity * docData.buy_price) || 0,
+        date: docData.created_at || new Date().toISOString()
+      }));
 
-      snapshot.docChanges().forEach((change) => {
-        const docData = change.doc.data();
-        const item = {
-          id: docData.id,
-          productId: docData.product_id,
-          productName: "Purchase Item",
-          supplierId: "",
-          supplierName: "Main Depot",
-          quantity: Number(docData.quantity) || 0,
-          buyPrice: Number(docData.buy_price) || 0,
-          totalAmount: Number(docData.quantity * docData.buy_price) || 0,
-          date: docData.created_at || new Date().toISOString()
-        };
-
-        const idx = updatedList.findIndex(x => x.id === item.id);
-        if (change.type === "added" || change.type === "modified") {
-          if (idx >= 0) {
-            updatedList[idx] = item;
-          } else {
-            updatedList.push(item);
-          }
-        } else if (change.type === "removed") {
-          if (idx >= 0) {
-            updatedList.splice(idx, 1);
-          }
-        }
-      });
-
-      localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
+      // localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setPurchases(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
       setSyncStatus("connected");
-    }, (err) => {
-      console.warn("[Realtime Sync] Purchases snapshot failed:", err);
     });
 
     // Helper to merge and trigger transaction state rebuild
@@ -789,7 +850,7 @@ export default function App() {
       const nestedTx = rebuildTransactions(flatTx, flatItems);
       nestedTx.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(nestedTx));
+      // localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(nestedTx));
 
       initialLoadedRef.current = false;
       setTransactions(nestedTx);
@@ -798,51 +859,24 @@ export default function App() {
     };
 
     // 5. TRANSACTIONS SUBSCRIBER
-    const qTransactions = query(collection(db, "transactions"), where("user_id", "==", activeUserId));
-    const unsubTransactions = onSnapshot(qTransactions, { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-        return;
-      }
+    const unsubTransactions = subscribeTransactions(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
-      let flatTransactions = JSON.parse(rawLocalTx);
-      if (!Array.isArray(flatTransactions)) flatTransactions = [];
+      const flatTransactions = items.map(docData => ({
+        id: docData.id,
+        invoice_no: docData.invoice_no,
+        customer_id: docData.customer_id || null,
+        total_amount: Number(docData.total_amount) || 0,
+        discount: Number(docData.discount) || 0,
+        vat_rate: Number(docData.vat_rate) || 0,
+        paid_amount: Number(docData.paid_amount) || 0,
+        payment_method: docData.payment_method || "Cash",
+        signature_svg: docData.signature_svg || null,
+        created_at: docData.created_at || new Date().toISOString()
+      }));
 
-      snapshot.docChanges().forEach((change) => {
-        const docData = change.doc.data();
-        const item = {
-          id: docData.id,
-          invoice_no: docData.invoice_no,
-          customer_id: docData.customer_id || null,
-          total_amount: Number(docData.total_amount) || 0,
-          discount: Number(docData.discount) || 0,
-          vat_rate: Number(docData.vat_rate) || 0,
-          paid_amount: Number(docData.paid_amount) || 0,
-          payment_method: docData.payment_method || "Cash",
-          signature_svg: docData.signature_svg || null,
-          created_at: docData.created_at || new Date().toISOString()
-        };
-
-        const idx = flatTransactions.findIndex((x: any) => x.id === item.id);
-        if (change.type === "added" || change.type === "modified") {
-          if (idx >= 0) {
-            flatTransactions[idx] = item;
-          } else {
-            flatTransactions.push(item);
-          }
-        } else if (change.type === "removed") {
-          if (idx >= 0) {
-            flatTransactions.splice(idx, 1);
-          }
-        }
-      });
-
-      localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTransactions));
+      // localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTransactions));
       handleTransactionsChange(flatTransactions, undefined);
-    }, (err) => {
-      console.warn("[Realtime Sync] Transactions snapshot failed:", err);
     });
 
     // 6. TRANSACTION ITEMS SUBSCRIBER
@@ -884,7 +918,7 @@ export default function App() {
         }
       });
 
-      localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+      // localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
     }, (err) => {
       console.warn("[Realtime Sync] Transaction Items snapshot failed:", err);
@@ -915,19 +949,34 @@ export default function App() {
         restoreLocalKeys(cloudData, false, activeUserId);
 
         // Load complete consolidated state from local storage
-        const dbData = loadDB(activeUserId);
+        const getStored = (key: string, fallback: any) => {
+          try {
+            const val = localStorage.getItem(getDbKey(key, undefined, activeUserId));
+            return val ? JSON.parse(val) : fallback;
+          } catch (_) {
+            return fallback;
+          }
+        };
+
+        const storedProducts = getStored("barakah_products", INITIAL_PRODUCTS);
+        const storedContacts = getStored("barakah_contacts", INITIAL_CONTACTS);
+        const storedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
+        const storedTransactions = getStored("barakah_transactions", []);
+        const storedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
+        const storedDeletedItems = getStored("barakah_deleted_items", []);
+        const storedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
 
         initialLoadedRef.current = false;
         
-        setProducts(dbData.products);
-        setContacts(dbData.contacts);
-        setExpenses(dbData.expenses);
-        setTransactions(dbData.transactions);
-        setBusinessInfo(dbData.businessInfo);
-        setPurchases(dbData.purchases || []);
-        setDeletedItems(dbData.deletedItems || []);
-        if (dbData.businessInfo && (dbData.businessInfo as any).staffList && Array.isArray((dbData.businessInfo as any).staffList)) {
-          setStaffList((dbData.businessInfo as any).staffList);
+        setProducts(storedProducts);
+        setContacts(storedContacts);
+        setExpenses(storedExpenses);
+        setTransactions(storedTransactions);
+        setBusinessInfo(storedBusinessInfo);
+        setPurchases(storedPurchases);
+        setDeletedItems(storedDeletedItems);
+        if (storedBusinessInfo && (storedBusinessInfo as any).staffList && Array.isArray((storedBusinessInfo as any).staffList)) {
+          setStaffList((storedBusinessInfo as any).staffList);
         }
 
         setTimeout(() => {
@@ -1019,13 +1068,20 @@ export default function App() {
     setActiveUser(dummyUser);
     
     // Refresh states
-    const db = loadDB();
-    setProducts(db.products);
-    setContacts(db.contacts);
-    setExpenses(db.expenses);
-    setTransactions(db.transactions);
-    setBusinessInfo(db.businessInfo);
-    setPurchases(db.purchases || []);
+    const getStored = (key: string, fallback: any) => {
+      try {
+        const val = localStorage.getItem(getDbKey(key, undefined, undefined));
+        return val ? JSON.parse(val) : fallback;
+      } catch (_) {
+        return fallback;
+      }
+    };
+    setProducts(getStored("barakah_products", INITIAL_PRODUCTS));
+    setContacts(getStored("barakah_contacts", INITIAL_CONTACTS));
+    setExpenses(getStored("barakah_expenses", INITIAL_EXPENSES));
+    setTransactions(getStored("barakah_transactions", []));
+    setBusinessInfo(getStored("barakah_business_info", INITIAL_BUSINESS_INFO));
+    setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
     triggerNotification("Guest Mode Activated (Welcome to Sandbox Guest Mode!)", "info");
     initialLoadedRef.current = true;
   };
@@ -1074,13 +1130,20 @@ export default function App() {
       const restored = await fetchAndRestoreCloudBackup(activeUser.email, passcode, true);
       if (restored) {
         // Reload states
-        const db = loadDB(activeUser?.uid);
-        setProducts(db.products);
-        setContacts(db.contacts);
-        setExpenses(db.expenses);
-        setTransactions(db.transactions);
-        setBusinessInfo(db.businessInfo);
-        setPurchases(db.purchases || []);
+        const getStored = (key: string, fallback: any) => {
+          try {
+            const val = localStorage.getItem(getDbKey(key, undefined, activeUser?.uid));
+            return val ? JSON.parse(val) : fallback;
+          } catch (_) {
+            return fallback;
+          }
+        };
+        setProducts(getStored("barakah_products", INITIAL_PRODUCTS));
+        setContacts(getStored("barakah_contacts", INITIAL_CONTACTS));
+        setExpenses(getStored("barakah_expenses", INITIAL_EXPENSES));
+        setTransactions(getStored("barakah_transactions", []));
+        setBusinessInfo(getStored("barakah_business_info", INITIAL_BUSINESS_INFO));
+        setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
 
         triggerNotification("Cloud backup restored and synchronized successfully! 🎉", "success");
       } else {
@@ -1097,13 +1160,20 @@ export default function App() {
   const handleDataImport = (data: any) => {
     restoreLocalKeys(data, true, activeUser?.uid);
     // Reload states from newly restored localStorage DB
-    const dbData = loadDB(activeUser?.uid);
-    setProducts(dbData.products);
-    setContacts(dbData.contacts);
-    setExpenses(dbData.expenses);
-    setTransactions(dbData.transactions);
-    setBusinessInfo(dbData.businessInfo);
-    setPurchases(dbData.purchases || []);
+    const getStored = (key: string, fallback: any) => {
+      try {
+        const val = localStorage.getItem(getDbKey(key, undefined, activeUser?.uid));
+        return val ? JSON.parse(val) : fallback;
+      } catch (_) {
+        return fallback;
+      }
+    };
+    setProducts(getStored("barakah_products", INITIAL_PRODUCTS));
+    setContacts(getStored("barakah_contacts", INITIAL_CONTACTS));
+    setExpenses(getStored("barakah_expenses", INITIAL_EXPENSES));
+    setTransactions(getStored("barakah_transactions", []));
+    setBusinessInfo(getStored("barakah_business_info", INITIAL_BUSINESS_INFO));
+    setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
   };
 
   // Handler for custom local auth action signup
@@ -1113,13 +1183,20 @@ export default function App() {
     setActiveUser(user);
     
     // Refresh states
-    const db = loadDB(user?.uid);
-    setProducts(db.products);
-    setContacts(db.contacts);
-    setExpenses(db.expenses);
-    setTransactions(db.transactions);
-    setBusinessInfo(db.businessInfo);
-    setPurchases(db.purchases || []);
+    const getStored = (key: string, fallback: any) => {
+      try {
+        const val = localStorage.getItem(getDbKey(key, undefined, user?.uid));
+        return val ? JSON.parse(val) : fallback;
+      } catch (_) {
+        return fallback;
+      }
+    };
+    setProducts(getStored("barakah_products", INITIAL_PRODUCTS));
+    setContacts(getStored("barakah_contacts", INITIAL_CONTACTS));
+    setExpenses(getStored("barakah_expenses", INITIAL_EXPENSES));
+    setTransactions(getStored("barakah_transactions", []));
+    setBusinessInfo(getStored("barakah_business_info", INITIAL_BUSINESS_INFO));
+    setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
 
     if (user.restored) {
       triggerNotification("Cloud backup and database restore completed successfully! 🎉");
@@ -1138,13 +1215,20 @@ export default function App() {
     setActiveUser(user);
 
     // Refresh states
-    const db = loadDB(user?.uid);
-    setProducts(db.products);
-    setContacts(db.contacts);
-    setExpenses(db.expenses);
-    setTransactions(db.transactions);
-    setBusinessInfo(db.businessInfo);
-    setPurchases(db.purchases || []);
+    const getStored = (key: string, fallback: any) => {
+      try {
+        const val = localStorage.getItem(getDbKey(key, undefined, user?.uid));
+        return val ? JSON.parse(val) : fallback;
+      } catch (_) {
+        return fallback;
+      }
+    };
+    setProducts(getStored("barakah_products", INITIAL_PRODUCTS));
+    setContacts(getStored("barakah_contacts", INITIAL_CONTACTS));
+    setExpenses(getStored("barakah_expenses", INITIAL_EXPENSES));
+    setTransactions(getStored("barakah_transactions", []));
+    setBusinessInfo(getStored("barakah_business_info", INITIAL_BUSINESS_INFO));
+    setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
 
     if (user.restored) {
       triggerNotification("Welcome back! Your store data was seamlessly restored from cloud backup. 🎉");
@@ -1163,13 +1247,20 @@ export default function App() {
     setActiveUser(user);
     
     // Refresh states
-    const db = loadDB(user?.uid);
-    setProducts(db.products);
-    setContacts(db.contacts);
-    setExpenses(db.expenses);
-    setTransactions(db.transactions);
-    setBusinessInfo(db.businessInfo);
-    setPurchases(db.purchases || []);
+    const getStored = (key: string, fallback: any) => {
+      try {
+        const val = localStorage.getItem(getDbKey(key, undefined, user?.uid));
+        return val ? JSON.parse(val) : fallback;
+      } catch (_) {
+        return fallback;
+      }
+    };
+    setProducts(getStored("barakah_products", INITIAL_PRODUCTS));
+    setContacts(getStored("barakah_contacts", INITIAL_CONTACTS));
+    setExpenses(getStored("barakah_expenses", INITIAL_EXPENSES));
+    setTransactions(getStored("barakah_transactions", []));
+    setBusinessInfo(getStored("barakah_business_info", INITIAL_BUSINESS_INFO));
+    setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
 
     if (user.restored) {
       triggerNotification("Cloud backup and database restore completed successfully! 🎉");
@@ -2512,19 +2603,30 @@ export default function App() {
 
     if (editingContact) {
       // Inline update of current client profile
+      const updatedContact = {
+        id: editingContact.id,
+        name: finalName,
+        phone: finalPhone,
+        address: finalAddress || "Dhaka, Bangladesh",
+        type: cType,
+        created_at: editingContact.created_at || new Date().toISOString()
+      };
       const updated = contacts.map(c => {
         if (c.id === editingContact.id) {
-          return {
-            ...c,
-            name: finalName,
-            phone: finalPhone,
-            address: finalAddress || "Dhaka, Bangladesh",
-            type: cType
-          };
+          return updatedContact;
         }
         return c;
       });
       setContacts(updated);
+
+      if (activeUser && !activeUser.isGuest) {
+        try {
+          await saveCustomer(activeUser.uid, updatedContact);
+        } catch (err) {
+          console.error("Error saving updated contact to Firestore:", err);
+        }
+      }
+
       setEditingContact(null);
       setCName("");
       setCPhone("");
@@ -2542,6 +2644,15 @@ export default function App() {
       };
 
       setContacts([newContact, ...contacts]);
+
+      if (activeUser && !activeUser.isGuest) {
+        try {
+          await saveCustomer(activeUser.uid, newContact);
+        } catch (err) {
+          console.error("Error saving new contact to Firestore:", err);
+        }
+      }
+
       setCName("");
       setCPhone("");
       setCAddress("");

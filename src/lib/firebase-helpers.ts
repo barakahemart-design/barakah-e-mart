@@ -54,24 +54,23 @@ export async function fetchDocsFresh(q: any): Promise<any> {
   }
 }
 
-export const isSupabaseConfigured = true;
-export const supabase = null as any; // Mock for any uncalled references
+export const isFirebaseConfigured = true;
 
-let currentSupabaseUser: any = null;
+let currentFirebaseUser: any = null;
 const authListeners = new Set<(user: any) => void>();
 
 const updateCurrentUser = (sessionUser: any) => {
   if (sessionUser) {
-    currentSupabaseUser = { 
+    currentFirebaseUser = { 
       uid: sessionUser.id || sessionUser.uid, 
       id: sessionUser.id || sessionUser.uid, 
       email: sessionUser.email, 
       ...sessionUser 
     };
   } else {
-    currentSupabaseUser = null;
+    currentFirebaseUser = null;
   }
-  authListeners.forEach(cb => cb(currentSupabaseUser));
+  authListeners.forEach(cb => cb(currentFirebaseUser));
 };
 
 // Listen for firebase auth state alterations
@@ -104,7 +103,7 @@ onAuthStateChanged(firebaseAuth, (user: FirebaseUser | null) => {
 const cachedUser = localStorage.getItem('barakah_local_active_user');
 if (cachedUser) {
   try {
-    currentSupabaseUser = JSON.parse(cachedUser);
+    currentFirebaseUser = JSON.parse(cachedUser);
   } catch (e) {
     // ignore
   }
@@ -277,8 +276,8 @@ export const selfHealDatabase = (customEmail?: string, uid?: string) => {
       }
     } catch (_) {}
   }
-  if (!email && currentSupabaseUser?.email) {
-    email = currentSupabaseUser.email.trim().toLowerCase();
+  if (!email && currentFirebaseUser?.email) {
+    email = currentFirebaseUser.email.trim().toLowerCase();
   }
   if (!finalUid && cached) {
     try {
@@ -288,8 +287,8 @@ export const selfHealDatabase = (customEmail?: string, uid?: string) => {
       }
     } catch (_) {}
   }
-  if (!finalUid && currentSupabaseUser?.id) {
-    finalUid = currentSupabaseUser.id;
+  if (!finalUid && currentFirebaseUser?.id) {
+    finalUid = currentFirebaseUser.id;
   }
 
   const normalizeWithEmail = (id: string) => toUUID(id, email);
@@ -376,7 +375,7 @@ export const selfHealDatabase = (customEmail?: string, uid?: string) => {
 export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: string) => {
   if (!data) return;
 
-  const email = (data.linked_email || data.linkedEmail || currentSupabaseUser?.email || "").trim().toLowerCase();
+  const email = (data.linked_email || data.linkedEmail || currentFirebaseUser?.email || "").trim().toLowerCase();
 
   const normalizeProduct = (p: any): any => {
     if (!p) return p;
@@ -1052,7 +1051,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }));
       }
 
-      const localTargetUid = currentSupabaseUser?.uid || activeUserId;
+      const localTargetUid = currentFirebaseUser?.uid || activeUserId;
       restoreLocalKeys(finalData, overwrite, localTargetUid);
       return true;
     }
@@ -1283,13 +1282,13 @@ export const signOut = async () => {
     console.warn("Direct auth engine signout warning:", e);
   }
   localStorage.removeItem('barakah_local_active_user');
-  currentSupabaseUser = null;
+  currentFirebaseUser = null;
   authListeners.forEach(cb => cb(null));
 };
 
 export const subscribeToAuthChanges = (callback: (user: any) => void) => {
   authListeners.add(callback);
-  callback(currentSupabaseUser);
+  callback(currentFirebaseUser);
   return () => {
     authListeners.delete(callback);
   };
@@ -1297,7 +1296,7 @@ export const subscribeToAuthChanges = (callback: (user: any) => void) => {
 
 export const auth = {
   get currentUser() {
-    return currentSupabaseUser;
+    return currentFirebaseUser;
   },
   signUpWithEmail,
   signInWithEmail,
@@ -1439,7 +1438,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
 
   // Real-time table synchronizer mapping
   try {
-    let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+    let activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id;
     if (!activeUserId && cleanEmail) {
       const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
       const profileSnap = await fetchDocsFresh(profileQ);
@@ -1741,7 +1740,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
   }
 
-  const activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id || "";
+  const activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id || "";
   const updatedAt = new Date().toISOString();
 
   const body = {
@@ -1828,7 +1827,7 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 export const upsertDocument = async (table: string, id: string, data: any) => {
-  let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+  let activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id;
   if (!activeUserId) {
     try {
       const cached = localStorage.getItem('barakah_local_active_user');
@@ -1880,7 +1879,7 @@ export const deleteDocument = async (table: string, id: string) => {
 };
 
 export const fetchUserCollection = async (table: string, ownerEmail: string) => {
-  let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+  let activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id;
   if (!activeUserId) {
     try {
       const cached = localStorage.getItem('barakah_local_active_user');
@@ -1933,7 +1932,7 @@ export const subscribeToCollection = (table: string, ownerEmail: string, callbac
 
 export const saveBusinessSettings = async (email: string, info: any) => {
   const docId = `settings_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  let activeUserId = firebaseAuth.currentUser?.uid || currentSupabaseUser?.id;
+  let activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id;
   if (!activeUserId) {
     try {
       const cached = localStorage.getItem('barakah_local_active_user');
