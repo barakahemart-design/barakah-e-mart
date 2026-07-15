@@ -442,26 +442,6 @@ export default function App() {
       }
     });
 
-    // 4. Fallback: Synthesize customer contacts using placeholder if they are still completely missing
-    transactions.forEach(t => {
-      if (t.contactId) {
-        const exists = updatedContacts.some(c => c.id === t.contactId);
-        if (!exists) {
-          const synthesizedContact: Contact = {
-            id: t.contactId,
-            name: `Recovered Customer (${t.invoiceNo})`,
-            phone: "",
-            address: "Auto-Recovered from transaction ledger",
-            type: "customer",
-            created_at: t.date || new Date().toISOString()
-          };
-          updatedContacts.push(synthesizedContact);
-          recoveredNames.push(synthesizedContact.name);
-          changed = true;
-        }
-      }
-    });
-
     // --- PHASE 2: Disabled to prevent auto-resurrecting explicitly soft-deleted contacts from trash ---
     /*
     deletedItems.forEach(item => {
