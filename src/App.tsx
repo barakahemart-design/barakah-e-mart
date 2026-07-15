@@ -239,7 +239,7 @@ import {
   deleteCloudDocument
 } from "./lib/firebase-helpers";
 import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "./lib/firebase";
+import { db, auth as firebaseAuth } from "./lib/firebase";
 import { 
   generateInvoicePDF,
   generateDeliveryChallanPDF
@@ -490,7 +490,6 @@ export default function App() {
       const storedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
       const storedTransactions = getStored("barakah_transactions", []);
       const storedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
-      const storedDeletedItems = getStored("barakah_deleted_items", []);
       const storedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
 
       setProducts(storedProducts);
@@ -499,7 +498,6 @@ export default function App() {
       setTransactions(storedTransactions);
       setBusinessInfo(storedBusinessInfo);
       setPurchases(storedPurchases);
-      setDeletedItems(storedDeletedItems);
 
       if (storedBusinessInfo && (storedBusinessInfo as any).staffList && Array.isArray((storedBusinessInfo as any).staffList)) {
         setStaffList((storedBusinessInfo as any).staffList);
@@ -598,6 +596,12 @@ export default function App() {
   useEffect(() => {
     if (!activeUser || activeUser.isGuest || !activeUser.uid) {
       setSyncStatus("offline");
+      return;
+    }
+
+    if (!firebaseAuth.currentUser || firebaseAuth.currentUser.uid !== activeUser.uid) {
+      console.log("[Realtime Sync] Waiting for Firebase Auth to initialize and match session user UID before subscribing.");
+      setSyncStatus("connecting");
       return;
     }
 
@@ -896,7 +900,6 @@ export default function App() {
         const storedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
         const storedTransactions = getStored("barakah_transactions", []);
         const storedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
-        const storedDeletedItems = getStored("barakah_deleted_items", []);
         const storedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
 
         initialLoadedRef.current = false;
@@ -907,7 +910,6 @@ export default function App() {
         setTransactions(storedTransactions);
         setBusinessInfo(storedBusinessInfo);
         setPurchases(storedPurchases);
-        setDeletedItems(storedDeletedItems);
         if (storedBusinessInfo && (storedBusinessInfo as any).staffList && Array.isArray((storedBusinessInfo as any).staffList)) {
           setStaffList((storedBusinessInfo as any).staffList);
         }
@@ -6617,8 +6619,7 @@ _${businessInfo.name}_`;
                   </div>
 
                   {/* Highly polished active Self-Healing & Data Recovery banner */}
-                  {(deletedItems.some(item => item.type === "customer" || item.type === "supplier") || 
-                    transactions.some(t => t.contactId && !contacts.some(c => c.id === t.contactId)) ||
+                  {(transactions.some(t => t.contactId && !contacts.some(c => c.id === t.contactId)) ||
                     purchases.some(p => p.supplierId && !contacts.some(c => c.id === p.supplierId))) && (
                     <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4.5 space-y-3.5 animate-fade-in" id="crm-recovery-banner">
                       <div className="flex items-start gap-3">
@@ -6630,7 +6631,7 @@ _${businessInfo.name}_`;
                             Customer & Supplier Data Recovery Center (Self-Healing Active)
                           </h4>
                           <p className="text-[11px] text-slate-350 leading-relaxed font-sans select-none">
-                            We detected some customer/supplier profiles were deleted from the CRM directory, but their entries remain secure in the transaction ledger and Trash. Click the button below to restore them instantly.
+                            We detected some customer/supplier profiles were deleted from the CRM directory, but their entries remain secure in the transaction ledger. Click the button below to restore them instantly.
                           </p>
                         </div>
                       </div>
