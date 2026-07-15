@@ -924,17 +924,31 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }
 
         if (!customersRes.empty) {
-          const sqlCustomers = customersRes.docs.map(docSnapshot => {
+          const sqlCustomers = [];
+          for (const docSnapshot of customersRes.docs) {
             const c = docSnapshot.data();
-            return {
+            if (c.id && docSnapshot.id !== c.id) {
+              try {
+                console.log(`[Migration-Restore] Migrating legacy customer doc from auto-ID '${docSnapshot.id}' to customer.id '${c.id}'`);
+                await setDoc(doc(db, "customers", c.id), {
+                  ...c,
+                  id: c.id,
+                  user_id: activeUserId
+                });
+                await deleteDoc(doc(db, "customers", docSnapshot.id));
+              } catch (migrateErr) {
+                console.error(`[Migration-Restore] Legacy customer migration failed for doc ${docSnapshot.id}:`, migrateErr);
+              }
+            }
+            sqlCustomers.push({
               id: c.id,
               name: c.name,
               phone: c.phone || "",
               address: c.address || "",
               type: c.type || "customer",
               created_at: c.updated_at || new Date().toISOString()
-            };
-          });
+            });
+          }
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
           finalData.contacts = mergeListsById(finalData.contacts || [], sqlCustomers);
         }

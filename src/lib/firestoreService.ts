@@ -95,7 +95,35 @@ async function handleDelete(collName: string, id: string): Promise<void> {
 
 // Exported subscribe functions
 export const subscribeProducts = createSubscription("products");
-export const subscribeCustomers = createSubscription("customers");
+
+export function subscribeCustomers(userId: string, callback: (items: any[]) => void) {
+  const q = query(collection(db, "customers"), where("user_id", "==", userId));
+  return onSnapshot(q, async (snapshot) => {
+    const docsData: any[] = [];
+    for (const d of snapshot.docs) {
+      const data = d.data();
+      if (data.id && d.id !== data.id) {
+        try {
+          console.log(`[Migration] Migrating legacy customer doc from auto-ID '${d.id}' to customer.id '${data.id}'`);
+          await setDoc(doc(db, "customers", data.id), {
+            ...data,
+            id: data.id,
+            user_id: userId
+          });
+          await deleteDoc(doc(db, "customers", d.id));
+        } catch (err) {
+          console.error(`[Migration] Failed to migrate legacy customer doc ${d.id}:`, err);
+        }
+      } else {
+        docsData.push({ id: d.id, ...data });
+      }
+    }
+    callback(docsData);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, "customers");
+  });
+}
+
 export const subscribeTransactions = createSubscription("transactions");
 export const subscribeExpenses = createSubscription("expenses");
 export const subscribePurchases = createSubscription("purchases");
