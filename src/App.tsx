@@ -748,7 +748,7 @@ export default function App() {
         imageUrl: docData.image_url || undefined
       }));
 
-      // localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
+      localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setProducts(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
@@ -768,7 +768,7 @@ export default function App() {
         created_at: docData.created_at || docData.updated_at || new Date().toISOString()
       }));
 
-      // localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
+      localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setContacts(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
@@ -787,7 +787,7 @@ export default function App() {
         date: docData.created_at || docData.date || new Date().toISOString()
       }));
 
-      // localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
+      localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setExpenses(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
@@ -810,7 +810,7 @@ export default function App() {
         date: docData.created_at || new Date().toISOString()
       }));
 
-      // localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
+      localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setPurchases(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
@@ -830,7 +830,7 @@ export default function App() {
       const nestedTx = rebuildTransactions(flatTx, flatItems);
       nestedTx.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      // localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(nestedTx));
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(nestedTx));
 
       initialLoadedRef.current = false;
       setTransactions(nestedTx);
@@ -855,7 +855,7 @@ export default function App() {
         created_at: docData.created_at || new Date().toISOString()
       }));
 
-      // localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTransactions));
+      localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTransactions));
       handleTransactionsChange(flatTransactions, undefined);
     });
 
@@ -898,7 +898,7 @@ export default function App() {
         }
       });
 
-      // localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+      localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
     }, (err) => {
       console.warn("[Realtime Sync] Transaction Items snapshot failed:", err);
