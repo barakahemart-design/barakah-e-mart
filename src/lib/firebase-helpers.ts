@@ -1713,34 +1713,61 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         if (item && item.id) deletedMap.set(item.id, item);
       });
       mergedDeletedItemsArr = Array.from(deletedMap.values());
-
-      // Propagate soft deletions by removing deleted items from the merged lists on cloud sync payload too
-      const deletedProducts = new Set<string>();
-      const deletedContacts = new Set<string>();
-      const deletedExpenses = new Set<string>();
-      const deletedPurchases = new Set<string>();
-      const deletedTransactions = new Set<string>();
-
-      mergedDeletedItemsArr.forEach((item: any) => {
-        if (!item) return;
-        const origId = (item.originalId || "").trim();
-        if (!origId) return;
-        const type = String(item.type).toLowerCase();
-        if (type === "product") deletedProducts.add(origId);
-        else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(toUUID(origId, cleanEmail));
-        else if (type === "expense") deletedExpenses.add(origId);
-        else if (type === "purchase") deletedPurchases.add(origId);
-        else if (type === "sale" || type === "transaction") deletedTransactions.add(origId);
-      });
-
-      mergedProductsArr = mergedProductsArr.filter((item: any) => item && !deletedProducts.has(item.id));
-      mergedContactsArr = mergedContactsArr.filter((item: any) => item && !deletedContacts.has(item.id));
-      mergedExpensesArr = mergedExpensesArr.filter((item: any) => item && !deletedExpenses.has(item.id));
-      mergedTransactionsArr = mergedTransactionsArr.filter((item: any) => item && !deletedTransactions.has(item.id));
     }
   } catch (e) {
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
   }
+
+  // Propagate soft deletions by removing deleted items from the merged lists on cloud sync payload too
+  const deletedProducts = new Set<string>();
+  const deletedContacts = new Set<string>();
+  const deletedExpenses = new Set<string>();
+  const deletedPurchases = new Set<string>();
+  const deletedTransactions = new Set<string>();
+
+  mergedDeletedItemsArr.forEach((item: any) => {
+    if (!item) return;
+    const origId = (item.originalId || "").trim();
+    const type = String(item.type).toLowerCase();
+    if (type === "product") {
+      if (origId) deletedProducts.add(origId);
+    } else if (type === "customer" || type === "supplier" || type === "contact") {
+      if (origId) {
+        deletedContacts.add(origId);
+        deletedContacts.add(toUUID(origId, cleanEmail));
+      }
+      if (item.firestoreId) {
+        deletedContacts.add(String(item.firestoreId).trim());
+      }
+      if (item.data) {
+        if (item.data.id) {
+          const dataId = String(item.data.id).trim();
+          deletedContacts.add(dataId);
+          deletedContacts.add(toUUID(dataId, cleanEmail));
+        }
+        if (item.data.firestoreId) {
+          deletedContacts.add(String(item.data.firestoreId).trim());
+        }
+      }
+    } else if (type === "expense") {
+      if (origId) deletedExpenses.add(origId);
+    } else if (type === "purchase") {
+      if (origId) deletedPurchases.add(origId);
+    } else if (type === "sale" || type === "transaction") {
+      if (origId) deletedTransactions.add(origId);
+    }
+  });
+
+  mergedProductsArr = mergedProductsArr.filter((item: any) => item && !deletedProducts.has(item.id));
+  mergedContactsArr = mergedContactsArr.filter((item: any) => {
+    if (!item) return false;
+    const itemId = String(item.id || "").trim();
+    const itemFirestoreId = String(item.firestoreId || "").trim();
+    const itemUUID = toUUID(itemId, cleanEmail);
+    return !deletedContacts.has(itemId) && !deletedContacts.has(itemFirestoreId) && !deletedContacts.has(itemUUID);
+  });
+  mergedExpensesArr = mergedExpensesArr.filter((item: any) => item && !deletedExpenses.has(item.id));
+  mergedTransactionsArr = mergedTransactionsArr.filter((item: any) => item && !deletedTransactions.has(item.id));
 
   const activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id || "";
   const updatedAt = new Date().toISOString();
