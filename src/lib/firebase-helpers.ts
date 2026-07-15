@@ -376,6 +376,7 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
   if (!data) return;
 
   const email = (data.linked_email || data.linkedEmail || currentFirebaseUser?.email || "").trim().toLowerCase();
+  const cleanEmail = email;
 
   const normalizeProduct = (p: any): any => {
     if (!p) return p;
@@ -450,7 +451,7 @@ export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: st
     if (!origId) return;
     const type = String(item.type).toLowerCase();
     if (type === "product") deletedProducts.add(origId);
-    else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(origId);
+    else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(toUUID(origId, cleanEmail));
     else if (type === "expense") deletedExpenses.add(origId);
     else if (type === "purchase") deletedPurchases.add(origId);
     else if (type === "sale" || type === "transaction") deletedTransactions.add(origId);
@@ -1725,7 +1726,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
         if (!origId) return;
         const type = String(item.type).toLowerCase();
         if (type === "product") deletedProducts.add(origId);
-        else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(origId);
+        else if (type === "customer" || type === "supplier" || type === "contact") deletedContacts.add(toUUID(origId, cleanEmail));
         else if (type === "expense") deletedExpenses.add(origId);
         else if (type === "purchase") deletedPurchases.add(origId);
         else if (type === "sale" || type === "transaction") deletedTransactions.add(origId);
