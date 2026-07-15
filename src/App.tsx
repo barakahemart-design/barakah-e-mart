@@ -266,21 +266,9 @@ export default function App() {
    const [expenses, setExpenses] = useState<Expense[]>([]);
    const [transactions, setTransactions] = useState<Transaction[]>([]);
    const [purchases, setPurchases] = useState<Purchase[]>([]);
-   const [deletedItems, setDeletedItems] = useState<any[]>([]);
    const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(INITIAL_BUSINESS_INFO);
  
-   const softDeleteItem = (type: 'sale' | 'customer' | 'expense' | 'purchase' | 'product', originalId: string, itemData: any, label: string) => {
-     const newItem = {
-       id: `${type}_deleted_${originalId || Math.random().toString(36).substring(7)}`,
-       originalId,
-       type,
-       deletedAt: new Date().toISOString(),
-       data: itemData,
-       label
-     };
-     setDeletedItems(prev => [newItem, ...prev]);
-   };
- 
+
    // Security Locking Roles state
    const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
 
@@ -376,22 +364,7 @@ export default function App() {
       if (p.supplierId) activeContactIds.add(p.supplierId);
     });
 
-    // 1. Try to find missing contacts in local `deletedItems` (soft-deleted trash) first
-    activeContactIds.forEach(id => {
-      const exists = updatedContacts.some(c => c.id === id);
-      if (!exists) {
-        const foundTrash = deletedItems.find(item => 
-          (item.type === "customer" || item.type === "supplier") && (item.originalId === id || item.data?.id === id)
-        );
-        if (foundTrash && foundTrash.data) {
-          updatedContacts.push(foundTrash.data);
-          recoveredNames.push(foundTrash.data.name);
-          changed = true;
-        }
-      }
-    });
-
-    // 2. Try to find missing contacts directly in Firestore "customers" collection (Cloud Recovery)
+    // 1. Try to find missing contacts directly in Firestore "customers" collection (Cloud Recovery)
     if (activeUser && !activeUser.isGuest && activeUser.uid) {
       try {
         const activeUserId = activeUser.uid;
@@ -442,26 +415,8 @@ export default function App() {
       }
     });
 
-    // --- PHASE 2: Disabled to prevent auto-resurrecting explicitly soft-deleted contacts from trash ---
-    /*
-    deletedItems.forEach(item => {
-      if ((item.type === "customer" || item.type === "supplier") && item.data) {
-        const exists = updatedContacts.some(c => c.id === item.originalId || c.id === item.data.id);
-        if (!exists) {
-          updatedContacts.push(item.data);
-          recoveredNames.push(item.data.name);
-          changed = true;
-        }
-      }
-    });
-    */
-
     if (changed) {
       setContacts(updatedContacts);
-      const recoveredIds = new Set(updatedContacts.map(c => c.id));
-      setDeletedItems(prev => prev.filter(item => 
-        !((item.type === "customer" || item.type === "supplier") && (recoveredIds.has(item.originalId) || recoveredIds.has(item.data?.id)))
-      ));
       
       const successMsg = recoveredNames.length > 0 
         ? `✨ Successfully recovered ${recoveredNames.length} profile(s) (${recoveredNames.slice(0, 3).join(", ")}${recoveredNames.length > 3 ? "..." : ""}) back to the CRM directory!`
@@ -584,7 +539,6 @@ export default function App() {
       // localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUser.uid), JSON.stringify(transactions));
       // localStorage.setItem(getDbKey("barakah_business_info", undefined, activeUser.uid), JSON.stringify(compiledBusinessInfo));
       // localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUser.uid), JSON.stringify(purchases));
-      // localStorage.setItem(getDbKey("barakah_deleted_items", undefined, activeUser.uid), JSON.stringify(deletedItems));
 
       const totalItems = products.length + transactions.length;
       if (totalItems > 0) {
@@ -594,8 +548,7 @@ export default function App() {
           contacts,
           expenses,
           transactions,
-          purchases,
-          deletedItems
+          purchases
         }));
         */
       }
@@ -627,8 +580,7 @@ export default function App() {
               expenses,
               transactions,
               businessInfo: compiledBusinessInfo,
-              purchases,
-              deletedItems
+              purchases
             });
             if (res && res.success && res.updatedAt) {
               lastUploadedAtRef.current = res.updatedAt;
@@ -640,7 +592,7 @@ export default function App() {
         return () => clearTimeout(delayDebounceFn);
       }
     }
-  }, [products, contacts, expenses, transactions, businessInfo, purchases, deletedItems, staffList, activeUser]);
+  }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser]);
 
   // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
@@ -1669,9 +1621,8 @@ export default function App() {
     const p = products.find(prod => prod.id === id);
     if (!p) return;
     await deleteCloudDocument("products", id);
-    softDeleteItem("product", id, p, `Product: ${p.name} (SKU: ${p.sku || "N/A"}, Stock: ${p.stock})`);
     setProducts(products.filter(item => item.id !== id));
-    triggerNotification(`Product '${name}' moved to Settings -> Deleted Filter.`);
+    triggerNotification(`Product '${name}' has been successfully deleted.`, "success");
   };
 
   // Save Shop Information Block
@@ -2061,7 +2012,6 @@ export default function App() {
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
     await deleteCloudDocument("purchases", id);
-    softDeleteItem("purchase", id, matchingPur, `Purchase Order: Invoice #${matchingPur.invoiceNo} (Qty: ${matchingPur.quantity}, Unit Price: ${businessInfo.currencySymbol || "৳"}${matchingPur.unitPrice})`);
     setPurchases(purchases.filter(p => p.id !== id));
     setProducts(products.map(p => {
       if (p.id === matchingPur.productId) {
@@ -2072,7 +2022,7 @@ export default function App() {
       }
       return p;
     }));
-    triggerNotification("Purchase record moved to Settings -> Deleted Filter and inventory adjusted.");
+    triggerNotification("Purchase record has been successfully deleted and inventory adjusted.", "success");
   };
 
   const handleEditPurchase = (id: string, updatedFields: any) => {
@@ -2234,17 +2184,8 @@ export default function App() {
       return prod;
     }));
 
-    // Soft delete transaction
-    const relatedCustomer = contacts.find(co => co.id === t.contactId);
-    const deleteCustName = relatedCustomer ? relatedCustomer.name : "Walk-in";
-    softDeleteItem(
-      "sale", 
-      id, 
-      t, 
-      `Invoice #${t.invoiceNo} (Amount: ${businessInfo.currencySymbol || "৳"}${t.total?.toLocaleString() || "0"}, Customer: ${deleteCustName})`
-    );
     setTransactions(transactions.filter(item => item.id !== id));
-    triggerNotification(`Invoice ${t.invoiceNo} moved to Settings -> Deleted Filter.`);
+    triggerNotification(`Invoice ${t.invoiceNo} has been successfully deleted.`, "success");
   };
 
   const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
@@ -6935,9 +6876,8 @@ _${businessInfo.name}_`;
                                           return;
                                         }
                                         await deleteCloudDocument("customers", c.firestoreId ?? c.id);
-                                        softDeleteItem("customer", c.id, c, `Partner: ${c.name} (${c.type === "supplier" ? "Supplier" : "Customer"}, Phone: ${c.phone || "N/A"})`);
                                         setContacts(contacts.filter(item => item.id !== c.id));
-                                        triggerNotification(`Partner profile '${c.name}' moved to Settings -> Deleted Filter.`);
+                                        triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success");
                                         setDeleteContactId(null);
                                       }}
                                       className="text-[8px] bg-rose-600 hover:bg-rose-500 text-white font-extrabold px-1.5 py-0.5 rounded transition-all cursor-pointer"
@@ -8610,9 +8550,8 @@ _${businessInfo.name}_`;
                       return;
                     }
                     await deleteCloudDocument("expenses", expenseToDelete.id);
-                    softDeleteItem("expense", expenseToDelete.id, expenseToDelete, `Expense Voucher: ${expenseToDelete.category} - ${expenseToDelete.description || "No info"} (${businessInfo.currencySymbol || "৳"}${expenseToDelete.amount})`);
                     setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
-                    triggerNotification("Expense voucher moved to Settings -> Deleted Filter.", "success");
+                    triggerNotification("Expense voucher has been successfully deleted.", "success");
                     setDeleteExpenseId(null);
                   }}
                   className="flex-1 py-1 px-4 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-rose-600/10 text-center uppercase tracking-wider"
