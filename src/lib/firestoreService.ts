@@ -28,7 +28,11 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
   const userId = typeof arg1 === 'string' ? arg1 : (arg1.user_id || arg1.userId);
   const data = typeof arg1 === 'string' ? arg2 : arg1;
   const { id, ...dataWithoutId } = data;
-  const docData = { ...dataWithoutId, user_id: userId };
+  const docData = {
+    id,
+    ...dataWithoutId,
+    user_id: userId
+  };
 
   try {
     if (id) {
