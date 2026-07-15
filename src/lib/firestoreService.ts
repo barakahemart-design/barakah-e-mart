@@ -98,26 +98,15 @@ export const subscribeProducts = createSubscription("products");
 
 export function subscribeCustomers(userId: string, callback: (items: any[]) => void) {
   const q = query(collection(db, "customers"), where("user_id", "==", userId));
-  return onSnapshot(q, async (snapshot) => {
-    const docsData: any[] = [];
-    for (const d of snapshot.docs) {
+  return onSnapshot(q, (snapshot) => {
+    const docsData = snapshot.docs.map(d => {
       const data = d.data();
-      if (data.id && d.id !== data.id) {
-        try {
-          console.log(`[Migration] Migrating legacy customer doc from auto-ID '${d.id}' to customer.id '${data.id}'`);
-          await setDoc(doc(db, "customers", data.id), {
-            ...data,
-            id: data.id,
-            user_id: userId
-          });
-          await deleteDoc(doc(db, "customers", d.id));
-        } catch (err) {
-          console.error(`[Migration] Failed to migrate legacy customer doc ${d.id}:`, err);
-        }
-      } else {
-        docsData.push({ id: d.id, ...data });
-      }
-    }
+      return {
+        ...data,
+        id: data.id || d.id,
+        firestoreId: d.id
+      };
+    });
     callback(docsData);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, "customers");

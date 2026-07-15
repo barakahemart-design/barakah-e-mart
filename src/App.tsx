@@ -761,6 +761,7 @@ export default function App() {
 
       const updatedList = items.map(docData => ({
         id: docData.id,
+        firestoreId: docData.firestoreId,
         name: docData.name || "Unnamed Contact",
         phone: docData.phone || "",
         address: docData.address || "",
@@ -6933,7 +6934,7 @@ _${businessInfo.name}_`;
                                           setDeleteContactId(null);
                                           return;
                                         }
-                                        await deleteCloudDocument("customers", c.id);
+                                        await deleteCloudDocument("customers", c.firestoreId ?? c.id);
                                         softDeleteItem("customer", c.id, c, `Partner: ${c.name} (${c.type === "supplier" ? "Supplier" : "Customer"}, Phone: ${c.phone || "N/A"})`);
                                         setContacts(contacts.filter(item => item.id !== c.id));
                                         triggerNotification(`Partner profile '${c.name}' moved to Settings -> Deleted Filter.`);
