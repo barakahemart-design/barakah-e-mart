@@ -1660,13 +1660,14 @@ export default function App() {
     triggerNotification(`${parsedProduct.name} successfully added to the inventory catalog.`);
   };
 
-  const handleDeleteProduct = (id: string, name: string) => {
+  const handleDeleteProduct = async (id: string, name: string) => {
     if (currentPanel !== "admin") {
       triggerNotification("Security block: Only administrators are authorized to delete products! 🛑", "error");
       return;
     }
     const p = products.find(prod => prod.id === id);
     if (!p) return;
+    await deleteCloudDocument("products", id);
     softDeleteItem("product", id, p, `Product: ${p.name} (SKU: ${p.sku || "N/A"}, Stock: ${p.stock})`);
     setProducts(products.filter(item => item.id !== id));
     triggerNotification(`Product '${name}' moved to Settings -> Deleted Filter.`);
@@ -2051,13 +2052,14 @@ export default function App() {
     triggerNotification(`Purchase Order ${pur.invoiceNo} logged. Initial purchase rate updated.`);
   };
 
-  const handleDeletePurchase = (id: string) => {
+  const handleDeletePurchase = async (id: string) => {
     if (currentPanel !== "admin") {
       triggerNotification("Security block: Only administrators are authorized to delete purchases! 🛑", "error");
       return;
     }
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
+    await deleteCloudDocument("purchases", id);
     softDeleteItem("purchase", id, matchingPur, `Purchase Order: Invoice #${matchingPur.invoiceNo} (Qty: ${matchingPur.quantity}, Unit Price: ${businessInfo.currencySymbol || "৳"}${matchingPur.unitPrice})`);
     setPurchases(purchases.filter(p => p.id !== id));
     setProducts(products.map(p => {
@@ -2209,13 +2211,15 @@ export default function App() {
     triggerNotification(`Invoice ${invoiceNo}: ${collectionAmt} BDT received & recorded.`);
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     if (currentPanel !== "admin") {
       triggerNotification("Security block: Only administrators are authorized to delete transactions / sales! 🛑", "error");
       return;
     }
     const t = transactions.find(item => item.id === id);
     if (!t) return;
+
+    await deleteCloudDocument("transactions", id);
 
     // Refund stock back to products catalog
     setProducts(products.map(prod => {
@@ -6923,12 +6927,13 @@ _${businessInfo.name}_`;
                                 {deleteContactId === c.id ? (
                                   <div className="flex items-center gap-1 bg-rose-500/10 p-0.5 rounded border border-rose-500/20">
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (currentPanel !== "admin") {
                                           triggerNotification("Security block: Only administrators are authorized to delete contact profiles! 🛑", "error");
                                           setDeleteContactId(null);
                                           return;
                                         }
+                                        await deleteCloudDocument("customers", c.id);
                                         softDeleteItem("customer", c.id, c, `Partner: ${c.name} (${c.type === "supplier" ? "Supplier" : "Customer"}, Phone: ${c.phone || "N/A"})`);
                                         setContacts(contacts.filter(item => item.id !== c.id));
                                         triggerNotification(`Partner profile '${c.name}' moved to Settings -> Deleted Filter.`);
@@ -8336,14 +8341,6 @@ _${businessInfo.name}_`;
                           return;
                         }
                         if (confirm("Are you sure you want to permanently delete all items in the trash? This physical deletion cannot be undone! ⚠️")) {
-                          deletedItems.forEach(item => {
-                            let cloudCol = "transactions";
-                            if (item.type === "customer") cloudCol = "customers";
-                            if (item.type === "expense") cloudCol = "expenses";
-                            if (item.type === "product") cloudCol = "products";
-                            if (item.type === "purchase") cloudCol = "purchases";
-                            deleteCloudDocument(cloudCol, item.originalId).catch(err => console.warn("Permanent purge fail:", err));
-                          });
                           setDeletedItems([]);
                           triggerNotification("Trash cleared completely and deleted permanently. 🤝", "success");
                         }
@@ -8435,22 +8432,8 @@ _${businessInfo.name}_`;
                                   return;
                                 }
                                 if (confirm("Execute permanent cloud wipeout on this item? This physical deletion cannot be undone! 😡")) {
-                                  let cloudCol = "transactions";
-                                  if (item.type === "customer") cloudCol = "customers";
-                                  if (item.type === "expense") cloudCol = "expenses";
-                                  if (item.type === "product") cloudCol = "products";
-                                  if (item.type === "purchase") cloudCol = "purchases";
-
-                                  deleteCloudDocument(cloudCol, item.originalId)
-                                    .then(() => {
-                                      setDeletedItems(prev => prev.filter(x => x.id !== item.id));
-                                      triggerNotification("Item permanently erased from record.", "success");
-                                    })
-                                    .catch(err => {
-                                      console.warn("Permanent erase failed:", err);
-                                      setDeletedItems(prev => prev.filter(x => x.id !== item.id));
-                                      triggerNotification("Item discarded.", "success");
-                                    });
+                                  setDeletedItems(prev => prev.filter(x => x.id !== item.id));
+                                  triggerNotification("Item permanently erased from record.", "success");
                                 }
                               }}
                               className="px-2.5 py-1 text-[9px] bg-rose-500/10 hover:bg-rose-550 text-rose-450 hover:text-white font-bold uppercase rounded-lg border border-rose-500/20 transition-all cursor-pointer font-sans"
@@ -8745,12 +8728,13 @@ _${businessInfo.name}_`;
 
               <div className="flex items-center gap-3 pt-3 font-sans">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (currentPanel !== "admin") {
                       triggerNotification("Security block: Only administrators are authorized to delete expense vouchers! 🛑", "error");
                       setDeleteExpenseId(null);
                       return;
                     }
+                    await deleteCloudDocument("expenses", expenseToDelete.id);
                     softDeleteItem("expense", expenseToDelete.id, expenseToDelete, `Expense Voucher: ${expenseToDelete.category} - ${expenseToDelete.description || "No info"} (${businessInfo.currencySymbol || "৳"}${expenseToDelete.amount})`);
                     setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
                     triggerNotification("Expense voucher moved to Settings -> Deleted Filter.", "success");
