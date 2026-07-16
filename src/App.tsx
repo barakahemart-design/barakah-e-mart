@@ -236,7 +236,8 @@ import {
   selfHealDatabase,
   toUUID,
   restoreLocalKeys,
-  deleteCloudDocument
+  deleteCloudDocument,
+  upsertDocument
 } from "./lib/firebase-helpers";
 import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
@@ -588,14 +589,24 @@ export default function App() {
         const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
         const delayDebounceFn = setTimeout(async () => {
           try {
+            const deletedTxIds = (() => {
+              try {
+                const rawDeleted = localStorage.getItem("barakah_deleted_transaction_ids") || "[]";
+                const parsed = JSON.parse(rawDeleted);
+                return Array.isArray(parsed) ? parsed : [];
+              } catch (_) {
+                return [];
+              }
+            })();
             const res = await uploadPasscodeBackup(activeUser.email, passcode, {
               products,
               contacts,
               expenses,
               transactions,
               businessInfo: compiledBusinessInfo,
-              purchases
-            });
+              purchases,
+              deletedTransactionIds: deletedTxIds
+            } as any);
             if (res && res.success && res.updatedAt) {
               lastUploadedAtRef.current = res.updatedAt;
             }
@@ -1991,6 +2002,18 @@ export default function App() {
           } else {
             flatItems.push(flatItem);
           }
+
+          // Persist the edited buyPrice immediately to corresponding Firestore transaction_items document
+          if (idx === itemIdx) {
+            upsertDocument("transaction_items", itemUUID, {
+              ...flatItem,
+              user_id: activeUserId,
+              owner_id: activeUserId,
+              is_negative_sale: nestedIt.isNegativeSaleApproved || false
+            }).catch(err => {
+              console.warn("Failed to persist edited transaction item buyPrice to Firestore:", err);
+            });
+          }
         });
       }
 
@@ -2232,7 +2255,39 @@ export default function App() {
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
+    // 1. Delete the transaction from Firestore "transactions" collection
     await deleteCloudDocument("transactions", id);
+
+    // 2. Delete related transaction items from Firestore "transaction_items" collection
+    try {
+      const q = query(collection(db, "transaction_items"), where("transaction_id", "==", id));
+      const querySnapshot = await getDocs(q);
+      for (const docSnap of querySnapshot.docs) {
+        await deleteCloudDocument("transaction_items", docSnap.id);
+      }
+    } catch (e) {
+      console.warn("Failed to delete transaction items via query, falling back to item list:", e);
+      if (t.items && Array.isArray(t.items)) {
+        for (const item of t.items) {
+          const itemUUID = item.id || `${id}_item_${t.items.indexOf(item)}`;
+          await deleteCloudDocument("transaction_items", itemUUID);
+        }
+      }
+    }
+
+    // 3. Store the deleted transaction ID in local storage to prevent cloud backup restoration
+    let deletedTxIds: string[] = [];
+    try {
+      const rawDeleted = localStorage.getItem("barakah_deleted_transaction_ids") || "[]";
+      deletedTxIds = JSON.parse(rawDeleted);
+      if (!Array.isArray(deletedTxIds)) deletedTxIds = [];
+      if (!deletedTxIds.includes(id)) {
+        deletedTxIds.push(id);
+        localStorage.setItem("barakah_deleted_transaction_ids", JSON.stringify(deletedTxIds));
+      }
+    } catch (_) {
+      deletedTxIds = [id];
+    }
 
     // Refund stock back to products catalog
     setProducts(products.map(prod => {
@@ -2246,7 +2301,25 @@ export default function App() {
       return prod;
     }));
 
-    setTransactions(transactions.filter(item => item.id !== id));
+    const updatedTransactions = transactions.filter(item => item.id !== id);
+    setTransactions(updatedTransactions);
+
+    // 4. Force-upload the passcode backup immediately with the updated transaction list and deleted transaction IDs list
+    if (activeUser && !activeUser.isGuest) {
+      const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+      uploadPasscodeBackup(activeUser.email, passcode, {
+        products,
+        contacts,
+        expenses,
+        transactions: updatedTransactions,
+        businessInfo,
+        purchases,
+        deletedTransactionIds: deletedTxIds
+      } as any).catch(err => {
+        console.warn("Explicit transaction deletion passcode backup failed:", err);
+      });
+    }
+
     triggerNotification(`Invoice ${t.invoiceNo} has been successfully deleted.`, "success");
   };
 
@@ -6937,7 +7010,23 @@ _${businessInfo.name}_`;
                                           return;
                                         }
                                         await deleteCloudDocument("customers", c.firestoreId ?? c.id);
-                                        setContacts(contacts.filter(item => item.id !== c.id));
+                                        const updatedContacts = contacts.filter(item => item.id !== c.id);
+                                        setContacts(updatedContacts);
+
+                                        if (activeUser && !activeUser.isGuest) {
+                                          const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+                                          uploadPasscodeBackup(activeUser.email, passcode, {
+                                            products,
+                                            contacts: updatedContacts,
+                                            expenses,
+                                            transactions,
+                                            businessInfo,
+                                            purchases
+                                          }).catch(err => {
+                                            console.warn("Explicit deletion passcode backup failed:", err);
+                                          });
+                                        }
+
                                         triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success");
                                         setDeleteContactId(null);
                                       }}

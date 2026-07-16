@@ -1581,16 +1581,31 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     purchases: normalizedPurchases
   };
 
+  // Extract deleted transaction IDs from payload or localStorage
+  let deletedTxIds: string[] = (payload as any).deletedTransactionIds || [];
+  if (deletedTxIds.length === 0) {
+    try {
+      const rawDeleted = localStorage.getItem("barakah_deleted_transaction_ids") || "[]";
+      deletedTxIds = JSON.parse(rawDeleted);
+      if (!Array.isArray(deletedTxIds)) deletedTxIds = [];
+    } catch (_) {}
+  }
+
   let mergedProductsArr = normalizedProducts;
   let mergedContactsArr = normalizedContacts;
   let mergedExpensesArr = normalizedExpenses;
   let mergedTransactionsArr = normalizedTransactions;
+  let mergedDeletedTxIds = deletedTxIds;
 
   try {
     const docSnap = await fetchDocFresh(doc(db, "passcode_syncs", syncId));
     if (docSnap.exists() && !isExplicitReset) {
       const existingData = docSnap.data();
       
+      if (existingData && Array.isArray(existingData.deleted_transaction_ids)) {
+        mergedDeletedTxIds = Array.from(new Set([...existingData.deleted_transaction_ids, ...deletedTxIds]));
+      }
+
       // Avoid accidental stomp/wiping of other devices' active records:
       // Merge products
       const productsMap = new Map();
@@ -1615,15 +1630,24 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       });
       mergedExpensesArr = Array.from(expensesMap.values());
 
-      // Merge transactions
+      // Merge transactions with deleted transactions filtering
       const transactionsMap = new Map();
+      const allDeletedTxIds = new Set(mergedDeletedTxIds);
+
       (existingData.transactions || []).forEach((item: any) => {
-        if (item && item.id) transactionsMap.set(item.id, item);
+        if (item && item.id && !allDeletedTxIds.has(item.id)) {
+          transactionsMap.set(item.id, item);
+        }
       });
       normalizedTransactions.forEach((item: any) => {
-        if (item && item.id) transactionsMap.set(item.id, item);
+        if (item && item.id && !allDeletedTxIds.has(item.id)) {
+          transactionsMap.set(item.id, item);
+        }
       });
       mergedTransactionsArr = Array.from(transactionsMap.values());
+    } else {
+      const allDeletedTxIds = new Set(mergedDeletedTxIds);
+      mergedTransactionsArr = normalizedTransactions.filter(item => item && item.id && !allDeletedTxIds.has(item.id));
     }
   } catch (e) {
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);
@@ -1641,6 +1665,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
     contacts: mergedContactsArr,
     expenses: mergedExpensesArr,
     transactions: mergedTransactionsArr,
+    deleted_transaction_ids: mergedDeletedTxIds,
     businessInfo: serializedBusinessInfo,
     business_info: serializedBusinessInfo,
     updated_at: updatedAt
