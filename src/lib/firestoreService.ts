@@ -16,7 +16,14 @@ function createSubscription(collName: string) {
   return (userId: string, callback: (items: any[]) => void) => {
     const q = query(collection(db, collName), where("user_id", "==", userId));
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      callback(snapshot.docs.map(d => {
+        const data = d.data();
+        return {
+          ...data,
+          id: data.id || d.id,
+          firestoreId: d.id
+        };
+      }));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, collName);
     });

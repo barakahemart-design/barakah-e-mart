@@ -142,6 +142,7 @@ export interface TransactionItem {
 
 export interface Transaction {
   id: string;
+  firestoreId?: string;
   invoiceNo: string;
   date: string;
   items: TransactionItem[];
@@ -685,6 +686,7 @@ export default function App() {
 
         rebuiltList.push({
           id: t.id,
+          firestoreId: t.firestoreId,
           invoiceNo: t.invoice_no,
           date: t.created_at || new Date().toISOString(),
           items: mappedItems,
@@ -817,6 +819,7 @@ export default function App() {
 
       const flatTransactions = items.map(docData => ({
         id: docData.id,
+        firestoreId: docData.firestoreId,
         invoice_no: docData.invoice_no,
         customer_id: docData.customer_id || null,
         total_amount: Number(docData.total_amount) || 0,
@@ -2232,7 +2235,7 @@ export default function App() {
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
-    await deleteCloudDocument("transactions", id);
+    await deleteCloudDocument("transactions", t.firestoreId ?? t.id);
 
     // Refund stock back to products catalog
     setProducts(products.map(prod => {
