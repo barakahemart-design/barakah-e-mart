@@ -1935,7 +1935,8 @@ export default function App() {
   };
 
   const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
-    setTransactions(prev => prev.map(t => {
+    // 1. Generate updated transactions list locally to immediately persist flat items
+    const updatedTransactions = transactions.map(t => {
       if (t.id === txId) {
         const updatedItems = t.items.map((it, idx) => {
           if (idx === itemIdx) {
@@ -1954,7 +1955,50 @@ export default function App() {
         };
       }
       return t;
-    }));
+    });
+
+    setTransactions(updatedTransactions);
+
+    // 2. Regenerate and overwrite barakah_flat_transaction_items in localStorage
+    try {
+      const activeUserId = activeUser?.uid;
+      const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+      let flatItems = JSON.parse(rawLocalItems);
+      if (!Array.isArray(flatItems)) flatItems = [];
+
+      const targetTx = updatedTransactions.find(t => t.id === txId);
+      if (targetTx && Array.isArray(targetTx.items)) {
+        targetTx.items.forEach((nestedIt: any, idx: number) => {
+          const itemUUID = nestedIt.id || `${txId}_item_${idx}`;
+          const productUUID = nestedIt.productId || null;
+
+          const flatItem = {
+            id: itemUUID,
+            transaction_id: txId,
+            product_id: productUUID,
+            product_name: nestedIt.name || "Product Item",
+            quantity: Number(nestedIt.quantity) || 0,
+            sell_price: Number(nestedIt.price) || 0,
+            cost_price: Number(nestedIt.buyPrice) || 0
+          };
+
+          const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === txId && x.product_id === productUUID));
+          if (flatIdx >= 0) {
+            flatItems[flatIdx] = {
+              ...flatItems[flatIdx],
+              ...flatItem
+            };
+          } else {
+            flatItems.push(flatItem);
+          }
+        });
+      }
+
+      localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
+    } catch (err) {
+      console.warn("Failed to update flat items in localStorage:", err);
+    }
 
     if (productId && newBuyPrice > 0) {
       setProducts(prev => prev.map(p => {
