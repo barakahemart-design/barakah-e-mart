@@ -279,8 +279,7 @@ export const loadDB = (uid?: string) => {
       expenses: INITIAL_EXPENSES,
       transactions: [],
       businessInfo: INITIAL_BUSINESS_INFO,
-      purchases: INITIAL_PURCHASES,
-      deletedItems: []
+      purchases: INITIAL_PURCHASES
     };
   }
 };

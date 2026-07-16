@@ -637,6 +637,12 @@ export async function deleteCloudDocument(collectionName: string, id: string): P
     const docRef = doc(db, collectionName, idUUID);
     await deleteDoc(docRef);
     console.log(`[Cloud Deletion] Cleanly deleted ${idUUID} from Firestore collection: ${collectionName}`);
+    
+    if (id !== idUUID) {
+      const legacyDocRef = doc(db, collectionName, id);
+      await deleteDoc(legacyDocRef);
+      console.log(`[Cloud Deletion] Cleanly deleted legacy ${id} from Firestore collection: ${collectionName}`);
+    }
   } catch (err: any) {
     console.warn(`[Cloud Deletion] Failed deleting document from Firestore collection ${collectionName}:`, err.message);
   }
@@ -1597,14 +1603,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       mergedProductsArr = Array.from(productsMap.values());
 
       // Merge contacts
-      const contactsMap = new Map();
-      (existingData.contacts || []).forEach((item: any) => {
-        if (item && item.id) contactsMap.set(item.id, item);
-      });
-      normalizedContacts.forEach((item: any) => {
-        if (item && item.id) contactsMap.set(item.id, item);
-      });
-      mergedContactsArr = Array.from(contactsMap.values());
+      mergedContactsArr = normalizedContacts;
 
       // Merge expenses
       const expensesMap = new Map();
