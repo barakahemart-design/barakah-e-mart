@@ -458,23 +458,6 @@ export default function App() {
         return;
       }
 
-      // Perform cloud pull on startup if registered and not synced yet in this tab session
-      if (!user.isGuest && !hasSyncedOnMountRef.current) {
-        hasSyncedOnMountRef.current = true;
-        setIsAuthLoading(true);
-        initialLoadedRef.current = false;
-
-        try {
-          const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
-          const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false);
-          if (wasRestored) {
-            console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount.");
-          }
-        } catch (e) {
-          console.error("[Sync on Mount] Startup cloud synchronization failed:", e);
-        }
-      }
-
       // Reload database from custom localStorage storage corresponding to the session mode
       const getStored = (key: string, fallback: any) => {
         try {
@@ -508,11 +491,44 @@ export default function App() {
         } catch (_) {}
       }
 
+      // INSTANTLY dismiss loading screen to allow local cached database access!
       setIsAuthLoading(false);
-      // Unlock saving/autosync safely now that validation is fully robust!
-      setTimeout(() => {
-        initialLoadedRef.current = true;
-      }, 500);
+      initialLoadedRef.current = true;
+
+      // Perform cloud pull on startup asynchronously in the background so slow connections do not block page loads
+      if (!user.isGuest && !hasSyncedOnMountRef.current) {
+        hasSyncedOnMountRef.current = true;
+
+        (async () => {
+          try {
+            const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
+            const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false);
+            if (wasRestored) {
+              console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount in background.");
+              // Dynamically re-hydrate state with the restored values
+              const updatedProducts = getStored("barakah_products", INITIAL_PRODUCTS);
+              const updatedContacts = getStored("barakah_contacts", INITIAL_CONTACTS);
+              const updatedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
+              const updatedTransactions = getStored("barakah_transactions", []);
+              const updatedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
+              const updatedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
+
+              setProducts(updatedProducts);
+              setContacts(updatedContacts);
+              setExpenses(updatedExpenses);
+              setTransactions(updatedTransactions);
+              setBusinessInfo(updatedBusinessInfo);
+              setPurchases(updatedPurchases);
+
+              if (updatedBusinessInfo && (updatedBusinessInfo as any).staffList && Array.isArray((updatedBusinessInfo as any).staffList)) {
+                setStaffList((updatedBusinessInfo as any).staffList);
+              }
+            }
+          } catch (e) {
+            console.error("[Sync on Mount] Background cloud synchronization failed:", e);
+          }
+        })();
+      }
     });
     return () => unsub();
   }, []);
