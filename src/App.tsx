@@ -131,6 +131,7 @@ export interface Contact {
 
 export interface TransactionItem {
   id: string;
+  firestoreId?: string;
   name: string;
   quantity: number;
   price: number;
@@ -239,7 +240,7 @@ import {
   restoreLocalKeys,
   deleteCloudDocument
 } from "./lib/firebase-helpers";
-import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
 import { 
   generateInvoicePDF,
@@ -663,6 +664,7 @@ export default function App() {
         if (relatedItems.length > 0) {
           mappedItems = relatedItems.map((item: any) => ({
             id: item.id,
+            firestoreId: item.firestoreId,
             name: item.product_name || "Product Item",
             quantity: Number(item.quantity) || 0,
             price: Number(item.sell_price) || 0,
@@ -852,6 +854,7 @@ export default function App() {
         const docData = change.doc.data();
         const item = {
           id: docData.id,
+          firestoreId: change.doc.id,
           transaction_id: docData.transaction_id,
           product_id: docData.product_id || null,
           product_name: docData.product_name || "Product Item",
@@ -1962,7 +1965,19 @@ export default function App() {
 
     setTransactions(updatedTransactions);
 
-    // 2. Regenerate and overwrite barakah_flat_transaction_items in localStorage
+    // 2. Write only the corresponding transaction_items Firestore document's cost_price
+    const targetTxToUpdate = transactions.find(t => t.id === txId);
+    if (targetTxToUpdate && Array.isArray(targetTxToUpdate.items)) {
+      const item = targetTxToUpdate.items[itemIdx];
+      if (item) {
+        const itemId = item.id || `${txId}_item_${itemIdx}`;
+        updateDoc(doc(db, "transaction_items", itemId), { cost_price: newBuyPrice }).catch((e) => {
+          console.error("Failed to update transaction item cost_price in Firestore:", e);
+        });
+      }
+    }
+
+    // 3. Regenerate and overwrite barakah_flat_transaction_items in localStorage
     try {
       const activeUserId = activeUser?.uid;
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
@@ -2001,18 +2016,6 @@ export default function App() {
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
     } catch (err) {
       console.warn("Failed to update flat items in localStorage:", err);
-    }
-
-    if (productId && newBuyPrice > 0) {
-      setProducts(prev => prev.map(p => {
-        if (p.id === productId) {
-          return {
-            ...p,
-            buyPrice: newBuyPrice
-          };
-        }
-        return p;
-      }));
     }
 
     triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
@@ -2271,7 +2274,7 @@ export default function App() {
     const status = dueBalance === 0 ? "paid" : paidAmount > 0 ? "partial" : "due";
 
     // Adjust catalog stock levels dynamically: revert old items sold, apply new items sold!
-    setProducts(products.map(prod => {
+    const updatedProductsList = products.map(prod => {
       let updatedStock = prod.stock;
 
       const oldItem = originalTx.items.find(item => item.productId === prod.id);
@@ -2288,20 +2291,185 @@ export default function App() {
         ...prod,
         stock: updatedStock
       };
-    }));
+    });
+    setProducts(updatedProductsList);
 
-    setTransactions(transactions.map(t => {
+    const updatedTransactionsList = transactions.map(t => {
       if (t.id === id) {
         return {
           ...t,
           ...updatedFields,
+          items,
+          subtotal,
           total,
           dueBalance,
           status
         };
       }
       return t;
-    }));
+    });
+    setTransactions(updatedTransactionsList);
+
+    // Regenerate and update local storage keys
+    try {
+      const activeUserId = activeUser?.uid;
+
+      // 1. Update barakah_flat_transaction_items
+      const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+      let flatItems = JSON.parse(rawLocalItems);
+      if (!Array.isArray(flatItems)) flatItems = [];
+
+      const targetTx = updatedTransactionsList.find(t => t.id === id);
+      if (targetTx && Array.isArray(targetTx.items)) {
+        targetTx.items.forEach((nestedIt: any, idx: number) => {
+          const itemUUID = nestedIt.id || `${id}_item_${idx}`;
+          const productUUID = nestedIt.productId || null;
+
+          const flatItem = {
+            id: itemUUID,
+            transaction_id: id,
+            product_id: productUUID,
+            product_name: nestedIt.name || "Product Item",
+            quantity: Number(nestedIt.quantity) || 0,
+            sell_price: Number(nestedIt.price) || 0,
+            cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0
+          };
+
+          const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === id && x.product_id === productUUID));
+          if (flatIdx >= 0) {
+            flatItems[flatIdx] = {
+              ...flatItems[flatIdx],
+              ...flatItem
+            };
+          } else {
+            flatItems.push(flatItem);
+          }
+        });
+      }
+      localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+
+      // 2. Update barakah_flat_transactions
+      const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
+      let flatTxList = JSON.parse(rawLocalTx);
+      if (!Array.isArray(flatTxList)) flatTxList = [];
+
+      if (targetTx) {
+        const flatTxItem = {
+          id: targetTx.id,
+          firestoreId: targetTx.firestoreId || targetTx.id,
+          invoice_no: targetTx.invoiceNo || targetTx.invoice_no,
+          customer_id: targetTx.contactId || targetTx.customer_id || null,
+          total_amount: Number(total) || 0,
+          discount: Number(discount) || 0,
+          vat_rate: originalTx.tax && subtotal ? Number(((Number(originalTx.tax) / Number(subtotal)) * 100).toFixed(2)) : 0.0,
+          paid_amount: Number(paidAmount) || 0,
+          payment_method: targetTx.paymentMethod || targetTx.payment_method || "Cash",
+          signature_svg: targetTx.customerSignature || targetTx.signature_svg || null,
+          created_at: targetTx.date || targetTx.created_at || new Date().toISOString()
+        };
+
+        const txIdx = flatTxList.findIndex((x: any) => x.id === id);
+        if (txIdx >= 0) {
+          flatTxList[txIdx] = {
+            ...flatTxList[txIdx],
+            ...flatTxItem
+          };
+        } else {
+          flatTxList.push(flatTxItem);
+        }
+        localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTxList));
+      }
+
+      // 3. Update barakah_transactions
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactionsList));
+    } catch (err) {
+      console.warn("Failed to update flat items in localStorage during edit:", err);
+    }
+
+    // Update the existing transaction_items Firestore document using its actual Firestore document ID.
+    // Persist only the price (sale price) field.
+    items.forEach(item => {
+      const docId = item.firestoreId || item.id;
+      if (docId) {
+        updateDoc(doc(db, "transaction_items", docId), { sell_price: Number(item.price) || 0 }).catch((e) => {
+          console.error("Failed to update transaction item sell_price in Firestore:", e);
+        });
+      }
+    });
+
+    // Update the parent transaction document in the transactions collection.
+    const txDocId = originalTx.firestoreId || originalTx.id;
+    if (txDocId) {
+      let costOfGoodsSold = 0;
+      items.forEach(item => {
+        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+        let buyCost = 0;
+        if (item.buyPrice && item.buyPrice > 0) {
+          buyCost = item.buyPrice;
+        } else if (dbProduct && dbProduct.buyPrice > 0) {
+          buyCost = dbProduct.buyPrice;
+        } else if (item.buyPrice !== undefined) {
+          buyCost = item.buyPrice;
+        } else {
+          buyCost = item.price * 0.70;
+        }
+        costOfGoodsSold += buyCost * (Number(item.quantity) || 0);
+      });
+      const profit = Math.round(total - costOfGoodsSold);
+
+      const nestedItems = items.map(item => ({
+        id: item.id || "",
+        firestoreId: item.firestoreId || "",
+        name: item.name || "",
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.price) || 0,
+        total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
+        productId: item.productId || "",
+        buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+        isNegativeSale: item.isNegativeSale || false
+      }));
+
+      updateDoc(doc(db, "transactions", txDocId), {
+        items: nestedItems,
+        subtotal: Number(subtotal) || 0,
+        total_amount: Number(total) || 0,
+        total: Number(total) || 0,
+        profit: profit,
+        discount: Number(discount) || 0,
+        paid_amount: Number(paidAmount) || 0,
+        paidAmount: Number(paidAmount) || 0,
+        due_balance: Number(dueBalance) || 0,
+        dueBalance: Number(dueBalance) || 0,
+        status: status,
+        vat_rate: originalTx.tax && subtotal ? Number(((Number(originalTx.tax) / Number(subtotal)) * 100).toFixed(2)) : 0.0,
+        updated_at: new Date().toISOString()
+      }).catch((e) => {
+        console.error("Failed to update parent transaction in Firestore:", e);
+      });
+    }
+
+    // Directly backup to cloud since auto-backup is disabled/skipped via isRemoteUpdateActiveRef during active sessions
+    if (activeUser && !activeUser.isGuest) {
+      const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
+      const compiledBusinessInfo = {
+        ...businessInfo,
+        staffList
+      };
+      uploadPasscodeBackup(activeUser.email, passcode, {
+        products: updatedProductsList,
+        contacts,
+        expenses,
+        transactions: updatedTransactionsList,
+        businessInfo: compiledBusinessInfo,
+        purchases
+      }).then((res) => {
+        if (res && res.success && res.updatedAt) {
+          lastUploadedAtRef.current = res.updatedAt;
+        }
+      }).catch((e) => {
+        console.warn("Manual post-edit cloud backup failed silently:", e);
+      });
+    }
 
     triggerNotification(`Invoice ${originalTx.invoiceNo} successfully updated and stock reconciled.`);
   };
@@ -2998,10 +3166,10 @@ _${businessInfo.name}_`;
     t.items.forEach(item => {
       const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
       let buyCost = 0;
-      if (dbProduct && dbProduct.buyPrice > 0) {
-        buyCost = dbProduct.buyPrice;
-      } else if (item.buyPrice && item.buyPrice > 0) {
+      if (item.buyPrice && item.buyPrice > 0) {
         buyCost = item.buyPrice;
+      } else if (dbProduct && dbProduct.buyPrice > 0) {
+        buyCost = dbProduct.buyPrice;
       } else if (dbProduct) {
         buyCost = dbProduct.buyPrice;
       } else if (item.buyPrice !== undefined) {
@@ -5896,10 +6064,10 @@ _${businessInfo.name}_`;
                               {t.items.map((it, idx) => {
                                 const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
                                 let buyCost = 0;
-                                if (dbProduct && dbProduct.buyPrice > 0) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (it.buyPrice && it.buyPrice > 0) {
+                                if (it.buyPrice && it.buyPrice > 0) {
                                   buyCost = it.buyPrice;
+                                } else if (dbProduct && dbProduct.buyPrice > 0) {
+                                  buyCost = dbProduct.buyPrice;
                                 } else if (dbProduct) {
                                   buyCost = dbProduct.buyPrice;
                                 } else if (it.buyPrice !== undefined) {

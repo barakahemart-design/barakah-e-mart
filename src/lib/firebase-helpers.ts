@@ -76,11 +76,22 @@ const updateCurrentUser = (sessionUser: any) => {
 // Listen for firebase auth state alterations
 onAuthStateChanged(firebaseAuth, (user: FirebaseUser | null) => {
   if (user) {
+    let cachedData: any = {};
+    const cached = localStorage.getItem('barakah_local_active_user');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.uid === user.uid || parsed.id === user.uid || parsed.email?.trim().toLowerCase() === user.email?.trim().toLowerCase())) {
+          cachedData = parsed;
+        }
+      } catch (e) {}
+    }
     updateCurrentUser({
       id: user.uid,
       uid: user.uid,
       email: user.email,
-      emailVerified: user.emailVerified
+      emailVerified: user.emailVerified,
+      ...cachedData
     });
   } else {
     const cached = localStorage.getItem('barakah_local_active_user');
@@ -1090,7 +1101,8 @@ export const signUpWithEmail = async (email: string, pass: string) => {
         id: authUser.uid || authUser.id, 
         uid: authUser.uid || authUser.id, 
         restored: false, 
-        isPasscodeUser: false 
+        isPasscodeUser: false,
+        password: pass
       };
 
       try {
@@ -1195,7 +1207,8 @@ export const signInWithEmail = async (email: string, pass: string) => {
         id: authUser.uid || authUser.id, 
         uid: authUser.uid || authUser.id, 
         restored: false, 
-        isPasscodeUser: false 
+        isPasscodeUser: false,
+        password: pass
       };
 
       try {
@@ -1616,14 +1629,7 @@ export const uploadPasscodeBackup = async (email: string, pin: string, payload: 
       mergedExpensesArr = Array.from(expensesMap.values());
 
       // Merge transactions
-      const transactionsMap = new Map();
-      (existingData.transactions || []).forEach((item: any) => {
-        if (item && item.id) transactionsMap.set(item.id, item);
-      });
-      normalizedTransactions.forEach((item: any) => {
-        if (item && item.id) transactionsMap.set(item.id, item);
-      });
-      mergedTransactionsArr = Array.from(transactionsMap.values());
+      mergedTransactionsArr = normalizedTransactions;
     }
   } catch (e) {
     console.warn("[Sync Recovery Guard] Error reading existing cloud state:", e);

@@ -43,48 +43,13 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
 
   try {
     if (id) {
-      if (collName === "customers") {
-        console.log("auth.currentUser.uid =", auth.currentUser?.uid);
-        console.log("received userId =", userId);
-        console.log("docData =", docData);
-        if (auth.currentUser?.uid !== userId) {
-          console.error("UID MISMATCH");
-        }
-      }
-      try {
-        if (collName === "customers") {
-          alert(`userId: ${userId}\ndocData.user_id: ${docData.user_id}\nid: ${id}`);
-        }
-        alert(JSON.stringify({
-          userId,
-          docData,
-          id
-        }, null, 2));
-        await setDoc(doc(db, collName, id), docData, { merge: true });
-        alert("SAVE SUCCESS");
-        if (collName === "customers") {
-          console.log("SAVE SUCCESS");
-        }
-      } catch (err: any) {
-        if (collName === "customers") {
-          console.error("setDoc FAILED:", err);
-          if (err && typeof err === 'object') {
-            console.error("Firebase error code:", err.code);
-            console.error("Firebase error message:", err.message);
-          }
-        }
-        throw err;
-      }
+      await setDoc(doc(db, collName, id), docData, { merge: true });
       return id;
     } else {
       const docRef = await addDoc(collection(db, collName), docData);
       return docRef.id;
     }
   } catch (error) {
-    alert("SAVE ERROR\n\n" + JSON.stringify({
-      code: (error as any)?.code,
-      message: (error as any)?.message
-    }, null, 2));
     handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, `${collName}/${id || 'new'}`);
     throw error;
   }
