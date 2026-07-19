@@ -57,7 +57,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
-import { format } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
@@ -2265,6 +2265,10 @@ export default function App() {
     }
   });
 
+  const [ledgerDateFilterType, setLedgerDateFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
+  const [ledgerStartDate, setLedgerStartDate] = useState(() => format(subDays(new Date(), 30), "yyyy-MM-dd"));
+  const [ledgerEndDate, setLedgerEndDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+
   useEffect(() => {
     const handler = setTimeout(() => {
       try {
@@ -3155,14 +3159,14 @@ _${businessInfo.name}_`;
   // -----------------------------------------------------------------
   // DATE RANGE FILTER ENGINE
   // -----------------------------------------------------------------
-  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_dashboard_filter"));
-    if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
       return saved as any;
     }
     return "all";
   });
-  const setDashboardFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setDashboardFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
     _setDashboardFilter(val);
     localStorage.setItem(getDbKey("barakah_dashboard_filter"), val);
   };
@@ -3193,6 +3197,11 @@ _${businessInfo.name}_`;
       if (dashboardFilter === "all") return true;
       if (dashboardFilter === "today") {
         return targetDate.toDateString() === today.toDateString();
+      }
+      if (dashboardFilter === "yesterday") {
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        return targetDate.toDateString() === yesterday.toDateString();
       }
       if (dashboardFilter === "weekly") {
         const check7DaysAgo = new Date();
@@ -3279,6 +3288,53 @@ _${businessInfo.name}_`;
   });
 
   const filteredTransactions = transactions.filter(t => {
+    // 1. Date filter check
+    let matchesDate = false;
+    try {
+      if (ledgerDateFilterType === "all") {
+        matchesDate = true;
+      } else {
+        const dateStr = t.date;
+        if (dateStr) {
+          let date: Date;
+          if (dateStr.includes("T")) {
+            date = parseISO(dateStr);
+          } else {
+            const parts = dateStr.split("-").map(Number);
+            if (parts.length === 3) {
+              date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+            } else {
+              date = parseISO(dateStr);
+            }
+          }
+          const today = startOfDay(new Date());
+
+          if (ledgerDateFilterType === "today") {
+            matchesDate = isWithinInterval(date, { start: startOfDay(today), end: endOfDay(today) });
+          } else if (ledgerDateFilterType === "yesterday") {
+            const yesterday = subDays(new Date(), 1);
+            matchesDate = isWithinInterval(date, { start: startOfDay(yesterday), end: endOfDay(yesterday) });
+          } else if (ledgerDateFilterType === "weekly") {
+            matchesDate = isWithinInterval(date, { start: startOfDay(subDays(new Date(), 7)), end: endOfDay(today) });
+          } else if (ledgerDateFilterType === "monthly") {
+            matchesDate = isWithinInterval(date, { start: startOfDay(subDays(new Date(), 30)), end: endOfDay(today) });
+          } else if (ledgerDateFilterType === "yearly") {
+            const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+            matchesDate = isWithinInterval(date, { start: startOfDay(startOfYear), end: endOfDay(today) });
+          } else if (ledgerDateFilterType === "custom") {
+            const start = startOfDay(parseISO(ledgerStartDate));
+            const end = endOfDay(parseISO(ledgerEndDate));
+            matchesDate = isWithinInterval(date, { start, end });
+          }
+        }
+      }
+    } catch (e) {
+      matchesDate = false;
+    }
+
+    if (!matchesDate) return false;
+
+    // 2. Existing search & status check
     const term = ledgerSearch.toLowerCase().trim();
     const contactName = contacts.find(c => c.id === t.contactId)?.name || "Walk-In Customer";
     if (!term) {
@@ -6072,6 +6128,51 @@ _${businessInfo.name}_`;
                   ))}
                 </div>
 
+              </div>
+
+              {/* Date Preset Filter Bar */}
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-5 p-5 bg-[#1E1E24] border border-[#2D2D35] rounded-2xl shadow-lg relative overflow-hidden mt-4" id="ledger-date-filter-bar">
+                <div className="flex flex-wrap items-center gap-2" id="ledger-date-presets">
+                  <span className="text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide mr-1 select-none">Date Range:</span>
+                  {(["all", "today", "yesterday", "weekly", "monthly", "yearly", "custom"] as const).map((preset) => (
+                    <button
+                      key={preset}
+                      id={`ledger-date-filter-${preset}`}
+                      onClick={() => setLedgerDateFilterType(preset)}
+                      className={`px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wider transition-all border cursor-pointer uppercase font-mono ${
+                        ledgerDateFilterType === preset
+                          ? "bg-gradient-to-r from-[#00E676] to-[#00B0FF] text-slate-950 border-emerald-400 shadow-lg scale-102"
+                          : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
+                      }`}
+                    >
+                      {preset === "all" && "All Time"}
+                      {preset === "today" && "Today"}
+                      {preset === "yesterday" && "Yesterday"}
+                      {preset === "weekly" && "Weekly"}
+                      {preset === "monthly" && "Monthly"}
+                      {preset === "yearly" && "Yearly"}
+                      {preset === "custom" && "Custom"}
+                    </button>
+                  ))}
+                </div>
+
+                {ledgerDateFilterType === "custom" && (
+                  <div className="flex items-center gap-2.5 bg-[#121214] border border-[#2D2D35] p-1.5 rounded-xl" id="ledger-custom-date-inputs">
+                    <input
+                      type="date"
+                      value={ledgerStartDate}
+                      onChange={(e) => setLedgerStartDate(e.target.value)}
+                      className="bg-transparent border-none text-white font-mono text-xs outline-none"
+                    />
+                    <span className="text-slate-600 text-xs font-bold shrink-0">to</span>
+                    <input
+                      type="date"
+                      value={ledgerEndDate}
+                      onChange={(e) => setLedgerEndDate(e.target.value)}
+                      className="bg-transparent border-none text-white font-mono text-xs outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Transactions Timeline List Feed */}

@@ -52,7 +52,7 @@ export function ReportsView({
   businessInfo,
   currencySymbol = "৳"
 }: ReportsViewProps) {
-  const [filterType, setFilterType] = useState<"all" | "today" | "weekly" | "monthly" | "yearly" | "custom">("all");
+  const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [productSearch, setProductSearch] = useState("");
@@ -77,6 +77,10 @@ export function ReportsView({
       if (filterType === "all") return true;
       if (filterType === "today") {
         return isWithinInterval(date, { start: startOfDay(today), end: endOfDay(today) });
+      }
+      if (filterType === "yesterday") {
+        const yesterday = subDays(new Date(), 1);
+        return isWithinInterval(date, { start: startOfDay(yesterday), end: endOfDay(yesterday) });
       }
       if (filterType === "weekly") {
         return isWithinInterval(date, { start: startOfDay(subDays(new Date(), 7)), end: endOfDay(today) });
@@ -356,7 +360,7 @@ export function ReportsView({
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center w-full lg:w-auto justify-end" id="report-filter-presets">
-          {(["all", "today", "weekly", "monthly", "yearly", "custom"] as const).map(preset => (
+          {(["all", "today", "yesterday", "weekly", "monthly", "yearly", "custom"] as const).map(preset => (
             <button
               key={preset}
               onClick={() => setFilterType(preset)}
@@ -366,12 +370,13 @@ export function ReportsView({
                   : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
               }`}
             >
-              {preset === "all" && "সব সময় (All Time)"}
-              {preset === "today" && "দৈনিক / দিন (Today)"}
-              {preset === "weekly" && "সাপ্তাহিক (Weekly)"}
-              {preset === "monthly" && "মাসিক (Monthly)"}
-              {preset === "yearly" && "বাৎসরিক (Yearly)"}
-              {preset === "custom" && "কাস্টম (Custom)"}
+              {preset === "all" && "All Time"}
+              {preset === "today" && "Today"}
+              {preset === "yesterday" && "Yesterday"}
+              {preset === "weekly" && "Weekly"}
+              {preset === "monthly" && "Monthly"}
+              {preset === "yearly" && "Yearly"}
+              {preset === "custom" && "Custom"}
             </button>
           ))}
 

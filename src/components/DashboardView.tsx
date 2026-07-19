@@ -227,6 +227,7 @@ export function DashboardView({
           {[
             { id: "all", label: "All Time" },
             { id: "today", label: "Today" },
+            { id: "yesterday", label: "Yesterday" },
             { id: "weekly", label: "7 Days" },
             { id: "monthly", label: "This Month" },
             { id: "yearly", label: "This Year" },
