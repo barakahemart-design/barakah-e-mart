@@ -743,7 +743,11 @@ export default function App() {
         address: docData.address || "",
         type: docData.type || "customer",
         created_at: docData.created_at || docData.updated_at || new Date().toISOString()
-      }));
+      })).sort((a, b) => {
+        const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+        const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+        return dateB - dateA;
+      });
 
       localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
@@ -842,9 +846,9 @@ export default function App() {
     const unsubItems = onSnapshot(qItems, { includeMetadataChanges: true }, (snapshot) => {
       if (snapshot.metadata.hasPendingWrites) {
         setSyncStatus("connected");
-        return;
+      } else {
+        markRemoteUpdateActive();
       }
-      markRemoteUpdateActive();
 
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
       let flatItems = JSON.parse(rawLocalItems);
@@ -6719,6 +6723,10 @@ _${businessInfo.name}_`;
                                     (c.address && c.address.toLowerCase().includes(contactSearchQuery.toLowerCase()));
               const matchesType = contactTypeFilter === "all" ? true : c.type === contactTypeFilter;
               return matchesSearch && matchesType;
+            }).sort((a, b) => {
+              const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+              const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+              return dateB - dateA;
             });
 
             return (
