@@ -1575,6 +1575,78 @@ export default function App() {
     setProducts(updatedProducts);
     setTransactions([newTransaction, ...transactions]);
 
+    // Regenerate and update local storage keys to immediately refresh dashboard and prevent empty-item filters in subscriptions
+    try {
+      const activeUserId = activeUser?.uid;
+
+      // 1. Update barakah_transactions
+      const updatedTransactions = [newTransaction, ...transactions];
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
+
+      // 2. Update barakah_flat_transaction_items
+      const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+      let flatItems = JSON.parse(rawLocalItems);
+      if (!Array.isArray(flatItems)) flatItems = [];
+
+      newTransaction.items.forEach((nestedIt: any, idx: number) => {
+        const itemUUID = nestedIt.id || `${newTransaction.id}_item_${idx}`;
+        const productUUID = nestedIt.productId || null;
+
+        const flatItem = {
+          id: itemUUID,
+          transaction_id: newTransaction.id,
+          product_id: productUUID,
+          product_name: nestedIt.name || "Product Item",
+          quantity: Number(nestedIt.quantity) || 0,
+          sell_price: Number(nestedIt.price) || 0,
+          cost_price: Number(nestedIt.buyPrice) || 0
+        };
+
+        const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === newTransaction.id && x.product_id === productUUID));
+        if (flatIdx >= 0) {
+          flatItems[flatIdx] = {
+            ...flatItems[flatIdx],
+            ...flatItem
+          };
+        } else {
+          flatItems.push(flatItem);
+        }
+      });
+      localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+
+      // 3. Update barakah_flat_transactions
+      const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
+      let flatTxList = JSON.parse(rawLocalTx);
+      if (!Array.isArray(flatTxList)) flatTxList = [];
+
+      const flatTxItem = {
+        id: newTransaction.id,
+        firestoreId: newTransaction.id,
+        invoice_no: newTransaction.invoiceNo,
+        customer_id: newTransaction.contactId || null,
+        total_amount: Number(newTransaction.total) || 0,
+        discount: Number(newTransaction.discount) || 0,
+        vat_rate: newTransaction.tax && newTransaction.subtotal ? Number(((Number(newTransaction.tax) / Number(newTransaction.subtotal)) * 100).toFixed(2)) : 0.0,
+        paid_amount: Number(newTransaction.paidAmount) || 0,
+        payment_method: newTransaction.paymentMethod || "Cash",
+        signature_svg: newTransaction.customerSignature || null,
+        created_at: newTransaction.date || new Date().toISOString()
+      };
+
+      const txIdx = flatTxList.findIndex((x: any) => x.id === newTransaction.id);
+      if (txIdx >= 0) {
+        flatTxList[txIdx] = {
+          ...flatTxList[txIdx],
+          ...flatTxItem
+        };
+      } else {
+        flatTxList.push(flatTxItem);
+      }
+      localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTxList));
+    } catch (err) {
+      console.warn("Failed to update flat items in localStorage during checkout:", err);
+    }
+
     // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
     try {
