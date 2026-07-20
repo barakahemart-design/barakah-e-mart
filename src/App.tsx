@@ -2573,14 +2573,14 @@ export default function App() {
   const [isClassifying, setIsClassifying] = useState(false);
 
   // Expense Date Range States
-  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_expense_date_filter"));
-    if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
       return saved as any;
     }
     return "all";
   });
-  const setExpenseDateFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
   };
@@ -2608,6 +2608,12 @@ export default function App() {
   const [editExpenseAmount, setEditExpenseAmount] = useState("");
   const [editExpenseDate, setEditExpenseDate] = useState("");
 
+  // Category adding state and expanded cards
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryModalTarget, setCategoryModalTarget] = useState<"add" | "edit" | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [expandedExpenseIds, setExpandedExpenseIds] = useState<Record<string, boolean>>({});
+
   const checkExpenseDateInFilter = (dateStr: string) => {
     try {
       if (!dateStr) return false;
@@ -2618,6 +2624,11 @@ export default function App() {
       if (expenseDateFilter === "all") return true;
       if (expenseDateFilter === "today") {
         return targetDate.toDateString() === today.toDateString();
+      }
+      if (expenseDateFilter === "yesterday") {
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        return targetDate.toDateString() === yesterday.toDateString();
       }
       if (expenseDateFilter === "weekly") {
         const check7DaysAgo = new Date();
@@ -6472,6 +6483,7 @@ _${businessInfo.name}_`;
                     {[
                       { id: "all", label: "All Time" },
                       { id: "today", label: "Today" },
+                      { id: "yesterday", label: "Yesterday" },
                       { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
                       { id: "yearly", label: "This Year" },
@@ -6546,10 +6558,18 @@ _${businessInfo.name}_`;
                       <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Description / Pay Reason *</label>
                       <textarea
                         required
-                        placeholder="e.g. Warehouse monthly lease, electric bills, courier postage"
+                        placeholder="e.g. Warehouse monthly lease, electric bills, courier postage (supports 1000+ words)"
                         value={expenseDesc}
-                        onChange={(e) => setExpenseDesc(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans h-20 resize-none leading-normal"
+                        onChange={(e) => {
+                          setExpenseDesc(e.target.value);
+                          e.target.style.height = "auto";
+                          e.target.style.height = `${e.target.scrollHeight}px`;
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.height = "auto";
+                          e.target.style.height = `${e.target.scrollHeight}px`;
+                        }}
+                        className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans min-h-[80px] overflow-hidden resize-none leading-normal"
                       />
                     </div>
 
@@ -6573,60 +6593,25 @@ _${businessInfo.name}_`;
                           <button
                             type="button"
                             onClick={() => {
-                              setIsAddingCustomCategory(!isAddingCustomCategory);
-                              if (!isAddingCustomCategory) {
-                                setExpenseCategory("");
-                              } else {
-                                setExpenseCategory("Others");
-                              }
+                              setCategoryModalTarget("add");
+                              setCategoryModalOpen(true);
                             }}
-                            className="text-[9px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors cursor-pointer select-none"
+                            className="text-[10px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors cursor-pointer select-none flex items-center gap-1"
                           >
-                            {isAddingCustomCategory ? "← Select Preset Category" : "⊕ Add Custom Category"}
+                            <Plus className="w-3 h-3 text-emerald-400 shrink-0" /> + Add Category
                           </button>
                         </div>
 
-                        {!isAddingCustomCategory ? (
-                          <select
-                            required
-                            value={expenseCategory}
-                            onChange={(e) => setExpenseCategory(e.target.value)}
-                            className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                          >
-                            {allCategories.map(cat => (
-                              <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              required
-                              placeholder="Type new category (e.g. Internet, Office Tea)"
-                              value={customCategory}
-                              onChange={(e) => setCustomCategory(e.target.value)}
-                              className="w-full px-3 py-2 bg-[#050912] border border-emerald-500/40 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const trimmed = customCategory.trim();
-                                if (trimmed) {
-                                  if (!expenseCategories.includes(trimmed)) {
-                                    setExpenseCategories([...expenseCategories, trimmed]);
-                                  }
-                                  setExpenseCategory(trimmed);
-                                  setIsAddingCustomCategory(false);
-                                  setCustomCategory("");
-                                  triggerNotification(`Category "${trimmed}" successfully mapped!`);
-                                }
-                              }}
-                              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shrink-0 uppercase tracking-wider select-none font-sans"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        )}
+                        <select
+                          required
+                          value={expenseCategory}
+                          onChange={(e) => setExpenseCategory(e.target.value)}
+                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono cursor-pointer"
+                        >
+                          {allCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -6703,77 +6688,114 @@ _${businessInfo.name}_`;
                     ))}
                   </div>
 
-                  <div className="overflow-x-auto" id="expenses-table-scroll">
-                    <table className="w-full text-slate-300 text-xs">
-                      <thead>
-                        <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
-                          <th className="py-2.5 px-4 text-left">Created Date</th>
-                          <th className="py-2.5 px-4 text-left">Voucher details</th>
-                          <th className="py-2.5 px-4 text-left">Category</th>
-                          <th className="py-2.5 px-4 text-right">Paid Amount</th>
-                          <th className="py-2.5 px-4 text-center">Actions / Adjust</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 font-mono">
-                        {(() => {
-                          const filteredExpenses = expenses.filter(e => 
-                            (expenseFilterCategory === "All" || e.category === expenseFilterCategory) &&
-                            checkExpenseDateInFilter(e.date)
-                          );
+                  <div className="p-4 space-y-4 max-h-[700px] overflow-y-auto" id="expenses-cards-scroll">
+                    {(() => {
+                      const filteredExpenses = expenses.filter(e => 
+                        (expenseFilterCategory === "All" || e.category === expenseFilterCategory) &&
+                        checkExpenseDateInFilter(e.date)
+                      );
 
-                          if (filteredExpenses.length === 0) {
-                            return (
-                              <tr>
-                                <td colSpan={5} className="py-12 text-center text-slate-500 italic">
-                                  {expenseFilterCategory === "All"
-                                    ? "No administrative overhead outlays logged yet for selected dates."
-                                    : `No outlays logged under "${expenseFilterCategory}" category for selected dates.`}
-                                </td>
-                              </tr>
-                            );
+                      if (filteredExpenses.length === 0) {
+                        return (
+                          <div className="py-16 text-center text-slate-400 italic bg-[#1E1E24]/30 border border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-3">
+                            <span className="text-4xl text-slate-650">🗄️</span>
+                            <p className="text-xs font-mono leading-normal">
+                              {expenseFilterCategory === "All"
+                                ? "No administrative overhead outlays logged yet for selected dates."
+                                : `No outlays logged under "${expenseFilterCategory}" category for selected dates.`}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return filteredExpenses.map((e) => {
+                        const isExpanded = !!expandedExpenseIds[e.id];
+                        const needsTruncation = e.description.length > 120;
+                        const displayText = needsTruncation && !isExpanded 
+                          ? e.description.slice(0, 120) + "..." 
+                          : e.description;
+
+                        // Display formatted date beautifully
+                        let formattedDate = e.date;
+                        try {
+                          const d = new Date(e.date);
+                          if (!isNaN(d.getTime())) {
+                            formattedDate = `${d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })} • 12:00 PM`;
                           }
+                        } catch (err) {}
 
-                          return filteredExpenses.map((e) => (
-                            <tr key={e.id} className="hover:bg-slate-900/10 text-slate-300">
-                              <td className="py-3 px-4 font-mono text-slate-400">{e.date}</td>
-                              <td className="py-3 px-4 text-slate-100 font-semibold">{e.description}</td>
-                              <td className="py-3 px-4">
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#050912] border border-slate-800 text-purple-400 font-mono inline-block">
+                        return (
+                          <div 
+                            key={e.id} 
+                            id={`expense-card-${e.id}`}
+                            className="bg-[#1E1E24]/90 hover:bg-[#1E1E24] border border-slate-800/70 hover:border-slate-800 rounded-2xl p-5 shadow-lg transition-all flex flex-col md:flex-row justify-between gap-4 relative overflow-hidden border-l-4 border-l-rose-500"
+                          >
+                            {/* Left Column: Category, Date, Description */}
+                            <div className="space-y-3 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400 font-mono inline-block">
                                   {e.category}
                                 </span>
-                              </td>
-                              <td className="py-3 px-4 text-right text-rose-400 font-bold font-mono">{businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}</td>
-                              <td className="py-3 px-4 text-center">
-                                <div className="flex items-center justify-center gap-1">
+                                <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
+                                  {formattedDate}
+                                </span>
+                              </div>
+
+                              <div className="text-slate-100 text-xs leading-relaxed break-words whitespace-pre-line font-sans">
+                                {displayText}
+                                {needsTruncation && (
                                   <button
-                                    id={`edit-expense-btn-${e.id}`}
-                                    onClick={() => {
-                                      setEditingExpense(e);
-                                      setEditExpenseDesc(e.description);
-                                      setEditExpenseCategory(e.category);
-                                      setEditExpenseAmount(String(e.amount));
-                                      setEditExpenseDate(e.date);
-                                    }}
-                                    className="p-1.5 hover:bg-emerald-500/10 rounded-lg group transition-all text-slate-500 hover:text-emerald-400 cursor-pointer"
-                                    title="Edit expense"
+                                    type="button"
+                                    onClick={() => setExpandedExpenseIds(prev => ({ ...prev, [e.id]: !isExpanded }))}
+                                    className="text-[11px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors ml-1.5 focus:outline-none inline-block cursor-pointer"
                                   >
-                                    <Edit3 className="w-3.5 h-3.5" />
+                                    {isExpanded ? "Show Less" : "Show More"}
                                   </button>
-                                  <button
-                                    id={`delete-expense-${e.id}`}
-                                    onClick={() => setDeleteExpenseId(e.id)}
-                                    className="p-1.5 hover:bg-rose-500/10 rounded-lg group transition-all text-slate-500 hover:text-rose-400 cursor-pointer"
-                                    title="Delete expense"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        })()}
-                      </tbody>
-                    </table>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right Column: Amount and actions */}
+                            <div className="flex md:flex-col justify-between items-end gap-3 shrink-0">
+                              <div className="text-right">
+                                <span className="text-[9px] text-slate-500 uppercase block tracking-wider font-mono font-bold">Paid Amount</span>
+                                <span className="text-base font-extrabold text-rose-400 font-mono">
+                                  {businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  id={`edit-expense-btn-${e.id}`}
+                                  onClick={() => {
+                                    setEditingExpense(e);
+                                    setEditExpenseDesc(e.description);
+                                    setEditExpenseCategory(e.category);
+                                    setEditExpenseAmount(String(e.amount));
+                                    setEditExpenseDate(e.date);
+                                  }}
+                                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-750 text-slate-300 hover:text-emerald-400 font-semibold text-[10px] tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 font-mono uppercase"
+                                  title="Edit expense"
+                                >
+                                  <Edit3 className="w-3 h-3 text-slate-400" />
+                                  Edit
+                                </button>
+                                <button
+                                  id={`delete-expense-${e.id}`}
+                                  onClick={() => setDeleteExpenseId(e.id)}
+                                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-750 text-slate-300 hover:text-rose-400 font-semibold text-[10px] tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 font-mono uppercase"
+                                  title="Delete expense"
+                                >
+                                  <Trash2 className="w-3 h-3 text-slate-400" />
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
 
                 </div>
@@ -9008,29 +9030,48 @@ _${businessInfo.name}_`;
                 </label>
                 <textarea
                   required
-                  rows={3}
                   value={editExpenseDesc}
-                  onChange={(e) => setEditExpenseDesc(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans leading-normal"
+                  onChange={(e) => {
+                    setEditExpenseDesc(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans min-h-[80px] overflow-hidden resize-none leading-normal"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
                   <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
                     Category
                   </label>
-                  <select
-                    value={editExpenseCategory}
-                    onChange={(e) => setEditExpenseCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 outline-none focus:border-emerald-500 font-mono"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCategoryModalTarget("edit");
+                      setCategoryModalOpen(true);
+                    }}
+                    className="text-[10px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors cursor-pointer select-none flex items-center gap-1"
                   >
-                    {allCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
+                    <Plus className="w-3 h-3 text-emerald-400 shrink-0" /> + Add Category
+                  </button>
                 </div>
+                <select
+                  value={editExpenseCategory}
+                  onChange={(e) => setEditExpenseCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 outline-none focus:border-emerald-500 font-mono cursor-pointer"
+                >
+                  {allCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
                     Date *
@@ -9043,20 +9084,20 @@ _${businessInfo.name}_`;
                     className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
-                  Amount (৳) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="0"
-                  value={editExpenseAmount}
-                  onChange={(e) => setEditExpenseAmount(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono"
-                />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                    Amount (৳) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="0"
+                    value={editExpenseAmount}
+                    onChange={(e) => setEditExpenseAmount(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 pt-3 font-sans">
@@ -9076,6 +9117,87 @@ _${businessInfo.name}_`;
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD NEW CATEGORY MODAL */}
+      {categoryModalOpen && (
+        <div className="fixed inset-0 z-[60] bg-[#0c0c0e]/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-sm w-full p-5 space-y-4 text-slate-200 animate-scaleIn" id="modal-add-category">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
+              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
+                <Plus className="w-4 h-4 text-emerald-400" />
+                Add New Category
+              </h3>
+              <button 
+                onClick={() => {
+                  setCategoryModalOpen(false);
+                  setCategoryModalTarget(null);
+                  setNewCategoryName("");
+                }} 
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Internet, Office Tea"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono text-xs"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = newCategoryName.trim();
+                    if (!trimmed) {
+                      triggerNotification("Category name cannot be empty.", "error");
+                      return;
+                    }
+                    if (!allCategories.includes(trimmed)) {
+                      setExpenseCategories([...expenseCategories, trimmed]);
+                    }
+                    
+                    if (categoryModalTarget === "add") {
+                      setExpenseCategory(trimmed);
+                    } else if (categoryModalTarget === "edit") {
+                      setEditExpenseCategory(trimmed);
+                    }
+                    
+                    triggerNotification(`Category "${trimmed}" successfully mapped!`);
+                    setCategoryModalOpen(false);
+                    setCategoryModalTarget(null);
+                    setNewCategoryName("");
+                  }}
+                  className="flex-1 py-2 bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
+                >
+                  Save Category
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryModalOpen(false);
+                    setCategoryModalTarget(null);
+                    setNewCategoryName("");
+                  }}
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
