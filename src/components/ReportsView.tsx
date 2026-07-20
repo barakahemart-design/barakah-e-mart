@@ -44,10 +44,10 @@ interface ReportsViewProps {
 }
 
 export function ReportsView({
-  products,
-  transactions,
-  expenses,
-  purchases,
+  products = [],
+  transactions = [],
+  expenses = [],
+  purchases = [],
   contacts = [],
   businessInfo,
   currencySymbol = "৳"
@@ -58,43 +58,70 @@ export function ReportsView({
   const [productSearch, setProductSearch] = useState("");
 
   // Check if a date falls inside the current date filter
-  const isDateInFilter = (dateStr: string) => {
+  const isDateInFilter = (dateStr: any) => {
     try {
       if (!dateStr) return false;
       let date: Date;
-      if (dateStr.includes("T")) {
-        date = parseISO(dateStr);
-      } else {
-        const parts = dateStr.split("-").map(Number);
-        if (parts.length === 3) {
-          date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-        } else {
+      if (dateStr instanceof Date) {
+        date = dateStr;
+      } else if (typeof dateStr === "string") {
+        if (dateStr.includes("T")) {
           date = parseISO(dateStr);
+        } else {
+          const parts = dateStr.split("-").map(Number);
+          if (parts.length === 3) {
+            date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+          } else {
+            date = parseISO(dateStr);
+          }
         }
+      } else {
+        date = new Date(dateStr);
       }
+
+      if (!date || isNaN(date.getTime())) return false;
       const today = startOfDay(new Date());
 
       if (filterType === "all") return true;
       if (filterType === "today") {
-        return isWithinInterval(date, { start: startOfDay(today), end: endOfDay(today) });
+        const start = startOfDay(today);
+        const end = endOfDay(today);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+        return isWithinInterval(date, { start, end });
       }
       if (filterType === "yesterday") {
         const yesterday = subDays(new Date(), 1);
-        return isWithinInterval(date, { start: startOfDay(yesterday), end: endOfDay(yesterday) });
+        const start = startOfDay(yesterday);
+        const end = endOfDay(yesterday);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+        return isWithinInterval(date, { start, end });
       }
       if (filterType === "weekly") {
-        return isWithinInterval(date, { start: startOfDay(subDays(new Date(), 7)), end: endOfDay(today) });
+        const start = startOfDay(subDays(new Date(), 7));
+        const end = endOfDay(today);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+        return isWithinInterval(date, { start, end });
       }
       if (filterType === "monthly") {
-        return isWithinInterval(date, { start: startOfDay(subDays(new Date(), 30)), end: endOfDay(today) });
+        const start = startOfDay(subDays(new Date(), 30));
+        const end = endOfDay(today);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+        return isWithinInterval(date, { start, end });
       }
       if (filterType === "yearly") {
         const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-        return isWithinInterval(date, { start: startOfDay(startOfYear), end: endOfDay(today) });
+        const start = startOfDay(startOfYear);
+        const end = endOfDay(today);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+        return isWithinInterval(date, { start, end });
       }
       if (filterType === "custom") {
-        const start = startOfDay(parseISO(startDate));
-        const end = endOfDay(parseISO(endDate));
+        if (!startDate || !endDate) return false;
+        const startParsed = parseISO(startDate);
+        const endParsed = parseISO(endDate);
+        if (isNaN(startParsed.getTime()) || isNaN(endParsed.getTime())) return false;
+        const start = startOfDay(startParsed);
+        const end = endOfDay(endParsed);
         return isWithinInterval(date, { start, end });
       }
     } catch (e) {
@@ -125,32 +152,47 @@ export function ReportsView({
     let salesDiscount = 0;
 
     filteredTransactions.forEach(t => {
-      salesVal += t.total || 0;
-      cashReceived += t.paidAmount || 0;
-      dueBalance += t.dueBalance || 0;
-      salesTax += t.tax || 0;
-      salesDiscount += t.discount || 0;
+      if (!t) return;
+      const tot = typeof t.total === "number" ? t.total : parseFloat(t.total) || 0;
+      const paid = typeof t.paidAmount === "number" ? t.paidAmount : parseFloat(t.paidAmount) || 0;
+      const due = typeof t.dueBalance === "number" ? t.dueBalance : parseFloat(t.dueBalance) || 0;
+      const tx = typeof t.tax === "number" ? t.tax : parseFloat(t.tax) || 0;
+      const disc = typeof t.discount === "number" ? t.discount : parseFloat(t.discount) || 0;
+
+      salesVal += tot;
+      cashReceived += paid;
+      dueBalance += due;
+      salesTax += tx;
+      salesDiscount += disc;
     });
 
     let expenseVal = 0;
     filteredExpenses.forEach(e => {
-      expenseVal += e.amount || 0;
+      if (!e) return;
+      const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
+      expenseVal += amt;
     });
 
     let purchaseVal = 0;
     filteredPurchases.forEach(p => {
-      purchaseVal += p.totalAmount || 0;
+      if (!p) return;
+      const tot = typeof p.totalAmount === "number" ? p.totalAmount : parseFloat(p.totalAmount) || 0;
+      purchaseVal += tot;
     });
 
     // Estimate Profit Margins: 
     // Sales value minus the estimated cost of goods sold (COGS)
     let estimatedCOGS = 0;
     filteredTransactions.forEach(t => {
+      if (!t) return;
       t.items?.forEach((item: any) => {
+        if (!item) return;
         // Look up item buyPrice in system catalog
         const catProd = products.find(p => p.id === item.productId);
-        const buyCost = catProd ? catProd.buyPrice : (item.price * 0.85); // fallback estimate
-        estimatedCOGS += buyCost * (item.quantity || 1);
+        const buyCostVal = catProd ? catProd.buyPrice : (item.price * 0.85); // fallback estimate
+        const buyCost = typeof buyCostVal === "number" ? buyCostVal : parseFloat(buyCostVal) || 0;
+        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+        estimatedCOGS += buyCost * qty;
       });
     });
 
@@ -176,21 +218,45 @@ export function ReportsView({
     const map: Record<string, { date: string; Sales: number; Purchases: number; Expenses: number }> = {};
     
     filteredTransactions.forEach(t => {
-      const d = format(parseISO(t.date), "dd MMM");
-      if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
-      map[d].Sales += t.total;
+      try {
+        if (!t || !t.date) return;
+        const parsed = parseISO(t.date);
+        if (isNaN(parsed.getTime())) return;
+        const d = format(parsed, "dd MMM");
+        if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
+        const tot = typeof t.total === "number" ? t.total : parseFloat(t.total) || 0;
+        map[d].Sales += tot;
+      } catch (err) {
+        console.warn("Failed to format transaction date:", t.date, err);
+      }
     });
 
     filteredPurchases.forEach(p => {
-      const d = format(parseISO(p.date + "T12:00:00"), "dd MMM");
-      if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
-      map[d].Purchases += p.totalAmount;
+      try {
+        if (!p || !p.date) return;
+        const parsed = parseISO(p.date + "T12:00:00");
+        if (isNaN(parsed.getTime())) return;
+        const d = format(parsed, "dd MMM");
+        if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
+        const tot = typeof p.totalAmount === "number" ? p.totalAmount : parseFloat(p.totalAmount) || 0;
+        map[d].Purchases += tot;
+      } catch (err) {
+        console.warn("Failed to format purchase date:", p.date, err);
+      }
     });
 
     filteredExpenses.forEach(e => {
-      const d = format(parseISO(e.date + "T12:00:00"), "dd MMM");
-      if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
-      map[d].Expenses += e.amount;
+      try {
+        if (!e || !e.date) return;
+        const parsed = parseISO(e.date + "T12:00:00");
+        if (isNaN(parsed.getTime())) return;
+        const d = format(parsed, "dd MMM");
+        if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
+        const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
+        map[d].Expenses += amt;
+      } catch (err) {
+        console.warn("Failed to format expense date:", e.date, err);
+      }
     });
 
     return Object.values(map).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10).reverse();
@@ -200,9 +266,15 @@ export function ReportsView({
   const expenseCatChartData = useMemo(() => {
     const map: Record<string, number> = {};
     filteredExpenses.forEach(e => {
-      map[e.category] = (map[e.category] || 0) + e.amount;
+      if (!e) return;
+      const cat = e.category || "Uncategorized";
+      const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
+      map[cat] = (map[cat] || 0) + amt;
     });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
+    return Object.entries(map).map(([name, value]) => ({
+      name,
+      value: typeof value === "number" && !isNaN(value) ? value : 0
+    }));
   }, [filteredExpenses]);
 
   // Expended items detailed breakdown: rent vs bills vs salaries explicitly
@@ -213,16 +285,18 @@ export function ReportsView({
     let others = 0;
 
     filteredExpenses.forEach(e => {
+      if (!e) return;
       const cat = (e.category || "").toLowerCase().trim();
       const desc = (e.description || "").toLowerCase().trim();
+      const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
       if (cat === "rent" || desc.includes("rent")) {
-        rent += e.amount || 0;
+        rent += amt;
       } else if (cat === "electricity" || cat === "utility" || cat === "bills" || cat === "water" || cat === "internet" || desc.includes("bill")) {
-        bills += e.amount || 0;
+        bills += amt;
       } else if (cat === "salary" || cat === "salaries" || cat === "wages" || cat === "payroll" || desc.includes("salary")) {
-        salaries += e.amount || 0;
+        salaries += amt;
       } else {
-        others += e.amount || 0;
+        others += amt;
       }
     });
 
@@ -235,20 +309,24 @@ export function ReportsView({
   const topSellingProducts = useMemo(() => {
     const map: Record<string, { id: string; name: string; sku: string; category: string; quantity: number; revenue: number }> = {};
     filteredTransactions.forEach(t => {
+      if (!t) return;
       t.items?.forEach((item: any) => {
-        const pid = item.productId || item.name;
+        if (!item) return;
+        const pid = item.productId || item.name || "Unknown Product";
         if (!map[pid]) {
           map[pid] = {
             id: item.productId || "",
-            name: item.name,
+            name: item.name || "Unknown Product",
             sku: item.sku || "",
             category: item.category || "",
             quantity: 0,
             revenue: 0
           };
         }
-        map[pid].quantity += item.quantity || 1;
-        map[pid].revenue += (item.price * (item.quantity || 1));
+        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+        const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
+        map[pid].quantity += qty;
+        map[pid].revenue += price * qty;
       });
     });
 
@@ -274,36 +352,54 @@ export function ReportsView({
       profitMarginPct: number;
     }> = [];
 
-    // Sort transactions from newest to oldest
+    // Sort transactions from newest to oldest safely
     const sortedTxs = [...filteredTransactions].sort((a, b) => {
-      return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+      if (!a || !b) return 0;
+      const dateA = a.date ? new Date(a.date) : null;
+      const dateB = b.date ? new Date(b.date) : null;
+      const timeA = dateA && !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+      const timeB = dateB && !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+      return timeB - timeA;
     });
 
     sortedTxs.forEach(t => {
+      if (!t) return;
       // Find customer name safely from contacts list
       const pairedContact = contacts.find(c => c.id === t.contactId);
       const customerName = pairedContact ? pairedContact.name : "Walk-In Customer";
-      const txDateStr = t.date ? format(new Date(t.date), "dd MMM yyyy") : "N/A";
+      let txDateStr = "N/A";
+      try {
+        if (t.date) {
+          const parsedD = new Date(t.date);
+          if (!isNaN(parsedD.getTime())) {
+            txDateStr = format(parsedD, "dd MMM yyyy");
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to format transaction date", t.date, err);
+      }
 
       t.items?.forEach((item: any) => {
+        if (!item) return;
         // Resolve standard item buy price or match with product database CATALOG buy price
         const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
         
         let buyCost = 0;
-        if (dbProduct && dbProduct.buyPrice > 0) {
+        if (dbProduct && typeof dbProduct.buyPrice === "number" && dbProduct.buyPrice > 0) {
           buyCost = dbProduct.buyPrice;
-        } else if (item.buyPrice && item.buyPrice > 0) {
+        } else if (item.buyPrice && typeof item.buyPrice === "number" && item.buyPrice > 0) {
           buyCost = item.buyPrice;
         } else if (dbProduct) {
-          buyCost = dbProduct.buyPrice;
+          buyCost = typeof dbProduct.buyPrice === "number" ? dbProduct.buyPrice : parseFloat(dbProduct.buyPrice) || 0;
         } else if (item.buyPrice !== undefined) {
-          buyCost = item.buyPrice;
+          buyCost = typeof item.buyPrice === "number" ? item.buyPrice : parseFloat(item.buyPrice) || 0;
         } else {
-          buyCost = item.price * 0.70;
+          buyCost = (typeof item.price === "number" ? item.price : parseFloat(item.price) || 0) * 0.70;
         }
 
-        const qty = item.quantity || 1;
-        const totalRevenue = item.price * qty;
+        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+        const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
+        const totalRevenue = price * qty;
         const totalCogs = buyCost * qty;
         const netProfit = totalRevenue - totalCogs;
         const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
@@ -312,11 +408,11 @@ export function ReportsView({
           date: txDateStr,
           invoiceNo: t.invoiceNo || "N/A",
           customerName,
-          productName: item.name,
+          productName: item.name || "Unknown Product",
           sku: item.sku || dbProduct?.sku || "",
           category: item.category || dbProduct?.category || "",
           quantity: qty,
-          salePrice: item.price,
+          salePrice: price,
           totalRevenue,
           totalCogs,
           netProfit,

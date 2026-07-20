@@ -3911,7 +3911,7 @@ _${businessInfo.name}_`;
               purchases={purchases}
               contacts={contacts}
               businessInfo={businessInfo}
-              currencySymbol={businessInfo.currencySymbol || "৳"}
+              currencySymbol={businessInfo?.currencySymbol || "৳"}
             />
           )}
 
