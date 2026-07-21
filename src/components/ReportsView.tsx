@@ -31,7 +31,14 @@ import {
   Line,
   Legend
 } from "recharts";
-import { format, isWithinInterval, startOfDay, endOfDay, parseISO, subDays } from "date-fns";
+import {
+  safeDate,
+  safeFormat,
+  safeIsWithinInterval,
+  safeStartOfDay,
+  safeEndOfDay,
+  safeSubDays
+} from "../lib/dateUtils";
 
 interface ReportsViewProps {
   products: any[];
@@ -53,76 +60,81 @@ export function ReportsView({
   currencySymbol = "৳"
 }: ReportsViewProps) {
   const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
-  const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [startDate, setStartDate] = useState(() => {
+    const thirtyDaysAgo = safeSubDays(new Date(), 30);
+    return safeFormat(thirtyDaysAgo, "yyyy-MM-dd", "");
+  });
+  const [endDate, setEndDate] = useState(() => {
+    return safeFormat(new Date(), "yyyy-MM-dd", "");
+  });
   const [productSearch, setProductSearch] = useState("");
 
   // Check if a date falls inside the current date filter
   const isDateInFilter = (dateStr: any) => {
     try {
-      if (!dateStr) return false;
-      let date: Date;
-      if (dateStr instanceof Date) {
-        date = dateStr;
-      } else if (typeof dateStr === "string") {
-        if (dateStr.includes("T")) {
-          date = parseISO(dateStr);
-        } else {
-          const parts = dateStr.split("-").map(Number);
-          if (parts.length === 3) {
-            date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-          } else {
-            date = parseISO(dateStr);
-          }
-        }
-      } else {
-        date = new Date(dateStr);
-      }
+      const date = safeDate(dateStr);
+      if (!date) return false;
 
-      if (!date || isNaN(date.getTime())) return false;
-      const today = startOfDay(new Date());
+      const now = safeDate(new Date());
+      if (!now) return false;
+
+      const safeToday = safeStartOfDay(now);
+      if (!safeToday) return false;
 
       if (filterType === "all") return true;
+
       if (filterType === "today") {
-        const start = startOfDay(today);
-        const end = endOfDay(today);
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-        return isWithinInterval(date, { start, end });
+        const s = safeStartOfDay(safeToday);
+        const e = safeEndOfDay(safeToday);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
       }
+
       if (filterType === "yesterday") {
-        const yesterday = subDays(new Date(), 1);
-        const start = startOfDay(yesterday);
-        const end = endOfDay(yesterday);
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-        return isWithinInterval(date, { start, end });
+        const yesterday = safeSubDays(safeToday, 1);
+        if (!yesterday) return false;
+        const s = safeStartOfDay(yesterday);
+        const e = safeEndOfDay(yesterday);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
       }
+
       if (filterType === "weekly") {
-        const start = startOfDay(subDays(new Date(), 7));
-        const end = endOfDay(today);
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-        return isWithinInterval(date, { start, end });
+        const sevenDaysAgo = safeSubDays(safeToday, 7);
+        if (!sevenDaysAgo) return false;
+        const s = safeStartOfDay(sevenDaysAgo);
+        const e = safeEndOfDay(safeToday);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
       }
+
       if (filterType === "monthly") {
-        const start = startOfDay(subDays(new Date(), 30));
-        const end = endOfDay(today);
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-        return isWithinInterval(date, { start, end });
+        const thirtyDaysAgo = safeSubDays(safeToday, 30);
+        if (!thirtyDaysAgo) return false;
+        const s = safeStartOfDay(thirtyDaysAgo);
+        const e = safeEndOfDay(safeToday);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
       }
+
       if (filterType === "yearly") {
-        const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-        const start = startOfDay(startOfYear);
-        const end = endOfDay(today);
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-        return isWithinInterval(date, { start, end });
+        const startOfYearDate = safeDate(new Date(safeToday.getFullYear(), 0, 1));
+        if (!startOfYearDate) return false;
+        const s = safeStartOfDay(startOfYearDate);
+        const e = safeEndOfDay(safeToday);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
       }
+
       if (filterType === "custom") {
         if (!startDate || !endDate) return false;
-        const startParsed = parseISO(startDate);
-        const endParsed = parseISO(endDate);
-        if (isNaN(startParsed.getTime()) || isNaN(endParsed.getTime())) return false;
-        const start = startOfDay(startParsed);
-        const end = endOfDay(endParsed);
-        return isWithinInterval(date, { start, end });
+        const startParsed = safeDate(startDate);
+        const endParsed = safeDate(endDate);
+        if (!startParsed || !endParsed) return false;
+        const s = safeStartOfDay(startParsed);
+        const e = safeEndOfDay(endParsed);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
       }
     } catch (e) {
       return false;
@@ -220,9 +232,10 @@ export function ReportsView({
     filteredTransactions.forEach(t => {
       try {
         if (!t || !t.date) return;
-        const parsed = parseISO(t.date);
-        if (isNaN(parsed.getTime())) return;
-        const d = format(parsed, "dd MMM");
+        const parsed = safeDate(t.date);
+        if (!parsed) return;
+        const d = safeFormat(parsed, "dd MMM");
+        if (!d) return;
         if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
         const tot = typeof t.total === "number" ? t.total : parseFloat(t.total) || 0;
         map[d].Sales += tot;
@@ -234,9 +247,10 @@ export function ReportsView({
     filteredPurchases.forEach(p => {
       try {
         if (!p || !p.date) return;
-        const parsed = parseISO(p.date + "T12:00:00");
-        if (isNaN(parsed.getTime())) return;
-        const d = format(parsed, "dd MMM");
+        const parsed = safeDate(p.date + "T12:00:00") || safeDate(p.date);
+        if (!parsed) return;
+        const d = safeFormat(parsed, "dd MMM");
+        if (!d) return;
         if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
         const tot = typeof p.totalAmount === "number" ? p.totalAmount : parseFloat(p.totalAmount) || 0;
         map[d].Purchases += tot;
@@ -248,9 +262,10 @@ export function ReportsView({
     filteredExpenses.forEach(e => {
       try {
         if (!e || !e.date) return;
-        const parsed = parseISO(e.date + "T12:00:00");
-        if (isNaN(parsed.getTime())) return;
-        const d = format(parsed, "dd MMM");
+        const parsed = safeDate(e.date + "T12:00:00") || safeDate(e.date);
+        if (!parsed) return;
+        const d = safeFormat(parsed, "dd MMM");
+        if (!d) return;
         if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
         const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
         map[d].Expenses += amt;
@@ -355,10 +370,10 @@ export function ReportsView({
     // Sort transactions from newest to oldest safely
     const sortedTxs = [...filteredTransactions].sort((a, b) => {
       if (!a || !b) return 0;
-      const dateA = a.date ? new Date(a.date) : null;
-      const dateB = b.date ? new Date(b.date) : null;
-      const timeA = dateA && !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
-      const timeB = dateB && !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+      const dateA = safeDate(a.date);
+      const dateB = safeDate(b.date);
+      const timeA = dateA ? dateA.getTime() : 0;
+      const timeB = dateB ? dateB.getTime() : 0;
       return timeB - timeA;
     });
 
@@ -370,9 +385,9 @@ export function ReportsView({
       let txDateStr = "N/A";
       try {
         if (t.date) {
-          const parsedD = new Date(t.date);
-          if (!isNaN(parsedD.getTime())) {
-            txDateStr = format(parsedD, "dd MMM yyyy");
+          const parsedD = safeDate(t.date);
+          if (parsedD) {
+            txDateStr = safeFormat(parsedD, "dd MMM yyyy", "N/A");
           }
         }
       } catch (err) {

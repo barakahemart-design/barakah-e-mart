@@ -58,6 +58,14 @@ import {
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
+import {
+  safeDate,
+  safeFormat,
+  safeIsWithinInterval,
+  safeStartOfDay,
+  safeEndOfDay,
+  safeSubDays
+} from "./lib/dateUtils";
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
@@ -2238,7 +2246,7 @@ export default function App() {
           totalAmount: nextTotal,
           dueAmount: nextDue,
           cashPaid: nextCashPaid,
-          note: (item.note || "") + ` [Returned ${returnQty} pcs on ${format(new Date(), "dd-MM-yyyy")}]`
+          note: (item.note || "") + ` [Returned ${returnQty} pcs on ${safeFormat(new Date(), "dd-MM-yyyy")}]`
         };
       }
       return item;
@@ -2266,8 +2274,8 @@ export default function App() {
   });
 
   const [ledgerDateFilterType, setLedgerDateFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
-  const [ledgerStartDate, setLedgerStartDate] = useState(() => format(subDays(new Date(), 30), "yyyy-MM-dd"));
-  const [ledgerEndDate, setLedgerEndDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [ledgerStartDate, setLedgerStartDate] = useState(() => safeFormat(safeSubDays(new Date(), 30), "yyyy-MM-dd"));
+  const [ledgerEndDate, setLedgerEndDate] = useState(() => safeFormat(new Date(), "yyyy-MM-dd"));
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -2922,7 +2930,7 @@ export default function App() {
    ${businessInfo.name}
    Supplier Due Payment Receipt
 ------------------------------------------
-Date: ${format(new Date(pur.date), "dd MMMM, yyyy")}
+Date: ${safeFormat(pur.date, "dd MMMM, yyyy", "N/A")}
 Voucher No: ${pur.invoiceNo || "N/A"}
 Supplier: ${pur.supplierName}
 
@@ -2957,7 +2965,7 @@ Address: ${businessInfo.address || "N/A"}
     const text = `*${businessInfo.name}*
 *Supplier Due Payment Receipt*
 ----------------------------------------
-*Date:* ${format(new Date(pur.date), "dd MMMM, yyyy")}
+*Date:* ${safeFormat(pur.date, "dd MMMM, yyyy", "N/A")}
 *Voucher No:* ${pur.invoiceNo || "N/A"}
 *Supplier:* ${pur.supplierName}
 
@@ -3079,7 +3087,7 @@ _${businessInfo.name}_`;
           
           <div class="meta-row">
             <span>Date:</span>
-            <span>${format(new Date(pur.date), "dd-MM-yyyy HH:mm")}</span>
+            <span>${safeFormat(pur.date, "dd-MM-yyyy HH:mm", "N/A")}</span>
           </div>
           <div class="meta-row">
             <span>Voucher No:</span>
@@ -3307,35 +3315,28 @@ _${businessInfo.name}_`;
       } else {
         const dateStr = t.date;
         if (dateStr) {
-          let date: Date;
-          if (dateStr.includes("T")) {
-            date = parseISO(dateStr);
-          } else {
-            const parts = dateStr.split("-").map(Number);
-            if (parts.length === 3) {
-              date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-            } else {
-              date = parseISO(dateStr);
-            }
-          }
-          const today = startOfDay(new Date());
+          const date = safeDate(dateStr);
+          if (!date) return false;
+          
+          const today = safeStartOfDay(new Date());
+          if (!today) return false;
 
           if (ledgerDateFilterType === "today") {
-            matchesDate = isWithinInterval(date, { start: startOfDay(today), end: endOfDay(today) });
+            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(today), end: safeEndOfDay(today) });
           } else if (ledgerDateFilterType === "yesterday") {
-            const yesterday = subDays(new Date(), 1);
-            matchesDate = isWithinInterval(date, { start: startOfDay(yesterday), end: endOfDay(yesterday) });
+            const yesterday = safeSubDays(new Date(), 1);
+            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(yesterday), end: safeEndOfDay(yesterday) });
           } else if (ledgerDateFilterType === "weekly") {
-            matchesDate = isWithinInterval(date, { start: startOfDay(subDays(new Date(), 7)), end: endOfDay(today) });
+            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(safeSubDays(new Date(), 7)), end: safeEndOfDay(today) });
           } else if (ledgerDateFilterType === "monthly") {
-            matchesDate = isWithinInterval(date, { start: startOfDay(subDays(new Date(), 30)), end: endOfDay(today) });
+            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(safeSubDays(new Date(), 30)), end: safeEndOfDay(today) });
           } else if (ledgerDateFilterType === "yearly") {
             const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-            matchesDate = isWithinInterval(date, { start: startOfDay(startOfYear), end: endOfDay(today) });
+            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(startOfYear), end: safeEndOfDay(today) });
           } else if (ledgerDateFilterType === "custom") {
-            const start = startOfDay(parseISO(ledgerStartDate));
-            const end = endOfDay(parseISO(ledgerEndDate));
-            matchesDate = isWithinInterval(date, { start, end });
+            const start = safeStartOfDay(safeDate(ledgerStartDate));
+            const end = safeEndOfDay(safeDate(ledgerEndDate));
+            matchesDate = safeIsWithinInterval(date, { start, end });
           }
         }
       }
@@ -3363,8 +3364,10 @@ _${businessInfo.name}_`;
   // Recharts analytic plot models 
   const ledgerTrendsPlotData = transactions.slice().reverse().map(t => {
     try {
+      const parsed = safeDate(t.date);
+      const dStr = parsed ? safeFormat(parsed, "dd MMM", "Slip Date") : "Slip Date";
       return {
-        date: format(new Date(t.date), "dd MMM"),
+        date: dStr,
         "Sales Value": t.total,
         "Cash Received": t.paidAmount
       };
@@ -5738,7 +5741,7 @@ _${businessInfo.name}_`;
                                   <tr key={pur.id} className={`hover:bg-slate-900/10 text-slate-300 ${isFullyPaid ? 'bg-emerald-950/5' : ''}`}>
                                     {/* 1. Date */}
                                     <td className="py-4 px-4 text-slate-400 text-[11px] whitespace-nowrap">
-                                      {format(new Date(pur.date), "dd MMMM, yyyy")}
+                                      {safeFormat(pur.date, "dd MMMM, yyyy", "N/A")}
                                       <span className="block text-[9px] text-[#A0A0A5] font-mono mt-0.5">Voucher No: {pur.invoiceNo || "N/A"}</span>
                                     </td>
 
@@ -5957,7 +5960,7 @@ _${businessInfo.name}_`;
                           </div>
                           <div>
                             <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Date</span>
-                            <strong className="text-white text-sm">{format(new Date(pur.date), "dd MMMM, yyyy")}</strong>
+                            <strong className="text-white text-sm">{safeFormat(pur.date, "dd MMMM, yyyy", "N/A")}</strong>
                           </div>
                           <div>
                             <span className="text-slate-500 block text-[10px] uppercase font-mono tracking-wider">Supplier Name</span>
@@ -8788,7 +8791,7 @@ _${businessInfo.name}_`;
                   <label className="text-[10px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Invoice Date / Time</label>
                   <input
                     type="datetime-local"
-                    value={format(new Date(editingTx.date), "yyyy-MM-dd'T'HH:mm")}
+                    value={safeFormat(editingTx.date, "yyyy-MM-dd'T'HH:mm", "")}
                     onChange={(e) => {
                       const selectedDate = e.target.value;
                       if (selectedDate) {
