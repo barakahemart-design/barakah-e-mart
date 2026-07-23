@@ -88,7 +88,16 @@ import {
   subscribeTransactions,
   subscribeExpenses,
   subscribePurchases,
-  saveCustomer
+  saveProduct,
+  saveCustomer,
+  saveTransaction,
+  saveExpense,
+  savePurchase,
+  deleteProduct,
+  deleteCustomer,
+  deleteTransaction,
+  deleteExpense,
+  deletePurchase
 } from "./lib/firestoreService";
 
 export interface Product {
@@ -250,7 +259,7 @@ import {
   saveBusinessSettings,
   getBusinessSettings
 } from "./lib/firebase-helpers";
-import { doc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
 import { 
   generateInvoicePDF,
@@ -1638,6 +1647,44 @@ export default function App() {
         flatTxList.push(flatTxItem);
       }
       localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTxList));
+
+      // 4. Save real-time transaction to Firestore cloud for multi-device sync
+      if (activeUser && !activeUser.isGuest) {
+        // Main transaction document
+        saveTransaction(activeUserId, flatTxItem).catch(err => {
+          console.error("Cloud save transaction failed:", err);
+        });
+
+        // Individual item records
+        newTransaction.items.forEach((nestedIt: any, idx: number) => {
+          const itemUUID = nestedIt.id || `${newTransaction.id}_item_${idx}`;
+          const productUUID = nestedIt.productId || null;
+
+          const flatItem = {
+            id: itemUUID,
+            transaction_id: newTransaction.id,
+            product_id: productUUID,
+            product_name: nestedIt.name || "Product Item",
+            quantity: Number(nestedIt.quantity) || 0,
+            sell_price: Number(nestedIt.price) || 0,
+            cost_price: Number(nestedIt.buyPrice) || 0,
+            user_id: activeUserId
+          };
+          setDoc(doc(db, "transaction_items", itemUUID), flatItem, { merge: true }).catch(err => {
+            console.error("Cloud save transaction item failed:", err);
+          });
+        });
+
+        // Updated inventory stock levels
+        posCart.forEach(cartItem => {
+          const targetProd = updatedProducts.find(p => p.id === cartItem.product.id || (p.sku && cartItem.product.sku === p.sku));
+          if (targetProd) {
+            saveProduct(activeUserId, targetProd).catch(err => {
+              console.error("Cloud save product stock failed:", err);
+            });
+          }
+        });
+      }
     } catch (err) {
       console.warn("Failed to update flat items in localStorage during checkout:", err);
     }
@@ -1695,6 +1742,11 @@ export default function App() {
     };
 
     setProducts([...products, parsedProduct]);
+    if (activeUser && !activeUser.isGuest) {
+      saveProduct(activeUser.uid, parsedProduct).catch(err => {
+        console.error("Cloud save product failed:", err);
+      });
+    }
     setNewProdName("");
     setNewProdSKU("");
     setNewProdBuyPrice("");
@@ -1712,6 +1764,9 @@ export default function App() {
     const p = products.find(prod => prod.id === id);
     if (!p) return;
     await deleteCloudDocument("products", id);
+    if (activeUser && !activeUser.isGuest) {
+      deleteProduct(id).catch(err => {});
+    }
     setProducts(products.filter(item => item.id !== id));
     triggerNotification(`Product '${name}' has been successfully deleted.`, "success");
   };
@@ -2307,6 +2362,32 @@ export default function App() {
   const incrementDuePayment = (invoiceNo: string, collectionAmt: number) => {
     if (!collectionAmt || collectionAmt <= 0) return;
 
+    const targetTx = transactions.find(t => t.invoiceNo === invoiceNo);
+    if (targetTx) {
+      const newPaid = Math.min(targetTx.total, targetTx.paidAmount + collectionAmt);
+      const newDue = Math.max(0, targetTx.total - newPaid);
+
+      if (activeUser && !activeUser.isGuest) {
+        const activeUserId = activeUser.uid;
+        const flatTxItem = {
+          id: targetTx.id,
+          firestoreId: targetTx.firestoreId || targetTx.id,
+          invoice_no: targetTx.invoiceNo,
+          customer_id: targetTx.contactId || null,
+          total_amount: Number(targetTx.total) || 0,
+          discount: Number(targetTx.discount) || 0,
+          vat_rate: targetTx.tax && targetTx.subtotal ? Number(((Number(targetTx.tax) / Number(targetTx.subtotal)) * 100).toFixed(2)) : 0.0,
+          paid_amount: Number(newPaid) || 0,
+          payment_method: targetTx.paymentMethod || "Cash",
+          signature_svg: targetTx.customerSignature || null,
+          created_at: targetTx.date || new Date().toISOString()
+        };
+        saveTransaction(activeUserId, flatTxItem).catch(err => {
+          console.error("Cloud save increment due payment failed:", err);
+        });
+      }
+    }
+
     setTransactions(transactions.map((t) => {
       if (t.invoiceNo === invoiceNo) {
         const newPaid = Math.min(t.total, t.paidAmount + collectionAmt);
@@ -2333,18 +2414,34 @@ export default function App() {
 
     await deleteCloudDocument("transactions", t.firestoreId ?? t.id);
 
+    if (activeUser && !activeUser.isGuest) {
+      deleteTransaction(id).catch(err => {});
+      if (Array.isArray(t.items)) {
+        t.items.forEach(item => {
+          if (item.id) {
+            deleteDoc(doc(db, "transaction_items", item.id)).catch(err => {});
+          }
+        });
+      }
+    }
+
     // Refund stock back to products catalog
-    setProducts(products.map(prod => {
+    const restoredProducts = products.map(prod => {
       const soldItem = t.items.find(item => item.productId === prod.id || item.id === prod.id);
       if (soldItem) {
-        return {
+        const nextP = {
           ...prod,
           stock: prod.stock + (soldItem.quantity ?? 0)
         };
+        if (activeUser && !activeUser.isGuest) {
+          saveProduct(activeUser.uid, nextP).catch(err => {});
+        }
+        return nextP;
       }
       return prod;
-    }));
+    });
 
+    setProducts(restoredProducts);
     setTransactions(transactions.filter(item => item.id !== id));
     triggerNotification(`Invoice ${t.invoiceNo} has been successfully deleted.`, "success");
   };
@@ -2541,6 +2638,14 @@ export default function App() {
       });
     }
 
+    if (activeUser && !activeUser.isGuest) {
+      updatedProductsList.forEach(p => {
+        saveProduct(activeUser.uid, p).catch(err => {
+          console.error("Cloud save product stock after edit transaction failed:", err);
+        });
+      });
+    }
+
     // Directly backup to cloud since auto-backup is disabled/skipped via isRemoteUpdateActiveRef during active sessions
     if (activeUser && !activeUser.isGuest) {
       const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
@@ -2682,6 +2787,9 @@ export default function App() {
     };
 
     setExpenses(prev => prev.map(item => item.id === editingExpense.id ? updatedExp : item));
+    if (activeUser && !activeUser.isGuest) {
+      saveExpense(activeUser.uid, updatedExp).catch(err => {});
+    }
     setEditingExpense(null);
     setEditExpenseDesc("");
     setEditExpenseCategory("Others");
@@ -2745,6 +2853,9 @@ export default function App() {
     };
 
     setExpenses([newExp, ...expenses]);
+    if (activeUser && !activeUser.isGuest) {
+      saveExpense(activeUser.uid, newExp).catch(err => {});
+    }
     setExpenseDesc("");
     setExpenseCategory("Others");
     setExpenseAmount("");
@@ -2763,6 +2874,9 @@ export default function App() {
       created_at: new Date().toISOString()
     };
     setContacts(prev => [newContact, ...prev]);
+    if (activeUser && !activeUser.isGuest) {
+      saveCustomer(activeUser.uid, newContact).catch(err => {});
+    }
     triggerNotification(`Supplier [${supplier.name}] added successfully!`, "success");
     return newId;
   };
@@ -2884,7 +2998,6 @@ export default function App() {
 
       if (activeUser && !activeUser.isGuest) {
         try {
-          alert(`activeUser.uid: ${activeUser.uid}\nupdatedContact.id: ${updatedContact.id}\nupdatedContact.name: ${updatedContact.name}`);
           await saveCustomer(activeUser.uid, updatedContact);
         } catch (err) {
           console.error("Error saving updated contact to Firestore:", err);
@@ -2911,7 +3024,6 @@ export default function App() {
 
       if (activeUser && !activeUser.isGuest) {
         try {
-          alert(`activeUser.uid: ${activeUser.uid}\nnewContact.id: ${newContact.id}\nnewContact.name: ${newContact.name}`);
           await saveCustomer(activeUser.uid, newContact);
         } catch (err) {
           console.error("Error saving new contact to Firestore:", err);
