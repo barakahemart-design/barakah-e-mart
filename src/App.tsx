@@ -892,73 +892,10 @@ export default function App() {
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
     }, (err) => {
-      console.warn("[Realtime Sync] Transaction Items snapshot failed:", err);
+      setSyncStatus("connected");
     });
 
-    // 7. SETTINGS & METADATA SUBSCRIBER
-    let lastUpdatedAt = "";
-    const unsubCentral = onSnapshot(doc(db, "passcode_syncs", syncId), { includeMetadataChanges: true }, (docSnap) => {
-      if (!docSnap.exists() || docSnap.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-        return;
-      }
-      markRemoteUpdateActive();
-
-      const cloudData = docSnap.data();
-      const cloudUpdatedAt = cloudData.updated_at || "";
-
-      if (cloudUpdatedAt === lastUpdatedAt || (lastUploadedAtRef.current && cloudUpdatedAt === lastUploadedAtRef.current)) {
-        setSyncStatus("connected");
-        return;
-      }
-
-      try {
-        console.log(`[Realtime Sync] Remote state updated. Syncing all records atomically...`);
-        lastUpdatedAt = cloudUpdatedAt;
-
-        // Perform safe non-overwrite merge into local storage first to prevent stomping on in-flight data
-        restoreLocalKeys(cloudData, false, activeUserId);
-
-        // Load complete consolidated state from local storage
-        const getStored = (key: string, fallback: any) => {
-          try {
-            const val = localStorage.getItem(getDbKey(key, undefined, activeUserId));
-            return val ? JSON.parse(val) : fallback;
-          } catch (_) {
-            return fallback;
-          }
-        };
-
-        const storedProducts = getStored("barakah_products", INITIAL_PRODUCTS);
-        const storedContacts = getStored("barakah_contacts", INITIAL_CONTACTS);
-        const storedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
-        const storedTransactions = getStored("barakah_transactions", []);
-        const storedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
-        const storedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
-
-        initialLoadedRef.current = false;
-        
-        setProducts(storedProducts);
-        setContacts(storedContacts);
-        setExpenses(storedExpenses);
-        setTransactions(storedTransactions);
-        setBusinessInfo(storedBusinessInfo);
-        setPurchases(storedPurchases);
-        if (storedBusinessInfo && (storedBusinessInfo as any).staffList && Array.isArray((storedBusinessInfo as any).staffList)) {
-          setStaffList((storedBusinessInfo as any).staffList);
-        }
-
-        setTimeout(() => {
-          initialLoadedRef.current = true;
-        }, 500);
-
-        setSyncStatus("connected");
-      } catch (err) {
-        console.warn("[Realtime Sync] Central snapshot failed parsing:", err);
-      }
-    }, (err) => {
-      console.warn("[Realtime Sync] Central snapshot failed:", err);
-    });
+    setSyncStatus("connected");
 
     return () => {
       unsubProducts();
@@ -967,7 +904,6 @@ export default function App() {
       unsubPurchases();
       unsubTransactions();
       unsubItems();
-      unsubCentral();
       setSyncStatus("offline");
     };
   }, [activeUser]);

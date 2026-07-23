@@ -40,6 +40,49 @@ import {
   safeSubDays
 } from "../lib/dateUtils";
 
+// Helper to accurately resolve item cost price preferring updated transaction item cost prices first
+function getItemBuyCost(item: any, dbProduct?: any): number {
+  if (!item) return 0;
+  
+  // 1. Check if transaction item has an updated/explicit cost price
+  const itemCost = item.buyPrice !== undefined && item.buyPrice !== null && !isNaN(Number(item.buyPrice))
+    ? Number(item.buyPrice)
+    : item.cost_price !== undefined && item.cost_price !== null && !isNaN(Number(item.cost_price))
+    ? Number(item.cost_price)
+    : item.buy_price !== undefined && item.buy_price !== null && !isNaN(Number(item.buy_price))
+    ? Number(item.buy_price)
+    : undefined;
+
+  if (itemCost !== undefined && itemCost > 0) {
+    return itemCost;
+  }
+
+  // 2. Fallback to catalog product buy price if positive
+  if (dbProduct && dbProduct.buyPrice !== undefined && dbProduct.buyPrice !== null) {
+    const prodCost = Number(dbProduct.buyPrice);
+    if (!isNaN(prodCost) && prodCost > 0) {
+      return prodCost;
+    }
+  }
+
+  // 3. Fallback to catalog product cost price if 0 or defined
+  if (dbProduct && dbProduct.buyPrice !== undefined && dbProduct.buyPrice !== null) {
+    const prodCost = Number(dbProduct.buyPrice);
+    if (!isNaN(prodCost)) {
+      return prodCost;
+    }
+  }
+
+  // 4. Fallback to item cost price if 0 or defined
+  if (itemCost !== undefined) {
+    return itemCost;
+  }
+
+  // 5. Default fallback based on sell price
+  const sellPrice = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
+  return sellPrice * 0.70;
+}
+
 interface ReportsViewProps {
   products: any[];
   transactions: any[];
@@ -193,16 +236,14 @@ export function ReportsView({
     });
 
     // Estimate Profit Margins: 
-    // Sales value minus the estimated cost of goods sold (COGS)
+    // Sales value minus the cost of goods sold (COGS)
     let estimatedCOGS = 0;
     filteredTransactions.forEach(t => {
       if (!t) return;
       t.items?.forEach((item: any) => {
         if (!item) return;
-        // Look up item buyPrice in system catalog
-        const catProd = products.find(p => p.id === item.productId);
-        const buyCostVal = catProd ? catProd.buyPrice : (item.price * 0.85); // fallback estimate
-        const buyCost = typeof buyCostVal === "number" ? buyCostVal : parseFloat(buyCostVal) || 0;
+        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+        const buyCost = getItemBuyCost(item, dbProduct);
         const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
         estimatedCOGS += buyCost * qty;
       });
@@ -396,21 +437,9 @@ export function ReportsView({
 
       t.items?.forEach((item: any) => {
         if (!item) return;
-        // Resolve standard item buy price or match with product database CATALOG buy price
+        // Resolve standard item buy price preferring updated item cost price first
         const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
-        
-        let buyCost = 0;
-        if (dbProduct && typeof dbProduct.buyPrice === "number" && dbProduct.buyPrice > 0) {
-          buyCost = dbProduct.buyPrice;
-        } else if (item.buyPrice && typeof item.buyPrice === "number" && item.buyPrice > 0) {
-          buyCost = item.buyPrice;
-        } else if (dbProduct) {
-          buyCost = typeof dbProduct.buyPrice === "number" ? dbProduct.buyPrice : parseFloat(dbProduct.buyPrice) || 0;
-        } else if (item.buyPrice !== undefined) {
-          buyCost = typeof item.buyPrice === "number" ? item.buyPrice : parseFloat(item.buyPrice) || 0;
-        } else {
-          buyCost = (typeof item.price === "number" ? item.price : parseFloat(item.price) || 0) * 0.70;
-        }
+        const buyCost = getItemBuyCost(item, dbProduct);
 
         const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
         const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
