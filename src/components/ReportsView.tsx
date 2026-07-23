@@ -44,8 +44,7 @@ import {
 function getItemBuyCost(item: any, dbProduct?: any): number {
   if (!item) return 0;
   
-  // 1. Check if transaction item has an updated/explicit cost price
-  const itemCost = item.buyPrice !== undefined && item.buyPrice !== null && !isNaN(Number(item.buyPrice))
+  const itemBuyPrice = item.buyPrice !== undefined && item.buyPrice !== null && !isNaN(Number(item.buyPrice))
     ? Number(item.buyPrice)
     : item.cost_price !== undefined && item.cost_price !== null && !isNaN(Number(item.cost_price))
     ? Number(item.cost_price)
@@ -53,33 +52,28 @@ function getItemBuyCost(item: any, dbProduct?: any): number {
     ? Number(item.buy_price)
     : undefined;
 
-  if (itemCost !== undefined && itemCost > 0) {
-    return itemCost;
+  // 1. If transaction item has an explicit positive buyPrice / cost_price (e.g. from Edit Cost override)
+  if (itemBuyPrice !== undefined && itemBuyPrice > 0) {
+    return itemBuyPrice;
   }
-
+  
   // 2. Fallback to catalog product buy price if positive
-  if (dbProduct && dbProduct.buyPrice !== undefined && dbProduct.buyPrice !== null) {
-    const prodCost = Number(dbProduct.buyPrice);
-    if (!isNaN(prodCost) && prodCost > 0) {
-      return prodCost;
-    }
+  if (dbProduct && typeof dbProduct.buyPrice === "number" && dbProduct.buyPrice > 0) {
+    return dbProduct.buyPrice;
   }
-
-  // 3. Fallback to catalog product cost price if 0 or defined
-  if (dbProduct && dbProduct.buyPrice !== undefined && dbProduct.buyPrice !== null) {
-    const prodCost = Number(dbProduct.buyPrice);
-    if (!isNaN(prodCost)) {
-      return prodCost;
-    }
+  
+  // 3. Fallback to catalog product cost price if defined
+  if (dbProduct && typeof dbProduct.buyPrice === "number") {
+    return dbProduct.buyPrice;
   }
-
-  // 4. Fallback to item cost price if 0 or defined
-  if (itemCost !== undefined) {
-    return itemCost;
+  
+  // 4. Fallback to transaction item buy price if defined (even if 0)
+  if (itemBuyPrice !== undefined) {
+    return itemBuyPrice;
   }
 
   // 5. Default fallback based on sell price
-  const sellPrice = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
+  const sellPrice = typeof item.price === "number" ? item.price : parseFloat(item.price) || (typeof item.sell_price === "number" ? item.sell_price : parseFloat(item.sell_price) || 0);
   return sellPrice * 0.70;
 }
 
