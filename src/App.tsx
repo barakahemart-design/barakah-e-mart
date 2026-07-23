@@ -536,6 +536,22 @@ export default function App() {
                 setStaffList((updatedBusinessInfo as any).staffList);
               }
             }
+
+            if (user.email) {
+              const bizSettings = await getBusinessSettings(user.email);
+              if (bizSettings) {
+                const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
+                if (Object.keys(cleanBiz).length > 0) {
+                  setBusinessInfo(prev => {
+                    const merged = { ...prev, ...cleanBiz };
+                    const userKey = getDbKey("barakah_business_info", user.email, user.uid);
+                    localStorage.setItem(userKey, JSON.stringify(merged));
+                    localStorage.setItem("barakah_business_info", JSON.stringify(merged));
+                    return merged;
+                  });
+                }
+              }
+            }
           } catch (e) {
             console.error("[Sync on Mount] Background cloud synchronization failed:", e);
           }

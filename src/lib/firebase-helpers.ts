@@ -874,13 +874,9 @@ export const signUpWithEmail = async (email: string, pass: string) => {
         if (uId) {
           const profileData = {
             id: uId,
-            email: cleanEmail,
-            shop_name: "Barakah Electronics",
-            shop_address: "Dhaka, Bangladesh",
-            support_phone: "01700-000000",
-            vat_reg_id: "VAT-884499"
+            email: cleanEmail
           };
-          await setDoc(doc(db, "profiles", uId), profileData);
+          await setDoc(doc(db, "profiles", uId), profileData, { merge: true });
         }
       } catch (profErr: any) {
         console.warn("[Auth Engine] Automatically ensuring profile document warning:", profErr.message);
@@ -980,13 +976,9 @@ export const signInWithEmail = async (email: string, pass: string) => {
         if (uId) {
           const profileData = {
             id: uId,
-            email: cleanEmail,
-            shop_name: "Barakah Electronics",
-            shop_address: "Dhaka, Bangladesh",
-            support_phone: "01700-000000",
-            vat_reg_id: "VAT-884499"
+            email: cleanEmail
           };
-          await setDoc(doc(db, "profiles", uId), profileData);
+          await setDoc(doc(db, "profiles", uId), profileData, { merge: true });
         }
       } catch (profErr: any) {
         console.warn("[Auth Engine] Profile write warning:", profErr.message);
@@ -1101,13 +1093,9 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
 
       const profileData = {
         id: authUser.uid,
-        email: cleanEmail,
-        shop_name: "Barakah Electronics",
-        shop_address: "Dhaka, Bangladesh",
-        support_phone: "01700-000000",
-        vat_reg_id: "VAT-884499"
+        email: cleanEmail
       };
-      await setDoc(doc(db, "profiles", authUser.uid), profileData);
+      await setDoc(doc(db, "profiles", authUser.uid), profileData, { merge: true });
     }
   } catch (authErr) {
     console.warn("Background authentication link procedure skipped:", authErr);
