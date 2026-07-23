@@ -42,7 +42,7 @@ import {
 
 // Helper to accurately resolve item cost price preferring updated transaction item cost prices first
 function getItemBuyCost(item: any, dbProduct?: any): number {
-  if (!item) return 0;
+  if (!item || typeof item !== "object") return 0;
   
   const itemBuyPrice = item.buyPrice !== undefined && item.buyPrice !== null && !isNaN(Number(item.buyPrice))
     ? Number(item.buyPrice)
@@ -52,39 +52,31 @@ function getItemBuyCost(item: any, dbProduct?: any): number {
     ? Number(item.buy_price)
     : undefined;
 
-  // 1. If transaction item has an explicit positive buyPrice / cost_price (e.g. from Edit Cost override)
-  if (itemBuyPrice !== undefined && itemBuyPrice > 0) {
+  // 1. If transaction item has an explicit cost price (e.g. set via Edit Cost)
+  if (itemBuyPrice !== undefined && itemBuyPrice >= 0) {
     return itemBuyPrice;
   }
   
-  // 2. Fallback to catalog product buy price if positive
-  if (dbProduct && typeof dbProduct.buyPrice === "number" && dbProduct.buyPrice > 0) {
-    return dbProduct.buyPrice;
+  // 2. Fallback to catalog product buy price if defined and valid
+  if (dbProduct && dbProduct.buyPrice !== undefined && dbProduct.buyPrice !== null && !isNaN(Number(dbProduct.buyPrice))) {
+    return Number(dbProduct.buyPrice);
   }
   
-  // 3. Fallback to catalog product cost price if defined
-  if (dbProduct && typeof dbProduct.buyPrice === "number") {
-    return dbProduct.buyPrice;
-  }
-  
-  // 4. Fallback to transaction item buy price if defined (even if 0)
-  if (itemBuyPrice !== undefined) {
-    return itemBuyPrice;
-  }
-
-  // 5. Default fallback based on sell price
-  const sellPrice = typeof item.price === "number" ? item.price : parseFloat(item.price) || (typeof item.sell_price === "number" ? item.sell_price : parseFloat(item.sell_price) || 0);
-  return sellPrice * 0.70;
+  // 3. Fallback based on sell price
+  const priceVal = typeof item.price === "number" ? item.price : parseFloat(item.price);
+  const sellPriceVal = typeof item.sell_price === "number" ? item.sell_price : parseFloat(item.sell_price);
+  const effectivePrice = !isNaN(priceVal) ? priceVal : (!isNaN(sellPriceVal) ? sellPriceVal : 0);
+  return effectivePrice * 0.70;
 }
 
 interface ReportsViewProps {
-  products: any[];
-  transactions: any[];
-  expenses: any[];
-  purchases: any[];
-  contacts: any[];
-  businessInfo: any;
-  currencySymbol: string;
+  products?: any[];
+  transactions?: any[];
+  expenses?: any[];
+  purchases?: any[];
+  contacts?: any[];
+  businessInfo?: any;
+  currencySymbol?: string;
 }
 
 export function ReportsView({
@@ -96,6 +88,12 @@ export function ReportsView({
   businessInfo,
   currencySymbol = "৳"
 }: ReportsViewProps) {
+  const safeProducts = Array.isArray(products) ? products : [];
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  const safePurchases = Array.isArray(purchases) ? purchases : [];
+  const safeContacts = Array.isArray(contacts) ? contacts : [];
+
   const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
   const [startDate, setStartDate] = useState(() => {
     const thirtyDaysAgo = safeSubDays(new Date(), 30);
@@ -109,6 +107,7 @@ export function ReportsView({
   // Check if a date falls inside the current date filter
   const isDateInFilter = (dateStr: any) => {
     try {
+      if (!dateStr) return false;
       const date = safeDate(dateStr);
       if (!date) return false;
 
@@ -181,16 +180,16 @@ export function ReportsView({
 
   // Filter records in real time
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => isDateInFilter(t.date));
-  }, [transactions, filterType, startDate, endDate]);
+    return safeTransactions.filter(t => t && isDateInFilter(t.date));
+  }, [safeTransactions, filterType, startDate, endDate]);
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => isDateInFilter(e.date));
-  }, [expenses, filterType, startDate, endDate]);
+    return safeExpenses.filter(e => e && isDateInFilter(e.date));
+  }, [safeExpenses, filterType, startDate, endDate]);
 
   const filteredPurchases = useMemo(() => {
-    return purchases.filter(p => isDateInFilter(p.date));
-  }, [purchases, filterType, startDate, endDate]);
+    return safePurchases.filter(p => p && isDateInFilter(p.date));
+  }, [safePurchases, filterType, startDate, endDate]);
 
   // Aggregate stats
   const stats = useMemo(() => {
@@ -234,13 +233,15 @@ export function ReportsView({
     let estimatedCOGS = 0;
     filteredTransactions.forEach(t => {
       if (!t) return;
-      t.items?.forEach((item: any) => {
-        if (!item) return;
-        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
-        const buyCost = getItemBuyCost(item, dbProduct);
-        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
-        estimatedCOGS += buyCost * qty;
-      });
+      if (Array.isArray(t.items)) {
+        t.items.forEach((item: any) => {
+          if (!item) return;
+          const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
+          const buyCost = getItemBuyCost(item, dbProduct);
+          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+          estimatedCOGS += buyCost * qty;
+        });
+      }
     });
 
     const grossProfit = salesVal - estimatedCOGS;
@@ -258,7 +259,7 @@ export function ReportsView({
       netProfit,
       cogs: estimatedCOGS
     };
-  }, [filteredTransactions, filteredExpenses, filteredPurchases, products]);
+  }, [filteredTransactions, filteredExpenses, filteredPurchases, safeProducts]);
 
   // Chart aggregation for Daily Sales Trend
   const dailyChartData = useMemo(() => {
@@ -415,7 +416,7 @@ export function ReportsView({
     sortedTxs.forEach(t => {
       if (!t) return;
       // Find customer name safely from contacts list
-      const pairedContact = contacts.find(c => c.id === t.contactId);
+      const pairedContact = safeContacts.find(c => c && c.id === t.contactId);
       const customerName = pairedContact ? pairedContact.name : "Walk-In Customer";
       let txDateStr = "N/A";
       try {
@@ -429,38 +430,40 @@ export function ReportsView({
         console.warn("Failed to format transaction date", t.date, err);
       }
 
-      t.items?.forEach((item: any) => {
-        if (!item) return;
-        // Resolve standard item buy price preferring updated item cost price first
-        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
-        const buyCost = getItemBuyCost(item, dbProduct);
+      if (Array.isArray(t.items)) {
+        t.items.forEach((item: any) => {
+          if (!item) return;
+          // Resolve standard item buy price preferring updated item cost price first
+          const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
+          const buyCost = getItemBuyCost(item, dbProduct);
 
-        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
-        const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
-        const totalRevenue = price * qty;
-        const totalCogs = buyCost * qty;
-        const netProfit = totalRevenue - totalCogs;
-        const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+          const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
+          const totalRevenue = price * qty;
+          const totalCogs = buyCost * qty;
+          const netProfit = totalRevenue - totalCogs;
+          const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
-        list.push({
-          date: txDateStr,
-          invoiceNo: t.invoiceNo || "N/A",
-          customerName,
-          productName: item.name || "Unknown Product",
-          sku: item.sku || dbProduct?.sku || "",
-          category: item.category || dbProduct?.category || "",
-          quantity: qty,
-          salePrice: price,
-          totalRevenue,
-          totalCogs,
-          netProfit,
-          profitMarginPct
+          list.push({
+            date: txDateStr,
+            invoiceNo: t.invoiceNo || "N/A",
+            customerName,
+            productName: item.name || "Unknown Product",
+            sku: item.sku || dbProduct?.sku || "",
+            category: item.category || dbProduct?.category || "",
+            quantity: qty,
+            salePrice: price,
+            totalRevenue,
+            totalCogs,
+            netProfit,
+            profitMarginPct
+          });
         });
-      });
+      }
     });
 
     return list;
-  }, [filteredTransactions, products, contacts]);
+  }, [filteredTransactions, safeProducts, safeContacts]);
 
   const netProfitMarginPct = useMemo(() => {
     if (stats.salesVal <= 0) return 0;
@@ -774,7 +777,7 @@ export function ReportsView({
             {/* Salary Item */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
-                <span className="text-slate-300 font-sans">2. Salaries & Staff wages`</span>
+                <span className="text-slate-300 font-sans">2. Salaries & Staff wages</span>
                 <span className="text-white font-mono">{currencySymbol}{expenseBreakdown.salaries.toLocaleString()}</span>
               </div>
               <div className="w-full bg-[#121214] h-2 rounded-xl overflow-hidden">
