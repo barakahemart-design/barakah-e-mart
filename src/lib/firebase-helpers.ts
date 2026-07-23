@@ -771,6 +771,19 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
 
       const localTargetUid = currentFirebaseUser?.uid || activeUserId;
       restoreLocalKeys(finalData, overwrite, localTargetUid);
+
+      try {
+        const bizSettings = await getBusinessSettings(cleanEmail);
+        if (bizSettings) {
+          const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
+          if (Object.keys(cleanBiz).length > 0) {
+            const bizKey = getDbKey("barakah_business_info", cleanEmail, localTargetUid);
+            localStorage.setItem(bizKey, JSON.stringify(cleanBiz));
+            localStorage.setItem("barakah_business_info", JSON.stringify(cleanBiz));
+          }
+        }
+      } catch (_) {}
+
       return true;
     }
   } catch (err) {
@@ -1277,10 +1290,17 @@ export const saveBusinessSettings = async (email: string, info: any) => {
 };
 
 export const getBusinessSettings = async (email: string) => {
-  const docId = `settings_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  if (!email) return null;
+  const cleanEmail = email.trim().toLowerCase();
+  const docId = `settings_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
   try {
-    const list = await fetchUserCollection('business_info', email);
-    return list.find((item: any) => item.id === docId) || null;
+    const docRef = doc(db, 'business_info', docId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+    const list = await fetchUserCollection('business_info', cleanEmail);
+    return list.find((item: any) => item.id === docId) || list[0] || null;
   } catch (err) {
     return null;
   }

@@ -246,7 +246,9 @@ import {
   selfHealDatabase,
   toUUID,
   restoreLocalKeys,
-  deleteCloudDocument
+  deleteCloudDocument,
+  saveBusinessSettings,
+  getBusinessSettings
 } from "./lib/firebase-helpers";
 import { doc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
@@ -557,12 +559,15 @@ export default function App() {
         staffList
       };
 
-      // localStorage.setItem(getDbKey("barakah_products", undefined, activeUser.uid), JSON.stringify(products));
-      // localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUser.uid), JSON.stringify(contacts));
-      // localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUser.uid), JSON.stringify(expenses));
-      // localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUser.uid), JSON.stringify(transactions));
-      // localStorage.setItem(getDbKey("barakah_business_info", undefined, activeUser.uid), JSON.stringify(compiledBusinessInfo));
-      // localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUser.uid), JSON.stringify(purchases));
+      const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
+      localStorage.setItem(userKey, JSON.stringify(compiledBusinessInfo));
+      localStorage.setItem("barakah_business_info", JSON.stringify(compiledBusinessInfo));
+
+      if (activeUser && !activeUser.isGuest && activeUser.email) {
+        saveBusinessSettings(activeUser.email, compiledBusinessInfo).catch(err => {
+          console.warn("[Auto Save] Business info cloud save failed:", err);
+        });
+      }
 
       const totalItems = products.length + transactions.length;
       if (totalItems > 0) {
@@ -895,6 +900,31 @@ export default function App() {
       setSyncStatus("connected");
     });
 
+    // 7. BUSINESS INFO / SETTINGS SUBSCRIBER
+    let unsubBusinessInfo = () => {};
+    if (activeUser.email) {
+      const settingsDocId = `settings_${activeUser.email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      unsubBusinessInfo = onSnapshot(doc(db, "business_info", settingsDocId), (docSnap) => {
+        if (docSnap.exists()) {
+          const cloudData = docSnap.data();
+          if (cloudData && typeof cloudData === "object") {
+            const { id, user_id, userId, linkedEmail, ...cleanInfo } = cloudData;
+            if (Object.keys(cleanInfo).length > 0) {
+              setBusinessInfo(prev => {
+                const merged = { ...prev, ...cleanInfo };
+                const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
+                localStorage.setItem(userKey, JSON.stringify(merged));
+                localStorage.setItem("barakah_business_info", JSON.stringify(merged));
+                return merged;
+              });
+            }
+          }
+        }
+      }, (err) => {
+        console.warn("[Realtime Sync] business_info listener error:", err);
+      });
+    }
+
     setSyncStatus("connected");
 
     return () => {
@@ -904,6 +934,7 @@ export default function App() {
       unsubPurchases();
       unsubTransactions();
       unsubItems();
+      unsubBusinessInfo();
       setSyncStatus("offline");
     };
   }, [activeUser]);
@@ -1669,24 +1700,41 @@ export default function App() {
     triggerNotification(`Product '${name}' has been successfully deleted.`, "success");
   };
 
+  const persistBusinessInfoState = (updatedInfo: BusinessInfo) => {
+    setBusinessInfo(updatedInfo);
+    const compiled = { ...updatedInfo, staffList };
+    const userUid = activeUser?.uid;
+    const userEmail = activeUser?.email;
+    const userKey = getDbKey("barakah_business_info", userEmail, userUid);
+    localStorage.setItem(userKey, JSON.stringify(compiled));
+    localStorage.setItem("barakah_business_info", JSON.stringify(compiled));
+
+    if (activeUser && !activeUser.isGuest && activeUser.email) {
+      saveBusinessSettings(activeUser.email, compiled).catch(err => {
+        console.warn("[Cloud Save] Failed to persist business info settings:", err);
+      });
+    }
+  };
+
   // Save Shop Information Block
   const handleSaveShopInfo = () => {
-    setBusinessInfo(prev => ({
-      ...prev,
+    const updated = {
+      ...businessInfo,
       name: tempShopName,
       address: tempShopAddress,
       phoneNumber: tempShopPhone,
       email: tempShopEmail,
       vatRegNo: tempVatRegNo,
       currencySymbol: tempCurrency
-    }));
+    };
+    persistBusinessInfoState(updated);
     triggerNotification("Shop Information changes saved successfully!", "success");
   };
 
   // Save Invoice Customization Config Block
   const handleSaveInvoiceConfig = () => {
-    setBusinessInfo(prev => ({
-      ...prev,
+    const updated = {
+      ...businessInfo,
       companyLogo: tempLogoBase64,
       showLogoInInvoice: tempShowLogo,
       termsConditions: tempTerms,
@@ -1698,30 +1746,34 @@ export default function App() {
       showPartnerLogos: tempShowPartners,
       partnerLogos: tempPartnerLogos,
       presetBrands: tempPresetBrands
-    }));
+    };
+    persistBusinessInfoState(updated);
     triggerNotification("Invoice Customization changes saved successfully!", "success");
   };
 
   // Save Font Settings Block
   const handleSaveFontSettings = () => {
-    setBusinessInfo(prev => ({
-      ...prev,
+    const updated = {
+      ...businessInfo,
       selectedFont: tempFont
-    }));
+    };
+    persistBusinessInfoState(updated);
     setFontSizeScale(tempFontSizeScale);
+    localStorage.setItem("font_size_scale", tempFontSizeScale);
     triggerNotification(`Corporate typography changed to ${tempFont} and scaled to [${tempFontSizeScale}] globally!`, "success");
   };
 
   // Save Sales Panel Restrictions Block
   const handleSaveSalesRestrictions = () => {
-    setBusinessInfo(prev => ({
-      ...prev,
+    const updated = {
+      ...businessInfo,
       salesmanPermissions: {
         canEditSales: tempCanEditSales,
         canDeleteSales: tempCanDeleteSales,
         canOverridePrices: tempCanOverridePrices
       }
-    }));
+    };
+    persistBusinessInfoState(updated);
     triggerNotification("Sales Panel Restrictions saved successfully!", "success");
   };
 
@@ -1742,11 +1794,12 @@ export default function App() {
       return;
     }
     
-    setBusinessInfo(prev => ({
-      ...prev,
+    const updated = {
+      ...businessInfo,
       adminPasscode: tempAdminPasscode,
       salesPasscode: tempSalesPasscode
-    }));
+    };
+    persistBusinessInfoState(updated);
     triggerNotification("Admin and Sales security passcodes updated successfully!", "success");
   };
 
