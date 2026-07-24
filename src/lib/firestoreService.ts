@@ -14,6 +14,10 @@ import { db, auth, handleFirestoreError, OperationType } from './firebase';
 // Helper function to create standard user-filtered collections subscriptions
 function createSubscription(collName: string) {
   return (userId: string, callback: (items: any[]) => void) => {
+    if (!userId || !auth.currentUser || auth.currentUser.uid !== userId) {
+      console.warn(`[firestoreService] Subscription for ${collName} skipped: user not authenticated in Firebase Auth.`);
+      return () => {};
+    }
     const q = query(collection(db, collName), where("user_id", "==", userId));
     return onSnapshot(q, (snapshot) => {
       callback(snapshot.docs.map(d => {
@@ -25,7 +29,7 @@ function createSubscription(collName: string) {
         };
       }));
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, collName);
+      console.warn(`[firestoreService] Snapshot listener for ${collName} notice:`, error);
     });
   };
 }
@@ -69,6 +73,10 @@ async function handleDelete(collName: string, id: string): Promise<void> {
 export const subscribeProducts = createSubscription("products");
 
 export function subscribeCustomers(userId: string, callback: (items: any[]) => void) {
+  if (!userId || !auth.currentUser || auth.currentUser.uid !== userId) {
+    console.warn(`[firestoreService] Subscription for customers skipped: user not authenticated in Firebase Auth.`);
+    return () => {};
+  }
   const q = query(collection(db, "customers"), where("user_id", "==", userId));
   return onSnapshot(q, (snapshot) => {
     const docsData = snapshot.docs.map(d => {
@@ -81,7 +89,7 @@ export function subscribeCustomers(userId: string, callback: (items: any[]) => v
     });
     callback(docsData);
   }, (error) => {
-    handleFirestoreError(error, OperationType.GET, "customers");
+    console.warn(`[firestoreService] Snapshot listener for customers notice:`, error);
   });
 }
 

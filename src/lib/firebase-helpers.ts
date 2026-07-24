@@ -20,6 +20,7 @@ import {
   signInWithEmailAndPassword, 
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  signInAnonymously,
   User as FirebaseUser
 } from 'firebase/auth';
 
@@ -499,7 +500,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
 
     // 1. Fetch cloud backups matching this email
     try {
-      if (cleanEmail) {
+      if (cleanEmail && typeof cleanEmail === "string") {
         const passcodeRef = collection(db, "passcode_syncs");
         const q = query(passcodeRef, where("linked_email", "==", cleanEmail));
         const querySnap = await fetchDocsFresh(q);
@@ -570,7 +571,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
           const profileSnap = await fetchDocFresh(doc(db, "profiles", syncId));
           if (profileSnap.exists()) {
             activeUserId = profileSnap.id;
-          } else if (cleanEmail) {
+          } else if (cleanEmail && typeof cleanEmail === "string") {
             const profileQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
             const profileSnapQ = await fetchDocsFresh(profileQ);
             if (!profileSnapQ.empty) {
@@ -612,13 +613,30 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
           }
         }
 
-        const [productsRes, customersRes, expensesRes, transactionsRes, purchasesRes] = await Promise.all([
-          fetchDocsFresh(query(collection(db, "products"), where("user_id", "==", activeUserId))),
-          fetchDocsFresh(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
-          fetchDocsFresh(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
-          fetchDocsFresh(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
-          fetchDocsFresh(query(collection(db, "purchases"), where("user_id", "==", activeUserId)))
-        ]);
+        let productsRes: any = { empty: true, docs: [] };
+        let customersRes: any = { empty: true, docs: [] };
+        let expensesRes: any = { empty: true, docs: [] };
+        let transactionsRes: any = { empty: true, docs: [] };
+        let purchasesRes: any = { empty: true, docs: [] };
+
+        if (firebaseAuth.currentUser && activeUserId === firebaseAuth.currentUser.uid) {
+          try {
+            const results = await Promise.all([
+              fetchDocsFresh(query(collection(db, "products"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
+              fetchDocsFresh(query(collection(db, "purchases"), where("user_id", "==", activeUserId)))
+            ]);
+            productsRes = results[0];
+            customersRes = results[1];
+            expensesRes = results[2];
+            transactionsRes = results[3];
+            purchasesRes = results[4];
+          } catch (colErr) {
+            console.warn("Direct collection query skipped due to auth/permission status:", colErr);
+          }
+        }
 
         if (!productsRes.empty) {
           const sqlProducts = productsRes.docs.map(docSnapshot => {
@@ -1087,15 +1105,25 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
       }
     }
 
-    if (authUser) {
-      userObj.id = authUser.uid;
-      userObj.uid = authUser.uid;
+    if (!authUser && !firebaseAuth.currentUser) {
+      try {
+        const anonCreds = await signInAnonymously(firebaseAuth);
+        authUser = anonCreds.user;
+      } catch (anonErr) {
+        console.warn("Anonymous background auth fallback failed:", anonErr);
+      }
+    }
+
+    const activeFbUser = authUser || firebaseAuth.currentUser;
+    if (activeFbUser) {
+      userObj.id = activeFbUser.uid;
+      userObj.uid = activeFbUser.uid;
 
       const profileData = {
-        id: authUser.uid,
+        id: activeFbUser.uid,
         email: cleanEmail
       };
-      await setDoc(doc(db, "profiles", authUser.uid), profileData, { merge: true });
+      await setDoc(doc(db, "profiles", activeFbUser.uid), profileData, { merge: true });
     }
   } catch (authErr) {
     console.warn("Background authentication link procedure skipped:", authErr);
@@ -1220,7 +1248,7 @@ export const fetchUserCollection = async (table: string, ownerEmail: string) => 
 
   try {
     let q;
-    if (queryIdentifier) {
+    if (firebaseAuth.currentUser && queryIdentifier && typeof queryIdentifier === "string" && firebaseAuth.currentUser.uid === queryIdentifier) {
       q = query(collection(db, table), where("user_id", "==", queryIdentifier));
       const docsSnap = await fetchDocsFresh(q);
       if (!docsSnap.empty) {

@@ -386,7 +386,7 @@ export default function App() {
     });
 
     // 1. Try to find missing contacts directly in Firestore "customers" collection (Cloud Recovery)
-    if (activeUser && !activeUser.isGuest && activeUser.uid) {
+    if (activeUser && !activeUser.isGuest && activeUser.uid && firebaseAuth.currentUser && firebaseAuth.currentUser.uid === activeUser.uid) {
       try {
         const activeUserId = activeUser.uid;
         const q = query(collection(db, "customers"), where("user_id", "==", activeUserId));
@@ -650,14 +650,8 @@ export default function App() {
 
   // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
-    if (!activeUser || activeUser.isGuest || !activeUser.uid) {
+    if (!activeUser || activeUser.isGuest) {
       setSyncStatus("offline");
-      return;
-    }
-
-    if (!firebaseAuth.currentUser || firebaseAuth.currentUser.uid !== activeUser.uid) {
-      console.log("[Realtime Sync] Waiting for Firebase Auth to initialize and match session user UID before subscribing.");
-      setSyncStatus("connecting");
       return;
     }
 
@@ -665,7 +659,13 @@ export default function App() {
 
     const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
     const syncId = getPasscodeSyncId(activeUser.email, passcode);
-    const activeUserId = activeUser.uid;
+    if (!firebaseAuth.currentUser || firebaseAuth.currentUser.uid !== activeUser.uid) {
+      console.warn("[Realtime Sync Engine] Waiting for Firebase Auth session matching active user before subscribing.");
+      setSyncStatus("offline");
+      return;
+    }
+
+    const activeUserId = firebaseAuth.currentUser.uid;
 
     const markRemoteUpdateActive = () => {
       isRemoteUpdateActiveRef.current = true;
@@ -888,15 +888,11 @@ export default function App() {
         markRemoteUpdateActive();
       }
 
-      const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
-      let flatItems = JSON.parse(rawLocalItems);
-      if (!Array.isArray(flatItems)) flatItems = [];
-
-      snapshot.docChanges().forEach((change) => {
-        const docData = change.doc.data();
-        const item = {
-          id: docData.id,
-          firestoreId: change.doc.id,
+      const flatItems = snapshot.docs.map(docSnap => {
+        const docData = docSnap.data();
+        return {
+          id: docData.id || docSnap.id,
+          firestoreId: docSnap.id,
           transaction_id: docData.transaction_id,
           product_id: docData.product_id || null,
           product_name: docData.product_name || "Product Item",
@@ -904,19 +900,6 @@ export default function App() {
           sell_price: Number(docData.sell_price) || 0,
           cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
         };
-
-        const idx = flatItems.findIndex((x: any) => x.id === item.id);
-        if (change.type === "added" || change.type === "modified") {
-          if (idx >= 0) {
-            flatItems[idx] = item;
-          } else {
-            flatItems.push(item);
-          }
-        } else if (change.type === "removed") {
-          if (idx >= 0) {
-            flatItems.splice(idx, 1);
-          }
-        }
       });
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
@@ -2034,6 +2017,7 @@ export default function App() {
   const handleUpdatePricing = (id: string, buyPrice: number, sellPrice: number, addStock?: number) => {
     const matchedProd = products.find(p => p.id === id);
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
 
     if (addStock && addStock > 0) {
       const invoiceNo = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -2050,13 +2034,18 @@ export default function App() {
         date: new Date().toISOString()
       };
       setPurchases(prev => [newPurchase, ...prev]);
+      if (activeUser && !activeUser.isGuest && targetUid) {
+        savePurchase(targetUid, newPurchase).catch(err => {
+          console.error("Cloud save purchase failed:", err);
+        });
+      }
     }
 
-    setProducts(products.map(p => {
+    const updatedProds = products.map(p => {
       if (p.id === id) {
         const nextStock = p.stock + (addStock || 0);
         const isStillNegative = nextStock < 0;
-        return {
+        const nextP = {
           ...p,
           buyPrice,
           sellPrice,
@@ -2064,9 +2053,16 @@ export default function App() {
           hasNegativeSale: isStillNegative,
           negativeSaleUpdated: true
         };
+        if (activeUser && !activeUser.isGuest && targetUid) {
+          saveProduct(targetUid, nextP).catch(err => {
+            console.error("Cloud save product stock failed:", err);
+          });
+        }
+        return nextP;
       }
       return p;
-    }));
+    });
+    setProducts(updatedProds);
     triggerNotification("Product stock and price configurations successfully updated.");
   };
 
@@ -2183,6 +2179,7 @@ export default function App() {
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const prodObj = products.find(p => p.id === pur.productId);
     const supObj = contacts.find(c => c.id === pur.supplierId);
+    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
     
     const newPur: Purchase = {
       id: toUUID(`pur_${Date.now()}`, cleanEmail),
@@ -2201,18 +2198,31 @@ export default function App() {
       originallyCredit: pur.dueAmount > 0
     };
     setPurchases([newPur, ...purchases]);
-    setProducts(products.map(p => {
+    if (activeUser && !activeUser.isGuest && targetUid) {
+      savePurchase(targetUid, newPur).catch(err => {
+        console.error("Cloud save purchase failed:", err);
+      });
+    }
+
+    const updatedProds = products.map(p => {
       if (p.id === pur.productId) {
         const updatedSellPrice = pur.updatedSellPrice !== undefined ? Number(pur.updatedSellPrice) : p.sellPrice;
-        return {
+        const nextP = {
           ...p,
           stock: p.stock + pur.quantity,
           buyPrice: pur.unitPrice, // New purchase price instantly updates P&L basis
           sellPrice: !isNaN(updatedSellPrice) ? updatedSellPrice : p.sellPrice
         };
+        if (activeUser && !activeUser.isGuest && targetUid) {
+          saveProduct(targetUid, nextP).catch(err => {
+            console.error("Cloud save product stock after purchase failed:", err);
+          });
+        }
+        return nextP;
       }
       return p;
-    }));
+    });
+    setProducts(updatedProds);
     triggerNotification(`Purchase Order ${pur.invoiceNo} logged. Initial purchase rate updated.`);
   };
 
@@ -2223,26 +2233,43 @@ export default function App() {
     }
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
+    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
+
     await deleteCloudDocument("purchases", id);
+    if (activeUser && !activeUser.isGuest) {
+      deletePurchase(id).catch(err => {});
+    }
     setPurchases(purchases.filter(p => p.id !== id));
-    setProducts(products.map(p => {
+
+    const updatedProds = products.map(p => {
       if (p.id === matchingPur.productId) {
-        return {
+        const nextP = {
           ...p,
           stock: Math.max(p.stock - matchingPur.quantity, 0)
         };
+        if (activeUser && !activeUser.isGuest && targetUid) {
+          saveProduct(targetUid, nextP).catch(err => {});
+        }
+        return nextP;
       }
       return p;
-    }));
+    });
+    setProducts(updatedProds);
     triggerNotification("Purchase record has been successfully deleted and inventory adjusted.", "success");
   };
 
   const handleEditPurchase = (id: string, updatedFields: any) => {
     const originalPur = purchases.find(p => p.id === id);
     if (!originalPur) return;
+    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
 
-    setPurchases(purchases.map(p => p.id === id ? { ...p, ...updatedFields } : p));
-    setProducts(products.map(prod => {
+    const updatedPur = { ...originalPur, ...updatedFields };
+    setPurchases(purchases.map(p => p.id === id ? updatedPur : p));
+    if (activeUser && !activeUser.isGuest && targetUid) {
+      savePurchase(targetUid, updatedPur).catch(err => {});
+    }
+
+    const updatedProds = products.map(prod => {
       let updatedStock = prod.stock;
       let updatedBuyPrice = prod.buyPrice;
 
@@ -2254,12 +2281,17 @@ export default function App() {
         updatedBuyPrice = updatedFields.unitPrice;
       }
 
-      return {
+      const nextP = {
         ...prod,
         stock: updatedStock,
         buyPrice: updatedBuyPrice
       };
-    }));
+      if ((prod.id === originalPur.productId || prod.id === updatedFields.productId) && activeUser && !activeUser.isGuest && targetUid) {
+        saveProduct(targetUid, nextP).catch(err => {});
+      }
+      return nextP;
+    });
+    setProducts(updatedProds);
 
     triggerNotification("Purchase record corrected and stock level adjusted successfully.");
   };
@@ -4852,10 +4884,22 @@ _${businessInfo.name}_`;
                   ...prod
                 };
                 setProducts([...products, parsedProduct]);
+                if (activeUser && !activeUser.isGuest) {
+                  const targetUid = firebaseAuth.currentUser?.uid || activeUser.uid;
+                  saveProduct(targetUid, parsedProduct).catch(err => {
+                    console.error("Cloud save product failed:", err);
+                  });
+                }
                 triggerNotification(`${parsedProduct.name} added to the inventory catalog successfully.`);
               }}
               onUpdateProduct={(updatedProd) => {
                 setProducts(products.map(p => p.id === updatedProd.id ? { ...p, ...updatedProd } : p));
+                if (activeUser && !activeUser.isGuest) {
+                  const targetUid = firebaseAuth.currentUser?.uid || activeUser.uid;
+                  saveProduct(targetUid, updatedProd).catch(err => {
+                    console.error("Cloud update product failed:", err);
+                  });
+                }
                 triggerNotification(`${updatedProd.name} updated inside catalog index successfully.`);
               }}
               onDeleteProduct={handleDeleteProduct}
@@ -7431,6 +7475,9 @@ _${businessInfo.name}_`;
                                           return;
                                         }
                                         await deleteCloudDocument("customers", c.firestoreId ?? c.id);
+                                        if (activeUser && !activeUser.isGuest) {
+                                          deleteCustomer(c.id).catch(err => {});
+                                        }
                                         setContacts(contacts.filter(item => item.id !== c.id));
                                         triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success");
                                         setDeleteContactId(null);
@@ -9105,6 +9152,9 @@ _${businessInfo.name}_`;
                       return;
                     }
                     await deleteCloudDocument("expenses", expenseToDelete.id);
+                    if (activeUser && !activeUser.isGuest) {
+                      deleteExpense(expenseToDelete.id).catch(err => {});
+                    }
                     setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
                     triggerNotification("Expense voucher has been successfully deleted.", "success");
                     setDeleteExpenseId(null);
