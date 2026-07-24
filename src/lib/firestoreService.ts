@@ -39,11 +39,23 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
   const userId = typeof arg1 === 'string' ? arg1 : (arg1.user_id || arg1.userId);
   const data = typeof arg1 === 'string' ? arg2 : arg1;
   const { id, ...dataWithoutId } = data;
-  const docData = {
+  const docData: any = {
     id,
     ...dataWithoutId,
     user_id: userId
   };
+
+  if (collName === "products") {
+    const bPrice = docData.buyPrice ?? docData.buy_price ?? 0;
+    const sPrice = docData.sellPrice ?? docData.sell_price ?? 0;
+    const imgUrl = docData.imageUrl || docData.image_url || "";
+    docData.buyPrice = Number(bPrice) || 0;
+    docData.buy_price = Number(bPrice) || 0;
+    docData.sellPrice = Number(sPrice) || 0;
+    docData.sell_price = Number(sPrice) || 0;
+    docData.imageUrl = imgUrl;
+    docData.image_url = imgUrl;
+  }
 
   try {
     if (id) {

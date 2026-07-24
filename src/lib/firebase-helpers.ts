@@ -646,11 +646,11 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               name: p.name,
               sku: p.sku || "",
               stock: Number(p.stock) || 0,
-              buyPrice: Number(p.buy_price) || 0,
-              sellPrice: Number(p.sell_price) || 0,
+              buyPrice: Number(p.buyPrice ?? p.buy_price) || 0,
+              sellPrice: Number(p.sellPrice ?? p.sell_price) || 0,
               category: p.category || "Electronics",
               unit: p.unit || "piece",
-              imageUrl: p.image_url || undefined
+              imageUrl: p.imageUrl || p.image_url || undefined
             };
           });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };

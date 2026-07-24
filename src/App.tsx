@@ -755,11 +755,11 @@ export default function App() {
         name: docData.name || "Unnamed Product",
         sku: docData.sku || "",
         stock: Number(docData.stock) || 0,
-        buyPrice: Number(docData.buy_price) || 0,
-        sellPrice: Number(docData.sell_price) || 0,
+        buyPrice: Number(docData.buyPrice ?? docData.buy_price) || 0,
+        sellPrice: Number(docData.sellPrice ?? docData.sell_price) || 0,
         category: docData.category || "Electronics",
         unit: docData.unit || "piece",
-        imageUrl: docData.image_url || undefined
+        imageUrl: docData.imageUrl || docData.image_url || undefined
       }));
 
       localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
