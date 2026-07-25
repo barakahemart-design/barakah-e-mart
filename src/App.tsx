@@ -2475,8 +2475,8 @@ export default function App() {
   };
 
   const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
-    if (currentPanel !== "admin") {
-      triggerNotification("Security block: Only administrators are authorized to edit sales transactions! 🛑", "error");
+    if (currentPanel !== "admin" && currentPanel !== "sales") {
+      triggerNotification("Security block: Unauthorized action! 🛑", "error");
       return;
     }
     const originalTx = transactions.find(t => t.id === id);
@@ -3746,6 +3746,15 @@ _${businessInfo.name}_`;
                 >
                   <Package className="w-4 h-4" />
                   View Products
+                </button>
+
+                <button
+                  id="tab-ledger-btn"
+                  onClick={() => setActiveTab("ledger")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'ledger' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
+                >
+                  <FileText className="w-4 h-4" />
+                  Transactions & Ledger
                 </button>
               </>
             )}
@@ -6433,59 +6442,61 @@ _${businessInfo.name}_`;
                                       <span className="text-[10px] text-slate-400 font-mono">
                                         (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
                                       </span>
-                                      {buyCost > 0 && (
+                                      {currentPanel === "admin" && buyCost > 0 && (
                                         <span className="text-[9px] text-slate-500 font-mono">
                                           (Cost: {businessInfo.currencySymbol}{buyCost})
                                         </span>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      {showEdit ? (
-                                        <div className="flex items-center gap-1 animate-fadeIn">
-                                          <input
-                                            type="number"
-                                            defaultValue={buyCost}
-                                            id={`buy-cost-${t.id}-${idx}`}
-                                            className="w-16 px-1.5 py-0.5 bg-black border border-slate-800 text-[#00E676] font-mono text-[9px] outline-none rounded"
-                                            onClick={(e) => e.stopPropagation()}
-                                          />
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}`) as HTMLInputElement)?.value);
-                                              if (!isNaN(val)) {
-                                                handleUpdateTransactionItemBuyPrice(t.id, idx, val);
+                                      {currentPanel === "admin" && (
+                                        showEdit ? (
+                                          <div className="flex items-center gap-1 animate-fadeIn">
+                                            <input
+                                              type="number"
+                                              defaultValue={buyCost}
+                                              id={`buy-cost-${t.id}-${idx}`}
+                                              className="w-16 px-1.5 py-0.5 bg-black border border-slate-800 text-[#00E676] font-mono text-[9px] outline-none rounded"
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}`) as HTMLInputElement)?.value);
+                                                if (!isNaN(val)) {
+                                                  handleUpdateTransactionItemBuyPrice(t.id, idx, val);
+                                                  setShowCostEditId(null);
+                                                }
+                                              }}
+                                              className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-1.5 py-0.5 text-[8px] rounded cursor-pointer"
+                                            >
+                                              Set
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
                                                 setShowCostEditId(null);
-                                              }
-                                            }}
-                                            className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-1.5 py-0.5 text-[8px] rounded cursor-pointer"
-                                          >
-                                            Set
-                                          </button>
+                                              }}
+                                              className="text-slate-400 hover:text-white text-[9px] px-1 cursor-pointer"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ) : (
                                           <button
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setShowCostEditId(null);
+                                              setShowCostEditId(`${t.id}-${idx}`);
                                             }}
-                                            className="text-slate-400 hover:text-white text-[9px] px-1 cursor-pointer"
+                                            className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
+                                            title="Override or edit purchase cost rate for this item"
                                           >
-                                            ✕
+                                            Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
                                           </button>
-                                        </div>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setShowCostEditId(`${t.id}-${idx}`);
-                                          }}
-                                          className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
-                                          title="Override or edit purchase cost rate for this item"
-                                        >
-                                          Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
-                                        </button>
+                                        )
                                       )}
                                       <span className="font-mono text-[10px] text-slate-400">
                                         {businessInfo.currencySymbol} {it.total.toLocaleString()}
@@ -6570,10 +6581,18 @@ _${businessInfo.name}_`;
                             </button>
                           )}
 
-                          {/* Modify and Erase buttons */}
-                          {currentPanel === "admin" && (
-                            <div className="flex items-center gap-1">
-                              {deleteTxId === t.id ? (
+                          {/* Modify selling price & Erase buttons */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setEditingTx(t)}
+                              className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
+                              title="Edit Sale Details & Selling Price"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {currentPanel === "admin" && (
+                              deleteTxId === t.id ? (
                                 <div className="flex items-center gap-1 justify-end bg-slate-900 p-1 border border-slate-800 rounded-xl h-10 animate-scaleIn">
                                   <span className="text-[8px] text-slate-400 font-mono uppercase px-1">Erase?</span>
                                   <button
@@ -6593,26 +6612,16 @@ _${businessInfo.name}_`;
                                   </button>
                                 </div>
                               ) : (
-                                <>
-                                  <button
-                                    onClick={() => setEditingTx(t)}
-                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
-                                    title="Edit Sale Details & Units"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  
-                                  <button
-                                    onClick={() => setDeleteTxId(t.id)}
-                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-455 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
-                                    title="Wipe transaction memo"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
+                                <button
+                                  onClick={() => setDeleteTxId(t.id)}
+                                  className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-455 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
+                                  title="Wipe transaction memo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )
+                            )}
+                          </div>
 
                         </div>
 
@@ -9477,11 +9486,7 @@ _${businessInfo.name}_`;
         {/* Transactions & Ledger */}
         <button
           onClick={() => {
-            if (currentPanel === "admin") {
-              setActiveTab("ledger");
-            } else {
-              triggerNotification("Please log in as Admin to see Ledger", "info");
-            }
+            setActiveTab("ledger");
             setIsMobileMenuOpen(false);
           }}
           className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
@@ -9696,6 +9701,7 @@ _${businessInfo.name}_`;
                       { id: "pos", label: "Sales / POS", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
                       { id: "contacts", label: "Customers & CRM", desc: "Due balances & contact logs", Icon: Users },
                       { id: "products", label: "Products", desc: "Real-time standard stock index", Icon: Package },
+                      { id: "ledger", label: "Transactions & Ledger", desc: "Sales history, edit selling price & print challan", Icon: FileText },
                     ].map((item) => {
                       const Icon = item.Icon;
                       const isActive = activeTab === item.id;
