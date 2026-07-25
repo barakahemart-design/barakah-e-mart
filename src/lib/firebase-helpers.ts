@@ -792,8 +792,13 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
 
       try {
         const bizSettings = await getBusinessSettings(cleanEmail);
-        if (bizSettings) {
-          const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
+        let combinedBiz = bizSettings ? { ...bizSettings } : null;
+        if (finalData && (finalData.businessInfo || finalData.business_info)) {
+          const cloudPasscodeBiz = finalData.businessInfo || finalData.business_info;
+          combinedBiz = { ...cloudPasscodeBiz, ...combinedBiz };
+        }
+        if (combinedBiz) {
+          const { id, user_id, userId, linkedEmail, ...cleanBiz } = combinedBiz;
           if (Object.keys(cleanBiz).length > 0) {
             const bizKey = getDbKey("barakah_business_info", cleanEmail, localTargetUid);
             localStorage.setItem(bizKey, JSON.stringify(cleanBiz));
@@ -1285,7 +1290,9 @@ export const subscribeToCollection = (table: string, ownerEmail: string, callbac
 };
 
 export const saveBusinessSettings = async (email: string, info: any) => {
-  const docId = `settings_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  if (!email) return;
+  const cleanEmail = email.trim().toLowerCase();
+  const docId = `settings_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
   let activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id;
   if (!activeUserId) {
     try {
@@ -1296,13 +1303,33 @@ export const saveBusinessSettings = async (email: string, info: any) => {
       }
     } catch (_) {}
   }
-  await upsertDocument('business_info', docId, { 
-    linkedEmail: email, 
+  const payload = { 
+    linkedEmail: cleanEmail, 
     id: docId, 
-    user_id: activeUserId || email, 
-    userId: activeUserId || email, 
+    user_id: activeUserId || cleanEmail, 
+    userId: activeUserId || cleanEmail, 
     ...info 
-  });
+  };
+
+  await upsertDocument('business_info', docId, payload);
+
+  try {
+    const syncId = getPasscodeSyncId(cleanEmail, "classic_account_secure");
+    const syncRef = doc(db, "passcode_syncs", syncId);
+    const syncSnap = await getDoc(syncRef);
+    if (syncSnap.exists()) {
+      const existingSync = syncSnap.data();
+      const currentBiz = existingSync.businessInfo || existingSync.business_info || {};
+      const updatedBiz = { ...currentBiz, ...info };
+      await setDoc(syncRef, {
+        businessInfo: updatedBiz,
+        business_info: updatedBiz,
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+    }
+  } catch (e) {
+    console.warn("[saveBusinessSettings] sync to passcode_syncs error:", e);
+  }
 };
 
 export const getBusinessSettings = async (email: string) => {

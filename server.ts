@@ -435,6 +435,14 @@ async function startServer() {
             };
             updatedFields.business_info = updatedFields.businessInfo;
           }
+        } else if (tableStr === "business_info" || tableStr === "businessInfo") {
+          const bizData = syncData.businessInfo || syncData.business_info || {};
+          const mergedBiz = {
+            ...bizData,
+            ...data
+          };
+          updatedFields.businessInfo = mergedBiz;
+          updatedFields.business_info = mergedBiz;
         }
 
         await setDoc(doc(db, "passcode_syncs", syncId), {

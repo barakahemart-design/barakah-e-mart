@@ -594,18 +594,13 @@ export default function App() {
         });
       }
 
-      const totalItems = products.length + transactions.length;
-      if (totalItems > 0) {
-        /*
-        localStorage.setItem(getDbKey("barakah_fail_safe_backup", undefined, activeUser.uid), JSON.stringify({
-          products,
-          contacts,
-          expenses,
-          transactions,
-          purchases
-        }));
-        */
-      }
+      // Persist active core database state to local storage for instant offline & reload resilience
+      const activeUserId = activeUser.uid;
+      localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(products));
+      localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(contacts));
+      localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(expenses));
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(transactions));
+      localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(purchases));
 
       // Also persist separately in localStorage just in case
       localStorage.setItem(getDbKey("barakah_staff_list"), JSON.stringify(staffList));
@@ -911,7 +906,8 @@ export default function App() {
     // 7. BUSINESS INFO / SETTINGS SUBSCRIBER
     let unsubBusinessInfo = () => {};
     if (activeUser.email) {
-      const settingsDocId = `settings_${activeUser.email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const cleanEmail = activeUser.email.trim().toLowerCase();
+      const settingsDocId = `settings_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
       unsubBusinessInfo = onSnapshot(doc(db, "business_info", settingsDocId), (docSnap) => {
         if (docSnap.exists()) {
           const cloudData = docSnap.data();
