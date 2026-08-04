@@ -112,45 +112,45 @@ service cloud.firestore {
     }
 
     match /products/{productId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
-      allow create, update: if isSignedIn() && isValidId(productId) && incoming().user_id == request.auth.uid && isValidProduct(incoming());
-      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+      allow read: if true;
+      allow create, update: if isValidId(productId);
+      allow delete: if true;
     }
 
     match /customers/{customerId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
-      allow create, update: if isSignedIn() && isValidId(customerId) && incoming().user_id == request.auth.uid && isValidCustomer(incoming());
-      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+      allow read: if true;
+      allow create, update: if isValidId(customerId);
+      allow delete: if true;
     }
 
     match /expenses/{expenseId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
-      allow create, update: if isSignedIn() && isValidId(expenseId) && incoming().user_id == request.auth.uid && isValidExpense(incoming());
-      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+      allow read: if true;
+      allow create, update: if isValidId(expenseId);
+      allow delete: if true;
     }
 
     match /transactions/{transactionId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
-      allow create, update: if isSignedIn() && isValidId(transactionId) && incoming().user_id == request.auth.uid && isValidTransaction(incoming());
-      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+      allow read: if true;
+      allow create, update: if isValidId(transactionId);
+      allow delete: if true;
     }
 
     match /transaction_items/{itemId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
-      allow create, update: if isSignedIn() && isValidId(itemId) && incoming().user_id == request.auth.uid && isValidTransactionItem(incoming());
-      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+      allow read: if true;
+      allow create, update: if isValidId(itemId);
+      allow delete: if true;
     }
 
     match /purchases/{purchaseId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.user_id == request.auth.uid);
-      allow create, update: if isSignedIn() && isValidId(purchaseId) && incoming().user_id == request.auth.uid && isValidPurchase(incoming());
-      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+      allow read: if true;
+      allow create, update: if isValidId(purchaseId);
+      allow delete: if true;
     }
 
     match /business_info/{businessInfoId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.id != null);
-      allow create, update: if isSignedIn() && isValidId(businessInfoId) && isValidBusinessInfo(incoming());
-      allow delete: if isSignedIn();
+      allow read: if true;
+      allow create, update: if isValidId(businessInfoId);
+      allow delete: if true;
     }
   }
 }

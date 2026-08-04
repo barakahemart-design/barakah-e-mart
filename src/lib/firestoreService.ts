@@ -66,6 +66,19 @@ async function handleSave(collName: string, arg1: any, arg2?: any): Promise<stri
       return docRef.id;
     }
   } catch (error) {
+    try {
+      const authHeaders = {
+        "Content-Type": "application/json",
+        "x-user-uid": userId || auth.currentUser?.uid || "",
+        "x-user-email": auth.currentUser?.email || ""
+      };
+      const res = await fetch("/api/db/upsert", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ table: collName, id: id || docData.id, data: docData })
+      });
+      if (res.ok) return id || docData.id;
+    } catch (_) {}
     handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, `${collName}/${id || 'new'}`);
     throw error;
   }

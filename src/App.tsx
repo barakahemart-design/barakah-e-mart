@@ -2783,6 +2783,25 @@ export default function App() {
       
       const today = new Date();
       if (expenseDateFilter === "all") return true;
+
+      if (expenseDateFilter === "yearly") {
+        return targetDate.getFullYear() === today.getFullYear();
+      }
+
+      if (expenseDateFilter === "custom") {
+        const start = new Date(expenseCustomStart + "T00:00:00");
+        const end = new Date(expenseCustomEnd + "T23:59:59");
+        const currentTarget = new Date(dateStr + "T12:00:00");
+        return currentTarget.getTime() >= start.getTime() && currentTarget.getTime() <= end.getTime();
+      }
+
+      // Restrict all preset date filters (today, yesterday, weekly, monthly) to the current month
+      const isCurrentMonth = targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      if (!isCurrentMonth) return false;
+
+      if (expenseDateFilter === "monthly") {
+        return true;
+      }
       if (expenseDateFilter === "today") {
         return targetDate.toDateString() === today.toDateString();
       }
@@ -2792,28 +2811,14 @@ export default function App() {
         return targetDate.toDateString() === yesterday.toDateString();
       }
       if (expenseDateFilter === "weekly") {
-        const check7DaysAgo = new Date();
-        check7DaysAgo.setDate(today.getDate() - 7);
         const tDate = new Date(dateStr + "T00:00:00");
         const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
         const sevenDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7, 0, 0, 0);
         return tDate.getTime() >= sevenDaysAgo.getTime() && tDate.getTime() <= midnightToday.getTime();
       }
-      if (expenseDateFilter === "monthly") {
-        return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
-      }
-      if (expenseDateFilter === "yearly") {
-        return targetDate.getFullYear() === today.getFullYear();
-      }
-      if (expenseDateFilter === "custom") {
-        const start = new Date(expenseCustomStart + "T00:00:00");
-        const end = new Date(expenseCustomEnd + "T23:59:59");
-        const currentTarget = new Date(dateStr + "T12:00:00");
-        return currentTarget.getTime() >= start.getTime() && currentTarget.getTime() <= end.getTime();
-      }
       return true;
     } catch (e) {
-      return true;
+      return false;
     }
   };
 
@@ -3378,6 +3383,24 @@ _${businessInfo.name}_`;
       
       const today = new Date();
       if (dashboardFilter === "all") return true;
+
+      if (dashboardFilter === "yearly") {
+        return targetDate.getFullYear() === today.getFullYear();
+      }
+
+      if (dashboardFilter === "custom") {
+        const start = new Date(customStart + "T00:00:00");
+        const end = new Date(customEnd + "T23:59:59");
+        return targetTime >= start.getTime() && targetTime <= end.getTime();
+      }
+
+      // Restrict all preset date filters (today, yesterday, weekly, monthly) to the current month
+      const isCurrentMonth = targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      if (!isCurrentMonth) return false;
+
+      if (dashboardFilter === "monthly") {
+        return true;
+      }
       if (dashboardFilter === "today") {
         return targetDate.toDateString() === today.toDateString();
       }
@@ -3391,20 +3414,9 @@ _${businessInfo.name}_`;
         check7DaysAgo.setDate(today.getDate() - 7);
         return targetTime >= check7DaysAgo.getTime() && targetTime <= today.getTime();
       }
-      if (dashboardFilter === "monthly") {
-        return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
-      }
-      if (dashboardFilter === "yearly") {
-        return targetDate.getFullYear() === today.getFullYear();
-      }
-      if (dashboardFilter === "custom") {
-        const start = new Date(customStart + "T00:00:00");
-        const end = new Date(customEnd + "T23:59:59");
-        return targetTime >= start.getTime() && targetTime <= end.getTime();
-      }
       return true;
     } catch (e) {
-      return true;
+      return false;
     }
   };
 
@@ -3482,25 +3494,31 @@ _${businessInfo.name}_`;
           const date = safeDate(dateStr);
           if (!date) return false;
           
-          const today = safeStartOfDay(new Date());
+          const now = new Date();
+          const today = safeStartOfDay(now);
           if (!today) return false;
 
-          if (ledgerDateFilterType === "today") {
-            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(today), end: safeEndOfDay(today) });
-          } else if (ledgerDateFilterType === "yesterday") {
-            const yesterday = safeSubDays(new Date(), 1);
-            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(yesterday), end: safeEndOfDay(yesterday) });
-          } else if (ledgerDateFilterType === "weekly") {
-            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(safeSubDays(new Date(), 7)), end: safeEndOfDay(today) });
-          } else if (ledgerDateFilterType === "monthly") {
-            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(safeSubDays(new Date(), 30)), end: safeEndOfDay(today) });
-          } else if (ledgerDateFilterType === "yearly") {
-            const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-            matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(startOfYear), end: safeEndOfDay(today) });
+          if (ledgerDateFilterType === "yearly") {
+            matchesDate = date.getFullYear() === now.getFullYear();
           } else if (ledgerDateFilterType === "custom") {
             const start = safeStartOfDay(safeDate(ledgerStartDate));
             const end = safeEndOfDay(safeDate(ledgerEndDate));
             matchesDate = safeIsWithinInterval(date, { start, end });
+          } else {
+            // Restrict today, yesterday, weekly, monthly to the current month
+            const isCurrentMonth = date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+            if (!isCurrentMonth) {
+              matchesDate = false;
+            } else if (ledgerDateFilterType === "monthly") {
+              matchesDate = true;
+            } else if (ledgerDateFilterType === "today") {
+              matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(today), end: safeEndOfDay(today) });
+            } else if (ledgerDateFilterType === "yesterday") {
+              const yesterday = safeSubDays(now, 1);
+              matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(yesterday), end: safeEndOfDay(yesterday) });
+            } else if (ledgerDateFilterType === "weekly") {
+              matchesDate = safeIsWithinInterval(date, { start: safeStartOfDay(safeSubDays(now, 7)), end: safeEndOfDay(now) });
+            }
           }
         }
       }
@@ -5569,23 +5587,26 @@ _${businessInfo.name}_`;
                   try {
                     const pDate = new Date(purDateStr);
                     const now = new Date();
+
+                    if (filter === "yearly") {
+                      return pDate.getFullYear() === now.getFullYear();
+                    }
+
+                    const isCurrentMonth = pDate.getMonth() === now.getMonth() && pDate.getFullYear() === now.getFullYear();
+                    if (!isCurrentMonth) return false;
+
                     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                     
+                    if (filter === "monthly") {
+                      return true;
+                    }
                     if (filter === "today") {
                       return pDate >= todayStart && pDate <= todayEnd;
                     }
                     if (filter === "weekly") {
                       const weeklyStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
                       return pDate >= weeklyStart && pDate <= todayEnd;
-                    }
-                    if (filter === "monthly") {
-                      const monthlyStart = new Date(now.getFullYear(), now.getMonth(), 1);
-                      return pDate >= monthlyStart && pDate <= todayEnd;
-                    }
-                    if (filter === "yearly") {
-                      const yearlyStart = new Date(now.getFullYear(), 0, 1);
-                      return pDate >= yearlyStart && pDate <= todayEnd;
                     }
                   } catch (e) {
                     console.error("Duelist Date match error:", e);

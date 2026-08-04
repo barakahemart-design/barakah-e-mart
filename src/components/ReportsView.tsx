@@ -119,6 +119,29 @@ export function ReportsView({
 
       if (filterType === "all") return true;
 
+      if (filterType === "yearly") {
+        return date.getFullYear() === now.getFullYear();
+      }
+
+      if (filterType === "custom") {
+        if (!startDate || !endDate) return false;
+        const startParsed = safeDate(startDate);
+        const endParsed = safeDate(endDate);
+        if (!startParsed || !endParsed) return false;
+        const s = safeStartOfDay(startParsed);
+        const e = safeEndOfDay(endParsed);
+        if (!s || !e) return false;
+        return safeIsWithinInterval(date, { start: s, end: e });
+      }
+
+      // Restrict today, yesterday, weekly, monthly to the current month
+      const isCurrentMonth = date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+      if (!isCurrentMonth) return false;
+
+      if (filterType === "monthly") {
+        return true;
+      }
+
       if (filterType === "today") {
         const s = safeStartOfDay(safeToday);
         const e = safeEndOfDay(safeToday);
@@ -140,35 +163,6 @@ export function ReportsView({
         if (!sevenDaysAgo) return false;
         const s = safeStartOfDay(sevenDaysAgo);
         const e = safeEndOfDay(safeToday);
-        if (!s || !e) return false;
-        return safeIsWithinInterval(date, { start: s, end: e });
-      }
-
-      if (filterType === "monthly") {
-        const thirtyDaysAgo = safeSubDays(safeToday, 30);
-        if (!thirtyDaysAgo) return false;
-        const s = safeStartOfDay(thirtyDaysAgo);
-        const e = safeEndOfDay(safeToday);
-        if (!s || !e) return false;
-        return safeIsWithinInterval(date, { start: s, end: e });
-      }
-
-      if (filterType === "yearly") {
-        const startOfYearDate = safeDate(new Date(safeToday.getFullYear(), 0, 1));
-        if (!startOfYearDate) return false;
-        const s = safeStartOfDay(startOfYearDate);
-        const e = safeEndOfDay(safeToday);
-        if (!s || !e) return false;
-        return safeIsWithinInterval(date, { start: s, end: e });
-      }
-
-      if (filterType === "custom") {
-        if (!startDate || !endDate) return false;
-        const startParsed = safeDate(startDate);
-        const endParsed = safeDate(endDate);
-        if (!startParsed || !endParsed) return false;
-        const s = safeStartOfDay(startParsed);
-        const e = safeEndOfDay(endParsed);
         if (!s || !e) return false;
         return safeIsWithinInterval(date, { start: s, end: e });
       }
