@@ -26,7 +26,7 @@ export async function generateBusinessInsights(
 
     return await response.json();
   } catch (error) {
-    console.error("AI Insight fetch failed, using beautiful client-side fallback list:", error);
+    console.warn("AI Insight fetch failed, using beautiful client-side fallback list:", error);
     return [
       {
         title: "Cashflow Balance Alert",

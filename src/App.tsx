@@ -1395,6 +1395,24 @@ export default function App() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
+  const resetPosWorkspace = (contactId?: string) => {
+    setPosCart([]);
+    setSelectedProductId("");
+    setCartItemQty(1);
+    setCartItemPrice("");
+    setPosSearchQuery("");
+    setShowSuggestions(false);
+    setCustomerDiscount(0);
+    setAmountPaidPaid("");
+    setInvoiceTaxRate(0);
+    setPosTerminalTab("checkout");
+    if (contactId !== undefined) {
+      setPosSelectedContactId(contactId);
+    }
+    setPosCustomDate(new Date().toISOString().split("T")[0]);
+    clearSignatureCanvas();
+  };
+
   // Add Specific Item to billing basket cart directly from product catalog view
   const addSpecificProductToCart = (prod: Product, qty: number = 1) => {
     const finalPrice = prod.sellPrice;
@@ -1439,6 +1457,8 @@ export default function App() {
     setCartItemQty(1);
     setCartItemPrice("");
     setSelectedProductId("");
+    setPosSearchQuery("");
+    setShowSuggestions(false);
   };
 
   const removeProductFromCart = (index: number) => {
@@ -1679,12 +1699,7 @@ export default function App() {
     }
 
     // Clean Workspace states
-    setPosCart([]);
-    setCustomerDiscount(0);
-    setAmountPaidPaid("");
-    setPosSelectedContactId("");
-    setPosCustomDate(new Date().toISOString().split("T")[0]);
-    clearSignatureCanvas();
+    resetPosWorkspace("");
 
     triggerNotification(`Invoice ${uniqueInvoiceNo} & Delivery Challan successfully downloaded!`);
   };
@@ -3050,6 +3065,10 @@ export default function App() {
 
       setContacts([newContact, ...contacts]);
 
+      if (cType === "customer") {
+        resetPosWorkspace(newContact.id);
+      }
+
       if (activeUser && !activeUser.isGuest) {
         try {
           await saveCustomer(activeUser.uid, newContact);
@@ -4095,7 +4114,10 @@ _${businessInfo.name}_`;
 
                 <div className="flex flex-wrap gap-2.5 font-sans text-xs">
                   <button
-                    onClick={() => setPosTerminalTab("checkout")}
+                    onClick={() => {
+                      resetPosWorkspace(posSelectedContactId);
+                      setPosTerminalTab("checkout");
+                    }}
                     className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
                       posTerminalTab === "checkout"
                         ? "bg-[#00E676]/10 text-[#00E676] border-[#00E676]/35 shadow-sm"
@@ -4283,9 +4305,24 @@ _${businessInfo.name}_`;
                       <span className="w-5 h-5 rounded-lg bg-[#00E676]/10 text-[#00E676] flex items-center justify-center font-bold text-xs">2</span>
                       <span className="text-xs font-bold text-white uppercase tracking-wider">Active Cart Items</span>
                     </div>
-                    <span className="text-[10px] font-mono text-[#00E676] font-bold bg-[#00E676]/10 px-2.5 py-1 rounded-full border border-[#00E676]/20">
-                      {posCart.length} item lines
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-[#00E676] font-bold bg-[#00E676]/10 px-2.5 py-1 rounded-full border border-[#00E676]/20">
+                        {posCart.length} item lines
+                      </span>
+                      {posCart.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetPosWorkspace(posSelectedContactId);
+                            triggerNotification("Cart and product search selection cleared", "info");
+                          }}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline font-mono cursor-pointer flex items-center gap-1 bg-rose-500/10 px-2.5 py-1 rounded-full border border-rose-500/20 transition-all"
+                          title="Reset cart items"
+                        >
+                          <Trash2 className="w-3 h-3" /> Clear Cart
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="p-5 space-y-3.5" id="pos-cart-items-stack">
@@ -4431,7 +4468,15 @@ _${businessInfo.name}_`;
                     <select
                       id="pos-customer-select"
                       value={posSelectedContactId}
-                      onChange={(e) => setPosSelectedContactId(e.target.value)}
+                      onChange={(e) => {
+                        const newCId = e.target.value;
+                        if (posCart.length > 0) {
+                          resetPosWorkspace(newCId);
+                          triggerNotification("Started fresh cart for selected customer", "info");
+                        } else {
+                          setPosSelectedContactId(newCId);
+                        }
+                      }}
                       className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-slate-200 text-xs outline-none focus:border-[#00E676] transition-all font-sans cursor-pointer focus:ring-1 focus:ring-[#00E676]/30"
                     >
                       <option value="">-- Regular Walk-in Customer --</option>
@@ -7419,7 +7464,7 @@ _${businessInfo.name}_`;
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setPosSelectedContactId(c.id);
+                                      resetPosWorkspace(c.id);
                                       setActiveTab("pos");
                                       triggerNotification(`POS Cash Memo loaded. Customer context: ${c.name}`, "success");
                                     }}

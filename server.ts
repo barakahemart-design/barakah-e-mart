@@ -680,7 +680,7 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
       try {
         try {
           const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: "gemini-3.6-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -689,7 +689,7 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
           });
           jsonStr = response.text?.trim() || "[]";
         } catch (firstTryErr: any) {
-          console.log("[AI Insights] Primary gemini-3.5-flash experiencing high demand. Trying backup model gemini-3.1-flash-lite...");
+          console.log("[AI Insights] Primary gemini-3.6-flash experiencing high demand. Trying backup model gemini-3.1-flash-lite...");
           const response = await ai.models.generateContent({
             model: "gemini-3.1-flash-lite",
             contents: prompt,
@@ -741,7 +741,7 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
       try {
         try {
           const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: "gemini-3.6-flash",
             contents: prompt
           });
           category = response.text?.trim() || "";
@@ -818,7 +818,7 @@ Example response structure:
       let resultObj = { name, phone, address };
       try {
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-3.6-flash",
           contents: prompt
         });
         const text = response.text?.trim() || "";
