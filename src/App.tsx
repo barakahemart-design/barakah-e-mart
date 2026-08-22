@@ -97,7 +97,9 @@ import {
   deleteCustomer,
   deleteTransaction,
   deleteExpense,
-  deletePurchase
+  deletePurchase,
+  handleSave,
+  isDocMatchingStore
 } from "./lib/firestoreService";
 
 export interface Product {
@@ -652,15 +654,8 @@ export default function App() {
 
     setSyncStatus("connecting");
 
-    const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
-    const syncId = getPasscodeSyncId(activeUser.email, passcode);
-    if (!firebaseAuth.currentUser || firebaseAuth.currentUser.uid !== activeUser.uid) {
-      console.warn("[Realtime Sync Engine] Waiting for Firebase Auth session matching active user before subscribing.");
-      setSyncStatus("offline");
-      return;
-    }
-
-    const activeUserId = firebaseAuth.currentUser.uid;
+    const cleanEmail = (activeUser.email || "").trim().toLowerCase();
+    const activeUserId = activeUser.uid || firebaseAuth.currentUser?.uid || cleanEmail;
 
     const markRemoteUpdateActive = () => {
       isRemoteUpdateActiveRef.current = true;
@@ -673,7 +668,7 @@ export default function App() {
       }, 2500);
     };
 
-    console.log(`[Realtime Sync Engine] Subscribing in real-time to granular Firestore collections for user: ${activeUserId}`);
+    console.log(`[Realtime Sync Engine] Subscribing in real-time to granular Firestore collections for user: ${activeUserId} (${cleanEmail})`);
 
     // Helper to rebuild nested transactions from flat transaction and flat items lists
     const rebuildTransactions = (flatTx: any[], flatItems: any[]) => {
@@ -706,17 +701,13 @@ export default function App() {
             buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
           }));
         } else {
-          // Keep existing items if present locally to protect against incomplete collections snapshot
+          // Keep existing items if present locally or in t.items to protect against incomplete collections snapshot
           const existing = localNested.find((x: any) => x.id === t.id);
           if (existing && Array.isArray(existing.items) && existing.items.length > 0) {
             mappedItems = existing.items;
+          } else if (Array.isArray(t.items) && t.items.length > 0) {
+            mappedItems = t.items;
           }
-        }
-
-        // Safe synchronization fallback: If a transaction is brand new and contains no items yet,
-        // we temporarily skip it from the rebuilt array. It will be added once the transaction_items listener receives them.
-        if (Number(t.total_amount) > 0 && mappedItems.length === 0) {
-          return;
         }
 
         rebuiltList.push({
@@ -875,27 +866,28 @@ export default function App() {
     });
 
     // 6. TRANSACTION ITEMS SUBSCRIBER
-    const qItems = query(collection(db, "transaction_items"), where("user_id", "==", activeUserId));
-    const unsubItems = onSnapshot(qItems, { includeMetadataChanges: true }, (snapshot) => {
+    const unsubItems = onSnapshot(collection(db, "transaction_items"), { includeMetadataChanges: true }, (snapshot) => {
       if (snapshot.metadata.hasPendingWrites) {
         setSyncStatus("connected");
       } else {
         markRemoteUpdateActive();
       }
 
-      const flatItems = snapshot.docs.map(docSnap => {
-        const docData = docSnap.data();
-        return {
-          id: docData.id || docSnap.id,
-          firestoreId: docSnap.id,
-          transaction_id: docData.transaction_id,
-          product_id: docData.product_id || null,
-          product_name: docData.product_name || "Product Item",
-          quantity: Number(docData.quantity) || 0,
-          sell_price: Number(docData.sell_price) || 0,
-          cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
-        };
-      });
+      const flatItems = snapshot.docs
+        .filter(docSnap => isDocMatchingStore(docSnap.data(), cleanEmail, activeUserId))
+        .map(docSnap => {
+          const docData = docSnap.data();
+          return {
+            id: docData.id || docSnap.id,
+            firestoreId: docSnap.id,
+            transaction_id: docData.transaction_id,
+            product_id: docData.product_id || null,
+            product_name: docData.product_name || "Product Item",
+            quantity: Number(docData.quantity) || 0,
+            sell_price: Number(docData.sell_price) || 0,
+            cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
+          };
+        });
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
@@ -1667,9 +1659,11 @@ export default function App() {
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: Number(nestedIt.buyPrice) || 0,
-            user_id: activeUserId
+            user_id: activeUserId,
+            store_id: cleanEmail,
+            email: cleanEmail
           };
-          setDoc(doc(db, "transaction_items", itemUUID), flatItem, { merge: true }).catch(err => {
+          handleSave("transaction_items", activeUserId, flatItem).catch(err => {
             console.error("Cloud save transaction item failed:", err);
           });
         });

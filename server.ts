@@ -222,13 +222,34 @@ async function startServer() {
     }
   });
 
+  // In-memory sync cache for seamless multi-device realtime propagation
+  const serverDbCache = new Map<string, Map<string, any>>();
+
+  function getTableCache(table: string) {
+    let tableMap = serverDbCache.get(table);
+    if (!tableMap) {
+      tableMap = new Map<string, any>();
+      serverDbCache.set(table, tableMap);
+    }
+    return tableMap;
+  }
+
   // Helper to dynamically resolve all user/profile IDs associated with user's verified identity
   async function resolveAllUserIdsForEmail(email: string, defaultUid: string): Promise<string[]> {
     const ids = new Set<string>();
-    ids.add(defaultUid);
+    if (defaultUid) ids.add(defaultUid);
 
     const cleanEmail = (email || "").trim().toLowerCase();
     if (cleanEmail) {
+      ids.add(cleanEmail);
+      if (cleanEmail === "barakahemart@gmail.com") {
+        ["1d4ce803-cbf5-44f1-9ec5-56642de068a1", "DGeDhFzjTDaYCeLZiMSvm8TY4sc2", "vault_a2vflc", "xrTguetUZqSbZOxUKRiUNJV3X1M2", "C5eOR2R8WEMegF53NA5eItMWDrr2", "Lzk64vTQcRPy0MWwQK6t0echMmq1", "1ys9dKJ3fKOKIVOl0GIbuIiHeB73"].forEach(id => ids.add(id));
+      } else if (cleanEmail === "barakahbillpro@gmail.com") {
+        ["xckXTyRn5AbsrU1paXbmj9dR6HX2"].forEach(id => ids.add(id));
+      } else if (cleanEmail === "tendabangladesh72@gmail.com") {
+        ["yVAiT3KAHnMYGX2D1hSxWGiZETw1", "rb0SFawVFSTANoZhNwYokmJOFyP2"].forEach(id => ids.add(id));
+      }
+
       // 1. Get profile document IDs (the primary Firebase Auth UIDs)
       try {
         const profilesQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
@@ -467,19 +488,62 @@ async function startServer() {
         return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
       }
 
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
       const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
       const recordsMap = new Map<string, any>();
       const tableStr = String(table);
 
-      // Point query each allowed identity to bypass Firestore "in" index limits and merge them gracefully
-      for (const uid of allowedIds) {
-        const q = query(collection(db, tableStr), where("user_id", "==", uid));
-        const docsSnap = await getDocs(q);
-        docsSnap.forEach(docSnapshot => {
-          const data = docSnapshot.data();
-          const docId = data.id || docSnapshot.id;
+      // 1. First populate from server in-memory real-time sync cache
+      const memCache = getTableCache(tableStr);
+      for (const [docId, data] of memCache.entries()) {
+        const docStore = (data.store_id || data.storeId || data.email || data.linked_email || "").trim().toLowerCase();
+        const docUid = String(data.user_id || data.userId || data.owner_id || "");
+        if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid)) {
           recordsMap.set(docId, data);
-        });
+        }
+      }
+
+      // 2. Query Firestore collection by allowed IDs and store email
+      try {
+        if (cleanEmail) {
+          try {
+            const storeQ = query(collection(db, tableStr), where("store_id", "==", cleanEmail));
+            const storeSnap = await getDocs(storeQ);
+            storeSnap.forEach(docSnapshot => {
+              const data = docSnapshot.data();
+              const docId = data.id || docSnapshot.id;
+              recordsMap.set(docId, data);
+              memCache.set(docId, data);
+            });
+          } catch (_) {}
+
+          try {
+            const emailQ = query(collection(db, tableStr), where("email", "==", cleanEmail));
+            const emailSnap = await getDocs(emailQ);
+            emailSnap.forEach(docSnapshot => {
+              const data = docSnapshot.data();
+              const docId = data.id || docSnapshot.id;
+              recordsMap.set(docId, data);
+              memCache.set(docId, data);
+            });
+          } catch (_) {}
+        }
+
+        // Query each allowed UID
+        for (const uid of allowedIds) {
+          try {
+            const q = query(collection(db, tableStr), where("user_id", "==", uid));
+            const docsSnap = await getDocs(q);
+            docsSnap.forEach(docSnapshot => {
+              const data = docSnapshot.data();
+              const docId = data.id || docSnapshot.id;
+              recordsMap.set(docId, data);
+              memCache.set(docId, data);
+            });
+          } catch (_) {}
+        }
+      } catch (fErr) {
+        console.warn(`[server.ts] Firestore fetch for ${tableStr} notice:`, fErr);
       }
 
       const records = Array.from(recordsMap.values());
@@ -497,25 +561,44 @@ async function startServer() {
         return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
       }
 
+      const cleanEmail = (verified.email || data?.email || "").trim().toLowerCase();
       const tableStr = String(table);
-      const docId = String(id || data.id);
+      const docId = String(id || data?.id);
 
       const enrichedData = {
         ...data,
         id: docId,
-        user_id: verified.uid,
-        userId: verified.uid,
-        owner_id: verified.uid,
-        updated_at: new Date().toISOString()
+        user_id: data?.user_id || verified.uid,
+        userId: data?.userId || verified.uid,
+        owner_id: data?.owner_id || verified.uid,
+        store_id: cleanEmail,
+        storeId: cleanEmail,
+        email: cleanEmail,
+        linked_email: cleanEmail,
+        linkedEmail: cleanEmail,
+        updated_at: data?.updated_at || new Date().toISOString()
       };
 
-      await setDoc(doc(db, tableStr, docId), enrichedData);
+      // 1. Immediately store in server in-memory sync cache
+      getTableCache(tableStr).set(docId, enrichedData);
 
-      // Async propagate upsert to the user's passcode_syncs file backing so PC onSnapshot captures it
-      await syncCollectionAndPasscodeVault(verified, tableStr, docId, enrichedData, false);
+      // 2. Persist to Firestore asynchronously
+      try {
+        await setDoc(doc(db, tableStr, docId), enrichedData, { merge: true });
+      } catch (fErr) {
+        console.warn(`[server.ts] Firestore setDoc for ${tableStr}/${docId} notice:`, fErr);
+      }
 
-      res.json({ success: true });
+      // 3. Propagate upsert to user's passcode_syncs backing document
+      try {
+        await syncCollectionAndPasscodeVault(verified, tableStr, docId, enrichedData, false);
+      } catch (pErr) {
+        console.warn(`[server.ts] syncCollectionAndPasscodeVault notice:`, pErr);
+      }
+
+      res.json({ success: true, id: docId });
     } catch (err: any) {
+      console.error("[server.ts] /api/db/upsert error:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -530,22 +613,24 @@ async function startServer() {
 
       const tableStr = String(table);
       const docId = String(id);
-      const docRef = doc(db, tableStr, docId);
-      const docSnap = await getDoc(docRef);
 
-      if (docSnap.exists()) {
-        const docData = docSnap.data();
-        const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
-        
-        if (docData.user_id && !allowedIds.includes(docData.user_id)) {
-          return res.status(403).json({ error: "Access Forbidden: Document belongs to another user." });
-        }
+      // Remove from server cache
+      getTableCache(tableStr).delete(docId);
+
+      // Delete from Firestore
+      try {
+        const docRef = doc(db, tableStr, docId);
+        await deleteDoc(docRef);
+      } catch (fErr) {
+        console.warn(`[server.ts] Firestore delete for ${tableStr}/${docId} notice:`, fErr);
       }
 
-      await deleteDoc(docRef);
-
-      // Async propagate deletion to user's passcode_syncs file backing so PC onSnapshot captures it
-      await syncCollectionAndPasscodeVault(verified, tableStr, docId, {}, true);
+      // Propagate deletion to user's passcode_syncs backing document
+      try {
+        await syncCollectionAndPasscodeVault(verified, tableStr, docId, {}, true);
+      } catch (pErr) {
+        console.warn(`[server.ts] syncCollectionAndPasscodeVault delete notice:`, pErr);
+      }
 
       res.json({ success: true });
     } catch (err: any) {

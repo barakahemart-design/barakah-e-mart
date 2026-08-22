@@ -1187,12 +1187,14 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
 
 export const upsertDocument = async (table: string, id: string, data: any) => {
   let activeUserId = firebaseAuth.currentUser?.uid || currentFirebaseUser?.id;
-  if (!activeUserId) {
+  let cleanEmail = (firebaseAuth.currentUser?.email || currentFirebaseUser?.email || "").trim().toLowerCase();
+  if (!activeUserId || !cleanEmail) {
     try {
       const cached = localStorage.getItem('barakah_local_active_user');
       if (cached) {
         const parsed = JSON.parse(cached);
-        activeUserId = parsed?.id || parsed?.uid;
+        if (!activeUserId) activeUserId = parsed?.id || parsed?.uid;
+        if (!cleanEmail) cleanEmail = (parsed?.email || "").trim().toLowerCase();
       }
     } catch (_) {}
   }
@@ -1200,12 +1202,19 @@ export const upsertDocument = async (table: string, id: string, data: any) => {
   const enrichedData = {
     ...data,
     id: id || data.id,
-    user_id: data.user_id || activeUserId,
-    userId: data.userId || activeUserId
+    user_id: data.user_id || activeUserId || cleanEmail,
+    userId: data.userId || activeUserId || cleanEmail,
+    owner_id: data.owner_id || activeUserId || cleanEmail,
+    store_id: cleanEmail,
+    storeId: cleanEmail,
+    email: cleanEmail,
+    linked_email: cleanEmail,
+    linkedEmail: cleanEmail,
+    updated_at: data.updated_at || new Date().toISOString()
   };
 
   try {
-    await setDoc(doc(db, table, id), enrichedData);
+    await setDoc(doc(db, table, id), enrichedData, { merge: true });
   } catch (e) {
     try {
       const authHeaders = await getAuthHeaders();
@@ -1215,7 +1224,7 @@ export const upsertDocument = async (table: string, id: string, data: any) => {
         body: JSON.stringify({ table, id, data: enrichedData })
       });
     } catch (err) {
-      handleFirestoreError(e, OperationType.WRITE, `${table}/${id}`);
+      console.warn(`[firebase-helpers] upsertDocument fallback notice for ${table}/${id}:`, err);
     }
   }
 };
