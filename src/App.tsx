@@ -101,6 +101,7 @@ import {
   handleSave,
   isDocMatchingStore
 } from "./lib/firestoreService";
+import { syncManager } from "./lib/syncService";
 
 export interface Product {
   id: string;
@@ -141,6 +142,7 @@ export interface Expense {
 
 export interface Contact {
   id: string;
+  firestoreId?: string;
   name: string;
   phone: string;
   address: string;
@@ -921,6 +923,224 @@ export default function App() {
       });
     }
 
+    // 8. MULTI-DEVICE SERVER REALTIME BROADCAST & POLLING ENGINE
+    syncManager.start(cleanEmail, activeUserId);
+    const unsubStatus = syncManager.addStatusListener((st) => {
+      if (st === 'connected') setSyncStatus("connected");
+      else if (st === 'connecting') setSyncStatus("syncing");
+      else if (st === 'offline') setSyncStatus("offline");
+    });
+
+    const unsubSyncChanges = syncManager.addChangeListener((change) => {
+      markRemoteUpdateActive();
+      const table = change.table;
+      const docId = change.id;
+      const docData = change.data;
+      const isDel = change.type === 'delete';
+
+      if (table === 'products') {
+        setProducts(prev => {
+          let updated: Product[];
+          if (isDel) {
+            updated = prev.filter(p => p.id !== docId);
+          } else {
+            const itemObj: Product = {
+              id: docId,
+              name: docData.name || "Unnamed Product",
+              sku: docData.sku || "",
+              stock: Number(docData.stock) || 0,
+              buyPrice: Number(docData.buyPrice ?? docData.buy_price) || 0,
+              sellPrice: Number(docData.sellPrice ?? docData.sell_price) || 0,
+              category: docData.category || "Electronics",
+              unit: docData.unit || "piece",
+              imageUrl: docData.imageUrl || docData.image_url || undefined
+            };
+            const idx = prev.findIndex(p => p.id === docId);
+            if (idx >= 0) {
+              updated = [...prev];
+              updated[idx] = { ...updated[idx], ...itemObj };
+            } else {
+              updated = [itemObj, ...prev];
+            }
+          }
+          localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updated));
+          return updated;
+        });
+        setSyncStatus("connected");
+      } else if (table === 'customers' || table === 'contacts') {
+        setContacts(prev => {
+          let updated: Contact[];
+          if (isDel) {
+            updated = prev.filter(c => c.id !== docId);
+          } else {
+            const itemObj: Contact = {
+              id: docId,
+              firestoreId: docData.firestoreId || docId,
+              name: docData.name || "Unnamed Contact",
+              phone: docData.phone || "",
+              address: docData.address || "",
+              type: docData.type || "customer",
+              created_at: docData.created_at || docData.updated_at || new Date().toISOString()
+            };
+            const idx = prev.findIndex(c => c.id === docId);
+            if (idx >= 0) {
+              updated = [...prev];
+              updated[idx] = { ...updated[idx], ...itemObj };
+            } else {
+              updated = [itemObj, ...prev];
+            }
+          }
+          updated.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updated));
+          return updated;
+        });
+        setSyncStatus("connected");
+      } else if (table === 'expenses') {
+        setExpenses(prev => {
+          let updated: Expense[];
+          if (isDel) {
+            updated = prev.filter(e => e.id !== docId);
+          } else {
+            const itemObj: Expense = {
+              id: docId,
+              category: docData.category || "Others",
+              amount: Number(docData.amount) || 0,
+              description: docData.description || "",
+              date: docData.created_at || docData.date || new Date().toISOString()
+            };
+            const idx = prev.findIndex(e => e.id === docId);
+            if (idx >= 0) {
+              updated = [...prev];
+              updated[idx] = { ...updated[idx], ...itemObj };
+            } else {
+              updated = [itemObj, ...prev];
+            }
+          }
+          localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updated));
+          return updated;
+        });
+        setSyncStatus("connected");
+      } else if (table === 'purchases') {
+        setPurchases(prev => {
+          let updated: Purchase[];
+          if (isDel) {
+            updated = prev.filter(pur => pur.id !== docId);
+          } else {
+            const itemObj: Purchase = {
+              id: docId,
+              productId: docData.product_id || docData.productId,
+              productName: docData.product_name || docData.productName || "Purchase Item",
+              supplierId: docData.supplier_id || docData.supplierId || "",
+              supplierName: docData.supplier_name || docData.supplierName || "Main Depot",
+              quantity: Number(docData.quantity) || 0,
+              buyPrice: Number(docData.buy_price || docData.buyPrice) || 0,
+              totalAmount: Number((docData.quantity || 0) * (docData.buy_price || docData.buyPrice || 0)) || 0,
+              date: docData.created_at || docData.date || new Date().toISOString()
+            };
+            const idx = prev.findIndex(pur => pur.id === docId);
+            if (idx >= 0) {
+              updated = [...prev];
+              updated[idx] = { ...updated[idx], ...itemObj };
+            } else {
+              updated = [itemObj, ...prev];
+            }
+          }
+          localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updated));
+          return updated;
+        });
+        setSyncStatus("connected");
+      } else if (table === 'transactions') {
+        const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
+        let flatTx = JSON.parse(rawLocalTx);
+        if (!Array.isArray(flatTx)) flatTx = [];
+
+        if (isDel) {
+          flatTx = flatTx.filter((t: any) => t.id !== docId);
+        } else {
+          const flatObj = {
+            id: docId,
+            firestoreId: docData.firestoreId || docId,
+            invoice_no: docData.invoice_no || docData.invoiceNo,
+            customer_id: docData.customer_id || docData.contactId || null,
+            total_amount: Number(docData.total_amount ?? docData.total ?? docData.subtotal) || 0,
+            discount: Number(docData.discount) || 0,
+            vat_rate: Number(docData.vat_rate || docData.tax) || 0,
+            paid_amount: Number(docData.paid_amount ?? docData.paidAmount) || 0,
+            payment_method: docData.payment_method || docData.paymentMethod || "Cash",
+            signature_svg: docData.signature_svg || docData.customerSignature || null,
+            created_at: docData.created_at || docData.date || new Date().toISOString()
+          };
+          const idx = flatTx.findIndex((t: any) => t.id === docId);
+          if (idx >= 0) {
+            flatTx[idx] = { ...flatTx[idx], ...flatObj };
+          } else {
+            flatTx.push(flatObj);
+          }
+        }
+        localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTx));
+
+        if (docData?.items && Array.isArray(docData.items) && docData.items.length > 0) {
+          const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+          let flatItems = JSON.parse(rawLocalItems);
+          if (!Array.isArray(flatItems)) flatItems = [];
+          flatItems = flatItems.filter((itm: any) => itm.transaction_id !== docId);
+          docData.items.forEach((itm: any) => {
+            flatItems.push({
+              id: itm.id || `itm_${docId}_${itm.productId || Math.random()}`,
+              transaction_id: docId,
+              product_id: itm.productId || itm.product_id || null,
+              product_name: itm.name || itm.product_name || "Product Item",
+              quantity: Number(itm.quantity) || 0,
+              sell_price: Number(itm.price ?? itm.sell_price) || 0,
+              cost_price: Number(itm.buyPrice ?? itm.cost_price) || 0
+            });
+          });
+          localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+          handleTransactionsChange(flatTx, flatItems);
+        } else {
+          handleTransactionsChange(flatTx, undefined);
+        }
+      } else if (table === 'transaction_items') {
+        const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
+        let flatItems = JSON.parse(rawLocalItems);
+        if (!Array.isArray(flatItems)) flatItems = [];
+        if (isDel) {
+          flatItems = flatItems.filter((itm: any) => itm.id !== docId);
+        } else {
+          const itmObj = {
+            id: docId,
+            transaction_id: docData.transaction_id,
+            product_id: docData.product_id || null,
+            product_name: docData.product_name || "Product Item",
+            quantity: Number(docData.quantity) || 0,
+            sell_price: Number(docData.sell_price) || 0,
+            cost_price: Number(docData.cost_price) || 0
+          };
+          const idx = flatItems.findIndex((itm: any) => itm.id === docId);
+          if (idx >= 0) {
+            flatItems[idx] = { ...flatItems[idx], ...itmObj };
+          } else {
+            flatItems.push(itmObj);
+          }
+        }
+        localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
+        handleTransactionsChange(undefined, flatItems);
+      } else if (table === 'business_info' || table === 'businessInfo') {
+        if (docData && typeof docData === "object") {
+          const { id, user_id, userId, linkedEmail, ...cleanInfo } = docData;
+          if (Object.keys(cleanInfo).length > 0) {
+            setBusinessInfo(prev => {
+              const merged = { ...prev, ...cleanInfo };
+              const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
+              localStorage.setItem(userKey, JSON.stringify(merged));
+              localStorage.setItem("barakah_business_info", JSON.stringify(merged));
+              return merged;
+            });
+          }
+        }
+      }
+    });
+
     setSyncStatus("connected");
 
     return () => {
@@ -931,6 +1151,9 @@ export default function App() {
       unsubTransactions();
       unsubItems();
       unsubBusinessInfo();
+      unsubStatus();
+      unsubSyncChanges();
+      syncManager.stop();
       setSyncStatus("offline");
     };
   }, [activeUser]);
@@ -1641,8 +1864,8 @@ export default function App() {
 
       // 4. Save real-time transaction to Firestore cloud for multi-device sync
       if (activeUser && !activeUser.isGuest) {
-        // Main transaction document
-        saveTransaction(activeUserId, flatTxItem).catch(err => {
+        // Main transaction document with embedded items
+        saveTransaction(activeUserId, { ...flatTxItem, items: newTransaction.items }).catch(err => {
           console.error("Cloud save transaction failed:", err);
         });
 
@@ -2419,7 +2642,7 @@ export default function App() {
           signature_svg: targetTx.customerSignature || null,
           created_at: targetTx.date || new Date().toISOString()
         };
-        saveTransaction(activeUserId, flatTxItem).catch(err => {
+        saveTransaction(activeUserId, { ...flatTxItem, items: targetTx.items }).catch(err => {
           console.error("Cloud save increment due payment failed:", err);
         });
       }

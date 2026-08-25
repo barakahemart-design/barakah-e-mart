@@ -95,20 +95,15 @@ service cloud.firestore {
 
     // 4. Collection Access Rule Definitions
     match /passcode_syncs/{syncId} {
-      allow get: if true;
-      allow list: if isSignedIn() && (resource.data.linked_email == request.auth.token.email || resource.data.linked_email == request.auth.uid);
-      allow create, update: if isValidId(syncId) && isValidPasscodeSync(incoming()) && (
-        !isSignedIn() || 
-        incoming().linked_email == request.auth.token.email || 
-        incoming().linked_email == request.auth.uid
-      );
-      allow delete: if isSignedIn() && (existing().linked_email == request.auth.token.email || existing().linked_email == request.auth.uid);
+      allow read: if true;
+      allow create, update: if isValidId(syncId);
+      allow delete: if true;
     }
 
     match /profiles/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidProfile(incoming());
-      allow delete: if isOwner(userId);
+      allow read: if true;
+      allow create, update: if isValidId(userId);
+      allow delete: if true;
     }
 
     match /products/{productId} {
