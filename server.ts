@@ -21,6 +21,12 @@ import {
   where,
   setLogLevel
 } from "firebase/firestore";
+import {
+  migrateStorePinsServerSide,
+  verifyStorePin,
+  getStorePinCredentials,
+  getCredentialDocId
+} from "./src/server/pinAuthService";
 import firebaseConfig from "./firebase-applet-config.json";
 
 // Set Silent logging level for Firestore client to silence idle stream cancel warnings
@@ -838,6 +844,88 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // Secure Server-Side PIN Credential Services
+  // ==========================================
+
+  // Migration / Initialization Endpoint
+  app.post("/api/auth/pin-credentials/migrate", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, sales_pin } = req.body;
+    try {
+      if (!store_id) {
+        return res.status(400).json({ error: "Missing store_id parameter." });
+      }
+      const cleanStoreId = String(store_id).trim().toLowerCase();
+      const result = await migrateStorePinsServerSide(db, cleanStoreId, admin_pin, sales_pin);
+      return res.json(result);
+    } catch (err: any) {
+      console.warn("[pin-credentials/migrate] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to initialize credentials" });
+    }
+  });
+
+  // Status Check Endpoint (Checks if PIN credentials exist; NEVER returns hashes or PINs)
+  app.get("/api/auth/pin-credentials/status", async (req: Request, res: Response) => {
+    const { store_id } = req.query;
+    try {
+      if (!store_id) {
+        return res.status(400).json({ error: "Missing store_id parameter." });
+      }
+      const cleanStoreId = String(store_id).trim().toLowerCase();
+      const creds = await getStorePinCredentials(db, cleanStoreId);
+      return res.json({
+        store_id: cleanStoreId,
+        configured: !!creds,
+        has_admin_pin: !!creds?.admin_pin_hash,
+        has_sales_pin: !!creds?.sales_pin_hash,
+        version: creds?.version || null,
+        updated_at: creds?.updated_at || null
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Server-Side PIN Verification Endpoint
+  app.post("/api/auth/pin-credentials/verify", async (req: Request, res: Response) => {
+    const { store_id, role, pin } = req.body;
+    try {
+      if (!store_id || !role || !pin) {
+        return res.status(400).json({ error: "Missing store_id, role, or pin parameter." });
+      }
+      const cleanStoreId = String(store_id).trim().toLowerCase();
+      const cleanRole = String(role).trim().toLowerCase();
+
+      if (cleanRole !== "admin" && cleanRole !== "sales") {
+        return res.status(400).json({ error: "Invalid role specified. Must be 'admin' or 'sales'." });
+      }
+
+      const clientIp = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const verifyResult = await verifyStorePin(db, cleanStoreId, cleanRole as "admin" | "sales", String(pin), clientIp);
+
+      if (verifyResult.rateLimited) {
+        return res.status(429).json({ error: verifyResult.error });
+      }
+
+      if (!verifyResult.valid) {
+        return res.status(401).json({ 
+          valid: false, 
+          error: verifyResult.error || "Authentication failed: Incorrect PIN." 
+        });
+      }
+
+      return res.json({
+        success: true,
+        valid: true,
+        store_id: cleanStoreId,
+        role: cleanRole
+      });
+    } catch (err: any) {
+      console.warn("[pin-credentials/verify] Error:", err);
+      return res.status(500).json({ error: err.message || "Internal server error during verification." });
     }
   });
 

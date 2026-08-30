@@ -284,6 +284,31 @@ export const loadDB = (uid?: string) => {
   }
 };
 
+export const safeSetLocalStorage = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
+      console.warn(`[Storage Quota Warning] LocalStorage quota reached while writing key "${key}". Pruning non-essential cache...`);
+      try {
+        // Remove heavy cached backup keys if storage is full
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.includes('fail_safe_backup') || k.includes('firestore_mutations_') || k.includes('firestore_clients_'))) {
+            localStorage.removeItem(k);
+          }
+        }
+        // Retry once after pruning
+        localStorage.setItem(key, value);
+      } catch (_) {
+        console.warn(`[Storage Quota Warning] Could not persist key "${key}" after pruning.`);
+      }
+    } else {
+      console.warn(`[Storage Error] Could not write key "${key}":`, e);
+    }
+  }
+};
+
 export const saveDB = (
   data: {
     products: Product[];
@@ -297,18 +322,18 @@ export const saveDB = (
   uid?: string
 ) => {
   try {
-    localStorage.setItem(getDbKey(KEYS.PRODUCTS, undefined, uid), JSON.stringify(data.products));
-    localStorage.setItem(getDbKey(KEYS.CONTACTS, undefined, uid), JSON.stringify(data.contacts));
-    localStorage.setItem(getDbKey(KEYS.EXPENSES, undefined, uid), JSON.stringify(data.expenses));
-    localStorage.setItem(getDbKey(KEYS.TRANSACTIONS, undefined, uid), JSON.stringify(data.transactions));
-    localStorage.setItem(getDbKey(KEYS.BUSINESS_INFO, undefined, uid), JSON.stringify(data.businessInfo));
-    localStorage.setItem(getDbKey(KEYS.PURCHASES, undefined, uid), JSON.stringify(data.purchases));
-    localStorage.setItem(getDbKey(KEYS.DELETED_ITEMS, undefined, uid), JSON.stringify(data.deletedItems || []));
+    safeSetLocalStorage(getDbKey(KEYS.PRODUCTS, undefined, uid), JSON.stringify(data.products));
+    safeSetLocalStorage(getDbKey(KEYS.CONTACTS, undefined, uid), JSON.stringify(data.contacts));
+    safeSetLocalStorage(getDbKey(KEYS.EXPENSES, undefined, uid), JSON.stringify(data.expenses));
+    safeSetLocalStorage(getDbKey(KEYS.TRANSACTIONS, undefined, uid), JSON.stringify(data.transactions));
+    safeSetLocalStorage(getDbKey(KEYS.BUSINESS_INFO, undefined, uid), JSON.stringify(data.businessInfo));
+    safeSetLocalStorage(getDbKey(KEYS.PURCHASES, undefined, uid), JSON.stringify(data.purchases));
+    safeSetLocalStorage(getDbKey(KEYS.DELETED_ITEMS, undefined, uid), JSON.stringify(data.deletedItems || []));
 
     // Update the local fail-safe backup key only if the data has actual items, to prevent overwriting with blank states
     const totalItems = data.products.length + data.transactions.length;
     if (totalItems > 0) {
-      localStorage.setItem(getDbKey("barakah_fail_safe_backup", undefined, uid), JSON.stringify({
+      safeSetLocalStorage(getDbKey("barakah_fail_safe_backup", undefined, uid), JSON.stringify({
         products: data.products,
         contacts: data.contacts,
         expenses: data.expenses,

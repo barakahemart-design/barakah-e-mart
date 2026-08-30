@@ -4,7 +4,9 @@ import {
   addDoc, 
   deleteDoc, 
   doc,
-  setDoc
+  setDoc,
+  query,
+  where
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
@@ -13,21 +15,22 @@ export function getActiveStoreEmail(): string {
     const cached = localStorage.getItem('barakah_local_active_user');
     if (cached) {
       const parsed = JSON.parse(cached);
-      return (parsed?.email || '').trim().toLowerCase();
+      const email = (parsed?.email || parsed?.linked_email || parsed?.linkedEmail || '').trim().toLowerCase();
+      if (email) return email;
     }
   } catch (_) {}
   return (auth.currentUser?.email || '').trim().toLowerCase();
 }
 
-// Known store UIDs mapping
+// Known store UIDs mapping and store validation
 export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: string): boolean {
   if (!cleanEmail && !activeUid) return true;
   const docStore = (docData.store_id || docData.storeId || docData.email || docData.linked_email || docData.linkedEmail || '').trim().toLowerCase();
   if (cleanEmail && docStore === cleanEmail) return true;
   
   const docUid = String(docData.user_id || docData.userId || docData.owner_id || '');
-  if (activeUid && docUid === activeUid) return true;
   if (cleanEmail && docUid === cleanEmail) return true;
+  if (activeUid && docUid === activeUid) return true;
   
   if (cleanEmail === 'barakahemart@gmail.com') {
     const known = ['1d4ce803-cbf5-44f1-9ec5-56642de068a1', 'DGeDhFzjTDaYCeLZiMSvm8TY4sc2', 'vault_a2vflc', 'xrTguetUZqSbZOxUKRiUNJV3X1M2', 'C5eOR2R8WEMegF53NA5eItMWDrr2', 'Lzk64vTQcRPy0MWwQK6t0echMmq1', '1ys9dKJ3fKOKIVOl0GIbuIiHeB73'];
@@ -42,15 +45,44 @@ export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: 
   return false;
 }
 
-// Helper function to create standard user-filtered collections subscriptions
+// Helper function to create standard store_id-partitioned collections subscriptions
 function createSubscription(collName: string) {
   return (userIdentifier: string, callback: (items: any[]) => void) => {
-    const cleanEmail = getActiveStoreEmail();
-    const activeUid = userIdentifier || auth.currentUser?.uid || cleanEmail;
-    
-    return onSnapshot(collection(db, collName), (snapshot) => {
-      const matchedDocs = snapshot.docs.filter(d => isDocMatchingStore(d.data(), cleanEmail, activeUid));
-      callback(matchedDocs.map(d => {
+    const storeId = getActiveStoreEmail();
+    const activeFirebaseUid = auth.currentUser?.uid || "null";
+    const activeUid = userIdentifier || auth.currentUser?.uid || storeId;
+
+    console.log(`[Realtime Listener Setup]`, {
+      activeFirebaseUid,
+      activeUserId: activeUid,
+      resolvedStoreId: storeId,
+      listenerCollection: collName,
+      partitionKey: "store_id",
+      status: "subscribing"
+    });
+
+    let q: any;
+    try {
+      if (storeId) {
+        q = query(collection(db, collName), where("store_id", "==", storeId));
+      } else {
+        q = collection(db, collName);
+      }
+    } catch (_) {
+      q = collection(db, collName);
+    }
+
+    const unsub = onSnapshot(q, { includeMetadataChanges: true }, (snapshot: any) => {
+      console.log(`[Realtime Snapshot Success]`, {
+        collection: collName,
+        docCount: snapshot.docs.length,
+        resolvedStoreId: storeId,
+        activeFirebaseUid,
+        hasPendingWrites: snapshot.metadata?.hasPendingWrites
+      });
+
+      const matchedDocs = snapshot.docs.filter((d: any) => isDocMatchingStore(d.data(), storeId, activeUid));
+      callback(matchedDocs.map((d: any) => {
         const data = d.data();
         return {
           ...data,
@@ -58,31 +90,52 @@ function createSubscription(collName: string) {
           firestoreId: d.id
         };
       }));
-    }, (error) => {
-      console.warn(`[firestoreService] Snapshot listener for ${collName} notice:`, error);
+    }, (error: any) => {
+      console.warn(`[Realtime Listener Error] Collection: ${collName}, StoreId: ${storeId}:`, error);
+      // Fallback: try raw collection listener if query with where clause encounters an index/permission issue
+      if (q !== collection(db, collName)) {
+        return onSnapshot(collection(db, collName), (fallbackSnap) => {
+          const matchedDocs = fallbackSnap.docs.filter(d => isDocMatchingStore(d.data(), storeId, activeUid));
+          callback(matchedDocs.map(d => {
+            const data = d.data();
+            return {
+              ...data,
+              id: data.id || d.id,
+              firestoreId: d.id
+            };
+          }));
+        }, (fbErr) => {
+          console.warn(`[Realtime Listener Fallback Error] Collection: ${collName}:`, fbErr);
+        });
+      }
     });
+
+    return unsub;
   };
 }
 
 // Helper function to perform save operations (add/update)
 export async function handleSave(collName: string, arg1: any, arg2?: any): Promise<string> {
-  const userId = typeof arg1 === 'string' ? arg1 : (arg1.user_id || arg1.userId);
   const data = typeof arg1 === 'string' ? arg2 : arg1;
-  const { id, ...dataWithoutId } = data;
-  const cleanEmail = (data.email || data.linked_email || data.store_id || getActiveStoreEmail()).trim().toLowerCase();
+  const targetId = data?.id || (typeof arg1 === 'string' && !arg2 ? arg1 : '') || doc(collection(db, collName)).id;
+
+  const userId = typeof arg1 === 'string' ? arg1 : (arg1?.user_id || arg1?.userId);
+  const { id, ...dataWithoutId } = data || {};
+  const cleanEmail = (data?.email || data?.linked_email || data?.store_id || getActiveStoreEmail()).trim().toLowerCase();
+  const activeUid = auth.currentUser?.uid || userId || cleanEmail || 'store_owner';
 
   const docData: any = {
-    id,
+    id: targetId,
     ...dataWithoutId,
-    user_id: userId || cleanEmail,
-    userId: userId || cleanEmail,
-    owner_id: userId || cleanEmail,
+    user_id: activeUid,
+    userId: activeUid,
+    owner_id: activeUid,
     store_id: cleanEmail,
     storeId: cleanEmail,
     email: cleanEmail,
     linked_email: cleanEmail,
     linkedEmail: cleanEmail,
-    updated_at: data.updated_at || new Date().toISOString()
+    updated_at: data?.updated_at || new Date().toISOString()
   };
 
   if (collName === "products") {
@@ -97,66 +150,54 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
     docData.image_url = imgUrl;
   }
 
-  // Attempt direct Firestore setDoc first
-  let directSuccess = false;
+  // Direct Firestore write using the client SDK
   try {
-    if (id) {
-      await setDoc(doc(db, collName, id), docData, { merge: true });
-    } else {
-      const docRef = await addDoc(collection(db, collName), docData);
-      docData.id = docRef.id;
-    }
-    directSuccess = true;
-  } catch (error) {
-    console.warn(`[firestoreService] Direct Firestore write to ${collName} failed, utilizing server sync proxy...`, error);
+    await setDoc(doc(db, collName, targetId), docData, { merge: true });
+  } catch (err) {
+    console.warn(`[Firestore write warning] ${collName}/${targetId}:`, err);
   }
 
-  // Always propagate to /api/db/upsert for multi-device server synchronization
+  // Background broadcast notification to sync proxy for immediate multi-device SSE (< 10ms)
   try {
-    const authHeaders = {
+    const authHeaders: any = {
       "Content-Type": "application/json",
-      "x-user-uid": userId || auth.currentUser?.uid || cleanEmail,
-      "x-user-email": cleanEmail || auth.currentUser?.email || ""
+      "x-user-uid": activeUid,
+      "x-user-email": cleanEmail
     };
-    const res = await fetch("/api/db/upsert", {
+    fetch("/api/db/upsert", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify({ table: collName, id: id || docData.id, data: docData })
-    });
-    if (res.ok) {
-      return id || docData.id;
-    }
-  } catch (syncErr) {
-    console.warn(`[firestoreService] Server upsert proxy notification error:`, syncErr);
-  }
+      body: JSON.stringify({ table: collName, id: targetId, data: docData })
+    }).catch(() => {});
+  } catch (_) {}
 
-  if (directSuccess) {
-    return id || docData.id;
-  }
-
-  return id || docData.id;
+  return targetId;
 }
 
 // Helper function to perform delete operations
 async function handleDelete(collName: string, id: string): Promise<void> {
   const cleanEmail = getActiveStoreEmail();
+  const activeUid = auth.currentUser?.uid || cleanEmail || 'store_owner';
+
+  // Direct Firestore deletion
   try {
     await deleteDoc(doc(db, collName, id));
-  } catch (error) {
-    console.warn(`[firestoreService] Direct delete for ${collName}/${id} error:`, error);
+  } catch (err) {
+    console.warn(`[Firestore delete warning] ${collName}/${id}:`, err);
   }
 
+  // Background broadcast notification to sync proxy for immediate multi-device SSE (< 10ms)
   try {
-    const authHeaders = {
+    const authHeaders: any = {
       "Content-Type": "application/json",
-      "x-user-uid": auth.currentUser?.uid || cleanEmail,
+      "x-user-uid": activeUid,
       "x-user-email": cleanEmail
     };
-    await fetch("/api/db/delete", {
+    fetch("/api/db/delete", {
       method: "POST",
       headers: authHeaders,
       body: JSON.stringify({ table: collName, id })
-    });
+    }).catch(() => {});
   } catch (_) {}
 }
 
@@ -164,6 +205,7 @@ async function handleDelete(collName: string, id: string): Promise<void> {
 export const subscribeProducts = createSubscription("products");
 export const subscribeCustomers = createSubscription("customers");
 export const subscribeTransactions = createSubscription("transactions");
+export const subscribeTransactionItems = createSubscription("transaction_items");
 export const subscribeExpenses = createSubscription("expenses");
 export const subscribePurchases = createSubscription("purchases");
 

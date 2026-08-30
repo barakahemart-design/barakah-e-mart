@@ -3,7 +3,8 @@ import { getAuth } from 'firebase/auth';
 import { 
   initializeFirestore, 
   persistentLocalCache, 
-  persistentMultipleTabManager,
+  persistentSingleTabManager,
+  memoryLocalCache,
   doc, 
   getDocFromServer, 
   setLogLevel 
@@ -16,15 +17,61 @@ try {
   console.warn("Could not set client Firestore log level:", e);
 }
 
+// Safe localStorage setItem patch to prevent uncaught QuotaExceededError in browser
+if (typeof window !== 'undefined' && window.Storage) {
+  try {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key: string, value: string) {
+      try {
+        originalSetItem.apply(this, [key, value]);
+      } catch (err: any) {
+        if (err?.name === 'QuotaExceededError' || err?.code === 22 || err?.code === 1014) {
+          console.warn(`[Storage Quota Warning] LocalStorage quota exceeded on key "${key}". Pruning stale keys...`);
+          try {
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < this.length; i++) {
+              const k = this.key(i);
+              if (k && (k.startsWith('firestore_') || k.includes('fail_safe_backup') || k.startsWith('barakah_flat_'))) {
+                keysToRemove.push(k);
+              }
+            }
+            keysToRemove.forEach(k => this.removeItem(k));
+            originalSetItem.apply(this, [key, value]);
+          } catch (retryErr) {
+            console.warn(`[Storage Quota Warning] Could not save key "${key}" even after pruning.`);
+          }
+        } else {
+          throw err;
+        }
+      }
+    };
+  } catch (e) {
+    console.warn("Could not patch Storage.prototype.setItem:", e);
+  }
+}
+
+// Clean up stale WebStorage Firestore keys from localStorage to prevent QuotaExceededError
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && (k.startsWith('firestore_mutations_') || k.startsWith('firestore_clients_') || k.startsWith('firestore_'))) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => window.localStorage.removeItem(k));
+  } catch (err) {
+    console.warn("Could not clean stale Firestore localStorage keys:", err);
+  }
+}
+
 const app = initializeApp(firebaseConfig);
 
-// Enable robust multi-tab offline local persistence cache in Firestore
+// Use in-memory Firestore cache to eliminate WebStorageSharedClientState localStorage quota issues
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
+  localCache: memoryLocalCache()
 }, firebaseConfig.firestoreDatabaseId);
-
 export const auth = getAuth();
 
 export enum OperationType {

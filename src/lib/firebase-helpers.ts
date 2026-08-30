@@ -59,6 +59,28 @@ export const isFirebaseConfigured = true;
 
 let currentFirebaseUser: any = null;
 const authListeners = new Set<(user: any) => void>();
+let isAuthInitialized = false;
+const authInitResolvers: Array<() => void> = [];
+
+export const waitForAuthInit = (): Promise<void> => {
+  if (isAuthInitialized) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    authInitResolvers.push(resolve);
+  });
+};
+
+const notifyAuthListeners = (user: any) => {
+  authListeners.forEach(cb => {
+    try {
+      const res: any = (cb as any)(user);
+      if (res && typeof res.catch === 'function') {
+        res.catch((err: any) => console.warn('[Auth listener async error]:', err));
+      }
+    } catch (e) {
+      console.warn('[Auth listener sync error]:', e);
+    }
+  });
+};
 
 const updateCurrentUser = (sessionUser: any) => {
   if (sessionUser) {
@@ -71,55 +93,28 @@ const updateCurrentUser = (sessionUser: any) => {
   } else {
     currentFirebaseUser = null;
   }
-  authListeners.forEach(cb => cb(currentFirebaseUser));
+  notifyAuthListeners(currentFirebaseUser);
 };
 
-// Listen for firebase auth state alterations
+// Listen for genuine Firebase Auth state alterations
 onAuthStateChanged(firebaseAuth, (user: FirebaseUser | null) => {
   if (user) {
-    let cachedData: any = {};
-    const cached = localStorage.getItem('barakah_local_active_user');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed && (parsed.uid === user.uid || parsed.id === user.uid || parsed.email?.trim().toLowerCase() === user.email?.trim().toLowerCase())) {
-          cachedData = parsed;
-        }
-      } catch (e) {}
-    }
     updateCurrentUser({
       id: user.uid,
       uid: user.uid,
       email: user.email,
       emailVerified: user.emailVerified,
-      ...cachedData
     });
   } else {
-    const cached = localStorage.getItem('barakah_local_active_user');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed) {
-          updateCurrentUser(parsed);
-          return;
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
     updateCurrentUser(null);
   }
-});
 
-// Load standard initial active user cached state if exists
-const cachedUser = localStorage.getItem('barakah_local_active_user');
-if (cachedUser) {
-  try {
-    currentFirebaseUser = JSON.parse(cachedUser);
-  } catch (e) {
-    // ignore
+  if (!isAuthInitialized) {
+    isAuthInitialized = true;
+    authInitResolvers.forEach(resolve => resolve());
+    authInitResolvers.length = 0;
   }
-}
+});
 
 export function deduplicateProducts(products: any[]): any[] {
   if (!Array.isArray(products)) return [];
@@ -619,14 +614,15 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         let transactionsRes: any = { empty: true, docs: [] };
         let purchasesRes: any = { empty: true, docs: [] };
 
-        if (firebaseAuth.currentUser && activeUserId === firebaseAuth.currentUser.uid) {
+        if (firebaseAuth.currentUser && (activeUserId === firebaseAuth.currentUser.uid || cleanEmail === (firebaseAuth.currentUser.email || '').trim().toLowerCase())) {
           try {
+            const storeId = cleanEmail || activeUserId;
             const results = await Promise.all([
-              fetchDocsFresh(query(collection(db, "products"), where("user_id", "==", activeUserId))),
-              fetchDocsFresh(query(collection(db, "customers"), where("user_id", "==", activeUserId))),
-              fetchDocsFresh(query(collection(db, "expenses"), where("user_id", "==", activeUserId))),
-              fetchDocsFresh(query(collection(db, "transactions"), where("user_id", "==", activeUserId))),
-              fetchDocsFresh(query(collection(db, "purchases"), where("user_id", "==", activeUserId)))
+              fetchDocsFresh(query(collection(db, "products"), where("store_id", "==", storeId))),
+              fetchDocsFresh(query(collection(db, "customers"), where("store_id", "==", storeId))),
+              fetchDocsFresh(query(collection(db, "expenses"), where("store_id", "==", storeId))),
+              fetchDocsFresh(query(collection(db, "transactions"), where("store_id", "==", storeId))),
+              fetchDocsFresh(query(collection(db, "purchases"), where("store_id", "==", storeId)))
             ]);
             productsRes = results[0];
             customersRes = results[1];
@@ -690,7 +686,8 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         }
 
         if (!transactionsRes.empty) {
-          const itemsRes = await fetchDocsFresh(query(collection(db, "transaction_items"), where("user_id", "==", activeUserId)));
+          const storeId = cleanEmail || activeUserId;
+          const itemsRes = await fetchDocsFresh(query(collection(db, "transaction_items"), where("store_id", "==", storeId)));
           const itemRows = itemsRes.empty ? [] : itemsRes.docs.map(docSnapshot => docSnapshot.data());
 
           const sqlTransactions = transactionsRes.docs.map(docSnapshot => {
@@ -905,12 +902,7 @@ export const signUpWithEmail = async (email: string, pass: string) => {
         console.warn("[Auth Engine] Automatically ensuring profile document warning:", profErr.message);
       }
 
-      try {
-        const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
-        userObj.restored = wasRestored;
-      } catch (err) {
-        console.warn("Auto restorating backup after secure login failed:", err);
-      }
+      // Legacy passcode restore disabled on login to prevent overwriting realtime Firestore state
 
       updateCurrentUser(userObj);
       localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
@@ -1007,12 +999,7 @@ export const signInWithEmail = async (email: string, pass: string) => {
         console.warn("[Auth Engine] Profile write warning:", profErr.message);
       }
 
-      try {
-        const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, "classic_account_secure");
-        userObj.restored = wasRestored;
-      } catch (err) {
-        console.warn("Restore backup information on standard email login failed:", err);
-      }
+      // Legacy passcode restore disabled on signup to prevent overwriting realtime Firestore state
 
       updateCurrentUser(userObj);
       localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
@@ -1036,7 +1023,24 @@ export const signOut = async () => {
 
 export const subscribeToAuthChanges = (callback: (user: any) => void) => {
   authListeners.add(callback);
-  callback(currentFirebaseUser);
+  const safeInvoke = () => {
+    try {
+      const res: any = (callback as any)(currentFirebaseUser);
+      if (res && typeof res.catch === 'function') {
+        res.catch((err: any) => console.warn('[Auth listener async error]:', err));
+      }
+    } catch (e) {
+      console.warn('[Auth listener sync error]:', e);
+    }
+  };
+
+  if (isAuthInitialized) {
+    safeInvoke();
+  } else {
+    waitForAuthInit().then(() => {
+      safeInvoke();
+    }).catch(e => console.warn('[waitForAuthInit error]:', e));
+  }
   return () => {
     authListeners.delete(callback);
   };
@@ -1134,12 +1138,7 @@ export const signInOrSignUpWithPasscode = async (email: string, pin: string) => 
     console.warn("Background authentication link procedure skipped:", authErr);
   }
 
-  try {
-    const wasRestored = await fetchAndRestoreCloudBackup(cleanEmail, pin);
-    userObj.restored = wasRestored;
-  } catch (err) {
-    console.warn("Auto restoring backups returned safely with warning:", err);
-  }
+  // Legacy passcode restore disabled on passcode login to prevent overwriting realtime Firestore state
 
   updateCurrentUser(userObj);
   localStorage.setItem('barakah_local_active_user', JSON.stringify(userObj));
@@ -1258,11 +1257,18 @@ export const fetchUserCollection = async (table: string, ownerEmail: string) => 
     } catch (_) {}
   }
 
-  const queryIdentifier = activeUserId || ownerEmail;
+  const cleanStoreEmail = (ownerEmail || '').trim().toLowerCase();
+  const queryIdentifier = cleanStoreEmail || activeUserId;
 
   try {
     let q;
-    if (firebaseAuth.currentUser && queryIdentifier && typeof queryIdentifier === "string" && firebaseAuth.currentUser.uid === queryIdentifier) {
+    if (firebaseAuth.currentUser && cleanStoreEmail) {
+      q = query(collection(db, table), where("store_id", "==", cleanStoreEmail));
+      const docsSnap = await fetchDocsFresh(q);
+      if (!docsSnap.empty) {
+        return docsSnap.docs.map(docSnapshot => docSnapshot.data());
+      }
+    } else if (firebaseAuth.currentUser && queryIdentifier && typeof queryIdentifier === "string" && firebaseAuth.currentUser.uid === queryIdentifier) {
       q = query(collection(db, table), where("user_id", "==", queryIdentifier));
       const docsSnap = await fetchDocsFresh(q);
       if (!docsSnap.empty) {
