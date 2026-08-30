@@ -9581,14 +9581,85 @@ _${businessInfo.name}_`;
         </div>
       )}
 
-
-      {/* ADD NEW CATEGORY MODAL */}
+{/* ADD NEW CATEGORY MODAL */}
       {categoryModalOpen && (
         <div className="fixed inset-0 z-[60] bg-[#0c0c0e]/95 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-sm w-full p-5 space-y-4 text-slate-200 animate-scaleIn" id="modal-add-category">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
-              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-cxœ¬VKoã6¾çWÌj/rÉö&i÷a(¶Ù[ÓCS @-e"©%©ØFÿŞ¡^K¢[(Ã693œÇ7ß¥E9+£°RÒF7¥`»àökñÀrH3æ˜›èÖô±¸µ¨™È¢ëÙ,€éXù×,ƒ{ÜÀİ¶Di¾2‹¹Ò»àbº¾*/–•µJÂÈ¦’_OŸ“×pÉ-¼ Úî¦ßUÆÄt{¸bÂàä‹_œœì4\˜a“ì~`:GÊJüÛÛØûƒL–ÑÖêõçeAv£³hUÉ³HäM›Ê0¤•6JG¥â®|ÁÀ¶§t{
-ç©ÓbÚäº¿¿˜füåö¢¿·Rºh+ùgµ,¸¥‚à‘Š`\j|AiÃ«„=ÉJ•4¬æE$ û‰İ‰O¯ |×ªM@£­´<"…
-[³MÌe*ªMØ˜ÃÓİP7t!¹pã¸ï²sşÉ¯GéK$	˜q÷…Nûşìöx®$àŸ×¿ÚíœÚ7gµãy-Fîæ9ê{eùŠS:¹’aĞéË¨‘ÀTiŠÆ¬ÈÂî]p	A»1võmãAû˜’¥í:æÛš†8“¦ß‰£î¢6òšÇ7>ºl‰âP¾¾îq>+·OP•%ê”Q9ëË%¥€¥Ï\æÑ†g8¤ŒZl©DK¡ÒgÏ…°'ep÷ÁOc—¦µO_¹,+ë±hweëø¤ÜÒø½â3ÏÍ ×ä.ê$À8á/Ë·»KxĞ”éRi{	w¤_D'>ë/LT˜¼ècŞz¬™ÌqO\<ïÔø‹k³Ÿ™Å:A¹® ÜÑl%b|?»™}šx‚¥ÒWûå!ü­hª·Ys‹ *+¸ÄH*éªVæs«Ùİ›®¾c6‹UV}sš£3Ï“ıº+[ ç
-¥¸BP¬¶{GÔ®xÒ˜£P1õñÅ0¸F&%vîR|í²ÛåâgÊÅ~–&è >İ´ù¢-Íê¦èZù ëh>s=%wl1*hğ‚Y³LmÜ€nx1·w¶	úÑ±½>Moßü¦ÖÔH{6›Ü§d¼9öeü„÷ÕÙ/¬sŞXç m»õÀùÑ~ƒ'Ø/}Ğ\u÷„¯±sfşGL0™¢8
-mg÷·Ü3îpo ÔûÛ’Ş~Jğvñ   ÿÿ º©<“
+              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
+                <Tag className="w-4 h-4 text-emerald-400" />
+                Add New Expense Category
+              </h3>
+              <button 
+                onClick={() => {
+                  setCategoryModalOpen(false);
+                  setNewCategoryName("");
+                  setCategoryModalTarget(null);
+                }} 
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newCategoryName.trim();
+                if (!trimmed) return;
+                if (!expenseCategories.includes(trimmed)) {
+                  setExpenseCategories(prev => [...prev, trimmed]);
+                }
+                if (categoryModalTarget === "edit") {
+                  setEditExpenseCategory(trimmed);
+                } else {
+                  setExpenseCategory(trimmed);
+                }
+                setNewCategoryName("");
+                setCategoryModalOpen(false);
+                setCategoryModalTarget(null);
+                triggerNotification(`Category "${trimmed}" added!`, "success");
+              }}
+              className="space-y-4 text-xs font-sans"
+            >
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Utility, Transport, Equipment"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 font-sans">
+                <button
+                  type="submit"
+                  className="flex-1 py-1 px-4 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-emerald-600/10 text-center uppercase tracking-wider"
+                >
+                  Create Category
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryModalOpen(false);
+                    setNewCategoryName("");
+                    setCategoryModalTarget(null);
+                  }}
+                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
