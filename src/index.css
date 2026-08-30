@@ -249,7 +249,7 @@ html.light button.bg-emerald-600,
 html.light div[class*="bg-[#00E676]"],
 html.light div.bg-emerald-500,
 html.light .bg-emerald-600,
-html.light .bg-[#2563EB],
+html.light .bg-\[\#2563EB\],
 html.light [class*="bg-emerald-600"],
 html.light [class*="bg-emerald-500"] {
   color: #ffffff !important;
@@ -259,7 +259,7 @@ html.light button.bg-emerald-500 *,
 html.light button.bg-emerald-600 *,
 html.light div[class*="bg-[#00E676]"] *,
 html.light .bg-emerald-600 *,
-html.light .bg-[#2563EB] * {
+html.light .bg-\[\#2563EB\] * {
   color: #ffffff !important;
   text-shadow: none !important;
 }
