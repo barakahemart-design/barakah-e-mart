@@ -10,7 +10,7 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // Register Progressive Web App Service Worker with instant auto-update support
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
