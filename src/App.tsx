@@ -86,7 +86,6 @@ import {
   subscribeProducts,
   subscribeCustomers,
   subscribeTransactions,
-  subscribeTransactionItems,
   subscribeExpenses,
   subscribePurchases,
   saveProduct,
@@ -102,7 +101,6 @@ import {
   handleSave,
   isDocMatchingStore
 } from "./lib/firestoreService";
-import { syncManager } from "./lib/syncService";
 
 export interface Product {
   id: string;
@@ -143,7 +141,6 @@ export interface Expense {
 
 export interface Contact {
   id: string;
-  firestoreId?: string;
   name: string;
   phone: string;
   address: string;
@@ -376,14 +373,6 @@ export default function App() {
   const hasSyncedOnMountRef = useRef(false);
   const hasHealedRef = useRef(false);
 
-  // Per-collection Firestore hydration flags (authoritative state guards)
-  const productsHydratedRef = useRef(false);
-  const contactsHydratedRef = useRef(false);
-  const expensesHydratedRef = useRef(false);
-  const transactionsHydratedRef = useRef(false);
-  const purchasesHydratedRef = useRef(false);
-  const businessInfoHydratedRef = useRef(false);
-
   const runAutoRecovery = async () => {
     let updatedContacts = [...contacts];
     let changed = false;
@@ -402,8 +391,7 @@ export default function App() {
     if (activeUser && !activeUser.isGuest && activeUser.uid && firebaseAuth.currentUser && firebaseAuth.currentUser.uid === activeUser.uid) {
       try {
         const activeUserId = activeUser.uid;
-        const storeId = (activeUser.email || '').trim().toLowerCase();
-        let q = storeId ? query(collection(db, "customers"), where("store_id", "==", storeId)) : query(collection(db, "customers"), where("user_id", "==", activeUserId));
+        const q = query(collection(db, "customers"), where("user_id", "==", activeUserId));
         const querySnap = await getDocs(q);
         
         if (!querySnap.empty) {
@@ -481,12 +469,6 @@ export default function App() {
 
       if (!user) {
         hasSyncedOnMountRef.current = false; // Reset sync status so the next user can pull their own data on mount
-        productsHydratedRef.current = false;
-        contactsHydratedRef.current = false;
-        expensesHydratedRef.current = false;
-        transactionsHydratedRef.current = false;
-        purchasesHydratedRef.current = false;
-        businessInfoHydratedRef.current = false;
         setIsAuthLoading(false);
         initialLoadedRef.current = true;
         // Cleanse memory state when user session is null to prevent carry-over data leak
@@ -536,18 +518,41 @@ export default function App() {
       setIsAuthLoading(false);
       initialLoadedRef.current = true;
 
-      // Perform cloud business settings pull on startup asynchronously
+      // Perform cloud pull on startup asynchronously in the background so slow connections do not block page loads
       if (!user.isGuest && !hasSyncedOnMountRef.current) {
         hasSyncedOnMountRef.current = true;
 
         (async () => {
           try {
+            const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
+            const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false);
+            if (wasRestored) {
+              console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount in background.");
+              // Dynamically re-hydrate state with the restored values
+              const updatedProducts = getStored("barakah_products", INITIAL_PRODUCTS);
+              const updatedContacts = getStored("barakah_contacts", INITIAL_CONTACTS);
+              const updatedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
+              const updatedTransactions = getStored("barakah_transactions", []);
+              const updatedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
+              const updatedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
+
+              setProducts(updatedProducts);
+              setContacts(updatedContacts);
+              setExpenses(updatedExpenses);
+              setTransactions(updatedTransactions);
+              setBusinessInfo(updatedBusinessInfo);
+              setPurchases(updatedPurchases);
+
+              if (updatedBusinessInfo && (updatedBusinessInfo as any).staffList && Array.isArray((updatedBusinessInfo as any).staffList)) {
+                setStaffList((updatedBusinessInfo as any).staffList);
+              }
+            }
+
             if (user.email) {
               const bizSettings = await getBusinessSettings(user.email);
               if (bizSettings) {
                 const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
                 if (Object.keys(cleanBiz).length > 0) {
-                  businessInfoHydratedRef.current = true;
                   setBusinessInfo(prev => {
                     const merged = { ...prev, ...cleanBiz };
                     const userKey = getDbKey("barakah_business_info", user.email, user.uid);
@@ -559,7 +564,7 @@ export default function App() {
               }
             }
           } catch (e) {
-            console.error("[Sync on Mount] Background business info synchronization failed:", e);
+            console.error("[Sync on Mount] Background cloud synchronization failed:", e);
           }
         })();
       }
@@ -591,23 +596,13 @@ export default function App() {
         });
       }
 
-      // Persist active core database state to local storage ONLY after that collection is hydrated from Firestore
+      // Persist active core database state to local storage for instant offline & reload resilience
       const activeUserId = activeUser.uid;
-      if (productsHydratedRef.current || activeUser.isGuest) {
-        localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(products));
-      }
-      if (contactsHydratedRef.current || activeUser.isGuest) {
-        localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(contacts));
-      }
-      if (expensesHydratedRef.current || activeUser.isGuest) {
-        localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(expenses));
-      }
-      if (transactionsHydratedRef.current || activeUser.isGuest) {
-        localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(transactions));
-      }
-      if (purchasesHydratedRef.current || activeUser.isGuest) {
-        localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(purchases));
-      }
+      localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(products));
+      localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(contacts));
+      localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(expenses));
+      localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(transactions));
+      localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(purchases));
 
       // Also persist separately in localStorage just in case
       localStorage.setItem(getDbKey("barakah_staff_list"), JSON.stringify(staffList));
@@ -740,7 +735,6 @@ export default function App() {
     // 1. PRODUCTS SUBSCRIBER
     const unsubProducts = subscribeProducts(activeUserId, (items) => {
       markRemoteUpdateActive();
-      productsHydratedRef.current = true;
 
       const updatedList = items.map(docData => ({
         id: docData.id,
@@ -764,7 +758,6 @@ export default function App() {
     // 2. CUSTOMERS SUBSCRIBER
     const unsubCustomers = subscribeCustomers(activeUserId, (items) => {
       markRemoteUpdateActive();
-      contactsHydratedRef.current = true;
 
       const updatedList = items.map(docData => ({
         id: docData.id,
@@ -790,7 +783,6 @@ export default function App() {
     // 3. EXPENSES SUBSCRIBER
     const unsubExpenses = subscribeExpenses(activeUserId, (items) => {
       markRemoteUpdateActive();
-      expensesHydratedRef.current = true;
 
       const updatedList = items.map(docData => ({
         id: docData.id,
@@ -810,7 +802,6 @@ export default function App() {
     // 4. PURCHASES SUBSCRIBER
     const unsubPurchases = subscribePurchases(activeUserId, (items) => {
       markRemoteUpdateActive();
-      purchasesHydratedRef.current = true;
 
       const updatedList = items.map(docData => ({
         id: docData.id,
@@ -844,7 +835,6 @@ export default function App() {
       const nestedTx = rebuildTransactions(flatTx, flatItems);
       nestedTx.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      transactionsHydratedRef.current = true;
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(nestedTx));
 
       initialLoadedRef.current = false;
@@ -856,7 +846,6 @@ export default function App() {
     // 5. TRANSACTIONS SUBSCRIBER
     const unsubTransactions = subscribeTransactions(activeUserId, (items) => {
       markRemoteUpdateActive();
-      transactionsHydratedRef.current = true;
 
       const flatTransactions = items.map(docData => ({
         id: docData.id,
@@ -877,22 +866,33 @@ export default function App() {
     });
 
     // 6. TRANSACTION ITEMS SUBSCRIBER
-    const unsubItems = subscribeTransactionItems(activeUserId, (items) => {
-      markRemoteUpdateActive();
+    const unsubItems = onSnapshot(collection(db, "transaction_items"), { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        setSyncStatus("connected");
+      } else {
+        markRemoteUpdateActive();
+      }
 
-      const flatItems = items.map(docData => ({
-        id: docData.id || docData.firestoreId,
-        firestoreId: docData.firestoreId || docData.id,
-        transaction_id: docData.transaction_id,
-        product_id: docData.product_id || null,
-        product_name: docData.product_name || "Product Item",
-        quantity: Number(docData.quantity) || 0,
-        sell_price: Number(docData.sell_price) || 0,
-        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
-      }));
+      const flatItems = snapshot.docs
+        .filter(docSnap => isDocMatchingStore(docSnap.data(), cleanEmail, activeUserId))
+        .map(docSnap => {
+          const docData = docSnap.data();
+          return {
+            id: docData.id || docSnap.id,
+            firestoreId: docSnap.id,
+            transaction_id: docData.transaction_id,
+            product_id: docData.product_id || null,
+            product_name: docData.product_name || "Product Item",
+            quantity: Number(docData.quantity) || 0,
+            sell_price: Number(docData.sell_price) || 0,
+            cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
+          };
+        });
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
+    }, (err) => {
+      setSyncStatus("connected");
     });
 
     // 7. BUSINESS INFO / SETTINGS SUBSCRIBER
@@ -921,224 +921,6 @@ export default function App() {
       });
     }
 
-    // 8. MULTI-DEVICE SERVER REALTIME BROADCAST & POLLING ENGINE
-    syncManager.start(cleanEmail, activeUserId);
-    const unsubStatus = syncManager.addStatusListener((st) => {
-      if (st === 'connected') setSyncStatus("connected");
-      else if (st === 'connecting') setSyncStatus("syncing");
-      else if (st === 'offline') setSyncStatus("offline");
-    });
-
-    const unsubSyncChanges = syncManager.addChangeListener((change) => {
-      markRemoteUpdateActive();
-      const table = change.table;
-      const docId = change.id;
-      const docData = change.data;
-      const isDel = change.type === 'delete';
-
-      if (table === 'products') {
-        setProducts(prev => {
-          let updated: Product[];
-          if (isDel) {
-            updated = prev.filter(p => p.id !== docId);
-          } else {
-            const itemObj: Product = {
-              id: docId,
-              name: docData.name || "Unnamed Product",
-              sku: docData.sku || "",
-              stock: Number(docData.stock) || 0,
-              buyPrice: Number(docData.buyPrice ?? docData.buy_price) || 0,
-              sellPrice: Number(docData.sellPrice ?? docData.sell_price) || 0,
-              category: docData.category || "Electronics",
-              unit: docData.unit || "piece",
-              imageUrl: docData.imageUrl || docData.image_url || undefined
-            };
-            const idx = prev.findIndex(p => p.id === docId);
-            if (idx >= 0) {
-              updated = [...prev];
-              updated[idx] = { ...updated[idx], ...itemObj };
-            } else {
-              updated = [itemObj, ...prev];
-            }
-          }
-          localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updated));
-          return updated;
-        });
-        setSyncStatus("connected");
-      } else if (table === 'customers' || table === 'contacts') {
-        setContacts(prev => {
-          let updated: Contact[];
-          if (isDel) {
-            updated = prev.filter(c => c.id !== docId);
-          } else {
-            const itemObj: Contact = {
-              id: docId,
-              firestoreId: docData.firestoreId || docId,
-              name: docData.name || "Unnamed Contact",
-              phone: docData.phone || "",
-              address: docData.address || "",
-              type: docData.type || "customer",
-              created_at: docData.created_at || docData.updated_at || new Date().toISOString()
-            };
-            const idx = prev.findIndex(c => c.id === docId);
-            if (idx >= 0) {
-              updated = [...prev];
-              updated[idx] = { ...updated[idx], ...itemObj };
-            } else {
-              updated = [itemObj, ...prev];
-            }
-          }
-          updated.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-          localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updated));
-          return updated;
-        });
-        setSyncStatus("connected");
-      } else if (table === 'expenses') {
-        setExpenses(prev => {
-          let updated: Expense[];
-          if (isDel) {
-            updated = prev.filter(e => e.id !== docId);
-          } else {
-            const itemObj: Expense = {
-              id: docId,
-              category: docData.category || "Others",
-              amount: Number(docData.amount) || 0,
-              description: docData.description || "",
-              date: docData.created_at || docData.date || new Date().toISOString()
-            };
-            const idx = prev.findIndex(e => e.id === docId);
-            if (idx >= 0) {
-              updated = [...prev];
-              updated[idx] = { ...updated[idx], ...itemObj };
-            } else {
-              updated = [itemObj, ...prev];
-            }
-          }
-          localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updated));
-          return updated;
-        });
-        setSyncStatus("connected");
-      } else if (table === 'purchases') {
-        setPurchases(prev => {
-          let updated: Purchase[];
-          if (isDel) {
-            updated = prev.filter(pur => pur.id !== docId);
-          } else {
-            const itemObj: Purchase = {
-              id: docId,
-              productId: docData.product_id || docData.productId,
-              productName: docData.product_name || docData.productName || "Purchase Item",
-              supplierId: docData.supplier_id || docData.supplierId || "",
-              supplierName: docData.supplier_name || docData.supplierName || "Main Depot",
-              quantity: Number(docData.quantity) || 0,
-              buyPrice: Number(docData.buy_price || docData.buyPrice) || 0,
-              totalAmount: Number((docData.quantity || 0) * (docData.buy_price || docData.buyPrice || 0)) || 0,
-              date: docData.created_at || docData.date || new Date().toISOString()
-            };
-            const idx = prev.findIndex(pur => pur.id === docId);
-            if (idx >= 0) {
-              updated = [...prev];
-              updated[idx] = { ...updated[idx], ...itemObj };
-            } else {
-              updated = [itemObj, ...prev];
-            }
-          }
-          localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updated));
-          return updated;
-        });
-        setSyncStatus("connected");
-      } else if (table === 'transactions') {
-        const rawLocalTx = localStorage.getItem(getDbKey("barakah_flat_transactions", undefined, activeUserId)) || "[]";
-        let flatTx = JSON.parse(rawLocalTx);
-        if (!Array.isArray(flatTx)) flatTx = [];
-
-        if (isDel) {
-          flatTx = flatTx.filter((t: any) => t.id !== docId);
-        } else {
-          const flatObj = {
-            id: docId,
-            firestoreId: docData.firestoreId || docId,
-            invoice_no: docData.invoice_no || docData.invoiceNo,
-            customer_id: docData.customer_id || docData.contactId || null,
-            total_amount: Number(docData.total_amount ?? docData.total ?? docData.subtotal) || 0,
-            discount: Number(docData.discount) || 0,
-            vat_rate: Number(docData.vat_rate || docData.tax) || 0,
-            paid_amount: Number(docData.paid_amount ?? docData.paidAmount) || 0,
-            payment_method: docData.payment_method || docData.paymentMethod || "Cash",
-            signature_svg: docData.signature_svg || docData.customerSignature || null,
-            created_at: docData.created_at || docData.date || new Date().toISOString()
-          };
-          const idx = flatTx.findIndex((t: any) => t.id === docId);
-          if (idx >= 0) {
-            flatTx[idx] = { ...flatTx[idx], ...flatObj };
-          } else {
-            flatTx.push(flatObj);
-          }
-        }
-        localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTx));
-
-        if (docData?.items && Array.isArray(docData.items) && docData.items.length > 0) {
-          const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
-          let flatItems = JSON.parse(rawLocalItems);
-          if (!Array.isArray(flatItems)) flatItems = [];
-          flatItems = flatItems.filter((itm: any) => itm.transaction_id !== docId);
-          docData.items.forEach((itm: any) => {
-            flatItems.push({
-              id: itm.id || `itm_${docId}_${itm.productId || Math.random()}`,
-              transaction_id: docId,
-              product_id: itm.productId || itm.product_id || null,
-              product_name: itm.name || itm.product_name || "Product Item",
-              quantity: Number(itm.quantity) || 0,
-              sell_price: Number(itm.price ?? itm.sell_price) || 0,
-              cost_price: Number(itm.buyPrice ?? itm.cost_price) || 0
-            });
-          });
-          localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
-          handleTransactionsChange(flatTx, flatItems);
-        } else {
-          handleTransactionsChange(flatTx, undefined);
-        }
-      } else if (table === 'transaction_items') {
-        const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
-        let flatItems = JSON.parse(rawLocalItems);
-        if (!Array.isArray(flatItems)) flatItems = [];
-        if (isDel) {
-          flatItems = flatItems.filter((itm: any) => itm.id !== docId);
-        } else {
-          const itmObj = {
-            id: docId,
-            transaction_id: docData.transaction_id,
-            product_id: docData.product_id || null,
-            product_name: docData.product_name || "Product Item",
-            quantity: Number(docData.quantity) || 0,
-            sell_price: Number(docData.sell_price) || 0,
-            cost_price: Number(docData.cost_price) || 0
-          };
-          const idx = flatItems.findIndex((itm: any) => itm.id === docId);
-          if (idx >= 0) {
-            flatItems[idx] = { ...flatItems[idx], ...itmObj };
-          } else {
-            flatItems.push(itmObj);
-          }
-        }
-        localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
-        handleTransactionsChange(undefined, flatItems);
-      } else if (table === 'business_info' || table === 'businessInfo') {
-        if (docData && typeof docData === "object") {
-          const { id, user_id, userId, linkedEmail, ...cleanInfo } = docData;
-          if (Object.keys(cleanInfo).length > 0) {
-            setBusinessInfo(prev => {
-              const merged = { ...prev, ...cleanInfo };
-              const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
-              localStorage.setItem(userKey, JSON.stringify(merged));
-              localStorage.setItem("barakah_business_info", JSON.stringify(merged));
-              return merged;
-            });
-          }
-        }
-      }
-    });
-
     setSyncStatus("connected");
 
     return () => {
@@ -1149,9 +931,6 @@ export default function App() {
       unsubTransactions();
       unsubItems();
       unsubBusinessInfo();
-      unsubStatus();
-      unsubSyncChanges();
-      syncManager.stop();
       setSyncStatus("offline");
     };
   }, [activeUser]);
@@ -1334,8 +1113,6 @@ export default function App() {
     initialLoadedRef.current = false;
     const user = await signUpWithEmail(email, pass);
     setActiveUser(user);
-    setCurrentPanel("admin");
-    setActiveTab("dashboard");
     
     // Refresh states
     const getStored = (key: string, fallback: any) => {
@@ -1368,8 +1145,6 @@ export default function App() {
     initialLoadedRef.current = false;
     const user = await signInWithEmail(email, pass);
     setActiveUser(user);
-    setCurrentPanel("admin");
-    setActiveTab("dashboard");
 
     // Refresh states
     const getStored = (key: string, fallback: any) => {
@@ -1866,8 +1641,8 @@ export default function App() {
 
       // 4. Save real-time transaction to Firestore cloud for multi-device sync
       if (activeUser && !activeUser.isGuest) {
-        // Main transaction document with embedded items
-        saveTransaction(activeUserId, { ...flatTxItem, items: newTransaction.items }).catch(err => {
+        // Main transaction document
+        saveTransaction(activeUserId, flatTxItem).catch(err => {
           console.error("Cloud save transaction failed:", err);
         });
 
@@ -2644,7 +2419,7 @@ export default function App() {
           signature_svg: targetTx.customerSignature || null,
           created_at: targetTx.date || new Date().toISOString()
         };
-        saveTransaction(activeUserId, { ...flatTxItem, items: targetTx.items }).catch(err => {
+        saveTransaction(activeUserId, flatTxItem).catch(err => {
           console.error("Cloud save increment due payment failed:", err);
         });
       }
@@ -9581,20 +9356,20 @@ _${businessInfo.name}_`;
         </div>
       )}
 
-{/* ADD NEW CATEGORY MODAL */}
+      {/* ADD NEW CATEGORY MODAL */}
       {categoryModalOpen && (
         <div className="fixed inset-0 z-[60] bg-[#0c0c0e]/95 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-sm w-full p-5 space-y-4 text-slate-200 animate-scaleIn" id="modal-add-category">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
               <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
-                <Tag className="w-4 h-4 text-emerald-400" />
-                Add New Expense Category
+                <Plus className="w-4 h-4 text-emerald-400" />
+                Add New Category
               </h3>
               <button 
                 onClick={() => {
                   setCategoryModalOpen(false);
-                  setNewCategoryName("");
                   setCategoryModalTarget(null);
+                  setNewCategoryName("");
                 }} 
                 className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
               >
@@ -9602,64 +9377,488 @@ _${businessInfo.name}_`;
               </button>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const trimmed = newCategoryName.trim();
-                if (!trimmed) return;
-                if (!expenseCategories.includes(trimmed)) {
-                  setExpenseCategories(prev => [...prev, trimmed]);
-                }
-                if (categoryModalTarget === "edit") {
-                  setEditExpenseCategory(trimmed);
-                } else {
-                  setExpenseCategory(trimmed);
-                }
-                setNewCategoryName("");
-                setCategoryModalOpen(false);
-                setCategoryModalTarget(null);
-                triggerNotification(`Category "${trimmed}" added!`, "success");
-              }}
-              className="space-y-4 text-xs font-sans"
-            >
+            <div className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
-                  Category Name *
+                  Category Name
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="e.g. Utility, Transport, Equipment"
+                  placeholder="e.g. Internet, Office Tea"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans"
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono text-xs"
                   autoFocus
                 />
               </div>
 
-              <div className="flex items-center gap-3 pt-2 font-sans">
+              <div className="flex gap-2 pt-2">
                 <button
-                  type="submit"
-                  className="flex-1 py-1 px-4 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-emerald-600/10 text-center uppercase tracking-wider"
+                  type="button"
+                  onClick={() => {
+                    const trimmed = newCategoryName.trim();
+                    if (!trimmed) {
+                      triggerNotification("Category name cannot be empty.", "error");
+                      return;
+                    }
+                    if (!allCategories.includes(trimmed)) {
+                      setExpenseCategories([...expenseCategories, trimmed]);
+                    }
+                    
+                    if (categoryModalTarget === "add") {
+                      setExpenseCategory(trimmed);
+                    } else if (categoryModalTarget === "edit") {
+                      setEditExpenseCategory(trimmed);
+                    }
+                    
+                    triggerNotification(`Category "${trimmed}" successfully mapped!`);
+                    setCategoryModalOpen(false);
+                    setCategoryModalTarget(null);
+                    setNewCategoryName("");
+                  }}
+                  className="flex-1 py-2 bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
                 >
-                  Create Category
+                  Save Category
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setCategoryModalOpen(false);
-                    setNewCategoryName("");
                     setCategoryModalTarget(null);
+                    setNewCategoryName("");
                   }}
-                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer text-center"
                 >
                   Cancel
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
+
+      {dangerAction && (
+        <div className="fixed inset-0 z-50 bg-[#0c0c0e]/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1E1E24] rounded-2xl border-2 border-rose-500/30 shadow-2xl overflow-hidden max-w-md w-full p-6 space-y-4 text-slate-200 animate-scaleIn">
+            <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+              <h3 className="text-xs font-extrabold uppercase text-[#FF5252] flex items-center gap-2 font-display">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+                Administrative Confirmation Required
+              </h3>
+              <button 
+                onClick={() => {
+                  setDangerAction(null);
+                  setDangerConfirmText("");
+                }} 
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-3 text-xs leading-relaxed">
+              <p className="font-sans text-slate-300">
+                You are about to execute a destructive, irreversible action:
+              </p>
+              <div className="p-3 bg-red-950/20 border border-red-900/40 rounded-xl text-rose-400 font-extrabold text-center uppercase tracking-wide text-[10px] font-mono">
+                {dangerAction === "delete_transactions" && "Wipe All Sales & Transactions History"}
+                {dangerAction === "delete_customers" && "Delete All Customer Profiles"}
+                {dangerAction === "reset_app" && "Factory Reset Application Database"}
+                {dangerAction === "delete_account" && "Permanently Delete Account State"}
+              </div>
+              <p className="font-sans text-[#A0A0A5]">
+                Once processed, this data cannot be recovered. To verify your authorization, type the exact word <strong className="text-white bg-slate-905 px-1.5 py-0.5 rounded font-mono border border-slate-800 uppercase pl-1 pr-1">CONFIRM</strong> in the field below:
+              </p>
+              
+              <div className="space-y-1.5 pt-1">
+                <input
+                  type="text"
+                  placeholder="Type CONFIRM here..."
+                  value={dangerConfirmText}
+                  onChange={(e) => setDangerConfirmText(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 focus:border-rose-500 rounded-xl font-mono text-center text-xs outline-none font-extrabold text-white uppercase tracking-wider focus:ring-1 focus:ring-rose-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-3 font-sans">
+              <button
+                disabled={dangerConfirmText !== "CONFIRM"}
+                onClick={executeDangerAction}
+                className="flex-1 py-1 px-4 bg-[#FF5252] hover:bg-rose-500 disabled:opacity-30 disabled:hover:bg-[#FF5252] text-slate-950 disabled:hover:text-slate-950 hover:text-white font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-[#FF5252]/10 text-center uppercase tracking-wider disabled:cursor-not-allowed"
+              >
+                Execute Operation
+              </button>
+              <button
+                onClick={() => {
+                  setDangerAction(null);
+                  setDangerConfirmText("");
+                }}
+                className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-705 text-white text-xs font-bold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+              >
+                Abort Action
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/90 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe flex items-center justify-around h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
+        {/* POS Button */}
+        <button
+          onClick={() => {
+            setActiveTab("pos");
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "pos" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+          }`}
+        >
+          <ShoppingCart className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide">POS</span>
+          {activeTab === "pos" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
+        </button>
+
+        {/* Dashboard Button */}
+        <button
+          onClick={() => {
+            if (currentPanel === "admin") {
+              setActiveTab("dashboard");
+            } else {
+              triggerNotification("Please log in as Admin to see dashboard", "info");
+            }
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "dashboard" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+          }`}
+        >
+          <LayoutDashboard className="w-[18px] h-[18px] mb-1" />
+          {/* Label word Dashboard removed for clean mobile design */}
+          {activeTab === "dashboard" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
+        </button>
+
+        {/* Transactions & Ledger */}
+        <button
+          onClick={() => {
+            setActiveTab("ledger");
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "ledger" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+          }`}
+        >
+          <FileText className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">Ledger</span>
+          {activeTab === "ledger" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
+        </button>
+
+        {/* Menu/More Button */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            isMobileMenuOpen ? "text-[#00E676] scale-105" : "text-[#94a3b8] hover:text-white"
+          }`}
+        >
+          <Menu className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">More</span>
+          {isMobileMenuOpen && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676]" />
+          )}
+        </button>
+      </nav>
+
+      {/* -------------------- MOBILE DRAWER OVERLAY -------------------- */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex animate-fadeIn" id="mobile-drawer-container">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity" 
+            onClick={() => setIsMobileMenuOpen(false)}
+            id="mobile-drawer-backdrop"
+          />
+
+          {/* Side Drawer Body */}
+          <div 
+            className="relative ml-auto w-72 max-w-[85vw] h-full bg-[#1E1E24] shadow-2xl flex flex-col justify-between border-l border-[#2A2A32] z-50 transition-all duration-300"
+            id="mobile-drawer-panel"
+          >
+            
+            {/* Top Header of Drawer */}
+            <div className="p-4 border-b border-[#2D2D35] flex items-center justify-between" id="mobile-drawer-header">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 flex items-center justify-center bg-[#00E676]/10 rounded-lg text-[#00E676] border border-[#00E676]/20 overflow-hidden shrink-0">
+                  {businessInfo.companyLogo && (businessInfo.companyLogo.startsWith("data:") || businessInfo.companyLogo.startsWith("http")) ? (
+                    <img src={businessInfo.companyLogo} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="font-extrabold text-[10px] truncate">{businessInfo.companyLogo || "⚡"}</span>
+                  )}
+                </div>
+                <span className="font-extrabold text-xs text-white uppercase tracking-wide font-display truncate max-w-[150px]">
+                  {businessInfo.name}
+                </span>
+              </div>
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)} 
+                className="p-1.5 hover:bg-white/5 rounded-lg text-slate-400 cursor-pointer"
+                id="close-mobile-drawer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Main Drawer Links (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#17171d]" id="mobile-drawer-scroll-body">
+              <p className="text-[10px] uppercase font-mono tracking-widest text-[#00E676] pl-1 font-bold mb-3">
+                {currentPanel === "admin" ? "⚡ Administrator Controls" : "🛒 Cashier Controls"}
+              </p>
+
+              <div className="space-y-4">
+                {currentPanel === "admin" ? (
+                  <>
+                    {/* Category 1: Core Operations */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Core Operations</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "pos", label: "Sales / POS", desc: "Checkout desk", Icon: ShoppingCart },
+                          { id: "dashboard", label: "Dashboard", desc: "Live report stats", Icon: LayoutDashboard },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4 mb-1 text-[#00E676]" />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category 2: Stocks & Catalog */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Stocks & Catalog</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "products", label: "Products", desc: "Current stock", Icon: Package },
+                          { id: "purchases", label: "Purchases", desc: "Supplier lot", Icon: PlusCircle },
+                          { id: "inventory", label: "Inventory", desc: "Below threshold", Icon: Bookmark },
+                          { id: "negative-sales", label: "Negative Stock Log", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? item.activeBg ? item.activeBg : 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className={`w-4 h-4 mb-1 ${item.color || 'text-slate-300'}`} />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category 3: Financial Ledger */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Ledgers & Accounts</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "ledger", label: "Transactions & Ledger", desc: "All cashflows", Icon: FileText },
+                          { id: "expenses", label: "Expenses Ledger", desc: "Bills & costs", Icon: PiggyBank },
+                          { id: "contacts", label: "Customers & CRM", desc: "CRM profiles", Icon: Users },
+                          { id: "reports", label: "Reports Dashboard", desc: "Daily statement", Icon: BarChart3 },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4 mb-1 text-[#00E676]" />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Category 4: Management & System */}
+                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35]">
+                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Management & System</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "staff", label: "Staff Management", desc: "Salary sheets", Icon: UserCheck },
+                          { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
+                        ].map((item) => {
+                          const Icon = item.Icon;
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
+                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
+                              }`}
+                            >
+                              <Icon className={`w-4 h-4 mb-1 text-[#00E676]`} />
+                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
+                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {[
+                      { id: "pos", label: "Sales / POS", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
+                      { id: "contacts", label: "Customers & CRM", desc: "Due balances & contact logs", Icon: Users },
+                      { id: "products", label: "Products", desc: "Real-time standard stock index", Icon: Package },
+                      { id: "ledger", label: "Transactions & Ledger", desc: "Sales history, edit selling price & print challan", Icon: FileText },
+                    ].map((item) => {
+                      const Icon = item.Icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer bg-[#212127] ${
+                            isActive 
+                              ? 'text-[#00E676] border-[#00E676]/40 shadow-sm font-bold' 
+                              : 'text-slate-300 border-[#2b2b35] hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className={`p-1.5 rounded-lg shrink-0 ${isActive ? 'bg-[#00E676]/20' : 'bg-[#131317]'}`}>
+                            <Icon className="w-4 h-4 text-[#00E676]" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black block leading-tight">{item.label}</span>
+                            <span className="text-[9px] text-slate-400 font-normal mt-0.5 block">{item.desc}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Drawer Bottom Actions Footer */}
+            <div className="p-4 border-t border-[#2D2D35] bg-[#16161C] space-y-3" id="mobile-drawer-footer">
+              {/* User Info */}
+              <div className="bg-[#121214] border border-[#2D2D35] p-2.5 rounded-xl text-center flex flex-col items-center">
+                <span className="text-[9px] uppercase tracking-wider font-mono text-[#A0A0A5] font-bold block">Terminal Profile</span>
+                {activeUser?.isGuest ? (
+                  <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-sans">
+                    Guest Mode
+                  </span>
+                ) : (
+                  <div className="space-y-0.5">
+                    <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/10 font-bold font-sans">
+                      Active Staff Member
+                    </span>
+                    <span className="text-[10px] text-[#A0A0A5] font-mono block truncate max-w-[200px]" title={activeUser?.email}>
+                      {activeUser?.email}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Access panel switch buttons */}
+              {currentPanel === "admin" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPanel("sales");
+                    setActiveTab("pos");
+                    setIsMobileMenuOpen(false);
+                    triggerNotification("Switched to Sales Panel", "info");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white bg-blue-750 dark:bg-blue-700 hover:bg-blue-800 dark:hover:bg-blue-605 border border-blue-600 dark:border-blue-600 cursor-pointer transition-colors shadow-sm"
+                >
+                  Go to Sales Terminal &rarr;
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPanel("none");
+                    setIsMobileMenuOpen(false);
+                    triggerNotification("Enter passcode to unlock admin controls", "info");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/20 border border-[#00E676]/20 cursor-pointer transition-colors"
+                >
+                  &larr; Admin Access
+                </button>
+              )}
+
+              {/* Logout */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleLogOut();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 cursor-pointer transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
+                Logout From Store
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
