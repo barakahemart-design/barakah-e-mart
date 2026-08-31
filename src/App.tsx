@@ -468,7 +468,7 @@ export default function App() {
       hasHealedRef.current = true;
       runAutoRecovery();
     }
-  }, [contacts.length, transactions.length]);
+  }, [initialLoadedRef.current, contacts.length, transactions.length]);
 
   // Load Offline initial database state and sync latest from cloud safely
   useEffect(() => {
@@ -585,7 +585,11 @@ export default function App() {
       localStorage.setItem(userKey, JSON.stringify(compiledBusinessInfo));
       localStorage.setItem("barakah_business_info", JSON.stringify(compiledBusinessInfo));
 
-      // Note: business settings are explicitly saved upon user action via persistBusinessInfoState
+      if (activeUser && !activeUser.isGuest && activeUser.email) {
+        saveBusinessSettings(activeUser.email, compiledBusinessInfo).catch(err => {
+          console.warn("[Auto Save] Business info cloud save failed:", err);
+        });
+      }
 
       // Persist active core database state to local storage ONLY after that collection is hydrated from Firestore
       const activeUserId = activeUser.uid;
@@ -904,7 +908,6 @@ export default function App() {
             if (Object.keys(cleanInfo).length > 0) {
               setBusinessInfo(prev => {
                 const merged = { ...prev, ...cleanInfo };
-                if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
                 const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
                 localStorage.setItem(userKey, JSON.stringify(merged));
                 localStorage.setItem("barakah_business_info", JSON.stringify(merged));
@@ -1126,7 +1129,6 @@ export default function App() {
           if (Object.keys(cleanInfo).length > 0) {
             setBusinessInfo(prev => {
               const merged = { ...prev, ...cleanInfo };
-              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
               const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
               localStorage.setItem(userKey, JSON.stringify(merged));
               localStorage.setItem("barakah_business_info", JSON.stringify(merged));
@@ -1192,11 +1194,7 @@ export default function App() {
   // Synchronize staff list on cloud restore or config resets
   useEffect(() => {
     if (businessInfo && (businessInfo as any).staffList && Array.isArray((businessInfo as any).staffList)) {
-      const newStaff = (businessInfo as any).staffList;
-      setStaffList(prev => {
-        if (JSON.stringify(prev) === JSON.stringify(newStaff)) return prev;
-        return newStaff;
-      });
+      setStaffList((businessInfo as any).staffList);
     }
   }, [businessInfo]);
 
@@ -4084,40 +4082,25 @@ _${businessInfo.name}_`;
       <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col md:h-screen md:overflow-hidden pb-20 md:pb-0" id="viewport-workspace">
         
         {/* TOP STATUS BAR */}
-        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-3 py-2.5 md:px-6 md:py-4 flex items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
+        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
           
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Mobile Hamburger Button */}
-            <button
-              id="mobile-hamburger-btn"
-              type="button"
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="md:hidden p-2 text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-xl border border-slate-700 flex items-center justify-center cursor-pointer shadow-sm shrink-0 transition-transform active:scale-95"
-              aria-label="Open Mobile Navigation Menu"
-              title="Open Menu"
-            >
-              <Menu className="w-5 h-5 text-[#00E676]" />
-            </button>
-
-            <div id="active-tab-title-display" className="min-w-0">
-              <div className="flex items-center gap-1.5 md:gap-2">
-                <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
-                <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
-                  {activeTab === 'dashboard' && 'Dashboard'}
-                  {activeTab === 'reports' && 'Reports Dashboard'}
-                  {activeTab === 'products' && 'Product Settings'}
-                  {activeTab === 'negative-sales' && 'Negative Stock Log'}
-                  {activeTab === 'purchases' && 'Purchases Ledger'}
-                  {activeTab === "pos" && "Counter Cash Memo"}
-                  {activeTab === 'inventory' && 'Stock Management'}
-                  {activeTab === 'duelist' && 'Due List'}
-                  {activeTab === 'ledger' && 'Account Ledger'}
-                  {activeTab === 'expenses' && 'Expenses Ledger'}
-                  {activeTab === 'contacts' && 'Customers Directory'}
-                  {activeTab === 'staff' && 'Staff Management'}
-                  {activeTab === 'settings' && 'System Settings'}
-                </h1>
-              </div>
+          <div id="active-tab-title-display" className="min-w-0">
+            <div className="flex items-center gap-1.5 md:gap-2">
+              <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
+              <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
+                {activeTab === 'dashboard' && <span className="hidden md:inline">Dashboard</span>}
+                {activeTab === 'reports' && 'Reports Dashboard'}
+                {activeTab === 'products' && 'Product Settings'}
+                {activeTab === 'negative-sales' && 'Negative Stock Log'}
+                {activeTab === 'purchases' && 'Purchases Ledger'}
+                {activeTab === "pos" && "Counter Cash Memo"}
+                {activeTab === 'inventory' && 'Stock Management'}
+                {activeTab === 'ledger' && 'Account Ledger'}
+                {activeTab === 'expenses' && 'Expenses Ledger'}
+                {activeTab === 'contacts' && 'Customers Directory'}
+                {activeTab === 'settings' && 'System Settings'}
+              </h1>
+            </div>
             <p className="hidden md:block text-xs text-slate-400 pl-4.5 mt-0.5 max-w-xl truncate">
               {activeTab === 'dashboard' && 'Real-time profit margins, revenue trackers and diagnostic charts.'}
               {activeTab === 'reports' && 'P&L, Gross Margin and comprehensive financial ledger.'}
@@ -4131,7 +4114,6 @@ _${businessInfo.name}_`;
               {activeTab === 'contacts' && 'CRM and suppliers contact list.'}
               {activeTab === 'settings' && 'Configure printed receipt company address, contact phone, and variables.'}
             </p>
-          </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 shrink-0" id="top-navbar-actions">
@@ -9587,23 +9569,97 @@ _${businessInfo.name}_`;
                 </button>
                 <button
                   type="button"
-                  onClick={xœì\ërÛ6şŸ§@ÙNâtBI–­´I£ìÈ²ÓzÖ—lì6»“ñL@’X“‚‘U×/²ÿöÕöIö ¼ˆ$@KŒ¬lä±<“H$ âœó€Ã­§¨ÿE„8.wƒñÁUH‚ˆl±ç=½y„”íá(:Á>é#\™Û(œ‰®Ì]dÍÈÃœ˜?v:hB?ö2¿ô\âäŠ§?w²ŸWÑ .ßµ¨ç FãÀ!yå¡‰¹­"˜LìyÈYD™R7à„%cØD~Ã0GDô±/sê:„2\§oX<0mFÄ$@¼IÒÕÖ¯5ı‡¢ŸrıUÛŠ9§AµÇ«¶ã~zıèQùÚˆ2¿Ø2m¥ı	²xtİşö÷ÑÉÁ{4œü|úî_èøtp„¾og²º¶½cÊfÇÔÁŞ)„?F[óQaĞ’İ+â çfıi~xŞ¹‚üğmÇ†?rÑ~ÑC°Óa44-/ffä#!zärâGó#îfÙÏĞÜ5J´U+Ÿ°}°}Ğİ½ÈEŞ™[”ÈÒÿ
-pŠ&Ø¡SÙD käÁ‰ë8@Ÿ¯Ì©˜ÕÔláÙ=…Ø&æ@Y ]ÆÁë‹ï‘=r	¾à•‰ÇÌ¸g”E¨pMĞŸ‘l>%0?R,•’Ğ2»­¡`d²S|BI9à;ÃR;
-@Jƒç?<¿ĞHdŒC³›ôwÜ(ôp•(ùÔs<.>v
-›d\#>aØsÌİNÇ@mµóÀqĞ	™¢Ôh aÊ<ı“…ÚDQ2&†k_ö¯·¤eºÖè@uXùÖ{yú“¾9L2ë!ÈÜ2Œº–¥Ï1ØBµıÍ:û'C°Š(¤Ÿaİ‘	®X¶ªÒˆîŸÁiä¤7JZ“$,R¥7ÎbËw9„ÔH„´BF>èöÉÇßÒ0Ë¦AÄÁ.»¾æ¦‚²DZâ®Ÿ;B[ß¤İ"FxÌ‚šV©ıN‡uIÔrÛ‹me<­ÃÓAµï– Iû¡Õ’ä=Ë&¡ƒ‚vF¶Š%Ôï÷‘!ÜQ?¸[Ï,'@óhD øËÑuë8Ê•eõ¦‘:6S1˜îxLØ	;ë;!Øú˜õGÆw×)=7ãMœo>>CFÛ6‰"uª7UêSñyT±GYíªx†l m‰‡Ö¶ˆ§ØùÛğê¢`ÜåÃ}Ğr(S5²™ô–GíKÍQn”‘xú^³È9iæêaÌ5#òY˜N\Y1òGì2âhn²É¦KXß ­qıÊ]Ïå³gè\Dy!eü:€ş¡æD7ú'ìÅ¤]1º@Éc’.ÁîHüµä°‹âİ,¼¸2wDĞÛMÃ¤^çÅv÷¢6p)Ä³RzÓ	xiDcî¹1iÛqô2í™9İ^&_ƒÉÇœ¾=•{ ûš F	!€VÅr*¤$¦*‘ô :d/ó‰"ƒ
-úğ¢×©K™*7K)ÒHtú­0‹övç3S­j23¯›êÓ‰ÅOnë8¾D|Õ8Âjc5u³->÷"Õ›ëÀ&^ÓÌ²|©ib™¥_ššä˜{‡GhÿİàıÁ;t2øíğçÁùáé‰¾u!u£cj¹9&AÜ<…ö—i’'S–¼°SÈİÄÌ rÇ2B0†§Àî"i{i[˜`>‹k§(²À…]¶ì¨)q b ğjFyØŠæÁ‡ö¤*Vœ]É”WÚ—t¢!à§#«@	# x÷$y·İKsf@})O]PîÅ>|Ût;àİ&‰ï“R
-gSOI€9úŸBgD"'ë3S8,E|æS¾F‘Í¨çY˜½w>y‰>qA¦77·§ŞY€¥†WüB°pÆS—OĞSô8Y±A{IÚYæ•Œµ+µÇï*i>pl¿»¿Ó»Ğ¹É¥üm·ÒqNGÏUG™š/@://É$ÑJ²\ üX50™¯%”C™y§nGY{‰&Ì.k¦
-"±âÂœ(:F´eS?ÄÁ,X‚º›­Â2½émæø%dKı…–j?á<4 Óû[ÁÒT8èúàÛ™İ¯İÂïâ«¡‰ Se ÖïÄ³/xb@Ü;"Œö–‚–ÏúF@Íì’vñD|¢—õ³ %¸h‚iwâ@dšÆëzfïŒÿşû?ÆÍ«¶µf2:?«ñ/zŞY±¸Õ]D
-Ø¢B|\N{*‰Qºœ…<ĞrÑ†»ã	¯eD „WíI·fjU>3²ê"[–éuw»†|ÍS¦"C¡ü›i¢DUQMs‡Æ"Éw™3$¹^¦tÍ9qƒù¾Å¤¡b1â	v@tO@]Ä71y¸|r†=%?oÅMı½ğÔ\^_»œ«Í>å5¼‚x #(†–"
-X]&-ÊÈÎâğ¡”Ejş‘šT]ÎÇ\lÊ|½o$åx¹È²º^(Ğ×ÓÂ¨É6FâvOòèÁä#ƒ…­n¡¤È™R±t4üì¥±ú˜(ó ½z0øV–Û
-K¤U_Ug©3èŒ‘èŒÁ ˜‰Ğ#Ñ›sÂàöb¯Úáè¿í±:ŸñªF;k•H|
-|çØ2M,Š™cZ\«XâSÍ …zl[cKøëtÈÿnÑ¼ŸôyøÌE|ıqZˆ;uKÙZLAM³xFIéª9[9£ûîgD$†1'DÇjô´|È”£KZÕ
-ó[ù"õòÈrÒ!ÀxróQÏÁZ¿p„g4æû]ËmdŸ¼[ÈLÆê(i´ş ÷¦#H¸7˜;›Ğ0#<„½à;ÚFoOÏÖ9øBXwÙ›¾Œ{ƒÀ_#"‚¬&ĞBæL}Ñí1¾;^¿ÅcÔ‰Wƒ_6Ä¦Ã/£ãŞÀï-¡xLšğmÊ…µ#/ c¹,hFÂÚ®€¿ò@›Â25s,¾yÓëöºE,¦W,f-¿*,C7±b²O§A3@¤AgœÚ—bMuıF1fö2º•¬b6Æ¦2'äşØE/†.³½¦¦1ãÄÚèâPe³ ˜±é Ì	¹7 Ü£ôÒÇì²aV"íß1À§‹C*kG¡Ïø*+2É›À”ŒØ· ½Â™ŒäŠ8UFÉ¼åW…¿_€q.«Ù*LLĞt\;ì<âŒÅÆæg£.`ÓA—PqolŞÁ9<ªèäá<ÁˆŒøHòdíLÏó®şeCl:
-3:îßºãñlozœ9úRdDI]é›À”Œ{ƒ¿=Ì†ÌøN3ü½KØğ÷B"G£ğ'ûo:ú$÷{b=z8!vãÄ˜°jâq÷ûçÄ^İDÒ`ä#¹Ï}*@¸¨L]Å
-gCl¼"¤tÜ]8K	j¨
-i¯* »§^­;ƒwç)v²v²ÑÃNöÃNöÿm'[”hg»ÙÛØÛØ_vû7—L¿Ü^öÃ’åÃ’eöùœ%Kİ=M¼¨lnX)ÁSJ‹cÒ	¢²"¥7”
-yVJW++B>¯3âJQş¦Y7Ä+¯]‘nt¸^ã
-ÚM]nOLNo?6²t­ia‚¬¥HêZ+r]Ã:Ö¶×½jÀ8“tqšqrÆ3d¸ÁˆêŸ½¨^µÖ4Têµ’÷·,c)æE4‰:Ê:Å8)GÈUS^y®lÉË=åõ#U+“–öEşrµ?Ó9Ë²“ğè1ÃŒ©«S@}bÖŸéw‹OQ²¿VÔ$oPÀØT¼ó¢8%?H#^¥’|µ(,x˜ŠÊÑXr6·ø¡[Q¹{v(©ÔÈwƒ,Áå¥	5ø+¢Ïuˆ…™éÑ1k6î—{ÍQ,MpàxäˆOcíx4xX‹cy•‰w¬É}ùqò]ìÅ÷æ`È¯mW±P¼Ó
-šÚ¡„7eªwdŞNK_=Ğ©ò
-”[ß§T{A)ºO¾-ª¹ß;=??=Fÿøõpøw´7x·¨ä¾ZeU( —¥ì…©ûfyd$JÚ™(”Õö»´¼Ï5¯}ó]’Ö‡$ºÉ+ê1„%Z
-Uâ¥º¯tf0ÿB£j[]éŸZò§¯I*ªA1`/W¶ßúj;Y³–P¬ÔP'«éÉ:qÜØ_\ï· ğHW‚ZÌçïªæ¥h»Î[Kde XÕï(Š!kK_çıªµŸªnÜµ(eÈ·BÌV>×#¾úµÈ…²“AY½ÜîZ^óÅÄZiÅp=’Ó¬á-Y^òåÄ–ŸÜ ©VŞ‘Ğ´Gõ[Éô¬Şš¥¦‰œUŞeöµÈMyĞÚ´L<¡¡´D—Eî,]êy”|O:¶oş  ÿÿ Š2ñ™
+                  onClick={() => setEditingExpense(null)}
+                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+                >
+                  Close
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+{/* ADD NEW CATEGORY MODAL */}
+      {categoryModalOpen && (
+        <div className="fixed inset-0 z-[60] bg-[#0c0c0e]/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-sm w-full p-5 space-y-4 text-slate-200 animate-scaleIn" id="modal-add-category">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
+              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
+                <Tag className="w-4 h-4 text-emerald-400" />
+                Add New Expense Category
+              </h3>
+              <button 
+                onClick={() => {
+                  setCategoryModalOpen(false);
+                  setNewCategoryName("");
+                  setCategoryModalTarget(null);
+                }} 
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newCategoryName.trim();
+                if (!trimmed) return;
+                if (!expenseCategories.includes(trimmed)) {
+                  setExpenseCategories(prev => [...prev, trimmed]);
+                }
+                if (categoryModalTarget === "edit") {
+                  setEditExpenseCategory(trimmed);
+                } else {
+                  setExpenseCategory(trimmed);
+                }
+                setNewCategoryName("");
+                setCategoryModalOpen(false);
+                setCategoryModalTarget(null);
+                triggerNotification(`Category "${trimmed}" added!`, "success");
+              }}
+              className="space-y-4 text-xs font-sans"
+            >
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Utility, Transport, Equipment"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 font-sans">
+                <button
+                  type="submit"
+                  className="flex-1 py-1 px-4 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-emerald-600/10 text-center uppercase tracking-wider"
+                >
+                  Create Category
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryModalOpen(false);
+                    setNewCategoryName("");
+                    setCategoryModalTarget(null);
+                  }}
+                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
