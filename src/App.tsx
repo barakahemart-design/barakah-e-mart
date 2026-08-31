@@ -468,7 +468,7 @@ export default function App() {
       hasHealedRef.current = true;
       runAutoRecovery();
     }
-  }, [initialLoadedRef.current, contacts.length, transactions.length]);
+  }, [contacts.length, transactions.length]);
 
   // Load Offline initial database state and sync latest from cloud safely
   useEffect(() => {
@@ -585,11 +585,7 @@ export default function App() {
       localStorage.setItem(userKey, JSON.stringify(compiledBusinessInfo));
       localStorage.setItem("barakah_business_info", JSON.stringify(compiledBusinessInfo));
 
-      if (activeUser && !activeUser.isGuest && activeUser.email) {
-        saveBusinessSettings(activeUser.email, compiledBusinessInfo).catch(err => {
-          console.warn("[Auto Save] Business info cloud save failed:", err);
-        });
-      }
+      // Note: business settings are explicitly saved upon user action via persistBusinessInfoState
 
       // Persist active core database state to local storage ONLY after that collection is hydrated from Firestore
       const activeUserId = activeUser.uid;
@@ -908,6 +904,7 @@ export default function App() {
             if (Object.keys(cleanInfo).length > 0) {
               setBusinessInfo(prev => {
                 const merged = { ...prev, ...cleanInfo };
+                if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
                 const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
                 localStorage.setItem(userKey, JSON.stringify(merged));
                 localStorage.setItem("barakah_business_info", JSON.stringify(merged));
@@ -1129,6 +1126,7 @@ export default function App() {
           if (Object.keys(cleanInfo).length > 0) {
             setBusinessInfo(prev => {
               const merged = { ...prev, ...cleanInfo };
+              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
               const userKey = getDbKey("barakah_business_info", activeUser.email, activeUser.uid);
               localStorage.setItem(userKey, JSON.stringify(merged));
               localStorage.setItem("barakah_business_info", JSON.stringify(merged));
@@ -1194,7 +1192,11 @@ export default function App() {
   // Synchronize staff list on cloud restore or config resets
   useEffect(() => {
     if (businessInfo && (businessInfo as any).staffList && Array.isArray((businessInfo as any).staffList)) {
-      setStaffList((businessInfo as any).staffList);
+      const newStaff = (businessInfo as any).staffList;
+      setStaffList(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newStaff)) return prev;
+        return newStaff;
+      });
     }
   }, [businessInfo]);
 
@@ -4082,25 +4084,40 @@ _${businessInfo.name}_`;
       <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col md:h-screen md:overflow-hidden pb-20 md:pb-0" id="viewport-workspace">
         
         {/* TOP STATUS BAR */}
-        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
+        <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-3 py-2.5 md:px-6 md:py-4 flex items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
           
-          <div id="active-tab-title-display" className="min-w-0">
-            <div className="flex items-center gap-1.5 md:gap-2">
-              <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
-              <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
-                {activeTab === 'dashboard' && <span className="hidden md:inline">Dashboard</span>}
-                {activeTab === 'reports' && 'Reports Dashboard'}
-                {activeTab === 'products' && 'Product Settings'}
-                {activeTab === 'negative-sales' && 'Negative Stock Log'}
-                {activeTab === 'purchases' && 'Purchases Ledger'}
-                {activeTab === "pos" && "Counter Cash Memo"}
-                {activeTab === 'inventory' && 'Stock Management'}
-                {activeTab === 'ledger' && 'Account Ledger'}
-                {activeTab === 'expenses' && 'Expenses Ledger'}
-                {activeTab === 'contacts' && 'Customers Directory'}
-                {activeTab === 'settings' && 'System Settings'}
-              </h1>
-            </div>
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Mobile Hamburger Button */}
+            <button
+              id="mobile-hamburger-btn"
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded-xl border border-slate-700 flex items-center justify-center cursor-pointer shadow-sm shrink-0 transition-transform active:scale-95"
+              aria-label="Open Mobile Navigation Menu"
+              title="Open Menu"
+            >
+              <Menu className="w-5 h-5 text-[#00E676]" />
+            </button>
+
+            <div id="active-tab-title-display" className="min-w-0">
+              <div className="flex items-center gap-1.5 md:gap-2">
+                <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
+                <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
+                  {activeTab === 'dashboard' && 'Dashboard'}
+                  {activeTab === 'reports' && 'Reports Dashboard'}
+                  {activeTab === 'products' && 'Product Settings'}
+                  {activeTab === 'negative-sales' && 'Negative Stock Log'}
+                  {activeTab === 'purchases' && 'Purchases Ledger'}
+                  {activeTab === "pos" && "Counter Cash Memo"}
+                  {activeTab === 'inventory' && 'Stock Management'}
+                  {activeTab === 'duelist' && 'Due List'}
+                  {activeTab === 'ledger' && 'Account Ledger'}
+                  {activeTab === 'expenses' && 'Expenses Ledger'}
+                  {activeTab === 'contacts' && 'Customers Directory'}
+                  {activeTab === 'staff' && 'Staff Management'}
+                  {activeTab === 'settings' && 'System Settings'}
+                </h1>
+              </div>
             <p className="hidden md:block text-xs text-slate-400 pl-4.5 mt-0.5 max-w-xl truncate">
               {activeTab === 'dashboard' && 'Real-time profit margins, revenue trackers and diagnostic charts.'}
               {activeTab === 'reports' && 'P&L, Gross Margin and comprehensive financial ledger.'}
@@ -4114,6 +4131,7 @@ _${businessInfo.name}_`;
               {activeTab === 'contacts' && 'CRM and suppliers contact list.'}
               {activeTab === 'settings' && 'Configure printed receipt company address, contact phone, and variables.'}
             </p>
+          </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 shrink-0" id="top-navbar-actions">
@@ -9569,97 +9587,12 @@ _${businessInfo.name}_`;
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditingExpense(null)}
-                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
-                >
-                  Close
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
-{/* ADD NEW CATEGORY MODAL */}
-      {categoryModalOpen && (
-        <div className="fixed inset-0 z-[60] bg-[#0c0c0e]/95 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-sm w-full p-5 space-y-4 text-slate-200 animate-scaleIn" id="modal-add-category">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
-              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
-                <Tag className="w-4 h-4 text-emerald-400" />
-                Add New Expense Category
-              </h3>
-              <button 
-                onClick={() => {
-                  setCategoryModalOpen(false);
-                  setNewCategoryName("");
-                  setCategoryModalTarget(null);
-                }} 
-                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const trimmed = newCategoryName.trim();
-                if (!trimmed) return;
-                if (!expenseCategories.includes(trimmed)) {
-                  setExpenseCategories(prev => [...prev, trimmed]);
-                }
-                if (categoryModalTarget === "edit") {
-                  setEditExpenseCategory(trimmed);
-                } else {
-                  setExpenseCategory(trimmed);
-                }
-                setNewCategoryName("");
-                setCategoryModalOpen(false);
-                setCategoryModalTarget(null);
-                triggerNotification(`Category "${trimmed}" added!`, "success");
-              }}
-              className="space-y-4 text-xs font-sans"
-            >
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
-                  Category Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Utility, Transport, Equipment"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-sans"
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2 font-sans">
-                <button
-                  type="submit"
-                  className="flex-1 py-1 px-4 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-emerald-600/10 text-center uppercase tracking-wider"
-                >
-                  Create Category
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCategoryModalOpen(false);
-                    setNewCategoryName("");
-                    setCategoryModalTarget(null);
-                  }}
-                  className="flex-1 py-1 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center uppercase tracking-wider"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                  onClick={xœì\ërÛ6şŸ§@ÙNâtBI–­´I£ìÈ²“zÖ—lì6»“ñL ’XS€‘U×/²ÿöÕöIö ¼ˆ$@K¬¬lä1=“P$âœóˆƒ­§¨ûq"\OxÁèà*$'[AäûOo!íp|Ìù	®5ôÉ•½Â™üçÊŞEƒ‘Í},ˆıc«…Æô3a/³K?À%A®Dòs'ıyÅÑp™L¼õ]Äh¸Äµ¯|4¶·á)†c£}9ã”Ù!õAXÜ‡CÔy†„9˜ÙÆ¹jì©çfid¼6Ö÷)'ÚõWÍA$Ê-^5]ïóëGŠ×†”MòO&Ow]7¿G½ı}trğõ{çoOßÿŸî÷Ğ÷Í”û×0lDÙì˜ºØ?ù ÇÑÖ¼Wè´ ïŠ¸È)
+»…ş°?>o]HÑ|ü¶åÀ¹h¾è 0Èe4´~Äl>AR˜ÈdÂSvşqágéÏĞŞµ
+´•^«Ş°}°}ĞŞ½È„Ø)(!$ÿå ÂÇØ¥Sõˆ„ÊĞ‡cÏu¾	¾²§rTS{@„ww±CìÀ,£6ôƒo"Ï¹ƒ}rXÈs»ÖDòÊÆ®k§Ü³Š"Ô¸&éOI1%0?:%áÀn7:–†‘ñNş¸Ã9Ã
+ï9ÔÊ@J­ƒç?<¿0Hd„C»·w=ú¸L”zë9å_;S®‘	aØwíİVËBM½qÏuÑ	™¢Ä ~Â<ıãÚXQÖ'ú¾ç\v¯·”­¹6è@µ_ùÖûœ<ıÉü82m!ÉÜ²¬ª'Ÿc6""¶núó77úèsœÁÎ•¬š”~Šu”G&p¸d«ÊfÈ ºg“Ù(M’´H¥Ö48‹O€@H…DH#dä3€nŸqä‹-³p–Ö›LÀÜtQP”HCŞ1µó†hë›¤ÙSÄˆˆXPñ‰Q˜tëŞğÇ\Â·ÒVáé ÜvK’$ÉıØh(ò¥ƒ¿0AÁ8"GÇêv»È"à=­ê±Àİâxf†W#À_®[ûÑ®,«7µÔ±ŠÁpG#ÂN(ØYØ	n}ëSÚYß]'ôÜXŒ7q¿ùôY<rÂ¹>Ô›29õ)ù‹,Î€h¢¨‰šv•<CÚÑ¶ÁÄÃÓ>_³ó·[áÕEÎ¸«—Oh@‹ÁIÙd¨Ç”_øÔ¹4¼eFÉ÷¡ï1‹“a¬^FÂĞ£˜…ÉÀõX	şyŒ¸†[àƒ2†áÖµHcÔ@¿Ï÷Äì:—q[H™x† }8sbêı3ö#Ò½.™Sè	dŒƒÉ—Ï`wşªÛEl^\Ù;2Œm'aR§õb»}Q¸ä"T%½é¼4¢‘ğ½€Ø¤´ˆ¿LZ¦N·“ÊWÇ`|àHĞ7²¥vÏàtc_Ôh!Ğ*Ò8BÅ€”ØÁTB…+b¢aA~òây>CÈ3(§/:­r°”ªr½$!‰4ÁA'g¹Q4·[w™D0#¯
+›ªÓ‰Åo›8¾D|U;ÂªcÕu³-û›XâÀ!~İÌ²x©nb™¦_Ú†rÌ½Ã£´ÿ¾÷áà=:éızø¶w~xzb~:—‹zü˜<Ÿ“ ªŸŠ‚BOÜ—I’§ŒSš¼±›Ëİäì öF*B°]†§Àî<$i{I›`6Š+‡(€»lşØÒSâ@(Ä àÕ¬b·%Íƒ.KìIT,?º‚)/´¯èD}À- ÏDVF ğŞgIòn³“äÌ€úB"¸ Ì‹}ü¶İk÷vÀ»cß§¤ Î¡¾– çrô?¤ÎÈD<KÖg¶tXâbæƒS¾FÜaÔ÷˜}ğ\1~‰,1ö@¦77·§Şi€¥‡W9üL°tÆSOŒÑQô8±A{qÚYä•Œ•3)µÇïji>pl¿½¿Ó¹0¹É¥üm»ÒñNËÏ•{™Ú/@:/OÉÄÑJ<] ıX90™Ï%C™y£vK›{ácæ—C‘"aç‡Á6:	q0‹– êfƒCX&øŞ–åb_B¶ôçŸh©çÇB„dzËYš½	øvæt+Gwƒ°/º–<µ`¢tğqÀìKX÷	c„½£ å³®P;½dœ<‘ÇSô²z” ô  Cp£ìNÈLÓz]ÍlàõßÿÇºyÕ”½VÆägşÅÃÛ +'·Ú‹H[”‹‹iO)1J¦³Z.ŸŞh,*ÈáUsÜ®Z™ÏùŒ¬<É–¥efİİ® ßğ–©Ìehÿ¦š¨P•WÓÌá…‘Lò½@åq®W…)EsÎ@ÜÂ`¼ïp i¨œŒx‚]İP—'=y† &#O —OÎ°OxüóVÜTß« OÅåõ¹Ë¹Úô(ÎáåÄA>´”QÀâè2~¢ˆì4N J×óÄ¤šr>æa[åë]+vh(GËE–åùB‰¾Fu>cÄn÷$‹¾Ğ›,DhU%¥@ÎVŠeò á_:‘³±2÷Zğ×¹@¡	Ãdæ¶ÒÕW×KéŒ:cÅ:#C0f¸zcÅzsNÜÁ¾¥CìU3\ı·½Öä3^Uhg¥É#Çw¶‹ùx@1sí0*–<Ê¤T¯#cËs<ş:éò¿[4ï's^'¹ˆ¯?Msq§ij"‹É©iÏh)]9g+ftß]ã”ˆØ0f„(ãX–™2t)«Z¡f2‹¢~B¤^ìY:ÄOn>™9XéğŒFb?¥k¹Ïé‘5«p©ÉX…!å+àZo:ò€„{ƒ¹³1C0Â}ˆĞë.¶£Môîôlís€_ „Up—v±éàKé¸7ü…dÕ^2g:‘Í£şûãõ[<Fİh5ø¥]l:üR:îüŞAŠG¤ ß%\X;ò2RÓ‚6—Övü;Út©™cñÍ›N»ÓÎc1¹¢a1}ò«Ââ94“3&ûtÔäIÂt&¨s)çT×o#æŒ!£[É*¦}l: 3Bî]ô#Ş÷˜ã×5)'Ö@/‹š(›­ À¬M`FÈ½à¥—Ì.kf%Êşã |º\¤²vºñ=.V™‘‰{Øt&d¤øÃ“  “[“_‘ë¢Š(™?ùUáïg F®Ëª7t×;Ÿ¸#ùaó/£.î`ÓASqolŞÁ9¼ªèÔâ<ÉÈŒøHñdíLÖó®ş¥]l:
+S:îßy£Ñl5o²œ™)2"—¤®‚À¤‡M`BÆ½Áßfı1fb§şŞÇlø‚ßB¸ÀÃá
+øSí7}Šˆ{ƒ=9İ§vâLX5ñ¸ûïçÄ^şˆŞ§ÁĞqõûT€YkºŠN»ØxEHè¸7ºp–TS’VTÀtO¿Zµï.ÖS<|É~ø’¾d?|Éş¿}É–%Úé×ì‡ÏØŸ±¿ìgì_=2ırß²¦,¦,Óã¯LYšîâEmas3ÀZ	¾PZ.“•)½¡TÊ³¼Tº\YŠy‘ĞêŒ²NTİ(m»¢^\k!qµÆå´O=áŒmAo_6²t­in€¬%HªÖ"äª«4Øø¼i«ëLÑI\$hÄ©1ZÏåCj~÷¢zÕJÓPª×Š÷oYÆRÌ‹hbuTuŠQ\©¦ºò\û8¦.w´íGÊV&)íã“åjŞÒ9ËÒ•ğè1ÃŒé«R@sbVŸ
+éw‹OY²¿VÔÄ;(`*÷| (
+dÉRÄÈ­Tâbƒ¯…9Sr@Îæ?t+*—Ãâc_ÂÅ•=µ7Èò¼Ñ6M¨À_}K˜Ù>Ñ¨âÃırÛÕÀÒ®Oèè42nÀcÀÃêhX»¨«Œòx¿¼:—ßâ;s0d×¶ËXÈß©CíPÌ›"Õ;ªo§a®ƒ‚èTÛåÖı”*/hE÷ñÙ¢šû½ÓóóÓcô_ûG{½÷‹JîËUV¹zUÊ> 0ô‰İB>Ê’v&K'Uµın+©oÃßsÃ¶o×…$õá ‰v¼C5†°BK®J¼P÷•ŒÆŸ‹`tm«*ıÓKşÌ5Iy5ÈìÅÊö[·¶S5k1ÅZu<›Ï¡×‹&‹ëı™JP‹ù|? r`^ˆ¶à¼µHUÊYı–¦ª¶ôuÖ®\û©ëÆ]‹R…| Ätæs=â«‹\(;”UËí®å5ŸLÜ ¡f×#9ÃŞB‘eå(_NlÙšÁZ~a`i!à	Í¸To±•LÖê­YjZ(Xi/³¯EnÚv@kÓ2ù†šÒ’M¹³dªçQ|tlßü  ÿÿ X‹å‚

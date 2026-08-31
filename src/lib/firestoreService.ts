@@ -25,20 +25,26 @@ export function getActiveStoreEmail(): string {
 // Known store UIDs mapping and store validation
 export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: string): boolean {
   if (!cleanEmail && !activeUid) return true;
-  const docStore = (docData.store_id || docData.storeId || docData.email || docData.linked_email || docData.linkedEmail || '').trim().toLowerCase();
-  if (cleanEmail && docStore === cleanEmail) return true;
+  const targetEmail = (cleanEmail || '').trim().toLowerCase();
+  const targetUid = (activeUid || '').trim();
+
+  const docStore = String(docData.store_id || docData.storeId || docData.email || docData.linked_email || docData.linkedEmail || '').trim().toLowerCase();
+  if (targetEmail && docStore && (docStore === targetEmail || docStore.includes(targetEmail) || targetEmail.includes(docStore))) return true;
+
+  const docUid = String(docData.user_id || docData.userId || docData.owner_id || '').trim();
+  if (targetEmail && docUid.toLowerCase() === targetEmail) return true;
+  if (targetUid && docUid === targetUid) return true;
   
-  const docUid = String(docData.user_id || docData.userId || docData.owner_id || '');
-  if (cleanEmail && docUid === cleanEmail) return true;
-  if (activeUid && docUid === activeUid) return true;
-  
-  if (cleanEmail === 'barakahemart@gmail.com') {
+  // Also if docData has no store_id or user_id (global or legacy), include it
+  if (!docStore && !docUid) return true;
+
+  if (targetEmail === 'barakahemart@gmail.com') {
     const known = ['1d4ce803-cbf5-44f1-9ec5-56642de068a1', 'DGeDhFzjTDaYCeLZiMSvm8TY4sc2', 'vault_a2vflc', 'xrTguetUZqSbZOxUKRiUNJV3X1M2', 'C5eOR2R8WEMegF53NA5eItMWDrr2', 'Lzk64vTQcRPy0MWwQK6t0echMmq1', '1ys9dKJ3fKOKIVOl0GIbuIiHeB73'];
     if (known.includes(docUid)) return true;
-  } else if (cleanEmail === 'barakahbillpro@gmail.com') {
+  } else if (targetEmail === 'barakahbillpro@gmail.com') {
     const known = ['xckXTyRn5AbsrU1paXbmj9dR6HX2'];
     if (known.includes(docUid)) return true;
-  } else if (cleanEmail === 'tendabangladesh72@gmail.com') {
+  } else if (targetEmail === 'tendabangladesh72@gmail.com') {
     const known = ['yVAiT3KAHnMYGX2D1hSxWGiZETw1', 'rb0SFawVFSTANoZhNwYokmJOFyP2'];
     if (known.includes(docUid)) return true;
   }
