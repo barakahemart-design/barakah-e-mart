@@ -3,9 +3,7 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
-  setDoc,
-  query,
-  where
+  setDoc
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -33,6 +31,20 @@ export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: 
   return !!targetUid && docUid === targetUid;
 }
 
+/**
+ * One authoritative realtime listener per collection.
+ *
+ * The previous implementation merged two independent query snapshots into a
+ * permanent Map. That caused two serious problems:
+ * 1) a delete could never disappear from the Map, so stale/old records came back;
+ * 2) if one filtered query missed a legacy document, another device could see a
+ * different dataset even though both devices used the same Firebase account.
+ *
+ * Firestore rules for these collections already permit reads, so we listen to
+ * the collection and filter by the authenticated email/UID in the client.
+ * This is intentionally simple and deterministic: every snapshot represents
+ * the complete current account view, including additions, edits and deletes.
+ */
 function createSubscription(collName: string) {
   return (userIdentifier: string, callback: (items: any[]) => void) => {
     const currentUser = auth.currentUser;
@@ -51,68 +63,44 @@ function createSubscription(collName: string) {
       status: 'subscribing'
     });
 
-    const records = new Map<string, any>();
-    let storeSnapshotReady = false;
-    let uidSnapshotReady = false;
-    let storeUnsub: (() => void) | null = null;
-    let uidUnsub: (() => void) | null = null;
+    let stopped = false;
 
-    const emit = () => {
-      if (!storeSnapshotReady && !uidSnapshotReady) return;
-      const items = Array.from(records.values());
-      console.log('[Realtime Snapshot Success]', {
-        collection: collName,
-        docCount: items.length,
-        resolvedStoreId: storeId,
-        activeFirebaseUid: activeUid
-      });
-      callback(items);
-    };
+    const unsubscribe = onSnapshot(
+      collection(db, collName),
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        if (stopped) return;
 
-    const applySnapshot = (snapshot: any) => {
-      snapshot.docs.forEach((d: any) => {
-        const data = d.data() || {};
-        if (!isDocMatchingStore(data, storeId, activeUid)) return;
-        records.set(d.id, {
-          ...data,
-          id: data.id || d.id,
-          firestoreId: d.id
+        const items: any[] = [];
+        snapshot.docs.forEach((snapshotDoc: any) => {
+          const data = snapshotDoc.data() || {};
+          if (!isDocMatchingStore(data, storeId, activeUid)) return;
+
+          items.push({
+            ...data,
+            id: data.id || snapshotDoc.id,
+            firestoreId: snapshotDoc.id
+          });
         });
-      });
-      emit();
-    };
 
-    try {
-      const storeQuery = query(collection(db, collName), where('store_id', '==', storeId));
-      storeUnsub = onSnapshot(storeQuery, { includeMetadataChanges: true }, (snapshot) => {
-        storeSnapshotReady = true;
-        applySnapshot(snapshot);
-      }, (error) => {
-        storeSnapshotReady = true;
-        console.error(`[Realtime Listener Error] ${collName} store_id`, error);
-        emit();
-      });
-
-      if (activeUid) {
-        const uidQuery = query(collection(db, collName), where('user_id', '==', activeUid));
-        uidUnsub = onSnapshot(uidQuery, { includeMetadataChanges: true }, (snapshot) => {
-          uidSnapshotReady = true;
-          applySnapshot(snapshot);
-        }, (error) => {
-          uidSnapshotReady = true;
-          console.error(`[Realtime Listener Error] ${collName} user_id`, error);
-          emit();
+        console.log('[Realtime Snapshot Success]', {
+          collection: collName,
+          docCount: items.length,
+          resolvedStoreId: storeId,
+          activeFirebaseUid: activeUid,
+          fromCache: snapshot.metadata?.fromCache === true
         });
-      } else {
-        uidSnapshotReady = true;
+
+        callback(items);
+      },
+      (error) => {
+        console.error(`[Realtime Listener Error] ${collName}`, error);
       }
-    } catch (error) {
-      console.error(`[Realtime Listener Setup Error] ${collName}`, error);
-    }
+    );
 
     return () => {
-      if (storeUnsub) storeUnsub();
-      if (uidUnsub) uidUnsub();
+      stopped = true;
+      unsubscribe();
     };
   };
 }
