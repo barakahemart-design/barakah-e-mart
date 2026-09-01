@@ -6,7 +6,6 @@ const path = require('path');
 const serverFile = path.join(process.cwd(), 'server.ts');
 let serverSource = fs.readFileSync(serverFile, 'utf8');
 const originalServer = serverSource;
-
 serverSource = serverSource.replace(
   'if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid)) {',
   'if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid) || allowedIds.includes(docId)) {'
@@ -33,22 +32,14 @@ const originalHelper = helperSource;
 const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async (email: string, pin: string, overwrite: boolean = false) => {
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanEmail) return false;
-
   try {
     const activeUid = currentFirebaseUser?.uid || firebaseAuth.currentUser?.uid || '';
-    const result: any = {
-      linked_email: cleanEmail,
-      email: cleanEmail,
-      products: [], contacts: [], expenses: [], transactions: [], purchases: []
-    };
+    const result: any = { linked_email: cleanEmail, email: cleanEmail, products: [], contacts: [], expenses: [], transactions: [], purchases: [] };
     let found = false;
 
-    // Recover the newest non-empty legacy vault linked to this exact account email.
     try {
       const vaultSnap = await getDocs(query(collection(db, 'passcode_syncs'), where('linked_email', '==', cleanEmail)));
-      const candidates = vaultSnap.docs
-        .map(d => ({ id: d.id, data: d.data() || {} }))
-        .sort((a, b) => String(b.data.updated_at || '').localeCompare(String(a.data.updated_at || '')));
+      const candidates = vaultSnap.docs.map(d => ({ id: d.id, data: d.data() || {} })).sort((a, b) => String(b.data.updated_at || '').localeCompare(String(a.data.updated_at || '')));
       const candidate = candidates.find(c =>
         (Array.isArray(c.data.products) && c.data.products.length > 0) ||
         (Array.isArray(c.data.contacts) && c.data.contacts.length > 0) ||
@@ -58,19 +49,11 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         (c.data.businessInfo && typeof c.data.businessInfo === 'object') ||
         (c.data.business_info && typeof c.data.business_info === 'object')
       );
-      if (candidate) {
-        Object.assign(result, candidate.data);
-        result.linked_email = cleanEmail;
-        found = true;
-      }
-    } catch (vaultErr) {
-      console.warn('[Cloud Restore] Direct vault read warning:', vaultErr);
-    }
+      if (candidate) { Object.assign(result, candidate.data); result.linked_email = cleanEmail; found = true; }
+    } catch (vaultErr) { console.warn('[Cloud Restore] Direct vault read warning:', vaultErr); }
 
-    // Also read canonical granular collections so a new device gets the same account state.
     const collectionMap: Array<[string, string]> = [
-      ['products', 'products'], ['customers', 'contacts'], ['expenses', 'expenses'],
-      ['purchases', 'purchases'], ['transactions', 'transactions']
+      ['products', 'products'], ['customers', 'contacts'], ['expenses', 'expenses'], ['purchases', 'purchases'], ['transactions', 'transactions']
     ];
     for (const [collectionName, resultKey] of collectionMap) {
       try {
@@ -83,16 +66,11 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         }
         if (docsById.size > 0) {
           const rows = Array.from(docsById.values());
-          if (resultKey === 'transactions') {
-            if (!Array.isArray(result.transactions) || result.transactions.length === 0) result.transactions = rows;
-          } else {
-            result[resultKey] = rows;
-          }
+          if (resultKey === 'transactions') { if (!Array.isArray(result.transactions) || result.transactions.length === 0) result.transactions = rows; }
+          else result[resultKey] = rows;
           found = true;
         }
-      } catch (collectionErr) {
-        console.warn('[Cloud Restore] Direct collection read warning:', collectionName, collectionErr);
-      }
+      } catch (collectionErr) { console.warn('[Cloud Restore] Direct collection read warning:', collectionName, collectionErr); }
     }
 
     try {
@@ -104,28 +82,16 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         result.business_info = result.businessInfo;
         found = true;
       }
-    } catch (settingsErr) {
-      console.warn('[Cloud Restore] Business settings read warning:', settingsErr);
-    }
+    } catch (settingsErr) { console.warn('[Cloud Restore] Business settings read warning:', settingsErr); }
 
     if (!found) return false;
 
-    // Put recovered legacy rows into the current canonical Firestore identity as well.
-    // Only upserts are performed; nothing is deleted and existing fields are merged.
     const writeCanonical = async (collectionName: string, row: any) => {
       if (!row || !row.id) return;
       const { id, ...rest } = row;
       await setDoc(doc(db, collectionName, String(id)), {
-        ...rest,
-        id: String(id),
-        user_id: activeUid || row.user_id || '',
-        userId: activeUid || row.userId || '',
-        owner_id: activeUid || row.owner_id || '',
-        store_id: cleanEmail,
-        storeId: cleanEmail,
-        email: cleanEmail,
-        linked_email: cleanEmail,
-        linkedEmail: cleanEmail,
+        ...rest, id: String(id), user_id: activeUid || row.user_id || '', userId: activeUid || row.userId || '', owner_id: activeUid || row.owner_id || '',
+        store_id: cleanEmail, storeId: cleanEmail, email: cleanEmail, linked_email: cleanEmail, linkedEmail: cleanEmail,
         updated_at: row.updated_at || new Date().toISOString()
       }, { merge: true });
     };
@@ -135,26 +101,19 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
     (Array.isArray(result.contacts) ? result.contacts : []).forEach((row: any) => canonicalWrites.push(writeCanonical('customers', row)));
     (Array.isArray(result.expenses) ? result.expenses : []).forEach((row: any) => canonicalWrites.push(writeCanonical('expenses', row)));
     (Array.isArray(result.purchases) ? result.purchases : []).forEach((row: any) => canonicalWrites.push(writeCanonical('purchases', row)));
-
-    // Legacy nested transactions are kept locally; flat Firestore transactions are already canonicalized above.
     if (Array.isArray(result.transactions)) {
       result.transactions.forEach((row: any) => {
         const flat = row && row.total_amount !== undefined ? row : {
-          id: row?.id,
-          invoice_no: row?.invoiceNo,
-          customer_id: row?.contactId,
-          total_amount: Number(row?.total ?? row?.total_amount) || 0,
-          discount: Number(row?.discount) || 0,
-          vat_rate: Number(row?.vat_rate) || 0,
-          paid_amount: Number(row?.paidAmount ?? row?.paid_amount) || 0,
-          payment_method: row?.paymentMethod || row?.payment_method || 'Cash',
-          signature_svg: row?.customerSignature || row?.signature_svg || null,
+          id: row?.id, invoice_no: row?.invoiceNo, customer_id: row?.contactId, total_amount: Number(row?.total ?? row?.total_amount) || 0,
+          discount: Number(row?.discount) || 0, vat_rate: Number(row?.vat_rate) || 0, paid_amount: Number(row?.paidAmount ?? row?.paid_amount) || 0,
+          payment_method: row?.paymentMethod || row?.payment_method || 'Cash', signature_svg: row?.customerSignature || row?.signature_svg || null,
           created_at: row?.date || row?.created_at || new Date().toISOString()
         };
         if (flat.id) canonicalWrites.push(writeCanonical('transactions', flat));
       });
     }
-    await Promise.all(canonicalWrites);
+    // A malformed legacy row must not block the rest of the recovery.
+    await Promise.allSettled(canonicalWrites);
 
     restoreLocalKeys(result, overwrite, activeUid || currentFirebaseUser?.uid);
     return true;
@@ -164,10 +123,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
   }
 };\n\n`;
 
-helperSource = helperSource.replace(
-  /export const fetchAndRestoreCloudBackup = async[\\s\\S]*?(?=\\nexport (?:const|async|function) )/,
-  directRecoveryFunction
-);
+helperSource = helperSource.replace(/export const fetchAndRestoreCloudBackup = async[\\s\\S]*?(?=\\nexport (?:const|async|function) )/, directRecoveryFunction);
 
 const disabledRestore = `export const restoreLocalKeys = (data: any, overwrite: boolean = false, uid?: string) => {
   // Phase 1: Disabled restoreLocalKeys merge logic
@@ -207,28 +163,22 @@ if (helperSource !== originalHelper) fs.writeFileSync(helperFile, helperSource, 
 const appFile = path.join(process.cwd(), 'src', 'App.tsx');
 let appSource = fs.readFileSync(appFile, 'utf8');
 const originalApp = appSource;
-
 const guards = [
-  ['subscribeProducts', 'barakah_products'], ['subscribeCustomers', 'barakah_contacts'],
-  ['subscribeExpenses', 'barakah_expenses'], ['subscribePurchases', 'barakah_purchases'],
-  ['subscribeTransactions', 'barakah_flat_transactions']
+  ['subscribeProducts', 'barakah_products'], ['subscribeCustomers', 'barakah_contacts'], ['subscribeExpenses', 'barakah_expenses'],
+  ['subscribePurchases', 'barakah_purchases'], ['subscribeTransactions', 'barakah_flat_transactions']
 ];
 for (const [subscriber, storageKey] of guards) {
   const pattern = new RegExp(`(const unsub${subscriber.replace('subscribe', '')} = ${subscriber}\\(activeUserId, \\(items\\) => \\{\\n\\s*)markRemoteUpdateActive\\(\\);`);
   appSource = appSource.replace(pattern, `$1if (items.length === 0) {\n        try {\n          const cached = localStorage.getItem(getDbKey("${storageKey}", undefined, activeUserId));\n          if (cached) { const parsed = JSON.parse(cached); if (Array.isArray(parsed) && parsed.length > 0) return; }\n        } catch (_) {}\n      }\n      markRemoteUpdateActive();`);
 }
-
 appSource = appSource.replace(
   'const flatItems = snapshot.docs\n        .filter(docSnap => isDocMatchingStore(docSnap.data(), cleanEmail, activeUserId))',
   'const matchingDocs = snapshot.docs.filter(docSnap => isDocMatchingStore(docSnap.data(), cleanEmail, activeUserId));\n      if (matchingDocs.length === 0) {\n        try {\n          const cached = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId));\n          if (cached) { const parsed = JSON.parse(cached); if (Array.isArray(parsed) && parsed.length > 0) return; }\n        } catch (_) {}\n      }\n\n      const flatItems = matchingDocs'
 );
-
-// A customer/expense/purchase-only change must also be allowed to reach cloud backup.
 appSource = appSource.replace(
   'if (products.length === 0 && transactions.length === 0 && !isSettingsModified) {',
   'if (products.length === 0 && contacts.length === 0 && expenses.length === 0 && transactions.length === 0 && purchases.length === 0 && !isSettingsModified) {'
 );
-
 if (appSource !== originalApp) fs.writeFileSync(appFile, appSource, 'utf8');
 
 console.log('Safe sync/recovery build patch applied.');
