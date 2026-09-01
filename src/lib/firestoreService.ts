@@ -41,7 +41,6 @@ function createSubscription(collName: string) {
 
     if (!currentUser || !storeId) {
       console.warn(`[Realtime Listener] No authenticated Firebase account for ${collName}`);
-      callback([]);
       return () => {};
     }
 
@@ -52,30 +51,69 @@ function createSubscription(collName: string) {
       status: 'subscribing'
     });
 
-    const q = query(collection(db, collName), where('store_id', '==', storeId));
+    const records = new Map<string, any>();
+    let storeSnapshotReady = false;
+    let uidSnapshotReady = false;
+    let storeUnsub: (() => void) | null = null;
+    let uidUnsub: (() => void) | null = null;
 
-    return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
-      const items = snapshot.docs
-        .filter((d) => isDocMatchingStore(d.data(), storeId, activeUid))
-        .map((d) => ({
-          ...d.data(),
-          id: d.data().id || d.id,
-          firestoreId: d.id
-        }));
-
+    const emit = () => {
+      if (!storeSnapshotReady && !uidSnapshotReady) return;
+      const items = Array.from(records.values());
       console.log('[Realtime Snapshot Success]', {
         collection: collName,
         docCount: items.length,
         resolvedStoreId: storeId,
-        activeFirebaseUid: activeUid,
-        hasPendingWrites: snapshot.metadata?.hasPendingWrites
+        activeFirebaseUid: activeUid
+      });
+      callback(items);
+    };
+
+    const applySnapshot = (snapshot: any) => {
+      snapshot.docs.forEach((d: any) => {
+        const data = d.data() || {};
+        if (!isDocMatchingStore(data, storeId, activeUid)) return;
+        records.set(d.id, {
+          ...data,
+          id: data.id || d.id,
+          firestoreId: d.id
+        });
+      });
+      emit();
+    };
+
+    try {
+      const storeQuery = query(collection(db, collName), where('store_id', '==', storeId));
+      storeUnsub = onSnapshot(storeQuery, { includeMetadataChanges: true }, (snapshot) => {
+        storeSnapshotReady = true;
+        applySnapshot(snapshot);
+      }, (error) => {
+        storeSnapshotReady = true;
+        console.error(`[Realtime Listener Error] ${collName} store_id`, error);
+        emit();
       });
 
-      callback(items);
-    }, (error) => {
-      console.error(`[Realtime Listener Error] ${collName}`, error);
-      callback([]);
-    });
+      if (activeUid) {
+        const uidQuery = query(collection(db, collName), where('user_id', '==', activeUid));
+        uidUnsub = onSnapshot(uidQuery, { includeMetadataChanges: true }, (snapshot) => {
+          uidSnapshotReady = true;
+          applySnapshot(snapshot);
+        }, (error) => {
+          uidSnapshotReady = true;
+          console.error(`[Realtime Listener Error] ${collName} user_id`, error);
+          emit();
+        });
+      } else {
+        uidSnapshotReady = true;
+      }
+    } catch (error) {
+      console.error(`[Realtime Listener Setup Error] ${collName}`, error);
+    }
+
+    return () => {
+      if (storeUnsub) storeUnsub();
+      if (uidUnsub) uidUnsub();
+    };
   };
 }
 
