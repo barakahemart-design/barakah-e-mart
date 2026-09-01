@@ -1,0 +1,84 @@
+name: Safe Legacy Recovery Patch
+
+on:
+  push:
+    branches:
+      - fix/legacy-data-recovery-safe
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout safe branch
+        uses: actions/checkout@v4
+
+      - name: Apply non-destructive recovery fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('server.ts')
+          s = p.read_text(encoding='utf-8')
+          original = s
+
+          old1 = 'if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid)) {'
+          new1 = 'if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid) || allowedIds.includes(docId)) {'
+          s = s.replace(old1, new1, 1)
+
+          old2 = 'if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid)) {'
+          new2 = 'if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid) || allowedIds.includes(docId)) {'
+          s = s.replace(old2, new2, 1)
+
+          old3 = '''      if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid) {
+        return res.status(403).json({ error: "This backup belongs to a different account." });
+      }'''
+          new3 = '''      const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
+      const syncUserId = String(resDoc?.user_id || "");
+      const syncEmail = String(resDoc?.linked_email || "").trim().toLowerCase();
+      const verifiedEmail = String(verified.email || "").trim().toLowerCase();
+      if (resDoc && syncUserId && syncUserId !== verified.uid && !allowedIds.includes(syncUserId) && syncEmail !== verifiedEmail) {
+        return res.status(403).json({ error: "This backup belongs to a different account." });
+      }'''
+          if old3 in s:
+              s = s.replace(old3, new3, 1)
+
+          old4 = '''      if (syncData.user_id && syncData.user_id !== verified.uid && syncData.linked_email !== verified.email) {
+        return res.status(403).json({ error: "This backup belongs to a different account." });
+      }'''
+          new4 = '''      const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
+      const syncUserId = String(syncData.user_id || "");
+      const syncEmail = String(syncData.linked_email || "").trim().toLowerCase();
+      const verifiedEmail = String(verified.email || "").trim().toLowerCase();
+      if (syncUserId && syncUserId !== verified.uid && !allowedIds.includes(syncUserId) && syncEmail !== verifiedEmail) {
+        return res.status(403).json({ error: "This backup belongs to a different account." });
+      }'''
+          if old4 in s:
+              s = s.replace(old4, new4, 1)
+
+          if s == original:
+              print('No changes needed; patch may already be applied.')
+          else:
+              p.write_text(s, encoding='utf-8')
+              print('Recovery patch applied.')
+          PY
+
+          grep -n "allowedIds.includes(docId)" server.ts
+          grep -n "syncEmail" server.ts
+
+      - name: Commit recovery patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No commit required."
+          else
+            git add server.ts
+            git commit -m "fix: recover legacy records by mapped document identity"
+            git push
+          fi
