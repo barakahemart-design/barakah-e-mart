@@ -16,7 +16,11 @@ function patchFile(path, transform, label) {
 patchFile('src/lib/firebase.ts', (source) => {
   let next = source.replace(
     'localCache: memoryLocalCache()\n',
-    'localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })\n'
+    'localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })\n'
+  );
+  next = next.replace(
+    '  persistentSingleTabManager,\n',
+    '  persistentSingleTabManager,\n  persistentMultipleTabManager,\n'
   );
 
   // The old startup connectivity probe was an unnecessary billed document read.
