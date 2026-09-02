@@ -1,33 +1,18 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 1. Global default-deny catch-all safety net
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // 2. Core Security Helpers (No DB writes)
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    // 3. Validation Blueprints (Strict Key & Type checks)
     function isValidPasscodeSync(data) {
       return data.id is string && data.id.size() <= 128
         && data.linked_email is string && data.linked_email.size() <= 128
@@ -37,14 +22,12 @@ service cloud.firestore {
         && (data.transactions == null || data.transactions is list)
         && (data.businessInfo == null || data.businessInfo is map || data.business_info == null || data.business_info is map);
     }
-
     function isValidProfile(data) {
       return data.id is string && data.id.size() <= 128
         && data.email is string && data.email.size() <= 128
         && (data.shop_name == null || (data.shop_name is string && data.shop_name.size() <= 256))
         && (data.shop_address == null || (data.shop_address is string && data.shop_address.size() <= 512));
     }
-
     function isValidProduct(data) {
       return data.id is string && data.id.size() <= 128
         && (data.user_id is string && data.user_id.size() <= 128)
@@ -54,98 +37,86 @@ service cloud.firestore {
         && (data.sell_price == null || data.sell_price is number)
         && (data.stock == null || data.stock is number);
     }
-
     function isValidCustomer(data) {
       return data.id is string && data.id.size() <= 128
         && (data.user_id is string && data.user_id.size() <= 128)
         && data.name is string && data.name.size() <= 256
         && (data.phone == null || (data.phone is string && data.phone.size() <= 32));
     }
-
     function isValidExpense(data) {
       return data.id is string && data.id.size() <= 128
         && (data.user_id is string && data.user_id.size() <= 128)
         && data.amount is number
         && (data.description == null || (data.description is string && data.description.size() <= 512));
     }
-
     function isValidTransaction(data) {
       return data.id is string && data.id.size() <= 128
         && (data.user_id is string && data.user_id.size() <= 128)
         && data.total_amount is number
         && (data.invoice_no == null || (data.invoice_no is string && data.invoice_no.size() <= 64));
     }
-
     function isValidTransactionItem(data) {
       return data.id is string && data.id.size() <= 128
         && (data.user_id is string && data.user_id.size() <= 128)
         && data.transaction_id is string && data.transaction_id.size() <= 128
         && data.quantity is number;
     }
-
     function isValidPurchase(data) {
       return data.id is string && data.id.size() <= 128
         && (data.user_id is string && data.user_id.size() <= 128)
         && data.product_id is string && data.product_id.size() <= 128;
     }
+    function isValidBusinessInfo(data) { return data.id is string && data.id.size() <= 128; }
 
-    function isValidBusinessInfo(data) {
-      return data.id is string && data.id.size() <= 128;
-    }
-
-    // 4. Collection Access Rule Definitions
     match /passcode_syncs/{syncId} {
       allow read: if true;
       allow create, update: if isValidId(syncId);
       allow delete: if true;
     }
-
     match /profiles/{userId} {
       allow read: if true;
       allow create, update: if isValidId(userId);
       allow delete: if true;
     }
-
     match /products/{productId} {
       allow read: if true;
       allow create, update: if isValidId(productId);
       allow delete: if true;
     }
-
     match /customers/{customerId} {
       allow read: if true;
       allow create, update: if isValidId(customerId);
       allow delete: if true;
     }
-
     match /expenses/{expenseId} {
       allow read: if true;
       allow create, update: if isValidId(expenseId);
       allow delete: if true;
     }
-
     match /transactions/{transactionId} {
       allow read: if true;
       allow create, update: if isValidId(transactionId);
       allow delete: if true;
     }
-
     match /transaction_items/{itemId} {
       allow read: if true;
       allow create, update: if isValidId(itemId);
       allow delete: if true;
     }
-
     match /purchases/{purchaseId} {
       allow read: if true;
       allow create, update: if isValidId(purchaseId);
       allow delete: if true;
     }
-
     match /business_info/{businessInfoId} {
       allow read: if true;
       allow create, update: if isValidId(businessInfoId);
       allow delete: if true;
+    }
+    match /deleted_records/{recordId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && isValidId(recordId);
+      allow delete: if false;
     }
   }
 }
