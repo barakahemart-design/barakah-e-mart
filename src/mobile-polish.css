@@ -1,0 +1,46 @@
+/* UI-only polish. Intentionally contains no data, Firebase, realtime, or persistence rules. */
+@media (max-width: 640px) {
+  html, body, #root { min-width: 0; width: 100%; overflow-x: hidden; }
+  body { font-size: 14px; line-height: 1.45; }
+  #root .rounded-2xl { border-radius: 16px !important; }
+  #root .rounded-3xl { border-radius: 18px !important; }
+  #root input, #root select, #root textarea {
+    min-height: 42px;
+    font-size: 16px !important;
+    border-radius: 12px !important;
+  }
+  #root button { min-height: 40px; }
+  #root .overflow-x-auto { -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  #root table th, #root table td { padding: 10px !important; white-space: nowrap; }
+  #root h1 { line-height: 1.15; }
+  #root h2, #root h3 { line-height: 1.2; }
+
+  /* Transaction/profitability ledger: cleaner card + comfortable horizontal reading. */
+  #product-profitability-ledger-section {
+    margin-top: 14px !important;
+    padding: 14px !important;
+    border-radius: 18px !important;
+    overflow: hidden !important;
+  }
+  #product-profitability-ledger-section > div:first-child {
+    gap: 10px !important;
+    align-items: flex-start !important;
+  }
+  #product-profitability-ledger-section h3 {
+    font-size: 13px !important;
+    letter-spacing: .055em !important;
+  }
+  #product-profitability-ledger-section table {
+    min-width: 760px;
+    font-size: 11px !important;
+  }
+  #product-profitability-ledger-section .overflow-x-auto {
+    margin: 0 -4px;
+    padding: 0 4px 5px;
+    border-radius: 12px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  #product-profitability-ledger-section { border-radius: 18px !important; }
+}
