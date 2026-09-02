@@ -108,4 +108,18 @@ function helperWriteFingerprint(table: string, id: string, data: any): string {
   return source;
 }, 'firebase-helpers duplicate-write guard');
 
+// Full legacy recovery is expensive. Normal cross-device synchronization is
+// already handled by the realtime listeners, so automatic recovery runs only
+// once per browser session/account. Explicit manual restore remains untouched.
+patchFile('src/App.tsx', (source) => {
+  const oldCall = `            const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false);
+            if (wasRestored) {`;
+  const newCall = `            const recoveryKey = 'barakah_cloud_recovery_' + String(user.email || '').trim().toLowerCase();
+            const recoveryAlreadyDone = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(recoveryKey) === '1';
+            const wasRestored = recoveryAlreadyDone ? false : await fetchAndRestoreCloudBackup(user.email, passcode, false);
+            if (wasRestored && typeof sessionStorage !== 'undefined') sessionStorage.setItem(recoveryKey, '1');
+            if (wasRestored) {`;
+  return source.replace(oldCall, newCall);
+}, 'App automatic recovery throttle');
+
 console.log('[Firestore quota guard] Complete.');
