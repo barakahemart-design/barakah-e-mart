@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import './mobile-polish.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -19,9 +20,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
         // Periodically check for updates
         setInterval(() => {
           registration.update().catch(() => {});
-        }, 15 * 60 * 1000); // Check every 15 minutes
+        }, 15 * 60 * 1000);
 
-        // Check for updates on load
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
@@ -40,7 +40,6 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
         console.error('[Service Worker] Registration failed:', error);
       });
 
-    // Handle controller change (reloads page automatically once skipWaiting completes)
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {
