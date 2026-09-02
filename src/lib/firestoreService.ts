@@ -32,16 +32,9 @@ export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: 
 }
 
 /**
- * Realtime source of truth.
- *
- * Every normal write is stamped with store_id=<account email>, so the live
- * listener can subscribe only to this account instead of downloading the
- * entire collection. This is important for both Firebase usage and mobile
- * startup time. A single query also gives deterministic add/edit/delete
- * snapshots: each snapshot is the complete current account view.
- *
- * Legacy records are recovered/canonicalized by the recovery layer. The live
- * path intentionally does not scan unrelated accounts or merge stale maps.
+ * Realtime source of truth. Each account gets one filtered listener per
+ * collection, keeping Firebase reads low while making add/edit/delete
+ * snapshots deterministic.
  */
 function createSubscription(collName: string) {
   return (userIdentifier: string, callback: (items: any[]) => void) => {
@@ -76,6 +69,7 @@ function createSubscription(collName: string) {
               firestoreId: snapshotDoc.id
             };
           })
+          .filter((item: any) => item.deleted !== true && item.isDeleted !== true)
           .filter((item: any) => isDocMatchingStore(item, storeId, activeUid));
 
         console.log('[Realtime Snapshot]', {
@@ -125,7 +119,9 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
     email: cleanEmail,
     linked_email: cleanEmail,
     linkedEmail: cleanEmail,
-    updated_at: data?.updated_at || new Date().toISOString()
+    deleted: false,
+    isDeleted: false,
+    updated_at: new Date().toISOString()
   };
 
   if (collName === 'products') {
@@ -140,14 +136,52 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
     docData.image_url = imgUrl;
   }
 
+  if (collName === 'transactions') {
+    // Keep both naming conventions so every reader/recovery path sees the
+    // same payment state after a collection-due update and browser reload.
+    const total = Number(docData.total ?? docData.total_amount) || 0;
+    const paid = Number(docData.paidAmount ?? docData.paid_amount) || 0;
+    const due = Math.max(0, total - paid);
+    docData.total = total;
+    docData.total_amount = total;
+    docData.paidAmount = paid;
+    docData.paid_amount = paid;
+    docData.dueBalance = due;
+    docData.due_balance = due;
+    docData.status = paid >= total ? 'paid' : (paid > 0 ? 'partial' : 'due');
+  }
+
   await setDoc(doc(db, collName, targetId), docData, { merge: true });
   return targetId;
 }
 
+/**
+ * A hard delete is paired with a tiny permanent tombstone. The original
+ * business document is physically deleted, while the tombstone prevents old
+ * vault/local recovery copies from resurrecting it later.
+ */
 async function handleDelete(collName: string, id: string): Promise<void> {
-  if (!auth.currentUser?.uid) {
+  const currentUser = auth.currentUser;
+  if (!currentUser?.uid || !currentUser.email) {
     throw new Error('You must be signed in with Firebase before deleting data.');
   }
+
+  const cleanEmail = currentUser.email.trim().toLowerCase();
+  const tombstoneId = `${collName}__${String(id)}`;
+  await setDoc(doc(db, 'deleted_records', tombstoneId), {
+    id: String(id),
+    collection: collName,
+    record_id: String(id),
+    user_id: currentUser.uid,
+    userId: currentUser.uid,
+    owner_id: currentUser.uid,
+    store_id: cleanEmail,
+    storeId: cleanEmail,
+    email: cleanEmail,
+    linked_email: cleanEmail,
+    deleted_at: new Date().toISOString()
+  }, { merge: true });
+
   await deleteDoc(doc(db, collName, id));
 }
 
