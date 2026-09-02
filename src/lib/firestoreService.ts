@@ -3,7 +3,9 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
-  setDoc
+  setDoc,
+  query,
+  where
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -21,29 +23,25 @@ export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: 
     docData?.store_id || docData?.storeId || docData?.email ||
     docData?.linked_email || docData?.linkedEmail || ''
   ).trim().toLowerCase();
-
   if (targetEmail && docStore === targetEmail) return true;
 
   const docUid = String(
     docData?.user_id || docData?.userId || docData?.owner_id || ''
   ).trim();
-
   return !!targetUid && docUid === targetUid;
 }
 
 /**
- * One authoritative realtime listener per collection.
+ * Realtime source of truth.
  *
- * The previous implementation merged two independent query snapshots into a
- * permanent Map. That caused two serious problems:
- * 1) a delete could never disappear from the Map, so stale/old records came back;
- * 2) if one filtered query missed a legacy document, another device could see a
- * different dataset even though both devices used the same Firebase account.
+ * Every normal write is stamped with store_id=<account email>, so the live
+ * listener can subscribe only to this account instead of downloading the
+ * entire collection. This is important for both Firebase usage and mobile
+ * startup time. A single query also gives deterministic add/edit/delete
+ * snapshots: each snapshot is the complete current account view.
  *
- * Firestore rules for these collections already permit reads, so we listen to
- * the collection and filter by the authenticated email/UID in the client.
- * This is intentionally simple and deterministic: every snapshot represents
- * the complete current account view, including additions, edits and deletes.
+ * Legacy records are recovered/canonicalized by the recovery layer. The live
+ * path intentionally does not scan unrelated accounts or merge stale maps.
  */
 function createSubscription(collName: string) {
   return (userIdentifier: string, callback: (items: any[]) => void) => {
@@ -52,45 +50,42 @@ function createSubscription(collName: string) {
     const activeUid = currentUser?.uid || userIdentifier || '';
 
     if (!currentUser || !storeId) {
-      console.warn(`[Realtime Listener] No authenticated Firebase account for ${collName}`);
+      console.warn(`[Realtime Listener] Waiting for authenticated account: ${collName}`);
       return () => {};
     }
 
-    console.log('[Realtime Listener Setup]', {
-      collection: collName,
-      activeFirebaseUid: activeUid,
-      resolvedStoreId: storeId,
-      status: 'subscribing'
-    });
+    const accountQuery = query(
+      collection(db, collName),
+      where('store_id', '==', storeId)
+    );
 
     let stopped = false;
+    let firstSnapshot = true;
 
     const unsubscribe = onSnapshot(
-      collection(db, collName),
-      { includeMetadataChanges: true },
+      accountQuery,
       (snapshot) => {
         if (stopped) return;
 
-        const items: any[] = [];
-        snapshot.docs.forEach((snapshotDoc: any) => {
-          const data = snapshotDoc.data() || {};
-          if (!isDocMatchingStore(data, storeId, activeUid)) return;
+        const items = snapshot.docs
+          .map((snapshotDoc: any) => {
+            const data = snapshotDoc.data() || {};
+            return {
+              ...data,
+              id: data.id || snapshotDoc.id,
+              firestoreId: snapshotDoc.id
+            };
+          })
+          .filter((item: any) => isDocMatchingStore(item, storeId, activeUid));
 
-          items.push({
-            ...data,
-            id: data.id || snapshotDoc.id,
-            firestoreId: snapshotDoc.id
-          });
-        });
-
-        console.log('[Realtime Snapshot Success]', {
+        console.log('[Realtime Snapshot]', {
           collection: collName,
           docCount: items.length,
-          resolvedStoreId: storeId,
-          activeFirebaseUid: activeUid,
-          fromCache: snapshot.metadata?.fromCache === true
+          account: storeId,
+          fromCache: snapshot.metadata?.fromCache === true,
+          firstSnapshot
         });
-
+        firstSnapshot = false;
         callback(items);
       },
       (error) => {
