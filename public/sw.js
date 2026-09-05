@@ -1,81 +1,70 @@
-const CACHE_NAME = 'barakah-pwa-cache-v2';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
+const CACHE_NAME = 'barakah-pwa-cache-v3';
+const STATIC_CACHE = [
   '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting()) // Force immediate activation of the new Service Worker
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_CACHE))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('[Service Worker] Deleting outdated cache:', cache);
-            return caches.delete(cache);
-          }
-        })
-      );
-    }).then(() => self.clients.claim()) // Claim clients immediately so the new version is active without manual reload
+    caches.keys().then((cacheNames) =>
+      Promise.all(
+        cacheNames
+          .filter((cache) => cache !== CACHE_NAME)
+          .map((cache) => caches.delete(cache))
+      )
+    ).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const request = event.request;
+  const url = new URL(request.url);
 
-  // CRITICAL: NEVER cache API routes, Firestore endpoints, and non-GET requests!
+  // Never intercept Firebase, API, Firestore, or non-GET traffic.
   if (
+    request.method !== 'GET' ||
     url.pathname.startsWith('/api') ||
     url.hostname.includes('firestore.googleapis.com') ||
-    url.hostname.includes('firebase') ||
-    event.request.method !== 'GET'
+    url.hostname.includes('firebase')
   ) {
-    return; // Bypass Service Worker cache completely
+    return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Stale-While-Revalidate: serve cached item instantly, update cache in background
-        fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-            }
-          })
-          .catch(() => {});
-        return cachedResponse;
-      }
+  // HTML/navigation must always prefer the network. This prevents an old
+  // index.html/app bundle from trapping Safari/iOS in a stale loading state.
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then((response) => response)
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
 
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
-        }
-
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return networkResponse;
-      }).catch(() => {
-        // Offline fallback
-      });
-    })
-  );
+  // Cache only immutable/static assets. Vite's hashed JS/CSS files are safe
+  // to cache, while the HTML shell is intentionally not cached.
+  if (request.destination === 'script' || request.destination === 'style' || request.destination === 'font' || request.destination === 'image') {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const network = fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())).catch(() => {});
+          }
+          return response;
+        }).catch(() => cached);
+        return cached || network;
+      })
+    );
+  }
 });
 
-// Auto-update receiver: skip waiting when receiving messages
 self.addEventListener('message', (event) => {
-  if (event.data === 'skipWaiting') {
-    self.skipWaiting();
-  }
+  if (event.data === 'skipWaiting') self.skipWaiting();
 });
