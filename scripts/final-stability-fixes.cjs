@@ -93,4 +93,49 @@ patch('src/lib/firestoreService.ts', source => {
   return next;
 }, 'Realtime auth initialization');
 
+// IMPORTANT: transaction_items must be account-scoped. The old whole-collection
+// listener scanned every store on every device and could also rebuild an empty
+// transaction list before the account's transaction snapshot arrived. Use the
+// already account-filtered subscription instead.
+patch('src/App.tsx', source => {
+  const oldStart = '    // 6. TRANSACTION ITEMS SUBSCRIBER\n';
+  const oldEnd = '    // 7. BUSINESS INFO / SETTINGS SUBSCRIBER\n';
+  const start = source.indexOf(oldStart);
+  const end = source.indexOf(oldEnd, start);
+  if (start < 0 || end < 0) return source;
+
+  const replacement = `    // 6. TRANSACTION ITEMS SUBSCRIBER\n    // Account-scoped listener: never scan every transaction item in Firestore.\n    const unsubItems = subscribeTransactionItems(activeUserId, (items) => {\n      markRemoteUpdateActive();\n\n      const flatItems = items.map((docData: any) => ({\n        id: docData.id,\n        firestoreId: docData.firestoreId,\n        transaction_id: docData.transaction_id,\n        product_id: docData.product_id || null,\n        product_name: docData.product_name || \"Product Item\",\n        quantity: Number(docData.quantity) || 0,\n        sell_price: Number(docData.sell_price) || 0,\n        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0\n      }));\n\n      localStorage.setItem(getDbKey(\"barakah_flat_transaction_items\", undefined, activeUserId), JSON.stringify(flatItems));\n      handleTransactionsChange(undefined, flatItems);\n    });\n\n`;
+  return source.slice(0, start) + replacement + source.slice(end);
+}, 'Account-scoped transaction item listener');
+
+// Make checkout writes authoritative. Firestore listeners can show local data
+// immediately, but the checkout must not report success until the main sale is
+// acknowledged by the backend. This prevents a sale from appearing locally and
+// then failing to appear on another device after reload.
+patch('src/App.tsx', source => {
+  const old = `        saveTransaction(activeUserId, flatTxItem).catch(err => {\n          console.error(\"Cloud save transaction failed:\", err);\n        });`;
+  const replacement = `        await saveTransaction(activeUserId, flatTxItem);`;
+  return source.replace(old, replacement);
+}, 'Authoritative sale save');
+
+// Save the transaction/item under the business owner's canonical store email
+// when business settings already identify it. This keeps Admin and Sales panels
+// on the same Firestore partition even if their Firebase auth UID/email differs.
+patch('src/App.tsx', source => {
+  const oldTx = `        store_id: cleanEmail,\n        email: cleanEmail`;
+  const replacementTx = `        store_id: (businessInfo?.email || cleanEmail).trim().toLowerCase(),\n        storeId: (businessInfo?.email || cleanEmail).trim().toLowerCase(),\n        linked_email: (businessInfo?.email || cleanEmail).trim().toLowerCase(),\n        email: cleanEmail`;
+  let next = source.replace(oldTx, replacementTx);
+  const oldItem = `            store_id: cleanEmail,\n            email: cleanEmail`;
+  const replacementItem = `            store_id: (businessInfo?.email || cleanEmail).trim().toLowerCase(),\n            storeId: (businessInfo?.email || cleanEmail).trim().toLowerCase(),\n            linked_email: (businessInfo?.email || cleanEmail).trim().toLowerCase(),\n            email: cleanEmail`;
+  return next.replace(oldItem, replacementItem);
+}, 'Canonical business store identity on checkout');
+
+// The realtime service uses the same canonical business email as checkout when
+// that identity has already been hydrated for the authenticated UID.
+patch('src/lib/firestoreService.ts', source => {
+  const old = `export function getActiveStoreEmail(): string {\n  return (auth.currentUser?.email || '').trim().toLowerCase();\n}`;
+  const replacement = `export function getActiveStoreEmail(): string {\n  const user = auth.currentUser;\n  const authEmail = (user?.email || '').trim().toLowerCase();\n  if (typeof window === 'undefined' || !user?.uid) return authEmail;\n  try {\n    const key = \`BARAKAH_DB_\${user.uid}_business_info\`;\n    const raw = window.localStorage.getItem(key);\n    if (raw) {\n      const info = JSON.parse(raw);\n      const businessEmail = String(info?.email || info?.linked_email || '').trim().toLowerCase();\n      if (businessEmail && businessEmail.includes('@')) return businessEmail;\n    }\n  } catch (_) {}\n  return authEmail;\n}`;
+  return source.replace(old, replacement);
+}, 'Canonical realtime store identity');
+
 console.log('[stability] complete');
