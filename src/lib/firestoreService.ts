@@ -5,6 +5,7 @@ import {
   doc,
   setDoc,
   getDocs,
+  getDoc,
   query,
   where
 } from 'firebase/firestore';
@@ -70,7 +71,7 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
       docData.created_at = explicitDate;
     } else {
       try {
-        const existingSnap = await import('firebase/firestore').then(({ getDoc }) => getDoc(doc(db, collName, targetId)));
+        const existingSnap = await getDoc(doc(db, collName, targetId));
         if (existingSnap.exists()) {
           const existing = existingSnap.data() || {};
           const preservedDate = existing.date ?? existing.expenseDate ?? existing.created_at;
