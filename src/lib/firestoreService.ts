@@ -60,17 +60,33 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
   const { id, ...dataWithoutId } = data || {};
   const docData: any = { id: targetId, ...dataWithoutId, user_id: activeUid, userId: activeUid, owner_id: activeUid, store_id: cleanEmail, storeId: cleanEmail, email: cleanEmail, linked_email: cleanEmail, linkedEmail: cleanEmail, deleted: false, isDeleted: false, updated_at: new Date().toISOString() };
 
-  // Business expense date is immutable unless the user explicitly changes it.
-  // Never substitute updated_at/current date when an expense already has a date.
+  // Expense `date` is business data, not the record's update timestamp.
+  // If the UI omits the date while editing an existing expense, preserve the
+  // already-saved business date instead of silently replacing it with today.
   if (collName === 'expenses') {
-    const explicitDate = data?.date ?? data?.expenseDate ?? data?.created_at;
-    if (explicitDate) {
+    const explicitDate = data?.date ?? data?.expenseDate;
+    if (explicitDate !== undefined && explicitDate !== null && String(explicitDate).trim() !== '') {
       docData.date = explicitDate;
       docData.created_at = explicitDate;
-    } else if (!docData.date && !docData.created_at) {
-      const now = new Date().toISOString();
-      docData.date = now;
-      docData.created_at = now;
+    } else {
+      try {
+        const existingSnap = await import('firebase/firestore').then(({ getDoc }) => getDoc(doc(db, collName, targetId)));
+        if (existingSnap.exists()) {
+          const existing = existingSnap.data() || {};
+          const preservedDate = existing.date ?? existing.expenseDate ?? existing.created_at;
+          if (preservedDate !== undefined && preservedDate !== null && String(preservedDate).trim() !== '') {
+            docData.date = preservedDate;
+            docData.created_at = preservedDate;
+          }
+        }
+      } catch (expenseDateReadErr) {
+        console.warn('[Expense Date] Existing-date preservation lookup failed:', expenseDateReadErr);
+      }
+      if (!docData.date && !docData.created_at) {
+        const now = new Date().toISOString();
+        docData.date = now;
+        docData.created_at = now;
+      }
     }
   }
 
