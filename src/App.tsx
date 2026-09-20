@@ -789,7 +789,7 @@ export default function App() {
         category: docData.category || "Others",
         amount: Number(docData.amount) || 0,
         description: docData.description || "",
-        date: docData.created_at || docData.date || new Date().toISOString()
+        date: docData.date || docData.expenseDate || docData.created_at || new Date().toISOString()
       }));
 
       localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
