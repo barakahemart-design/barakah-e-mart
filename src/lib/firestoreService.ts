@@ -135,7 +135,7 @@ async function handleDelete(collName: string, id: string): Promise<void> {
     deleted_at: new Date().toISOString()
   }, { merge: true })));
 
-  await Promise.all(Array.from(candidates).map((physicalId) => deleteDoc(doc(db, collName, physicalId)));
+  await Promise.all(Array.from(candidates).map((physicalId) => deleteDoc(doc(db, collName, physicalId))));
 }
 
 export const subscribeProducts = createSubscription('products');
