@@ -47,49 +47,72 @@ function createSubscription(collName: string) {
       return () => {};
     }
 
-    const accountQuery = query(
-      collection(db, collName),
-      where('store_id', '==', storeId)
-    );
+    // Query every supported account identity so legacy documents (created before
+    // store_id was introduced) continue to sync across devices. Results are merged
+    // by physical Firestore document id; no business data is discarded.
+    const identityQueries = [
+      query(collection(db, collName), where('store_id', '==', storeId)),
+      query(collection(db, collName), where('storeId', '==', storeId)),
+      query(collection(db, collName), where('email', '==', storeId)),
+      query(collection(db, collName), where('linked_email', '==', storeId)),
+      query(collection(db, collName), where('linkedEmail', '==', storeId)),
+      query(collection(db, collName), where('user_id', '==', activeUid)),
+      query(collection(db, collName), where('userId', '==', activeUid)),
+      query(collection(db, collName), where('owner_id', '==', activeUid))
+    ];
 
     let stopped = false;
     let firstSnapshot = true;
 
-    const unsubscribe = onSnapshot(
-      accountQuery,
-      (snapshot) => {
-        if (stopped) return;
+    const mergedDocs = new Map<string, any>();
+    let pending = identityQueries.length;
+    let firstSnapshot = true;
+    const unsubscribers: Array<() => void> = [];
 
-        const items = snapshot.docs
-          .map((snapshotDoc: any) => {
+    const emit = () => {
+      if (stopped || pending > 0) return;
+      const items = Array.from(mergedDocs.values())
+        .filter((item: any) => item.deleted !== true && item.isDeleted !== true)
+        .filter((item: any) => isDocMatchingStore(item, storeId, activeUid));
+
+      console.log('[Realtime Snapshot]', {
+        collection: collName,
+        docCount: items.length,
+        account: storeId,
+        firstSnapshot
+      });
+      firstSnapshot = false;
+      callback(items);
+    };
+
+    identityQueries.forEach((accountQuery) => {
+      const unsubscribe = onSnapshot(
+        accountQuery,
+        (snapshot) => {
+          if (stopped) return;
+          snapshot.docs.forEach((snapshotDoc: any) => {
             const data = snapshotDoc.data() || {};
-            return {
+            mergedDocs.set(snapshotDoc.id, {
               ...data,
               id: data.id || snapshotDoc.id,
               firestoreId: snapshotDoc.id
-            };
-          })
-          .filter((item: any) => item.deleted !== true && item.isDeleted !== true)
-          .filter((item: any) => isDocMatchingStore(item, storeId, activeUid));
-
-        console.log('[Realtime Snapshot]', {
-          collection: collName,
-          docCount: items.length,
-          account: storeId,
-          fromCache: snapshot.metadata?.fromCache === true,
-          firstSnapshot
-        });
-        firstSnapshot = false;
-        callback(items);
-      },
-      (error) => {
-        console.error(`[Realtime Listener Error] ${collName}`, error);
-      }
-    );
+            });
+          });
+          pending -= 1;
+          emit();
+        },
+        (error) => {
+          console.error(`[Realtime Listener Error] ${collName}`, error);
+          pending -= 1;
+          emit();
+        }
+      );
+      unsubscribers.push(unsubscribe);
+    });
 
     return () => {
       stopped = true;
-      unsubscribe();
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   };
 }
