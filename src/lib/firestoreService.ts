@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   setDoc,
+  getDocs,
   query,
   where
 } from 'firebase/firestore';
@@ -62,7 +63,6 @@ function createSubscription(collName: string) {
     ];
 
     let stopped = false;
-    let firstSnapshot = true;
 
     const mergedDocs = new Map<string, any>();
     let pending = identityQueries.length;
@@ -126,7 +126,7 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
     throw new Error('You must be signed in with Firebase before saving data.');
   }
 
-  const targetId = data?.id || doc(collection(db, collName)).id;
+  const targetId = data?.firestoreId || data?.id || doc(collection(db, collName)).id;
   const cleanEmail = currentUser.email.trim().toLowerCase();
   const activeUid = currentUser.uid;
   const { id, ...dataWithoutId } = data || {};
@@ -205,7 +205,30 @@ async function handleDelete(collName: string, id: string): Promise<void> {
     deleted_at: new Date().toISOString()
   }, { merge: true });
 
-  await deleteDoc(doc(db, collName, id));
+  const physicalIds = new Set<string>([String(id)]);
+  try {
+    const identityQueries = [
+      query(collection(db, collName), where('id', '==', String(id))),
+      query(collection(db, collName), where('store_id', '==', cleanEmail)),
+      query(collection(db, collName), where('user_id', '==', currentUser.uid))
+    ];
+    const snapshots = await Promise.all(identityQueries.map((q) => getDocs(q)));
+    for (const snap of snapshots) {
+      snap.docs.forEach((d: any) => {
+        const data = d.data() || {};
+        if (String(data.id || d.id) === String(id) &&
+            isDocMatchingStore(data, cleanEmail, currentUser.uid)) {
+          physicalIds.add(d.id);
+        }
+      });
+    }
+  } catch (lookupErr) {
+    console.warn('[Delete] Legacy physical-id lookup failed:', lookupErr);
+  }
+
+  await Promise.all(Array.from(physicalIds).map((physicalId) =>
+    deleteDoc(doc(db, collName, physicalId))
+  ));
 }
 
 export const subscribeProducts = createSubscription('products');
