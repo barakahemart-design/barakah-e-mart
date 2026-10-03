@@ -28,6 +28,34 @@ function detectLogoFormat(src: string): 'PNG' | 'JPEG' | 'WEBP' {
   return 'PNG';
 }
 
+async function convertLogoToPng(src: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        if (!canvas.width || !canvas.height) {
+          reject(new Error('Logo image has no usable dimensions.'));
+          return;
+        }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not create logo canvas context.'));
+          return;
+        }
+        ctx.drawImage(image, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error('Could not load saved business logo.'));
+    image.src = src;
+  });
+}
+
 const FONT_URLS: { [key: string]: string } = {
   "Inter": "https://cdn.jsdelivr.net/npm/@fontsource/inter/files/inter-latin-400-normal.ttf",
   "Roboto": "https://cdn.jsdelivr.net/npm/@fontsource/roboto/files/roboto-latin-400-normal.ttf",
@@ -271,26 +299,14 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     try {
       doc.addImage(companyLogoStr, detectLogoFormat(companyLogoStr), brandX, identityY, logoWidth, logoHeight);
     } catch (e) {
-      // Fallback for formats that the installed jsPDF build cannot decode directly.
+      // Some saved formats (for example WebP) may not be decoded directly by jsPDF.
+      // Convert them synchronously from the PDF generator's point of view by awaiting
+      // the browser image load before the document is saved.
       try {
-        const image = new Image();
-        image.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = image.naturalWidth || image.width;
-            canvas.height = image.naturalHeight || image.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            ctx.drawImage(image, 0, 0);
-            doc.addImage(canvas.toDataURL('image/png'), 'PNG', brandX, identityY, logoWidth, logoHeight);
-          } catch (retryError) {
-            console.error("Error drawing converted logo in PDF:", retryError);
-          }
-        };
-        image.onerror = () => console.error("Error loading saved business logo for PDF.");
-        image.src = companyLogoStr;
+        const convertedLogo = await convertLogoToPng(companyLogoStr);
+        doc.addImage(convertedLogo, 'PNG', brandX, identityY, logoWidth, logoHeight);
       } catch (retryError) {
-        console.error("Error drawing logo in PDF:", retryError);
+        console.error("Error drawing converted logo in PDF:", retryError);
       }
     }
   } else if (hasLogoTextSymbol && companyLogoStr) {
