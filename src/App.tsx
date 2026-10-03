@@ -570,11 +570,23 @@ export default function App() {
               setSettingsHydrated(true);
             }
           } catch (e) {
-            // Even if the cloud Settings lookup fails, do not write demo defaults
-            // back to Firestore during this startup attempt.
+            // Even if the broader cloud restore fails, still check Settings
+            // before enabling automatic Settings writes.
             console.error("[Sync on Mount] Background cloud synchronization failed:", e);
-          }
-            console.error("[Sync on Mount] Background cloud synchronization failed:", e);
+            try {
+              if (user.email) {
+                const bizSettings = await getBusinessSettings(user.email);
+                if (bizSettings) {
+                  const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
+                  if (Object.keys(cleanBiz).length > 0) {
+                    setBusinessInfo(prev => ({ ...prev, ...cleanBiz }));
+                  }
+                }
+              }
+            } catch (settingsErr) {
+              console.warn("[Sync on Mount] Dedicated Settings lookup failed:", settingsErr);
+            }
+            setSettingsHydrated(true);
           }
         })();
       }
