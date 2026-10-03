@@ -525,46 +525,11 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     }
   });
 
-  // Warranty Policy section — show the full item warranty details on the invoice.
+  // BOTTOM FINANCIAL & POLICY SECTION
+  // Order: Total in Words -> Warranty Policy -> Official Terms & Conditions.
   let finalY = (doc as any).lastAutoTable.finalY + 8;
-  const warrantyItems = transaction.items.filter((item: any) =>
-    (item.warranty && String(item.warranty).trim()) ||
-    (item.warrantyDetails && String(item.warrantyDetails).trim()) ||
-    (item.warranty_details && String(item.warranty_details).trim())
-  );
 
-  if (warrantyItems.length > 0) {
-    doc.setFont(pdfFontName, "bold");
-    doc.setFontSize(8.5 * sizeFactor);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text("WARRANTY POLICY", 15, finalY);
-    finalY += 4.5;
-
-    warrantyItems.forEach((item: any) => {
-      const warranty = String(item.warranty || "").trim();
-      const details = String(item.warrantyDetails || item.warranty_details || "").trim();
-      const itemTitle = warranty ? item.name + " — " + warranty : item.name;
-      const titleLines = doc.splitTextToSize(itemTitle, 180);
-      doc.setFont(pdfFontName, "bold");
-      doc.text(titleLines, 15, finalY);
-      finalY += titleLines.length * 3.5;
-
-      if (details) {
-        doc.setFont(pdfFontName, "normal");
-        const detailLines = doc.splitTextToSize(details, 175);
-        doc.text(detailLines, 20, finalY);
-        finalY += detailLines.length * 3.5;
-      }
-      finalY += 1.5;
-    });
-
-    finalY += 3;
-  } else {
-    finalY += 2;
-  }
-
-  // BOTTOM FINANCIAL & SIGNATURES SECTION
-  // Left Column: Total in Words block & Showroom Terms
+  // Total Bill in Words — immediately below the product table.
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(7 * sizeFactor);
   doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
@@ -577,12 +542,55 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   const wordLines = doc.splitTextToSize(tVerbal, 110);
   doc.text(wordLines, 15, finalY + 11.5);
 
-  // Showroom Terms
-  let termsTitleY = finalY + 22;
+  finalY += Math.max(22, 11.5 + wordLines.length * 4);
+
+  // Warranty Policy — clean, evenly spaced block after Total Bill in Words.
+  const warrantyItems = transaction.items.filter((item: any) =>
+    (item.warranty && String(item.warranty).trim()) ||
+    (item.warrantyDetails && String(item.warrantyDetails).trim()) ||
+    (item.warranty_details && String(item.warranty_details).trim())
+  );
+
+  if (warrantyItems.length > 0) {
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(8.5 * sizeFactor);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("WARRANTY POLICY", 15, finalY);
+    finalY += 5.5;
+
+    warrantyItems.forEach((item: any) => {
+      const warranty = String(item.warranty || "").trim();
+      const details = String(item.warrantyDetails || item.warranty_details || "").trim();
+
+      doc.setFont(pdfFontName, "bold");
+      doc.setFontSize(7.8 * sizeFactor);
+      const itemTitle = warranty ? item.name + " — " + warranty : item.name;
+      const titleLines = doc.splitTextToSize(itemTitle, 180);
+      doc.text(titleLines, 15, finalY);
+      finalY += titleLines.length * 3.8;
+
+      if (details) {
+        doc.setFont(pdfFontName, "normal");
+        doc.setFontSize(6.8 * sizeFactor);
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        const detailLines = doc.splitTextToSize(details, 175);
+        doc.text(detailLines, 20, finalY);
+        finalY += detailLines.length * 3.5;
+      }
+      finalY += 3.5;
+    });
+
+    finalY += 2;
+  } else {
+    finalY += 3;
+  }
+
+  // Official showroom terms — Warranty word intentionally removed from this heading.
+  let termsTitleY = finalY;
   doc.setFont(pdfFontName, "bold");
   doc.setFontSize(8 * sizeFactor);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text("OFFICIAL WARRANTY, TERMS & CONDITIONS", 15, termsTitleY);
+  doc.text("OFFICIAL TERMS & CONDITIONS", 15, termsTitleY);
 
   let termsY = termsTitleY + 4.5;
   doc.setFont(pdfFontName, "normal");
