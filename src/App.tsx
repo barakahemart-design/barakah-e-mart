@@ -112,6 +112,8 @@ export interface Product {
   category: string;
   unit: string;
   imageUrl?: string;
+  warranty?: string;
+  warrantyDetails?: string;
 }
 
 export interface Purchase {
@@ -158,6 +160,8 @@ export interface TransactionItem {
   productId?: string;
   buyPrice?: number;
   isNegativeSale?: boolean;
+  warranty?: string;
+  warrantyDetails?: string;
 }
 
 export interface Transaction {
