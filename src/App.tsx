@@ -5657,7 +5657,7 @@ _${businessInfo.name}_`;
                   <span className="text-[10px] text-[#00E676] font-bold uppercase tracking-wider font-mono">Date Horizon Presets:</span>
                   <div className="flex flex-wrap gap-1.5 font-sans" id="duelist-horizontal-pills">
                     {[
-                      { id: "all", label: "All Time" },
+                      { id: "all", label: "All" },
                       { id: "today", label: "Today" },
                       { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
@@ -6832,7 +6832,7 @@ _${businessInfo.name}_`;
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-wrap gap-1.5" id="preset-expense-pills">
                     {[
-                      { id: "all", label: "All Time" },
+                      { id: "all", label: "All" },
                       { id: "today", label: "Today" },
                       { id: "yesterday", label: "Yesterday" },
                       { id: "weekly", label: "7 Days" },
