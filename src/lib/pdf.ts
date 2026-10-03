@@ -486,12 +486,13 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   }
 
   // Main Itemized Table mapping
-  const tableHeaders = [['SL', 'Item Model / Specification / SKU', 'Qty', 'Unit Rate', 'Total Amount']];
+  const tableHeaders = [['SL', 'Item Model / Specification / SKU', 'Qty', 'Unit Rate', 'Warranty', 'Total Amount']];
   const tableBody = transaction.items.map((item, index) => [
     (index + 1).toString(),
     item.name,
     item.quantity.toString(),
     `${devCurrencySymbol} ${item.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    item.warranty || "",
     `${devCurrencySymbol} ${item.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   ]);
 
