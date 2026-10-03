@@ -2509,6 +2509,22 @@ export default function App() {
     triggerNotification(`Invoice ${t.invoiceNo} has been successfully deleted.`, "success");
   };
 
+  const handleDeleteTransactionItem = (transactionId: string, itemIndex: number) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Security block: Only administrators are authorized to delete individual sale items! 🛑", "error");
+      return;
+    }
+    const targetTx = transactions.find(t => t.id === transactionId);
+    if (!targetTx || !Array.isArray(targetTx.items) || targetTx.items.length <= 1) {
+      triggerNotification("A transaction must keep at least one product line. To remove the whole invoice, use the transaction delete action.", "info");
+      return;
+    }
+    const item = targetTx.items[itemIndex];
+    if (!item) return;
+    if (!window.confirm("Remove \"" + item.name + "\" from Invoice " + targetTx.invoiceNo + "? Only this product line will be removed; the invoice and other items will remain.")) return;
+    handleEditTransaction(transactionId, { items: targetTx.items.filter((_, idx) => idx !== itemIndex) });
+  };
+
   const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
     if (currentPanel !== "admin" && currentPanel !== "sales") {
       triggerNotification("Security block: Unauthorized action! 🛑", "error");
@@ -2518,11 +2534,15 @@ export default function App() {
     if (!originalTx) return;
 
     const items = updatedFields.items || originalTx.items;
-    const discount = updatedFields.discount !== undefined ? updatedFields.discount : originalTx.discount;
-    const paidAmount = updatedFields.paidAmount !== undefined ? updatedFields.paidAmount : originalTx.paidAmount;
-
-    const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-    const total = Math.max(subtotal - discount, 0);
+    const discount = updatedFields.discount !== undefined ? Math.max(0, Number(updatedFields.discount) || 0) : Math.max(0, Number(originalTx.discount) || 0);
+    const originalSubtotal = Number(originalTx.subtotal) || 0;
+    const originalTax = Number(originalTx.tax) || 0;
+    const taxRate = originalSubtotal > 0 ? (originalTax / originalSubtotal) * 100 : 0;
+    const subtotal = items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.price) || 0)), 0);
+    const tax = Math.round(subtotal * (taxRate / 100));
+    const total = Math.max(subtotal + tax - discount, 0);
+    const requestedPaidAmount = updatedFields.paidAmount !== undefined ? Math.max(0, Number(updatedFields.paidAmount) || 0) : Math.max(0, Number(originalTx.paidAmount) || 0);
+    const paidAmount = Math.min(total, requestedPaidAmount);
     const dueBalance = Math.max(total - paidAmount, 0);
     const status = dueBalance === 0 ? "paid" : paidAmount > 0 ? "partial" : "due";
 
@@ -2554,7 +2574,9 @@ export default function App() {
           ...updatedFields,
           items,
           subtotal,
+          tax,
           total,
+          paidAmount,
           dueBalance,
           status
         };
@@ -2574,6 +2596,19 @@ export default function App() {
 
       const targetTx = updatedTransactionsList.find(t => t.id === id);
       if (targetTx && Array.isArray(targetTx.items)) {
+        const activeItemKeys = new Set<string>();
+        targetTx.items.forEach((nestedIt: any, idx: number) => {
+          const itemUUID = nestedIt.id || (id + "_item_" + idx);
+          const productUUID = nestedIt.productId || null;
+          activeItemKeys.add(itemUUID);
+          if (productUUID) activeItemKeys.add("product:" + productUUID);
+        });
+        flatItems = flatItems.filter((x: any) => {
+          if (x.transaction_id !== id) return true;
+          const itemId = x.id || "";
+          const productId = x.product_id || null;
+          return activeItemKeys.has(itemId) || (!!productId && activeItemKeys.has("product:" + productId));
+        });
         targetTx.items.forEach((nestedIt: any, idx: number) => {
           const itemUUID = nestedIt.id || `${id}_item_${idx}`;
           const productUUID = nestedIt.productId || null;
@@ -2585,7 +2620,9 @@ export default function App() {
             product_name: nestedIt.name || "Product Item",
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
-            cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0
+            cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0,
+            warranty: nestedIt.warranty || "",
+            warranty_details: nestedIt.warrantyDetails || ""
           };
 
           const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === id && x.product_id === productUUID));
@@ -2614,7 +2651,7 @@ export default function App() {
           customer_id: targetTx.contactId || targetTx.customer_id || null,
           total_amount: Number(total) || 0,
           discount: Number(discount) || 0,
-          vat_rate: originalTx.tax && subtotal ? Number(((Number(originalTx.tax) / Number(subtotal)) * 100).toFixed(2)) : 0.0,
+          vat_rate: Number(taxRate.toFixed(2)),
           paid_amount: Number(paidAmount) || 0,
           payment_method: targetTx.paymentMethod || targetTx.payment_method || "Cash",
           signature_svg: targetTx.customerSignature || targetTx.signature_svg || null,
@@ -2639,14 +2676,28 @@ export default function App() {
       console.warn("Failed to update flat items in localStorage during edit:", err);
     }
 
-    // Update the existing transaction_items Firestore document using its actual Firestore document ID.
-    // Persist only the price (sale price) field.
+    // Update remaining line items and permanently remove deleted line-item documents.
+    const remainingDocIds = new Set<string>();
     items.forEach(item => {
       const docId = item.firestoreId || item.id;
       if (docId) {
-        updateDoc(doc(db, "transaction_items", docId), { sell_price: Number(item.price) || 0 }).catch((e) => {
-          console.error("Failed to update transaction item sell_price in Firestore:", e);
-        });
+        remainingDocIds.add(docId);
+        updateDoc(doc(db, "transaction_items", docId), {
+          sell_price: Number(item.price) || 0,
+          quantity: Number(item.quantity) || 0,
+          product_name: item.name || "Product Item",
+          product_id: item.productId || null,
+          cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+          warranty: item.warranty || "",
+          warranty_details: item.warrantyDetails || ""
+        }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
+      }
+    });
+    originalTx.items.forEach(oldItem => {
+      const oldDocId = oldItem.firestoreId || oldItem.id;
+      const stillExists = items.some(item => (item.firestoreId || item.id) === oldDocId);
+      if (oldDocId && !stillExists && !remainingDocIds.has(oldDocId)) {
+        deleteDoc(doc(db, "transaction_items", oldDocId)).catch((e) => console.error("Failed to delete removed transaction item from Firestore:", e));
       }
     });
 
@@ -2679,12 +2730,15 @@ export default function App() {
         total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
         productId: item.productId || "",
         buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+        warranty: item.warranty || "",
+        warrantyDetails: item.warrantyDetails || "",
         isNegativeSale: item.isNegativeSale || false
       }));
 
       updateDoc(doc(db, "transactions", txDocId), {
         items: nestedItems,
         subtotal: Number(subtotal) || 0,
+        tax: Number(tax) || 0,
         total_amount: Number(total) || 0,
         total: Number(total) || 0,
         profit: profit,
@@ -6583,7 +6637,20 @@ _${businessInfo.name}_`;
                                               setShowCostEditId(`${t.id}-${idx}`);
                                             }}
                                             className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
-                                            title="Override or edit purchase cost rate for this item"
+                                            title="Delete only this product line"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteTransactionItem(t.id, idx);
+                                            }}
+                                            className="text-[9px] text-rose-500 hover:text-rose-600 hover:underline font-mono cursor-pointer bg-transparent border-0 p-0"
+                                            title="Delete only this product line"
+                                          >
+                                            Delete Item
+                                          </button>
+                                          <span className="sr-only">
                                           >
                                             Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
                                           </button>
@@ -9095,6 +9162,15 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTransactionItem(editingTx.id, idx)}
+                              className="px-2 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold text-[9px] rounded-lg flex items-center gap-1 cursor-pointer"
+                              title="Delete only this product line"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Delete
+                            </button>
                             <span className="text-[10px] text-slate-450 font-bold font-mono">Price</span>
                             <div className="relative">
                               <span className="absolute left-1.5 top-1 text-slate-400 font-mono text-[10px]">{businessInfo.currencySymbol || "৳"}</span>
