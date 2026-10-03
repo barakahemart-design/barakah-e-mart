@@ -525,7 +525,43 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     }
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY + 10;
+  // Warranty Policy section — show the full item warranty details on the invoice.
+  let finalY = (doc as any).lastAutoTable.finalY + 8;
+  const warrantyItems = transaction.items.filter((item: any) =>
+    (item.warranty && String(item.warranty).trim()) ||
+    (item.warrantyDetails && String(item.warrantyDetails).trim()) ||
+    (item.warranty_details && String(item.warranty_details).trim())
+  );
+
+  if (warrantyItems.length > 0) {
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(8.5 * sizeFactor);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("WARRANTY POLICY", 15, finalY);
+    finalY += 4.5;
+
+    warrantyItems.forEach((item: any) => {
+      const warranty = String(item.warranty || "").trim();
+      const details = String(item.warrantyDetails || item.warranty_details || "").trim();
+      const itemTitle = warranty ? item.name + " — " + warranty : item.name;
+      const titleLines = doc.splitTextToSize(itemTitle, 180);
+      doc.setFont(pdfFontName, "bold");
+      doc.text(titleLines, 15, finalY);
+      finalY += titleLines.length * 3.5;
+
+      if (details) {
+        doc.setFont(pdfFontName, "normal");
+        const detailLines = doc.splitTextToSize(details, 175);
+        doc.text(detailLines, 20, finalY);
+        finalY += detailLines.length * 3.5;
+      }
+      finalY += 1.5;
+    });
+
+    finalY += 3;
+  } else {
+    finalY += 2;
+  }
 
   // BOTTOM FINANCIAL & SIGNATURES SECTION
   // Left Column: Total in Words block & Showroom Terms
