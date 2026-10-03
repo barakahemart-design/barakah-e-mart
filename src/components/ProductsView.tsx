@@ -40,6 +40,8 @@ interface ProductsViewProps {
     stock: number; 
     unit: string; 
     imageUrl?: string;
+    warranty?: string;
+    warrantyDetails?: string;
   }) => void;
   onUpdateProduct: (prod: {
     id: string;
@@ -79,6 +81,8 @@ export function ProductsView({
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("pcs");
   const [newProdImgUrl, setNewProdImgUrl] = useState("");
+  const [newProdWarranty, setNewProdWarranty] = useState("");
+  const [newProdWarrantyDetails, setNewProdWarrantyDetails] = useState("");
   const [isCompressingProdImg, setIsCompressingProdImg] = useState(false);
 
   // Modern Popover Edit States
@@ -91,6 +95,8 @@ export function ProductsView({
   const [editStock, setEditStock] = useState("");
   const [editUnit, setEditUnit] = useState("pcs");
   const [editImgUrl, setEditImgUrl] = useState("");
+  const [editWarranty, setEditWarranty] = useState("");
+  const [editWarrantyDetails, setEditWarrantyDetails] = useState("");
   const [isCompressingEditImg, setIsCompressingEditImg] = useState(false);
 
   const startEditProduct = (prod: any) => {
@@ -103,6 +109,8 @@ export function ProductsView({
     setEditStock(prod.stock.toString());
     setEditUnit(prod.unit || "pcs");
     setEditImgUrl(prod.imageUrl || "");
+    setEditWarranty(prod.warranty || "");
+    setEditWarrantyDetails(prod.warrantyDetails || "");
   };
 
   const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,7 +202,9 @@ export function ProductsView({
       sellPrice: parseFloat(newProdSell) || 0,
       stock: parseInt(newProdStock) || 0,
       unit: newProdUnit || "pcs",
-      imageUrl: newProdImgUrl
+      imageUrl: newProdImgUrl,
+      warranty: newProdWarranty.trim(),
+      warrantyDetails: newProdWarrantyDetails.trim()
     });
     setNewProdName("");
     setNewProdSku("");
@@ -204,6 +214,8 @@ export function ProductsView({
     setNewProdStock("");
     setNewProdUnit("pcs");
     setNewProdImgUrl("");
+    setNewProdWarranty("");
+    setNewProdWarrantyDetails("");
     setShowAddForm(false);
   };
 
@@ -219,7 +231,9 @@ export function ProductsView({
       sellPrice: parseFloat(editSell) || 0,
       stock: parseInt(editStock) || 0,
       unit: editUnit || "pcs",
-      imageUrl: editImgUrl
+      imageUrl: editImgUrl,
+      warranty: editWarranty.trim(),
+      warrantyDetails: editWarrantyDetails.trim()
     });
     setEditingProduct(null);
   };
@@ -387,6 +401,17 @@ export function ProductsView({
                     onChange={(e) => setNewProdSell(e.target.value)}
                     className="w-full px-3 py-2 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all font-mono"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Default Warranty (Optional)</label>
+                  <input type="text" placeholder="e.g. 3 Months / 1 Year / 12 Years" value={newProdWarranty} onChange={(e) => setNewProdWarranty(e.target.value)} className="w-full px-3 py-2 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Warranty Details (Optional)</label>
+                  <textarea placeholder="How to claim, required documents, service time, repair/replacement terms..." value={newProdWarrantyDetails} onChange={(e) => setNewProdWarrantyDetails(e.target.value)} className="w-full px-3 py-2 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all h-20 resize-none" />
                 </div>
               </div>
 
@@ -801,6 +826,17 @@ export function ProductsView({
                     onChange={(e) => setEditStock(e.target.value)}
                     className="w-full px-3 py-2 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all font-mono"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Default Warranty (Optional)</label>
+                  <input type="text" value={editWarranty} onChange={(e) => setEditWarranty(e.target.value)} placeholder="e.g. 3 Months / 1 Year" className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#A0A0A5] pl-1 block">Warranty Details (Optional)</label>
+                  <textarea value={editWarrantyDetails} onChange={(e) => setEditWarrantyDetails(e.target.value)} placeholder="How to claim, required documents, service time, repair/replacement terms..." className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white outline-none focus:border-[#00E676] transition-all h-20 resize-none" />
                 </div>
               </div>
 
