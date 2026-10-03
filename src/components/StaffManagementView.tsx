@@ -117,6 +117,12 @@ export function StaffManagementView({
     payment: SalaryPayment;
   } | null>(null);
 
+  // Staff-specific current-year history and dedicated Pay Salary workflow.
+  const [selectedStaffHistory, setSelectedStaffHistory] = useState<Staff | null>(null);
+  const [showDedicatedPaySalary, setShowDedicatedPaySalary] = useState(false);
+  const [dedicatedPayStaffId, setDedicatedPayStaffId] = useState("");
+  const [dedicatedPayMonth, setDedicatedPayMonth] = useState(getCurrentMonthCode());
+
   // Generate the latest 12 months dynamically from the current device date.
   const monthOptions = Array.from({ length: 12 }, (_, index) => {
     const date = new Date();
@@ -128,6 +134,36 @@ export function StaffManagementView({
       label: date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
     };
   });
+
+  // Full January–December calendar for the current year.
+  const currentYear = new Date().getFullYear();
+  const currentYearMonthOptions = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(currentYear, index, 1);
+    const code = `${currentYear}-${String(index + 1).padStart(2, "0")}`;
+    return {
+      code,
+      label: date.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      shortLabel: date.toLocaleDateString("en-US", { month: "short" })
+    };
+  });
+
+  const openDedicatedPaySalary = () => {
+    const firstStaff = activeEmployees[0];
+    setDedicatedPayStaffId(firstStaff?.id || "");
+    setDedicatedPayMonth(selectedMonth);
+    setShowDedicatedPaySalary(true);
+  };
+
+  const beginDedicatedPayment = () => {
+    const staff = activeEmployees.find(member => member.id === dedicatedPayStaffId);
+    if (!staff) {
+      triggerNotification("Please select a staff member first.", "error");
+      return;
+    }
+    setSelectedMonth(dedicatedPayMonth);
+    setShowDedicatedPaySalary(false);
+    openSalaryPayment(staff, dedicatedPayMonth);
+  };
 
   // Helper check: Is a given month completely paid for all ACTIVE staff members?
   const getMonthPaymentStatus = (monthCode: string) => {
@@ -540,6 +576,15 @@ export function StaffManagementView({
                   {monthOptions.find(mo => mo.code === selectedMonth)?.label || selectedMonth}
                 </span>
                 <span className="text-[10px] text-slate-500 block">All statuses sync into global ledger.</span>
+                <button
+                  type="button"
+                  onClick={openDedicatedPaySalary}
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-extrabold cursor-pointer shadow-sm"
+                  id="selected-period-pay-salary"
+                >
+                  <Coins className="w-3.5 h-3.5" />
+                  Pay Salary
+                </button>
               </div>
 
               <div className="space-y-1">
@@ -608,7 +653,14 @@ export function StaffManagementView({
                         return (
                           <tr key={emp.id} className="hover:bg-slate-900/10 transition-colors">
                             <td className="py-3.5 px-4 space-y-0.5">
-                              <span className="font-extrabold text-white text-xs block">{emp.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStaffHistory(emp)}
+                                className="font-extrabold text-white text-xs block hover:text-blue-400 hover:underline text-left cursor-pointer"
+                                title="Open full current-year salary history"
+                              >
+                                {emp.name}
+                              </button>
                               <span className="font-mono text-[10px] text-slate-400 block">{emp.phone}</span>
                             </td>
                             <td className="py-3.5 px-4 font-semibold text-slate-300">
@@ -847,6 +899,97 @@ export function StaffManagementView({
 
       </div>
 
+
+      {/* -----------------------------------------------------------------
+          MODAL: FULL CURRENT-YEAR SALARY HISTORY
+          ----------------------------------------------------------------- */}
+      {selectedStaffHistory && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[50000] flex items-center justify-center p-4" id="staff-salary-history-modal">
+          <div className="bg-[#1E1E24] border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-sm font-extrabold text-white block">{selectedStaffHistory.name}</span>
+                <span className="text-[10px] text-slate-400 font-mono">{selectedStaffHistory.jobTitle} • {selectedStaffHistory.phone} • {currentYear} Salary History</span>
+              </div>
+              <button type="button" onClick={() => setSelectedStaffHistory(null)} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-76px)] space-y-2">
+              {currentYearMonthOptions.map((month) => {
+                const payment = (selectedStaffHistory.salaryPayments || []).find(p => p.monthCode === month.code);
+                const isPaid = payment?.status === "paid";
+                const monthIndex = Number(month.code.slice(5, 7)) - 1;
+                const isFuture = monthIndex > new Date().getMonth();
+                return (
+                  <div key={month.code} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-[10px] border ${
+                        isPaid ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                        isFuture ? "bg-slate-900 text-slate-500 border-slate-800" :
+                        "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                      }`}>{month.shortLabel}</div>
+                      <div>
+                        <p className="text-xs font-bold text-white">{month.label}</p>
+                        {isPaid && payment ? (
+                          <p className="text-[10px] text-slate-400 font-mono">{currencySymbol}{payment.amount.toLocaleString()} • {payment.paymentDate} • {payment.paymentMethod}</p>
+                        ) : (
+                          <p className={`text-[10px] font-mono ${isFuture ? "text-slate-500" : "text-rose-400"}`}>{isFuture ? "Upcoming" : "Salary due / baki"}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isPaid && payment ? (
+                        <>
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ PAID</span>
+                          <button type="button" onClick={() => triggerPrintPayslip(selectedStaffHistory, payment)} className="p-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-white cursor-pointer" title="Print salary slip"><Printer className="w-3.5 h-3.5" /></button>
+                        </>
+                      ) : !isFuture ? (
+                        <button type="button" onClick={() => { setSelectedStaffHistory(null); openSalaryPayment(selectedStaffHistory, month.code); }} className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-extrabold cursor-pointer">
+                          <Coins className="w-3.5 h-3.5 inline mr-1" />Pay Salary
+                        </button>
+                      ) : (
+                        <span className="text-[9px] text-slate-600 font-mono uppercase">Upcoming</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -----------------------------------------------------------------
+          MODAL: DEDICATED PAY SALARY ENTRY POINT
+          ----------------------------------------------------------------- */}
+      {showDedicatedPaySalary && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[50000] flex items-center justify-center p-4" id="dedicated-pay-salary-modal">
+          <div className="bg-[#1E1E24] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div><span className="text-sm font-extrabold text-white block">Pay Salary</span><span className="text-[10px] text-slate-400">Select staff and salary month</span></div>
+              <button type="button" onClick={() => setShowDedicatedPaySalary(false)} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono">Staff Member</label>
+                <select value={dedicatedPayStaffId} onChange={(e) => setDedicatedPayStaffId(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-white outline-none focus:border-blue-500">
+                  <option value="">Select staff</option>
+                  {activeEmployees.map(member => <option key={member.id} value={member.id}>{member.name} — {member.jobTitle}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono">Salary Month</label>
+                <select value={dedicatedPayMonth} onChange={(e) => setDedicatedPayMonth(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-white outline-none focus:border-blue-500">
+                  {currentYearMonthOptions.map(month => <option key={month.code} value={month.code}>{month.label}</option>)}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowDedicatedPaySalary(false)} className="px-4 py-2 bg-slate-950 border border-slate-850 rounded-xl text-xs font-semibold text-slate-400 hover:text-white cursor-pointer">Cancel</button>
+                <button type="button" onClick={beginDedicatedPayment} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl text-xs font-extrabold cursor-pointer">Continue</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* -----------------------------------------------------------------
           MODAL 1: ADD NEW STAFF enroller form popup
