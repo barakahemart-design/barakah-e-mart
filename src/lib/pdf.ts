@@ -15,7 +15,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 // Detect the actual saved logo format instead of forcing every logo to PNG.
 function detectLogoFormat(src: string): 'PNG' | 'JPEG' | 'WEBP' {
-  const match = src.match(/^data:image\\/([^;,]+)/i);
+  const match = src.match(/^data:image\/([^;,]+)/i);
   if (match) {
     const mime = match[1].toLowerCase();
     if (mime === 'jpeg' || mime === 'jpg') return 'JPEG';
