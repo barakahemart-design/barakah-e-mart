@@ -203,6 +203,7 @@ export interface BusinessInfo {
   showPartnerLogos?: boolean;
   partnerLogos?: string[];
   presetBrands?: string[];
+  expenseCategories?: string[];
   salesmanPermissions?: {
     canEditSales: boolean;
     canDeleteSales: boolean;
@@ -609,6 +610,7 @@ export default function App() {
     if (activeUser) {
       const compiledBusinessInfo = {
         ...businessInfo,
+        expenseCategories,
         staffList
       };
 
@@ -669,7 +671,7 @@ export default function App() {
         return () => clearTimeout(delayDebounceFn);
       }
     }
-  }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser, settingsHydrated]);
+  }, [products, contacts, expenses, transactions, businessInfo, purchases, expenseCategories, staffList, activeUser, settingsHydrated]);
 
   // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
@@ -2797,6 +2799,17 @@ export default function App() {
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("Others");
   const [expenseCategories, setExpenseCategories] = useState<string[]>(["Rent", "Electricity", "Salary", "Marketing", "Others"]);
+  
+  useEffect(() => {
+    const savedCategories = (businessInfo as any)?.expenseCategories;
+    if (Array.isArray(savedCategories) && savedCategories.length > 0) {
+      const normalized = Array.from(new Set(savedCategories.map((cat: any) => String(cat).trim()).filter(Boolean)));
+      setExpenseCategories(prev => {
+        if (prev.length === normalized.length && prev.every((cat, i) => cat === normalized[i])) return prev;
+        return normalized;
+      });
+    }
+  }, [businessInfo?.expenseCategories]);
   const [customCategory, setCustomCategory] = useState("");
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
   const [expenseFilterCategory, setExpenseFilterCategory] = useState("All");
