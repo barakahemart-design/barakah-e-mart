@@ -6656,7 +6656,7 @@ _${businessInfo.name}_`;
                                               Delete Item
                                             </button>
                                           </div>
-                                      )}
+                                      ))}
                                       <span className="font-mono text-[10px] text-slate-400">
                                         {businessInfo.currencySymbol} {it.total.toLocaleString()}
                                       </span>
