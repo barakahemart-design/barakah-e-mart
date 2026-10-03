@@ -282,6 +282,7 @@ export default function App() {
    const lastUploadedAtRef = useRef("");
    const isRemoteUpdateActiveRef = useRef(false);
    const remoteTimeoutRef = useRef<any>(null);
+   const [settingsHydrated, setSettingsHydrated] = useState(false);
  
    // Active Core Database State (Merged loaded state)
    const [products, setProducts] = useState<Product[]>([]);
@@ -466,6 +467,7 @@ export default function App() {
 
     const unsub = subscribeToAuthChanges(async (user) => {
       setActiveUser(user);
+      setSettingsHydrated(false);
 
       if (!user) {
         hasSyncedOnMountRef.current = false; // Reset sync status so the next user can pull their own data on mount
@@ -562,8 +564,16 @@ export default function App() {
                   });
                 }
               }
+              // Only allow automatic Settings writes after the cloud Settings
+              // record has been checked. This prevents demo/local defaults from
+              // overwriting the user's saved Settings during app startup.
+              setSettingsHydrated(true);
             }
           } catch (e) {
+            // Even if the cloud Settings lookup fails, do not write demo defaults
+            // back to Firestore during this startup attempt.
+            console.error("[Sync on Mount] Background cloud synchronization failed:", e);
+          }
             console.error("[Sync on Mount] Background cloud synchronization failed:", e);
           }
         })();
@@ -590,7 +600,7 @@ export default function App() {
       localStorage.setItem(userKey, JSON.stringify(compiledBusinessInfo));
       localStorage.setItem("barakah_business_info", JSON.stringify(compiledBusinessInfo));
 
-      if (activeUser && !activeUser.isGuest && activeUser.email) {
+      if (settingsHydrated && activeUser && !activeUser.isGuest && activeUser.email) {
         saveBusinessSettings(activeUser.email, compiledBusinessInfo).catch(err => {
           console.warn("[Auto Save] Business info cloud save failed:", err);
         });
@@ -643,7 +653,7 @@ export default function App() {
         return () => clearTimeout(delayDebounceFn);
       }
     }
-  }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser]);
+  }, [products, contacts, expenses, transactions, businessInfo, purchases, staffList, activeUser, settingsHydrated]);
 
   // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
