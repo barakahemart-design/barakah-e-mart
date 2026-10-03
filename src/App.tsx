@@ -3751,7 +3751,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'pos' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <ShoppingCart className="w-4 h-4" />
-                  Sales / POS
+                  Sales
                 </button>
 
                 <button
@@ -3760,7 +3760,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'contacts' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <Users className="w-4 h-4" />
-                  Customers & CRM
+                  Customers
                 </button>
 
                 <button
@@ -3778,7 +3778,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'negative-sales' ? 'bg-[#FF5252]/10 text-[#FF5252] border border-[#FF5252]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <TrendingDown className="w-4 h-4" />
-                  Negative Stock Log
+                  Stock Alert
                 </button>
 
                 <button
@@ -3796,7 +3796,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'inventory' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <Bookmark className="w-4 h-4" />
-                  Stock Management
+                  Stock
                 </button>
 
                 <button
@@ -3814,7 +3814,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'ledger' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <FileText className="w-4 h-4" />
-                  Transactions & Ledger
+                  Ledger
                 </button>
 
                 <button
@@ -3823,7 +3823,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'expenses' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <PiggyBank className="w-4 h-4" />
-                  Expenses Ledger
+                  Expenses
                 </button>
 
                 <button
@@ -3832,7 +3832,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'reports' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <BarChart3 className="w-4 h-4" />
-                  Reports Dashboard
+                  Reports
                 </button>
 
                 <button
@@ -3841,7 +3841,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'staff' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <UserCheck className="w-4 h-4" />
-                  Staff Management
+                  Staff
                 </button>
 
                 <p className="text-[10px] uppercase font-mono tracking-widest text-[#A0A0A5] pl-1.5 mt-4 mb-2 font-bold">Configs</p>
@@ -3863,7 +3863,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'pos' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <ShoppingCart className="w-4 h-4" />
-                  Sales / POS
+                  Sales
                 </button>
 
                 <button
@@ -3881,7 +3881,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'products' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <Package className="w-4 h-4" />
-                  View Products
+                  Products
                 </button>
 
                 <button
@@ -3890,7 +3890,7 @@ _${businessInfo.name}_`;
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'ledger' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <FileText className="w-4 h-4" />
-                  Transactions & Ledger
+                  Ledger
                 </button>
               </>
             )}
@@ -3969,14 +3969,14 @@ _${businessInfo.name}_`;
               <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
               <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
                 {activeTab === 'dashboard' && <span className="hidden md:inline">Dashboard</span>}
-                {activeTab === 'reports' && 'Reports Dashboard'}
+                {activeTab === 'reports' && 'Reports'}
                 {activeTab === 'products' && 'Product Settings'}
-                {activeTab === 'negative-sales' && 'Negative Stock Log'}
+                {activeTab === 'negative-sales' && 'Stock Alert'}
                 {activeTab === 'purchases' && 'Purchases Ledger'}
                 {activeTab === "pos" && "Counter Cash Memo"}
-                {activeTab === 'inventory' && 'Stock Management'}
+                {activeTab === 'inventory' && 'Stock'}
                 {activeTab === 'ledger' && 'Account Ledger'}
-                {activeTab === 'expenses' && 'Expenses Ledger'}
+                {activeTab === 'expenses' && 'Expenses'}
                 {activeTab === 'contacts' && 'Customers Directory'}
                 {activeTab === 'settings' && 'System Settings'}
               </h1>
@@ -9674,7 +9674,7 @@ _${businessInfo.name}_`;
           )}
         </button>
 
-        {/* Transactions & Ledger */}
+        {/* Ledger */}
         <button
           onClick={() => {
             setActiveTab("ledger");
@@ -9759,7 +9759,7 @@ _${businessInfo.name}_`;
                       <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Core Operations</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "pos", label: "Sales / POS", desc: "Checkout desk", Icon: ShoppingCart },
+                          { id: "pos", label: "Sales", desc: "Checkout desk", Icon: ShoppingCart },
                           { id: "dashboard", label: "Dashboard", desc: "Live report stats", Icon: LayoutDashboard },
                         ].map((item) => {
                           const Icon = item.Icon;
@@ -9794,7 +9794,7 @@ _${businessInfo.name}_`;
                           { id: "products", label: "Products", desc: "Current stock", Icon: Package },
                           { id: "purchases", label: "Purchases", desc: "Supplier lot", Icon: PlusCircle },
                           { id: "inventory", label: "Inventory", desc: "Below threshold", Icon: Bookmark },
-                          { id: "negative-sales", label: "Negative Stock Log", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
+                          { id: "negative-sales", label: "Stock Alert", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
                         ].map((item) => {
                           const Icon = item.Icon;
                           const isActive = activeTab === item.id;
@@ -9825,10 +9825,10 @@ _${businessInfo.name}_`;
                       <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Ledgers & Accounts</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "ledger", label: "Transactions & Ledger", desc: "All cashflows", Icon: FileText },
-                          { id: "expenses", label: "Expenses Ledger", desc: "Bills & costs", Icon: PiggyBank },
-                          { id: "contacts", label: "Customers & CRM", desc: "CRM profiles", Icon: Users },
-                          { id: "reports", label: "Reports Dashboard", desc: "Daily statement", Icon: BarChart3 },
+                          { id: "ledger", label: "Ledger", desc: "All cashflows", Icon: FileText },
+                          { id: "expenses", label: "Expenses", desc: "Bills & costs", Icon: PiggyBank },
+                          { id: "contacts", label: "Customers", desc: "CRM profiles", Icon: Users },
+                          { id: "reports", label: "Reports", desc: "Daily statement", Icon: BarChart3 },
                         ].map((item) => {
                           const Icon = item.Icon;
                           const isActive = activeTab === item.id;
@@ -9859,7 +9859,7 @@ _${businessInfo.name}_`;
                       <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Management & System</span>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: "staff", label: "Staff Management", desc: "Salary sheets", Icon: UserCheck },
+                          { id: "staff", label: "Staff", desc: "Salary sheets", Icon: UserCheck },
                           { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
                         ].map((item) => {
                           const Icon = item.Icon;
@@ -9889,10 +9889,10 @@ _${businessInfo.name}_`;
                 ) : (
                   <div className="grid grid-cols-1 gap-2.5">
                     {[
-                      { id: "pos", label: "Sales / POS", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
-                      { id: "contacts", label: "Customers & CRM", desc: "Due balances & contact logs", Icon: Users },
+                      { id: "pos", label: "Sales", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
+                      { id: "contacts", label: "Customers", desc: "Due balances & contact logs", Icon: Users },
                       { id: "products", label: "Products", desc: "Real-time standard stock index", Icon: Package },
-                      { id: "ledger", label: "Transactions & Ledger", desc: "Sales history, edit selling price & print challan", Icon: FileText },
+                      { id: "ledger", label: "Ledger", desc: "Sales history, edit selling price & print challan", Icon: FileText },
                     ].map((item) => {
                       const Icon = item.Icon;
                       const isActive = activeTab === item.id;
