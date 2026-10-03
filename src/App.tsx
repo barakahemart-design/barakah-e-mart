@@ -905,7 +905,9 @@ export default function App() {
         product_name: docData.product_name || "Product Item",
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
-        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
+        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
+        warranty: docData.warranty || "",
+        warranty_details: docData.warranty_details || ""
       }));
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
@@ -1251,10 +1253,11 @@ export default function App() {
   // -----------------------------------------------------------------
   // 1. POS INVOICING WORKSPACE (Cash Memo) STATE
   // -----------------------------------------------------------------
-  const [posCart, setPosCart] = useState<{ product: Product; quantity: number; price?: number }[]>([]);
+  const [posCart, setPosCart] = useState<{ product: Product; quantity: number; price?: number; warranty?: string }[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [cartItemQty, setCartItemQty] = useState<number>(1);
   const [cartItemPrice, setCartItemPrice] = useState<string>("");
+  const [cartItemWarranty, setCartItemWarranty] = useState<string>("");
   const [customerDiscount, setCustomerDiscount] = useState<number>(0);
   const [invoiceTaxRate, setInvoiceTaxRate] = useState<number>(0); // default VAT % is now 0
   const [posSelectedContactId, setPosSelectedContactId] = useState<string>("");
@@ -1434,7 +1437,7 @@ export default function App() {
       updatedCart[existingIdx].price = finalPrice;
       setPosCart(updatedCart);
     } else {
-      setPosCart([...posCart, { product: prod, quantity: qty, price: finalPrice }]);
+      setPosCart([...posCart, { product: prod, quantity: qty, price: finalPrice, warranty: prod.warranty || "" }]);
     }
     triggerNotification(`${prod.name} added to cart!`);
   };
@@ -1460,12 +1463,13 @@ export default function App() {
       updatedCart[existingIdx].price = finalPrice; // assign the updated price
       setPosCart(updatedCart);
     } else {
-      setPosCart([...posCart, { product: prod, quantity: cartItemQty, price: finalPrice }]);
+      setPosCart([...posCart, { product: prod, quantity: cartItemQty, price: finalPrice, warranty: cartItemWarranty.trim() || prod.warranty || "" }]);
     }
 
     triggerNotification(`${prod.name} added to checkout cart!`);
     setCartItemQty(1);
     setCartItemPrice("");
+    setCartItemWarranty("");
     setSelectedProductId("");
     setPosSearchQuery("");
     setShowSuggestions(false);
@@ -1548,6 +1552,8 @@ export default function App() {
           price: itemPrice,
           total: itemPrice * cartItem.quantity,
           buyPrice: cartItem.product.buyPrice || 0,
+          warranty: cartItem.warranty || "",
+          warrantyDetails: cartItem.product.warrantyDetails || "",
           isNegativeSale: cartItem.product.stock < cartItem.quantity
         };
       }),
@@ -1612,7 +1618,9 @@ export default function App() {
           product_name: nestedIt.name || "Product Item",
           quantity: Number(nestedIt.quantity) || 0,
           sell_price: Number(nestedIt.price) || 0,
-          cost_price: Number(nestedIt.buyPrice) || 0
+          cost_price: Number(nestedIt.buyPrice) || 0,
+          warranty: nestedIt.warranty || "",
+          warranty_details: nestedIt.warrantyDetails || ""
         };
 
         const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === newTransaction.id && x.product_id === productUUID));
@@ -4314,6 +4322,10 @@ _${businessInfo.name}_`;
                         className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] text-center font-mono font-bold focus:ring-1 focus:ring-[#00E676]/30"
                       />
                     </div>
+                    <div className="col-span-1 md:col-span-2 space-y-1.5" id="pos-warranty-wrap">
+                      <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Warranty (Optional)</label>
+                      <input type="text" id="pos-warranty-input" value={cartItemWarranty} onChange={(e) => setCartItemWarranty(e.target.value)} placeholder="e.g. 3 Months / 1 Year" className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] text-center font-mono focus:ring-1 focus:ring-[#00E676]/30" />
+                    </div>
 
                     <button
                       type="button"
@@ -4383,6 +4395,7 @@ _${businessInfo.name}_`;
                             </div>
                             <div>
                               <div className="font-bold text-xs text-white group-hover:text-[#00E676] transition-colors">{item.product.name}</div>
+                              {item.warranty && <div className="text-[10px] text-amber-400 font-semibold mt-0.5">Warranty: {item.warranty}</div>}
                               <div className="text-[10px] font-mono text-[#A0A0A5] mt-0.5">
                                 SKU: {item.product.sku} <span className="mx-1 text-[#2D2D35]">•</span> Stock: {item.product.stock} {item.product.unit}
                               </div>
