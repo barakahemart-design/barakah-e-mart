@@ -6,7 +6,8 @@ import {
   setDoc,
   getDocs,
   query,
-  where
+  where,
+  or
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -48,71 +49,59 @@ function createSubscription(collName: string) {
       return () => {};
     }
 
-    // Query every supported account identity so legacy documents (created before
-    // store_id was introduced) continue to sync across devices. Results are merged
-    // by physical Firestore document id; no business data is discarded.
-    const identityQueries = [
-      query(collection(db, collName), where('store_id', '==', storeId)),
-      query(collection(db, collName), where('storeId', '==', storeId)),
-      query(collection(db, collName), where('email', '==', storeId)),
-      query(collection(db, collName), where('linked_email', '==', storeId)),
-      query(collection(db, collName), where('linkedEmail', '==', storeId)),
-      query(collection(db, collName), where('user_id', '==', activeUid)),
-      query(collection(db, collName), where('userId', '==', activeUid)),
-      query(collection(db, collName), where('owner_id', '==', activeUid))
-    ];
+    // One account-scoped realtime listener. The OR query preserves compatibility
+    // with legacy identity fields without opening eight separate listeners.
+    const accountQuery = query(
+      collection(db, collName),
+      or(
+        where('store_id', '==', storeId),
+        where('storeId', '==', storeId),
+        where('email', '==', storeId),
+        where('linked_email', '==', storeId),
+        where('linkedEmail', '==', storeId),
+        where('user_id', '==', activeUid),
+        where('userId', '==', activeUid),
+        where('owner_id', '==', activeUid)
+      )
+    );
 
     let stopped = false;
-
-    const mergedDocs = new Map<string, any>();
-    let pending = identityQueries.length;
     let firstSnapshot = true;
-    const unsubscribers: Array<() => void> = [];
 
-    const emit = () => {
-      if (stopped || pending > 0) return;
-      const items = Array.from(mergedDocs.values())
-        .filter((item: any) => item.deleted !== true && item.isDeleted !== true)
-        .filter((item: any) => isDocMatchingStore(item, storeId, activeUid));
+    const unsubscribe = onSnapshot(
+      accountQuery,
+      (snapshot) => {
+        if (stopped) return;
 
-      console.log('[Realtime Snapshot]', {
-        collection: collName,
-        docCount: items.length,
-        account: storeId,
-        firstSnapshot
-      });
-      firstSnapshot = false;
-      callback(items);
-    };
-
-    identityQueries.forEach((accountQuery) => {
-      const unsubscribe = onSnapshot(
-        accountQuery,
-        (snapshot) => {
-          if (stopped) return;
-          snapshot.docs.forEach((snapshotDoc: any) => {
+        const items = snapshot.docs
+          .map((snapshotDoc: any) => {
             const data = snapshotDoc.data() || {};
-            mergedDocs.set(snapshotDoc.id, {
+            return {
               ...data,
               id: data.id || snapshotDoc.id,
               firestoreId: snapshotDoc.id
-            });
-          });
-          pending -= 1;
-          emit();
-        },
-        (error) => {
-          console.error(`[Realtime Listener Error] ${collName}`, error);
-          pending -= 1;
-          emit();
-        }
-      );
-      unsubscribers.push(unsubscribe);
-    });
+            };
+          })
+          .filter((item: any) => item.deleted !== true && item.isDeleted !== true)
+          .filter((item: any) => isDocMatchingStore(item, storeId, activeUid));
+
+        console.log('[Realtime Snapshot]', {
+          collection: collName,
+          docCount: items.length,
+          account: storeId,
+          firstSnapshot
+        });
+        firstSnapshot = false;
+        callback(items);
+      },
+      (error) => {
+        console.error(`[Realtime Listener Error] ${collName}`, error);
+      }
+    );
 
     return () => {
       stopped = true;
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      unsubscribe();
     };
   };
 }
