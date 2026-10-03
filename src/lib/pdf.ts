@@ -13,6 +13,21 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return window.btoa(binary);
 }
 
+// Detect the actual saved logo format instead of forcing every logo to PNG.
+function detectLogoFormat(src: string): 'PNG' | 'JPEG' | 'WEBP' {
+  const match = src.match(/^data:image\\/([^;,]+)/i);
+  if (match) {
+    const mime = match[1].toLowerCase();
+    if (mime === 'jpeg' || mime === 'jpg') return 'JPEG';
+    if (mime === 'webp') return 'WEBP';
+    return 'PNG';
+  }
+  const clean = src.split('?')[0].toLowerCase();
+  if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return 'JPEG';
+  if (clean.endsWith('.webp')) return 'WEBP';
+  return 'PNG';
+}
+
 const FONT_URLS: { [key: string]: string } = {
   "Inter": "https://cdn.jsdelivr.net/npm/@fontsource/inter/files/inter-latin-400-normal.ttf",
   "Roboto": "https://cdn.jsdelivr.net/npm/@fontsource/roboto/files/roboto-latin-400-normal.ttf",
@@ -254,9 +269,29 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   // Draw Logo
   if (hasLogoImg && companyLogoStr) {
     try {
-      doc.addImage(companyLogoStr, 'PNG', brandX, identityY, logoWidth, logoHeight);
+      doc.addImage(companyLogoStr, detectLogoFormat(companyLogoStr), brandX, identityY, logoWidth, logoHeight);
     } catch (e) {
-      console.error("Error drawing logo in PDF:", e);
+      // Fallback for formats that the installed jsPDF build cannot decode directly.
+      try {
+        const image = new Image();
+        image.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth || image.width;
+            canvas.height = image.naturalHeight || image.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(image, 0, 0);
+            doc.addImage(canvas.toDataURL('image/png'), 'PNG', brandX, identityY, logoWidth, logoHeight);
+          } catch (retryError) {
+            console.error("Error drawing converted logo in PDF:", retryError);
+          }
+        };
+        image.onerror = () => console.error("Error loading saved business logo for PDF.");
+        image.src = companyLogoStr;
+      } catch (retryError) {
+        console.error("Error drawing logo in PDF:", retryError);
+      }
     }
   } else if (hasLogoTextSymbol && companyLogoStr) {
     try {
