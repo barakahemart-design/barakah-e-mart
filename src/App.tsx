@@ -2522,7 +2522,9 @@ export default function App() {
     const item = targetTx.items[itemIndex];
     if (!item) return;
     if (!window.confirm("Remove \"" + item.name + "\" from Invoice " + targetTx.invoiceNo + "? Only this product line will be removed; the invoice and other items will remain.")) return;
-    handleEditTransaction(transactionId, { items: targetTx.items.filter((_, idx) => idx !== itemIndex) });
+    const updatedItems = targetTx.items.filter((_, idx) => idx !== itemIndex);
+    handleEditTransaction(transactionId, { items: updatedItems });
+    setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
   };
 
   const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
