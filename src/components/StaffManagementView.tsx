@@ -151,6 +151,18 @@ export function StaffManagementView({
     return hasAnyLogged ? "outstanding" : "unpaid";
   };
 
+  // Open the existing salary payment flow for one specific staff member and month.
+  const openSalaryPayment = (staff: Staff, monthCode: string) => {
+    const payment = (staff.salaryPayments || []).find(p => p.monthCode === monthCode);
+    setSelectedMonth(monthCode);
+    setPayingStaff(staff);
+    setPayAmount(payment ? String(payment.amount) : String(staff.salary));
+    setPayDate(payment ? payment.paymentDate : getTodayDate());
+    setPayMethod(payment ? payment.paymentMethod : "Cash");
+    setPayNotes(payment ? (payment.notes || "") : "");
+    setPayStatus(payment ? payment.status : "paid");
+  };
+
   // Submission handles
   const handleAddNewStaff = (e: React.FormEvent) => {
     e.preventDefault();
@@ -641,14 +653,7 @@ export function StaffManagementView({
                                 {/* Recording button / edit and details */}
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setPayingStaff(emp);
-                                    setPayAmount(payment ? String(payment.amount) : String(emp.salary));
-                                    setPayDate(payment ? payment.paymentDate : "2026-05-29");
-                                    setPayMethod(payment ? payment.paymentMethod : "Cash");
-                                    setPayNotes(payment ? (payment.notes || "") : "");
-                                    setPayStatus(payment ? payment.status : "paid");
-                                  }}
+                                  onClick={() => openSalaryPayment(emp, selectedMonth)}
                                   className={`px-3 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1.5 ${
                                     isPaid
                                       ? "bg-slate-950 text-slate-400 hover:text-white border border-slate-850"
