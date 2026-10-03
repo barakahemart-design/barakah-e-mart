@@ -424,7 +424,7 @@ async function startServer() {
                 category: data.category || "Others",
                 amount: Number(data.amount) || 0,
                 description: data.description || "",
-                date: data.created_at || data.date || new Date().toISOString()
+                // The expense ledger date is user-selected; created_at is only a legacy fallback.\n                date: data.date || data.created_at || new Date().toISOString()
               };
             } else if (tableStr === "purchases") {
               itemObj = {
