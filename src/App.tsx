@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { 
   Building2, 
   ShoppingCart, 
@@ -3496,47 +3496,67 @@ _${businessInfo.name}_`;
     }
   };
 
-  const filteredDashboardTx = transactions.filter(t => checkDateInFilter(t.date));
-  const filteredDashboardExpenses = expenses.filter(e => checkDateInFilter(e.date));
-  const filteredDashboardPurchases = purchases.filter(p => checkDateInFilter(p.date));
+  const dashboardMetrics = useMemo(() => {
+    const filteredDashboardTx = transactions.filter(t => checkDateInFilter(t.date));
+    const filteredDashboardExpenses = expenses.filter(e => checkDateInFilter(e.date));
+    const filteredDashboardPurchases = purchases.filter(p => checkDateInFilter(p.date));
 
-  // Calculations for financial dashboard
-  const totalSalesTk = filteredDashboardTx.reduce((sum, t) => sum + t.total, 0);
-  const totalOutstandingDueTk = filteredDashboardTx.reduce((sum, t) => sum + t.dueBalance, 0);
-  const totalExpensesTk = filteredDashboardExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const totalPurchasesTk = filteredDashboardPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
-  
-  // Calculate total individual units of products sold
-  const totalUnitsSold = filteredDashboardTx.reduce((sum, t) => {
-    const itemQty = t.items ? t.items.reduce((innerSum, item) => innerSum + Number(item.quantity ?? 0), 0) : 0;
-    return sum + itemQty;
-  }, 0);
-  
-  // Calculate total costs of items checkout to plot pure visual profit margins
+    const totalSalesTk = filteredDashboardTx.reduce((sum, t) => sum + t.total, 0);
+    const totalOutstandingDueTk = filteredDashboardTx.reduce((sum, t) => sum + t.dueBalance, 0);
+    const totalExpensesTk = filteredDashboardExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalPurchasesTk = filteredDashboardPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
+    const totalUnitsSold = filteredDashboardTx.reduce((sum, t) => {
+      const itemQty = t.items ? t.items.reduce((innerSum, item) => innerSum + Number(item.quantity ?? 0), 0) : 0;
+      return sum + itemQty;
+    }, 0);
+
+    let totalCostOfGoodsSold = 0;
+    filteredDashboardTx.forEach(t => {
+      t.items.forEach(item => {
+        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+        let buyCost = 0;
+        if (item.buyPrice && item.buyPrice > 0) {
+          buyCost = item.buyPrice;
+        } else if (dbProduct && dbProduct.buyPrice > 0) {
+          buyCost = dbProduct.buyPrice;
+        } else if (dbProduct) {
+          buyCost = dbProduct.buyPrice;
+        } else if (item.buyPrice !== undefined) {
+          buyCost = item.buyPrice;
+        } else {
+          buyCost = item.price * 0.70;
+        }
+        totalCostOfGoodsSold += buyCost * item.quantity;
+      });
+    });
+
+    return {
+      filteredDashboardTx,
+      filteredDashboardExpenses,
+      filteredDashboardPurchases,
+      totalSalesTk,
+      totalOutstandingDueTk,
+      totalExpensesTk,
+      totalPurchasesTk,
+      totalUnitsSold,
+      totalCostOfGoodsSold
+    };
+  }, [transactions, expenses, purchases, products, dashboardFilter, customStart, customEnd]);
+
+  const {
+    filteredDashboardTx,
+    filteredDashboardExpenses,
+    filteredDashboardPurchases,
+    totalSalesTk,
+    totalOutstandingDueTk,
+    totalExpensesTk,
+    totalPurchasesTk,
+    totalUnitsSold,
+    totalCostOfGoodsSold
+  } = dashboardMetrics;
+
   const totalDuesActiveState = totalOutstandingDueTk;
   const netEarningsReceived = totalSalesTk - totalOutstandingDueTk;
-  
-  // Exact COGS calculation using matching products buy price, preferring actual catalog prices
-  let totalCostOfGoodsSold = 0;
-  filteredDashboardTx.forEach(t => {
-    t.items.forEach(item => {
-      const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
-      let buyCost = 0;
-      if (item.buyPrice && item.buyPrice > 0) {
-        buyCost = item.buyPrice;
-      } else if (dbProduct && dbProduct.buyPrice > 0) {
-        buyCost = dbProduct.buyPrice;
-      } else if (dbProduct) {
-        buyCost = dbProduct.buyPrice;
-      } else if (item.buyPrice !== undefined) {
-        buyCost = item.buyPrice;
-      } else {
-        buyCost = item.price * 0.70;
-      }
-      totalCostOfGoodsSold += buyCost * item.quantity;
-    });
-  });
-
   const netProfitAmt = Math.round(totalSalesTk - totalCostOfGoodsSold - totalExpensesTk);
   
   // Backward compatibility variables for render blocks
@@ -3545,20 +3565,23 @@ _${businessInfo.name}_`;
   const projectedNetTerminalProfit = netProfitAmt;
 
   // Filter lists dynamically
-  const purchasedProductIds = new Set(purchases.filter(pur => (pur.quantity || 0) > 0).map(pur => pur.productId).filter(Boolean));
+  const filteredProducts = useMemo(() => {
+    const purchasedProductIds = new Set(
+      purchases.filter(pur => (pur.quantity || 0) > 0).map(pur => pur.productId).filter(Boolean)
+    );
 
-  const filteredProducts = products.filter(p => {
-    // Only display products bought from a supplier (exists in purchases with qty > 0)
-    if (!purchasedProductIds.has(p.id)) return false;
+    return products.filter(p => {
+      if (!purchasedProductIds.has(p.id)) return false;
 
-    const query = inventorySearch.toLowerCase().trim();
-    if (!query) return true;
-    const searchTerms = query.split(/\s+/);
-    const targetString = `${p.name} ${p.sku} ${p.category}`.toLowerCase();
-    return searchTerms.every(term => targetString.includes(term));
-  });
+      const query = inventorySearch.toLowerCase().trim();
+      if (!query) return true;
+      const searchTerms = query.split(/\s+/);
+      const targetString = (p.name + " " + p.sku + " " + p.category).toLowerCase();
+      return searchTerms.every(term => targetString.includes(term));
+    });
+  }, [products, purchases, inventorySearch]);
 
-  const filteredTransactions = transactions.filter(t => {
+  const filteredTransactions = useMemo(() => transactions.filter(t => {
     // 1. Date filter check
     let matchesDate = false;
     try {
@@ -3617,10 +3640,10 @@ _${businessInfo.name}_`;
     
     if (ledgerStatusFilter === "all") return matchesSearch;
     return matchesSearch && t.status === ledgerStatusFilter;
-  });
+  }), [transactions, contacts, ledgerDateFilterType, ledgerStartDate, ledgerEndDate, ledgerSearch, ledgerStatusFilter]);
 
   // Recharts analytic plot models 
-  const ledgerTrendsPlotData = transactions.slice().reverse().map(t => {
+  const ledgerTrendsPlotData = useMemo(() => transactions.slice().reverse().map(t => {
     try {
       const parsed = safeDate(t.date);
       const dStr = parsed ? safeFormat(parsed, "dd MMM", "Slip Date") : "Slip Date";
@@ -3632,14 +3655,14 @@ _${businessInfo.name}_`;
     } catch (e) {
       return { date: "Slip Date", "Sales Value": t.total, "Cash Received": t.paidAmount };
     }
-  });
+  }), [transactions]);
 
-  const expenseCategoryPlotData = Object.entries(
+  const expenseCategoryPlotData = useMemo(() => Object.entries(
     expenses.reduce((acc, curr) => {
       acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
       return acc;
     }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value }));
+  ).map(([name, value]) => ({ name, value })), [expenses]);
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 
