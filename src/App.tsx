@@ -2850,6 +2850,7 @@ export default function App() {
   const [categoryModalTarget, setCategoryModalTarget] = useState<"add" | "edit" | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [expandedExpenseIds, setExpandedExpenseIds] = useState<Record<string, boolean>>({});
+  const [categoryToManage, setCategoryToManage] = useState<string | null>(null);
 
   const checkExpenseDateInFilter = (dateStr: string) => {
     try {
@@ -2927,6 +2928,91 @@ export default function App() {
     ...expenseCategories,
     ...expenses.map(e => e.category).filter(Boolean)
   ]));
+
+  const getExpenseMonthKey = (dateStr: string) => {
+    const match = String(dateStr || "").match(/^(\d{4})-(\d{2})/);
+    return match ? match[1] + "-" + match[2] : "";
+  };
+
+  const handleEditExpenseCategory = async (oldCategory: string, newCategory: string) => {
+    const trimmed = newCategory.trim();
+    if (!trimmed) {
+      triggerNotification("Category name cannot be empty.", "error");
+      return;
+    }
+    if (oldCategory === trimmed) {
+      setCategoryToManage(null);
+      setNewCategoryName("");
+      return;
+    }
+    if (allCategories.includes(trimmed)) {
+      triggerNotification("That category name already exists.", "error");
+      return;
+    }
+
+    const currentMonthKey = getExpenseMonthKey(new Date().toISOString().split("T")[0]);
+    const affected = expenses.filter(e =>
+      e.category === oldCategory && getExpenseMonthKey(e.date) === currentMonthKey
+    );
+
+    const updatedExpenses = expenses.map(e =>
+      e.category === oldCategory && getExpenseMonthKey(e.date) === currentMonthKey
+        ? { ...e, category: trimmed }
+        : e
+    );
+
+    setExpenseCategories(prev => prev.map(cat => cat === oldCategory ? trimmed : cat));
+    if (affected.length > 0) {
+      setExpenses(updatedExpenses);
+      if (activeUser && !activeUser.isGuest) {
+        await Promise.all(affected.map(e => saveExpense(activeUser.uid, { ...e, category: trimmed })));
+      }
+    }
+
+    if (expenseFilterCategory === oldCategory) setExpenseFilterCategory(trimmed);
+    if (expenseCategory === oldCategory) setExpenseCategory(trimmed);
+    if (editExpenseCategory === oldCategory) setEditExpenseCategory(trimmed);
+    setCategoryToManage(null);
+    setNewCategoryName("");
+    triggerNotification(`Category "${oldCategory}" renamed to "${trimmed}" for the current month.`, "success");
+  };
+
+  const handleDeleteExpenseCategory = async (category: string) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Security block: Only administrators are authorized to delete expense categories! 🛑", "error");
+      return;
+    }
+
+    const currentMonthKey = getExpenseMonthKey(new Date().toISOString().split("T")[0]);
+    const affected = expenses.filter(e =>
+      e.category === category && getExpenseMonthKey(e.date) === currentMonthKey
+    );
+
+    const confirmed = window.confirm(
+      affected.length > 0
+        ? `Delete category "${category}" and its ${affected.length} current-month expense entr${affected.length === 1 ? "y" : "ies"}? Older-month expenses under this category will remain.`
+        : `Delete category "${category}"? There are no current-month expenses under this category, so older-month records will remain.`
+    );
+    if (!confirmed) return;
+
+    if (activeUser && !activeUser.isGuest && affected.length > 0) {
+      await Promise.all(affected.map(e => deleteExpense(e.id).catch(() => {})));
+    }
+    setExpenses(prev => prev.filter(e =>
+      !(e.category === category && getExpenseMonthKey(e.date) === currentMonthKey)
+    ));
+    setExpenseCategories(prev => prev.filter(cat => cat !== category));
+    if (expenseFilterCategory === category) setExpenseFilterCategory("All");
+    if (expenseCategory === category) setExpenseCategory("Others");
+    if (editExpenseCategory === category) setEditExpenseCategory("Others");
+    setCategoryToManage(null);
+    triggerNotification(
+      affected.length > 0
+        ? `Category "${category}" deleted. Current-month expenses removed; older records were kept.`
+        : `Category "${category}" deleted. Older-month records were kept.`,
+      "success"
+    );
+  };
 
   // Suggest expense category intelligently using AI proxy pipeline
   const fetchAISuggestedCategory = async () => {
@@ -6963,6 +7049,33 @@ _${businessInfo.name}_`;
                             <option key={cat} value={cat}>{cat}</option>
                           ))}
                         </select>
+
+                        <div className="mt-2 space-y-1.5">
+                          <span className="text-[9px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Manage Categories</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {allCategories.map(cat => (
+                              <div key={cat} className="flex items-center gap-1 px-2 py-1 bg-[#0b101b] border border-slate-800 rounded-lg">
+                                <span className="text-[9px] text-slate-300 font-mono">{cat}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => { setNewCategoryName(cat); setCategoryToManage(cat); }}
+                                  className="p-0.5 text-slate-400 hover:text-emerald-400 cursor-pointer"
+                                  title={`Edit ${cat}`}
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteExpenseCategory(cat)}
+                                  className="p-0.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                                  title={`Delete ${cat}`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -9483,6 +9596,52 @@ _${businessInfo.name}_`;
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EXPENSE CATEGORY MODAL */}
+      {categoryToManage && (
+        <div className="fixed inset-0 z-[65] bg-[#0c0c0e]/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1E1E24] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden max-w-sm w-full p-5 space-y-4 text-slate-200 animate-scaleIn">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
+              <h3 className="text-xs font-extrabold uppercase text-[#00E676] flex items-center gap-2 font-display">
+                <Edit3 className="w-4 h-4 text-emerald-400" />
+                Edit Category
+              </h3>
+              <button
+                onClick={() => { setCategoryToManage(null); setNewCategoryName(""); }}
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">Category Name</label>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono text-xs"
+                autoFocus
+              />
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => categoryToManage && handleEditExpenseCategory(categoryToManage, newCategoryName)}
+                  className="flex-1 py-2 bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setCategoryToManage(null); setNewCategoryName(""); }}
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
