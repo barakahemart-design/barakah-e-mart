@@ -501,12 +501,12 @@ export function ReportsView({
                   : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
               }`}
             >
-              {preset === "all" && "All Time"}
+              {preset === "all" && "All"}
               {preset === "today" && "Today"}
               {preset === "yesterday" && "Yesterday"}
-              {preset === "weekly" && "Weekly"}
-              {preset === "monthly" && "Monthly"}
-              {preset === "yearly" && "Yearly"}
+              {preset === "weekly" && "7 Days"}
+              {preset === "monthly" && "This Month"}
+              {preset === "yearly" && "This Year"}
               {preset === "custom" && "Custom"}
             </button>
           ))}
