@@ -86,6 +86,7 @@ import {
   subscribeProducts,
   subscribeCustomers,
   subscribeTransactions,
+  subscribeTransactionItems,
   subscribeExpenses,
   subscribePurchases,
   saveProduct,
@@ -98,8 +99,7 @@ import {
   deleteTransaction,
   deleteExpense,
   deletePurchase,
-  handleSave,
-  isDocMatchingStore
+  handleSave
 } from "./lib/firestoreService";
 
 export interface Product {
@@ -789,7 +789,9 @@ export default function App() {
         category: docData.category || "Others",
         amount: Number(docData.amount) || 0,
         description: docData.description || "",
-        date: docData.created_at || docData.date || new Date().toISOString()
+        // The user-selected expense date is authoritative. created_at is only a
+        // legacy fallback and must never overwrite the selected ledger date.
+        date: docData.date || docData.created_at || new Date().toISOString()
       }));
 
       localStorage.setItem(getDbKey("barakah_expenses", undefined, activeUserId), JSON.stringify(updatedList));
@@ -866,32 +868,22 @@ export default function App() {
     });
 
     // 6. TRANSACTION ITEMS SUBSCRIBER
-    const unsubItems = onSnapshot(collection(db, "transaction_items"), { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        setSyncStatus("connected");
-      } else {
-        markRemoteUpdateActive();
-      }
-
-      const flatItems = snapshot.docs
-        .filter(docSnap => isDocMatchingStore(docSnap.data(), cleanEmail, activeUserId))
-        .map(docSnap => {
-          const docData = docSnap.data();
-          return {
-            id: docData.id || docSnap.id,
-            firestoreId: docSnap.id,
-            transaction_id: docData.transaction_id,
-            product_id: docData.product_id || null,
-            product_name: docData.product_name || "Product Item",
-            quantity: Number(docData.quantity) || 0,
-            sell_price: Number(docData.sell_price) || 0,
-            cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
-          };
-        });
+    // Keep this account-scoped; never listen to the entire transaction_items collection.
+    const unsubItems = subscribeTransactionItems(activeUserId, (items) => {
+      markRemoteUpdateActive();
+      const flatItems = items.map((docData: any) => ({
+        id: docData.id,
+        firestoreId: docData.firestoreId,
+        transaction_id: docData.transaction_id,
+        product_id: docData.product_id || null,
+        product_name: docData.product_name || "Product Item",
+        quantity: Number(docData.quantity) || 0,
+        sell_price: Number(docData.sell_price) || 0,
+        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
+      }));
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
-    }, (err) => {
       setSyncStatus("connected");
     });
 
