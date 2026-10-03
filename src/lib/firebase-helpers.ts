@@ -678,7 +678,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               category: e.category || "Others",
               amount: Number(e.amount) || 0,
               description: e.description || "",
-              date: e.created_at || new Date().toISOString()
+              // The expense ledger date is the user-selected date. created_at is only a legacy fallback.\n              date: e.date || e.created_at || new Date().toISOString()
             };
           });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
