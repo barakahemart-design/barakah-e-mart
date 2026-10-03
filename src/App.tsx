@@ -6630,31 +6630,30 @@ _${businessInfo.name}_`;
                                             </button>
                                           </div>
                                         ) : (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setShowCostEditId(`${t.id}-${idx}`);
-                                            }}
-                                            className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
-                                            title="Delete only this product line"
-                                          />
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDeleteTransactionItem(t.id, idx);
-                                            }}
-                                            className="text-[9px] text-rose-500 hover:text-rose-600 hover:underline font-mono cursor-pointer bg-transparent border-0 p-0"
-                                            title="Delete only this product line"
-                                          >
-                                            Delete Item
-                                          </button>
-                                          <span className="sr-only">
-                                          >
-                                            Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
-                                          </button>
-                                        )
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowCostEditId(t.id + "-" + idx);
+                                              }}
+                                              className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
+                                              title="Override or edit purchase cost rate for this item"
+                                            >
+                                              Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteTransactionItem(t.id, idx);
+                                              }}
+                                              className="text-[9px] text-rose-500 hover:text-rose-600 hover:underline font-mono cursor-pointer bg-transparent border-0 p-0"
+                                              title="Delete only this product line"
+                                            >
+                                              Delete Item
+                                            </button>
+                                          </div>
                                       )}
                                       <span className="font-mono text-[10px] text-slate-400">
                                         {businessInfo.currencySymbol} {it.total.toLocaleString()}
