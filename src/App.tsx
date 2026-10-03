@@ -5659,7 +5659,7 @@ _${businessInfo.name}_`;
                     {[
                       { id: "all", label: "All Time" },
                       { id: "today", label: "Today" },
-                      { id: "weekly", label: "Last 7 Days" },
+                      { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
                       { id: "yearly", label: "This Year" }
                     ].map((preset) => (
@@ -6495,12 +6495,12 @@ _${businessInfo.name}_`;
                           : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
                       }`}
                     >
-                      {preset === "all" && "All Time"}
+                      {preset === "all" && "All"}
                       {preset === "today" && "Today"}
                       {preset === "yesterday" && "Yesterday"}
-                      {preset === "weekly" && "Weekly"}
-                      {preset === "monthly" && "Monthly"}
-                      {preset === "yearly" && "Yearly"}
+                      {preset === "weekly" && "7 Days"}
+                      {preset === "monthly" && "This Month"}
+                      {preset === "yearly" && "This Year"}
                       {preset === "custom" && "Custom"}
                     </button>
                   ))}
@@ -6838,7 +6838,7 @@ _${businessInfo.name}_`;
                       { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
                       { id: "yearly", label: "This Year" },
-                      { id: "custom", label: "Custom Range" }
+                      { id: "custom", label: "Custom" }
                     ].map((preset) => (
                       <button
                         key={preset.id}
