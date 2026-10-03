@@ -65,8 +65,18 @@ export function StaffManagementView({
   // Navigation tabs within Staff Management
   const [activeSubTab, setActiveSubTab] = useState<"payroll" | "directory">("payroll");
 
-  // Selection for payment ledger month (default to current month May 2026 "2026-05")
-  const [selectedMonth, setSelectedMonth] = useState<string>("2026-05");
+  // Selection for payment ledger month (defaults to the device's current month)
+  const getCurrentMonthCode = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const getTodayDate = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthCode());
 
   // Filter queries
   const [dirSearch, setDirSearch] = useState("");
@@ -79,7 +89,7 @@ export function StaffManagementView({
   const [staffEmail, setStaffEmail] = useState("");
   const [staffJobTitle, setStaffJobTitle] = useState("");
   const [staffSalary, setStaffSalary] = useState("");
-  const [staffJoinDate, setStaffJoinDate] = useState("2026-05-01");
+  const [staffJoinDate, setStaffJoinDate] = useState(getTodayDate());
   const [staffNotes, setStaffNotes] = useState("");
 
   // Editing staff
@@ -96,7 +106,7 @@ export function StaffManagementView({
   // Pay Salary modal states
   const [payingStaff, setPayingStaff] = useState<Staff | null>(null);
   const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState("2026-05-29");
+  const [payDate, setPayDate] = useState(getTodayDate());
   const [payMethod, setPayMethod] = useState("Cash");
   const [payNotes, setPayNotes] = useState("");
   const [payStatus, setPayStatus] = useState<"paid" | "outstanding">("paid");
@@ -107,17 +117,17 @@ export function StaffManagementView({
     payment: SalaryPayment;
   } | null>(null);
 
-  // Generate continuous list of months for UI (last 8 months starting from 2026-05)
-  const monthOptions = [
-    { code: "2026-05", label: "May 2026" },
-    { code: "2026-04", label: "April 2026" },
-    { code: "2026-03", label: "March 2026" },
-    { code: "2026-02", label: "February 2026" },
-    { code: "2026-01", label: "January 2026" },
-    { code: "2025-12", label: "December 2025" },
-    { code: "2025-11", label: "November 2025" },
-    { code: "2025-10", label: "October 2025" },
-  ];
+  // Generate the latest 12 months dynamically from the current device date.
+  const monthOptions = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - index);
+    const code = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    return {
+      code,
+      label: date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    };
+  });
 
   // Helper check: Is a given month completely paid for all ACTIVE staff members?
   const getMonthPaymentStatus = (monthCode: string) => {
@@ -165,7 +175,7 @@ export function StaffManagementView({
     setStaffEmail("");
     setStaffJobTitle("");
     setStaffSalary("");
-    setStaffJoinDate("2026-05-01");
+    setStaffJoinDate(getTodayDate());
     setStaffNotes("");
     setShowAddModal(false);
     triggerNotification("Staff member successfully enlisted!", "success");
@@ -200,6 +210,14 @@ export function StaffManagementView({
     if (!payingStaff) return;
 
     const parsedAmount = parseFloat(payAmount) || 0;
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      triggerNotification("Please enter a valid salary amount greater than 0.", "error");
+      return;
+    }
+    if (!payDate) {
+      triggerNotification("Please select the salary disbursement date.", "error");
+      return;
+    }
     const currentPayments = payingStaff.salaryPayments || [];
     
     // Try to update existing for same month code or generate a clean sequence
@@ -235,6 +253,11 @@ export function StaffManagementView({
     });
 
     setPayingStaff(null);
+    setPayAmount("");
+    setPayDate(getTodayDate());
+    setPayMethod("Cash");
+    setPayNotes("");
+    setPayStatus("paid");
     triggerNotification(`Salary sheet recorded for ${payingStaff.name}`, "success");
   };
 
