@@ -646,7 +646,9 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               sellPrice: Number(p.sellPrice ?? p.sell_price) || 0,
               category: p.category || "Electronics",
               unit: p.unit || "piece",
-              imageUrl: p.imageUrl || p.image_url || undefined
+              imageUrl: p.imageUrl || p.image_url || undefined,
+              warranty: p.warranty || p.warranty_period || "",
+              warrantyDetails: p.warrantyDetails || p.warranty_details || ""
             };
           });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
@@ -710,7 +712,9 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
                 price: Number(item.sell_price) || 0,
                 total: Number(item.quantity * item.sell_price) || 0,
                 productId: item.product_id || undefined,
-                buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+                buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
+                warranty: item.warranty || "",
+                warrantyDetails: item.warrantyDetails || item.warranty_details || ""
               };
             });
 
