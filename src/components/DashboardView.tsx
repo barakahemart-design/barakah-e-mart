@@ -225,13 +225,13 @@ export function DashboardView({
       <div className="bg-[#0b0f19] border border-slate-800/80 p-2 sm:p-2.5 rounded-2xl flex flex-wrap items-center gap-3 justify-between" id="dashboard-period-menu-container">
         <div className="flex flex-wrap gap-1.5" id="preset-horizontal-pills">
           {[
-            { id: "all", label: "All Time" },
+            { id: "all", label: "All" },
             { id: "today", label: "Today" },
             { id: "yesterday", label: "Yesterday" },
             { id: "weekly", label: "7 Days" },
             { id: "monthly", label: "This Month" },
             { id: "yearly", label: "This Year" },
-            { id: "custom", label: "Custom Range" }
+            { id: "custom", label: "Custom" }
           ].map((preset) => (
             <button
               key={preset.id}
