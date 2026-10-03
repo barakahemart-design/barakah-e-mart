@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   UserCheck, 
   Users, 
@@ -347,13 +347,32 @@ export function StaffManagementView({
     return matchesSearch && matchesStatus;
   });
 
-  // Action to trigger printing window of a compiled receipt
+  // Prepare the payslip first; printing starts only after the print-only DOM
+  // has actually rendered. This is more reliable on mobile browsers.
   const triggerPrintPayslip = (staff: Staff, payment: SalaryPayment) => {
     setPrintPayslipContext({ staff, payment });
-    setTimeout(() => {
-      window.print();
-    }, 350);
   };
+
+  useEffect(() => {
+    if (!printPayslipContext) return;
+
+    const printTimer = window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        window.print();
+      });
+    }, 150);
+
+    const clearAfterPrint = () => {
+      setPrintPayslipContext(null);
+    };
+
+    window.addEventListener("afterprint", clearAfterPrint);
+
+    return () => {
+      window.clearTimeout(printTimer);
+      window.removeEventListener("afterprint", clearAfterPrint);
+    };
+  }, [printPayslipContext]);
 
   return (
     <div className="space-y-6 text-slate-700 dark:text-slate-300 font-sans" id="staff-management-workspace">
@@ -903,19 +922,21 @@ export function StaffManagementView({
       {/* -----------------------------------------------------------------
           MODAL: FULL CURRENT-YEAR SALARY HISTORY
           ----------------------------------------------------------------- */}
-      {selectedStaffHistory && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[50000] flex items-center justify-center p-4" id="staff-salary-history-modal">
-          <div className="bg-[#1E1E24] border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-sm font-extrabold text-white block">{selectedStaffHistory.name}</span>
-                <span className="text-[10px] text-slate-400 font-mono">{selectedStaffHistory.jobTitle} • {selectedStaffHistory.phone} • {currentYear} Salary History</span>
+      {selectedStaffHistory && (() => {
+        const historyStaff = staffList.find(member => member.id === selectedStaffHistory.id) || selectedStaffHistory;
+        return (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[50000] flex items-center justify-center p-4" id="staff-salary-history-modal">
+            <div className="bg-[#1E1E24] border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-extrabold text-white block">{historyStaff.name}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{historyStaff.jobTitle} • {historyStaff.phone} • {currentYear} Salary History</span>
+                </div>
+                <button type="button" onClick={() => setSelectedStaffHistory(null)} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
-              <button type="button" onClick={() => setSelectedStaffHistory(null)} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[calc(90vh-76px)] space-y-2">
-              {currentYearMonthOptions.map((month) => {
-                const payment = (selectedStaffHistory.salaryPayments || []).find(p => p.monthCode === month.code);
+              <div className="p-4 overflow-y-auto max-h-[calc(90vh-76px)] space-y-2">
+                {currentYearMonthOptions.map((month) => {
+                  const payment = (historyStaff.salaryPayments || []).find(p => p.monthCode === month.code);
                 const isPaid = payment?.status === "paid";
                 const monthIndex = Number(month.code.slice(5, 7)) - 1;
                 const isFuture = monthIndex > new Date().getMonth();
@@ -936,14 +957,40 @@ export function StaffManagementView({
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
                       {isPaid && payment ? (
                         <>
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ PAID</span>
-                          <button type="button" onClick={() => triggerPrintPayslip(selectedStaffHistory, payment)} className="p-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-white cursor-pointer" title="Print salary slip"><Printer className="w-3.5 h-3.5" /></button>
+                          <button
+                            type="button"
+                            onClick={() => triggerPrintPayslip(historyStaff, payment)}
+                            className="p-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-white cursor-pointer"
+                            title="Print salary slip"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStaffHistory(null);
+                              openSalaryPayment(historyStaff, month.code);
+                            }}
+                            className="p-1.5 bg-slate-950 border border-slate-850 hover:bg-blue-950 rounded-lg text-slate-400 hover:text-blue-400 cursor-pointer"
+                            title="Edit this month's salary payment"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePayment(historyStaff, payment.id)}
+                            className="p-1.5 bg-slate-950 border border-slate-850 hover:bg-rose-950 rounded-lg text-slate-400 hover:text-rose-400 cursor-pointer"
+                            title="Delete this month's salary payment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </>
                       ) : !isFuture ? (
-                        <button type="button" onClick={() => { setSelectedStaffHistory(null); openSalaryPayment(selectedStaffHistory, month.code); }} className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-extrabold cursor-pointer">
+                        <button type="button" onClick={() => { setSelectedStaffHistory(null); openSalaryPayment(historyStaff, month.code); }} className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-extrabold cursor-pointer">
                           <Coins className="w-3.5 h-3.5 inline mr-1" />Pay Salary
                         </button>
                       ) : (
@@ -956,7 +1003,8 @@ export function StaffManagementView({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* -----------------------------------------------------------------
           MODAL: DEDICATED PAY SALARY ENTRY POINT
