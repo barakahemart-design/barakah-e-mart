@@ -527,7 +527,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
 
   // BOTTOM FINANCIAL & POLICY SECTION
   // Order: Total in Words -> Warranty Policy -> Official Terms & Conditions.
-  let finalY = (doc as any).lastAutoTable.finalY + 8;
+  const bottomSectionTopY = (doc as any).lastAutoTable.finalY + 8;
+  let finalY = bottomSectionTopY;
 
   // Total Bill in Words — immediately below the product table.
   doc.setFont(pdfFontName, "bold");
@@ -617,8 +618,12 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   });
 
   // Right Column: Financial Card (Subtotal, VAT, Discount, Grand Total, Cash Paid, Change/Due)
+  // Keep the amount card vertically balanced beside the full Warranty + Terms block,
+  // instead of pushing it to the bottom when warranty details are long.
   let rightX = 135;
-  let summaryY = finalY;
+  const financialCardHeight = 38;
+  const financialContentHeight = Math.max(0, termsY - bottomSectionTopY);
+  let summaryY = bottomSectionTopY + Math.max(0, (financialContentHeight - financialCardHeight) / 2);
 
   // Premium clean flat totals box
   doc.setFillColor(255, 255, 255);
