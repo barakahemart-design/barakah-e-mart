@@ -599,7 +599,9 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Sync state to local storage automatically when changed and auto backup to cloud on changes
+    const [expenseCategories, setExpenseCategories] = useState<string[]>(["Rent", "Electricity", "Salary", "Marketing", "Others"]);
+
+// Sync state to local storage automatically when changed and auto backup to cloud on changes
   useEffect(() => {
     if (!initialLoadedRef.current) return;
     if (isRemoteUpdateActiveRef.current) {
@@ -2798,7 +2800,7 @@ export default function App() {
   // -----------------------------------------------------------------
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("Others");
-  const [expenseCategories, setExpenseCategories] = useState<string[]>(["Rent", "Electricity", "Salary", "Marketing", "Others"]);
+  
   
   useEffect(() => {
     const savedCategories = (businessInfo as any)?.expenseCategories;
