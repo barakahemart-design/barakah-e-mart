@@ -44,3 +44,52 @@
 @media (min-width: 641px) and (max-width: 1024px) {
   #product-profitability-ledger-section { border-radius: 18px !important; }
 }
+
+
+/* iOS safe-area + mobile shell polish: UI-only, no app logic. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (max-width: 640px) {
+    html, body, #root {
+      background: var(--color-layout-bg, #06080e);
+    }
+
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #root {
+      min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    }
+
+    /* Keep fixed mobile controls clear of the iPhone home-indicator area. */
+    #root nav.fixed.bottom-0 {
+      bottom: env(safe-area-inset-bottom);
+    }
+
+    /* The drawer should fill the visual viewport, including the safe-area. */
+    #mobile-drawer-container,
+    #mobile-drawer-container > #mobile-drawer-backdrop {
+      top: 0;
+      bottom: 0;
+    }
+
+    #mobile-drawer-panel {
+      padding-top: max(1rem, env(safe-area-inset-top));
+      padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  /* Remove accidental horizontal overscroll/glow from the app shell. */
+  html, body {
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent iOS tap highlight from making the UI look washed-out. */
+  button, a, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
