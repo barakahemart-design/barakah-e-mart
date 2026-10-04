@@ -6,29 +6,22 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone"],
   "background_color": "#090d16",
   "theme_color": "#090d16",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/barakah-icon-192-real.png",
+      "src": "/barakah-icon-android.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "/barakah-icon-512-real.png",
-      "type": "image/png",
+      "src": "/barakah-icon.svg",
+      "type": "image/svg+xml",
       "sizes": "512x512",
       "purpose": "any"
-    },
-    {
-      "src": "/barakah-icon-512-real.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "maskable"
     }
   ]
 }
