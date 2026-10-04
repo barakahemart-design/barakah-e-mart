@@ -5217,7 +5217,7 @@ _${businessInfo.name}_`;
             <div className="space-y-6 animate-fadeIn" id="view-inventory-container">
               
               {/* STOCKS STATS / KPI OVERVIEW DETAILS */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="stock-valuation-summary-cards">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4" id="stock-valuation-summary-cards">
                 
                 {/* CARD 1: TOTAL STOCK VALUE VALUATION */}
                 <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-total-stock-asset">
@@ -5272,6 +5272,62 @@ _${businessInfo.name}_`;
                 </div>
 
               </div>
+
+              {/* PHASE 1: EXPECTED SALES + PROFIT SNAPSHOT */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" id="inventory-profit-snapshot">
+                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-cyan-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 font-mono">Expected Sales Value</span>
+                    <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <h3 className="text-2xl font-black font-mono text-white tracking-tight">
+                    {businessInfo.currencySymbol} {products.filter(p => purchasedProductIds.has(p.id) && p.stock > 0).reduce((acc, p) => acc + (p.stock * p.sellPrice), 0).toLocaleString()}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">Estimated sales value if the currently available stock is sold at today&apos;s selling price.</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">Expected Stock Profit</span>
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <h3 className="text-2xl font-black font-mono text-white tracking-tight">
+                    {businessInfo.currencySymbol} {products.filter(p => purchasedProductIds.has(p.id) && p.stock > 0).reduce((acc, p) => acc + (p.stock * Math.max(0, p.sellPrice - p.buyPrice)), 0).toLocaleString()}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">Potential gross profit from the remaining stock before expenses and other adjustments.</p>
+                </div>
+              </div>
+
+              {/* PHASE 1: LOW / OUT-OF-STOCK ALERT */}
+              {(() => {
+                const inventoryProducts = products.filter(p => purchasedProductIds.has(p.id));
+                const outOfStock = inventoryProducts.filter(p => p.stock <= 0);
+                const lowStock = inventoryProducts.filter(p => p.stock > 0 && p.stock <= 5);
+                if (outOfStock.length === 0 && lowStock.length === 0) return null;
+                return (
+                  <div className="bg-[#0a101f]/80 border border-amber-500/20 rounded-2xl p-4 shadow-md" id="inventory-stock-alerts">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">Stock Alerts</span>
+                      </div>
+                      <div className="flex gap-2 text-[10px] font-mono">
+                        <span className="px-2 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">Out: {outOfStock.length}</span>
+                        <span className="px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">Low: {lowStock.length}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[...outOfStock, ...lowStock].slice(0, 8).map(p => (
+                        <span key={p.id} className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold ${p.stock <= 0 ? "bg-rose-500/10 border-rose-500/20 text-rose-300" : "bg-amber-500/10 border-amber-500/20 text-amber-300"}`}>
+                          <span className="truncate max-w-[150px]">{p.name}</span>
+                          <span className="font-mono font-bold">({p.stock} {p.unit})</span>
+                        </span>
+                      ))}
+                      {outOfStock.length + lowStock.length > 8 && <span className="text-[10px] text-slate-500 self-center">+{outOfStock.length + lowStock.length - 8} more</span>}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* TRI-MODULE TAB SELECTOR BAR */}
               <div className="flex gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
@@ -5337,6 +5393,7 @@ _${businessInfo.name}_`;
                             <th className="py-2.5 px-4 text-left">Category</th>
                             <th className="py-2.5 px-4 text-right">Cost Rate (Buy)</th>
                             <th className="py-2.5 px-4 text-right">Selling Price (Sell)</th>
+                            <th className="py-2.5 px-4 text-center">Stock Status</th>
                             <th className="py-2.5 px-4 text-center">In-Stock Quantity</th>
                             <th className="py-2.5 px-4 text-right border-l border-slate-850">Stock Valuation</th>
                             <th className="py-2.5 px-4 text-center">Restock (+10)</th>
@@ -5346,7 +5403,7 @@ _${businessInfo.name}_`;
                         <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
                           {filteredProducts.length === 0 ? (
                             <tr>
-                              <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
+                              <td colSpan={10} className="py-12 text-center text-slate-500 font-sans">
                                 No catalog stock items registered. Log new purchases or register items in the "Products" control screen.
                               </td>
                             </tr>
@@ -5361,7 +5418,16 @@ _${businessInfo.name}_`;
                                   <td className="py-3 px-4 text-right">{businessInfo.currencySymbol} {p.buyPrice}</td>
                                   <td className="py-3 px-4 text-right text-emerald-400 font-medium">{businessInfo.currencySymbol} {p.sellPrice}</td>
                                   <td className="py-3 px-4 text-center">
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                    {p.stock <= 0 ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">Out of Stock</span>
+                                    ) : p.stock <= 5 ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">Low Stock</span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Healthy</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.stock <= 0 ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : p.stock <= 5 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"}`}>
                                       {p.stock} {p.unit}
                                     </span>
                                   </td>
