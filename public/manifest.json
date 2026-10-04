@@ -6,6 +6,9 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
   "background_color": "#090d16",
   "theme_color": "#090d16",
   "orientation": "portrait-primary",
@@ -18,10 +21,16 @@
       "purpose": "any"
     },
     {
-      "src": "/barakah-icon-512.svg",
-      "type": "image/svg+xml",
+      "src": "/barakah-icon-512-real.png",
+      "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
+    },
+    {
+      "src": "/barakah-icon-512-real.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ]
 }
