@@ -12,9 +12,15 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/barakah-icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192",
+      "src": "/barakah-icon.svg?v=icon-13",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/barakah-icon-512.svg?v=icon-13",
+      "type": "image/svg+xml",
+      "sizes": "any",
       "purpose": "any"
     }
   ]
