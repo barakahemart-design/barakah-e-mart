@@ -9,16 +9,14 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/barakah-icon-192.png",
+      "src": "https://img.icons8.com/color/192/shopping-bag.png",
       "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any"
+      "sizes": "192x192"
     },
     {
-      "src": "/barakah-icon-512.png",
+      "src": "https://img.icons8.com/color/512/shopping-bag.png",
       "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any"
+      "sizes": "512x512"
     }
   ]
 }
