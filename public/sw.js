@@ -1,9 +1,7 @@
 const CACHE_NAME = 'barakah-pwa-cache-v11';
 const STATIC_CACHE = [
   '/manifest.json',
-  '/barakah-icon-192.png',
-  '/barakah-icon-512.png',
-  '/barakah-icon-512-maskable.png'
+  '/barakah-icon-192.png'
 ];
 
 self.addEventListener('install', (event) => {
