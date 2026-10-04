@@ -3666,11 +3666,11 @@ _${businessInfo.name}_`;
   const projectedNetTerminalProfit = netProfitAmt;
 
   // Filter lists dynamically
-  const filteredProducts = useMemo(() => {
-    const purchasedProductIds = new Set(
-      purchases.filter(pur => (pur.quantity || 0) > 0).map(pur => pur.productId).filter(Boolean)
-    );
+  const purchasedProductIds = useMemo(() => new Set(
+    purchases.filter(pur => (pur.quantity || 0) > 0).map(pur => pur.productId).filter(Boolean)
+  ), [purchases]);
 
+  const filteredProducts = useMemo(() => {
     return products.filter(p => {
       if (!purchasedProductIds.has(p.id)) return false;
 
