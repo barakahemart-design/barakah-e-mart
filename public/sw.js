@@ -1,4 +1,4 @@
-const CACHE_NAME = 'barakah-pwa-cache-v6';
+const CACHE_NAME = 'barakah-pwa-cache-v7';
 const STATIC_CACHE = [
   '/manifest.json'
 ];
