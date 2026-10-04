@@ -1,4 +1,4 @@
-const CACHE_NAME = 'barakah-pwa-cache-v3';
+const CACHE_NAME = 'barakah-pwa-cache-v4';
 const STATIC_CACHE = [
   '/manifest.json'
 ];
@@ -27,7 +27,6 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Never intercept Firebase, API, Firestore, or non-GET traffic.
   if (
     request.method !== 'GET' ||
     url.pathname.startsWith('/api') ||
@@ -37,8 +36,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTML/navigation must always prefer the network. This prevents an old
-  // index.html/app bundle from trapping Safari/iOS in a stale loading state.
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(
       fetch(request, { cache: 'no-store' })
@@ -48,8 +45,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache only immutable/static assets. Vite's hashed JS/CSS files are safe
-  // to cache, while the HTML shell is intentionally not cached.
   if (request.destination === 'script' || request.destination === 'style' || request.destination === 'font' || request.destination === 'image') {
     event.respondWith(
       caches.match(request).then((cached) => {
