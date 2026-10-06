@@ -18,8 +18,8 @@
       "purpose": "any"
     },
     {
-      "src": "/barakah-icon-512.svg?v=icon-15",
-      "type": "image/svg+xml",
+      "src": "/barakah-icon-512.png?v=icon-16",
+      "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     }
