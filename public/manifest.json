@@ -11,7 +11,8 @@
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
-    {"src": "/barakah-icon-192.png?v=icon-17", "type": "image/png", "sizes": "192x192", "purpose": "any"},
-    {"src": "/barakah-icon-512.png?v=icon-17", "type": "image/png", "sizes": "512x512", "purpose": "any"}
+    {"src": "/barakah-icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any"},
+    {"src": "/barakah-icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any"},
+    {"src": "/barakah-icon-512-maskable.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable"}
   ]
 }
