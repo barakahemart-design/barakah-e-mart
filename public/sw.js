@@ -1,10 +1,11 @@
-const CACHE_NAME = 'barakah-pwa-cache-v19';
+const CACHE_NAME = 'barakah-pwa-cache-v20';
 const STATIC_CACHE = [
-  '/manifest.json',
-  '/barakah-icon.svg?v=icon-19',
-  '/barakah-icon-192.png?v=icon-19',
-  '/barakah-icon-512.png?v=icon-19',
-  '/barakah-icon-512-maskable.png?v=icon-19'
+  '/manifest.json?v=21',
+  '/barakah-icon.svg?v=21',
+  '/barakah-icon-192.png?v=21',
+  '/barakah-icon-512.png?v=21',
+  '/barakah-icon-512-maskable.png?v=21',
+  '/favicon.ico?v=21'
 ];
 
 self.addEventListener('install', (event) => {
@@ -19,9 +20,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) =>
       Promise.all(
-        cacheNames
-          .filter((cache) => cache !== CACHE_NAME)
-          .map((cache) => caches.delete(cache))
+        cacheNames.filter((cache) => cache !== CACHE_NAME).map((cache) => caches.delete(cache))
       )
     ).then(() => self.clients.claim())
   );
