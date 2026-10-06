@@ -8,31 +8,24 @@
     <meta property="og:title" content="Barakah Bill Pro" />
     <meta property="og:description" content="Enterprise Intelligent Invoicing, Inventory, Sales, and Expense Manager with Offline Core and Cloud Sync." />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/png" href="/barakah-icon-192.png?v=icon-16" />
+    <link rel="icon" type="image/svg+xml" href="/barakah-icon.svg?v=icon-17" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/barakah-icon-192.png?v=icon-17" />
     <meta name="theme-color" content="#090d16" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="apple-touch-icon" href="/barakah-icon-192.png?v=icon-16" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/barakah-icon-192.png?v=icon-17" />
     <script>
       // STRICT ZOOM PREVENTION FOR ANDROID/IOS APK WRAPPERS
       document.addEventListener('touchstart', function (event) {
-        if (event.touches.length > 1) {
-          event.preventDefault(); // Prevent pinch-to-zoom
-        }
+        if (event.touches.length > 1) event.preventDefault();
       }, { passive: false });
-
       let lastTouchEnd = 0;
       document.addEventListener('touchend', function (event) {
         const now = (new Date()).getTime();
-        if (now - lastTouchEnd <= 300) {
-          event.preventDefault(); // Prevent double-tap zoom
-        }
+        if (now - lastTouchEnd <= 300) event.preventDefault();
         lastTouchEnd = now;
       }, { passive: false });
-
-      document.addEventListener('gesturestart', function (event) {
-        event.preventDefault(); // Prevent gesture pinching
-      });
+      document.addEventListener('gesturestart', function (event) { event.preventDefault(); });
     </script>
   </head>
   <body>
