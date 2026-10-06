@@ -13,11 +13,10 @@ createRoot(document.getElementById('root')!).render(
 // Register Progressive Web App Service Worker with instant auto-update support
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=13', { updateViaCache: 'none' })
+    navigator.serviceWorker.register('/sw.js?v=14', { updateViaCache: 'none' })
       .then((registration) => {
         console.log('[Service Worker] Registered successfully with scope:', registration.scope);
 
-        // Periodically check for updates
         setInterval(() => {
           registration.update().catch(() => {});
         }, 15 * 60 * 1000);
@@ -44,7 +43,6 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {
         refreshing = true;
-        console.log('[Service Worker] Page controller changed. Reloading page automatically to fetch latest bundles...');
         window.location.reload();
       }
     });
