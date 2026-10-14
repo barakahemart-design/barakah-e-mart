@@ -4,7 +4,8 @@ const sharp = require('sharp');
 
 const root = process.cwd();
 const publicDir = path.join(root, 'public');
-const source = path.join(publicDir, 'barakah-icon.svg');
+// Use the existing 512x512 PNG master instead of the SVG wrapper that embeds a lower-resolution raster image.
+const source = path.join(publicDir, 'barakah-icon.png');
 
 async function main() {
   if (!fs.existsSync(source)) throw new Error('Barakah source icon not found');
