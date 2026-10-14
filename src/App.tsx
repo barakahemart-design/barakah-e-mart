@@ -44,7 +44,8 @@ import {
   DollarSign,
   Coins,
   Check,
-  Menu,
+  Copy,
+  Menu
   LayoutDashboard,
   Sun,
   Moon,
@@ -3171,6 +3172,40 @@ export default function App() {
     } else {
       triggerNotification("Translation failed. Please check and translate manually.", "error");
     }
+  };
+
+  // Copy saved customer details for quick reuse in Expenses or other forms.
+  const handleCopyContactDetails = async (contact: Contact) => {
+    const details = `Customer Name: ${contact.name || ""}
+Phone: ${contact.phone || ""}
+Address: ${contact.address || ""}`;
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(details);
+      } else {
+        throw new Error("Clipboard API unavailable");
+      }
+    } catch (_) {
+      // Compatibility fallback for browsers/devices without Clipboard API access.
+      const textarea = document.createElement("textarea");
+      textarea.value = details;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      textarea.style.pointerEvents = "none";
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (!copied) {
+        triggerNotification("Could not copy customer details. Please try again.", "error");
+        return;
+      }
+    }
+
+    triggerNotification(`Copied details for ${contact.name}.`, "success");
   };
 
   const handleAddContact = async (e: React.FormEvent) => {
@@ -7810,9 +7845,20 @@ _${businessInfo.name}_`;
 
                               {/* Action buttons */}
                               <div className="flex items-center gap-1 bg-[#121214] p-1 rounded-lg border border-[#2D2D35]">
+                                {c.type === "customer" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyContactDetails(c)}
+                                    className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
+                                    title="Copy Customer Details"
+                                    aria-label={`Copy details for ${c.name}`}
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")}
+                                  onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")
                                   className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
                                   title="Call Client"
                                 >
