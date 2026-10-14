@@ -28,12 +28,6 @@
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
-    },
-    {
-      "src": "/barakah-icon.svg?v=23",
-      "type": "image/svg+xml",
-      "sizes": "any",
-      "purpose": "any"
     }
   ]
 }
