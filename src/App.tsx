@@ -7858,7 +7858,7 @@ _${businessInfo.name}_`;
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")
+                                  onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")}
                                   className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
                                   title="Call Client"
                                 >
