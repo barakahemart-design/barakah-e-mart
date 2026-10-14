@@ -4,8 +4,8 @@ const sharp = require('sharp');
 
 const root = process.cwd();
 const publicDir = path.join(root, 'public');
-// Use the existing 512x512 PNG master instead of the SVG wrapper that embeds a lower-resolution raster image.
-const source = path.join(publicDir, 'barakah-icon.png');
+// Use the valid SVG wrapper; the checked-in PNG master has a corrupt IDAT chunk and cannot be decoded by Sharp.
+const source = path.join(publicDir, 'barakah-icon.svg');
 
 async function main() {
   if (!fs.existsSync(source)) throw new Error('Barakah source icon not found');
