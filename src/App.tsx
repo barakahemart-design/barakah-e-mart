@@ -45,7 +45,7 @@ import {
   Coins,
   Check,
   Copy,
-  Menu
+  Menu,
   LayoutDashboard,
   Sun,
   Moon,
