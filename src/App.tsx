@@ -33,6 +33,7 @@ import {
   UserCheck,
   RefreshCw,
   Clock,
+  Bell,
   ShieldCheck,
   Tag,
   X,
@@ -321,6 +322,49 @@ export default function App() {
 
   // Notifications State
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  // Isolated unread counter for newly created sales and customers.
+  const [businessUnreadCount, setBusinessUnreadCount] = useState(0);
+  const businessUnreadKey = activeUser?.uid ? `barakah_business_unread_${activeUser.uid}` : "";
+
+  useEffect(() => {
+    if (!businessUnreadKey) {
+      setBusinessUnreadCount(0);
+      return;
+    }
+    try {
+      const stored = Number(localStorage.getItem(businessUnreadKey) || 0);
+      setBusinessUnreadCount(Number.isFinite(stored) && stored > 0 ? Math.floor(stored) : 0);
+    } catch {
+      setBusinessUnreadCount(0);
+    }
+  }, [businessUnreadKey]);
+
+  useEffect(() => {
+    if (!businessUnreadKey) return;
+    try {
+      localStorage.setItem(businessUnreadKey, String(businessUnreadCount));
+      const badgeApi = navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+      if (businessUnreadCount > 0 && typeof badgeApi.setAppBadge === "function") {
+        void badgeApi.setAppBadge(businessUnreadCount).catch(() => {});
+      } else if (businessUnreadCount === 0 && typeof badgeApi.clearAppBadge === "function") {
+        void badgeApi.clearAppBadge().catch(() => {});
+      }
+    } catch {
+      // Badge API and storage are optional platform capabilities.
+    }
+  }, [businessUnreadKey, businessUnreadCount]);
+
+  const addBusinessUnread = () => {
+    setBusinessUnreadCount((count) => {
+      const next = count + 1;
+      if (businessUnreadKey) {
+        try { localStorage.setItem(businessUnreadKey, String(next)); } catch {}
+      }
+      return next;
+    });
+  };
+
+  const clearBusinessUnread = () => setBusinessUnreadCount(0);
 
   // Global theme dark/light mode state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -1712,6 +1756,8 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to update flat items in localStorage during checkout:", err);
     }
+
+    addBusinessUnread();
 
     // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
@@ -3283,6 +3329,7 @@ Address: ${contact.address || ""}`;
       setContacts([newContact, ...contacts]);
 
       if (cType === "customer") {
+        addBusinessUnread();
         resetPosWorkspace(newContact.id);
       }
 
@@ -4173,8 +4220,25 @@ _${businessInfo.name}_`;
                </div>
              )}
 
+            {/* New sale/customer unread counter. Independent from the existing toast system. */}
+            <button
+              id="business-notification-badge"
+              type="button"
+              onClick={clearBusinessUnread}
+              aria-label={businessUnreadCount > 0 ? `${businessUnreadCount} unread business notifications. Mark all as read` : "No unread business notifications"}
+              title={businessUnreadCount > 0 ? `${businessUnreadCount} new sale/customer notifications — click to clear` : "No unread sale/customer notifications"}
+              className="relative flex items-center justify-center p-2.5 bg-[#050912]/80 hover:bg-slate-800/80 text-white rounded-xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer shadow-sm h-8.5 w-8.5"
+            >
+              <Bell className="w-4 h-4" />
+              {businessUnreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] leading-[18px] font-extrabold text-center border border-[#0a101f]">
+                  {businessUnreadCount > 99 ? "99+" : businessUnreadCount}
+                </span>
+              )}
+            </button>
+
             {/* Offline Engine status dot indicator */}
-            {/* Global theme dark/light toggle button */}
+            {/* Global theme dark/light toggle button */
             <button
               id="global-theme-toggle"
               type="button"
