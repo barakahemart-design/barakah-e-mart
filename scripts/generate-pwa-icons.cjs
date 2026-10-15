@@ -4,6 +4,7 @@ const sharp = require('sharp');
 
 const root = process.cwd();
 const publicDir = path.join(root, 'public');
+// Use the valid SVG wrapper; the checked-in PNG master has a corrupt IDAT chunk and cannot be decoded by Sharp.
 const source = path.join(publicDir, 'barakah-icon.svg');
 
 async function main() {
