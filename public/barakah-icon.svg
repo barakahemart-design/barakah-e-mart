@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="56" fill="#000"/>
+  <g transform="translate(51.2 51.2) scale(0.8)">
   <g transform="translate(-56 -56)">
   <path fill="#fff" d="M261.5 183.5 Q258 181 258 190 L257.5 263.5 Q257.5 268.5 263 272 L331 312 Q343 319 354 307 Q367 292 366.5 273 Q366 246 343 230 L263 184.5 Q262 183.5 261.5 183.5 Z"/>
   <path fill="#fff" d="M261.5 297 Q258 294 258 302 L258 386 Q258 414 282 432 Q309 451 336 435 Q365 418 365 389 Q365 361 342 345 L263 298 Q262 297 261.5 297 Z"/>
