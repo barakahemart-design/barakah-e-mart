@@ -355,13 +355,7 @@ export default function App() {
   }, [businessUnreadKey, businessUnreadCount]);
 
   const addBusinessUnread = () => {
-    setBusinessUnreadCount((count) => {
-      const next = count + 1;
-      if (businessUnreadKey) {
-        try { localStorage.setItem(businessUnreadKey, String(next)); } catch {}
-      }
-      return next;
-    });
+    setBusinessUnreadCount((count) => count + 1);
   };
 
   const clearBusinessUnread = () => setBusinessUnreadCount(0);
@@ -4227,7 +4221,7 @@ _${businessInfo.name}_`;
               onClick={clearBusinessUnread}
               aria-label={businessUnreadCount > 0 ? `${businessUnreadCount} unread business notifications. Mark all as read` : "No unread business notifications"}
               title={businessUnreadCount > 0 ? `${businessUnreadCount} new sale/customer notifications — click to clear` : "No unread sale/customer notifications"}
-              className="relative flex items-center justify-center p-2.5 bg-[#050912]/80 hover:bg-slate-800/80 text-white rounded-xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer shadow-sm h-8.5 w-8.5"
+              className="relative flex items-center justify-center p-2.5 bg-[#050912]/80 hover:bg-slate-800/80 text-white rounded-xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer shadow-sm h-9 w-9"
             >
               <Bell className="w-4 h-4" />
               {businessUnreadCount > 0 && (
