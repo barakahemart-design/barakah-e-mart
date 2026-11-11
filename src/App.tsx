@@ -8869,6 +8869,27 @@ _${businessInfo.name}_`;
           )}
         </button>
 
+        {/* Expenses shortcut */}
+        <button
+          onClick={() => {
+            if (currentPanel === "admin") {
+              setActiveTab("expenses");
+            } else {
+              triggerNotification("Please log in as Admin to manage expenses", "info");
+            }
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
+            activeTab === "expenses" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+          }`}
+        >
+          <PiggyBank className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">Expense</span>
+          {activeTab === "expenses" && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
+          )}
+        </button>
+
         {/* Menu/More Button */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
