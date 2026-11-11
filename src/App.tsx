@@ -6033,7 +6033,7 @@ _${businessInfo.name}_`;
                               </span>
                             </div>
 
-                            <div className="flex items-center justify-between gap-2 min-w-0 rounded-xl border border-white/20 bg-white/[0.07] backdrop-blur-2xl px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                            <div className="flex items-center justify-between gap-2 min-w-0 rounded-xl border border-white/10 bg-black/45 backdrop-blur-2xl px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_4px_14px_rgba(0,0,0,0.22)]">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <div className="w-7 h-7 rounded-full bg-white/[0.09] border border-white/20 flex items-center justify-center font-bold text-[9px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
                                 <div className="min-w-0 leading-tight">
@@ -6049,14 +6049,14 @@ _${businessInfo.name}_`;
                                     setCollectionTx(t);
                                     setCollectAmount(t.dueBalance.toString());
                                   }}
-                                  className="shrink-0 px-2.5 py-2 rounded-lg border border-emerald-200/30 bg-white/[0.14] hover:bg-emerald-300/25 backdrop-blur-xl text-emerald-200 text-[9px] font-extrabold uppercase tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-all"
+                                  className="shrink-0 px-2.5 py-2 rounded-lg border border-rose-700/60 bg-rose-950/85 hover:bg-rose-900/90 backdrop-blur-xl text-rose-200 text-[9px] font-extrabold uppercase tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_4px_12px_rgba(0,0,0,0.28)] transition-all"
                                 >
                                   Collect Due
                                 </button>
                               )}
                             </div>
 
-                            <div className="rounded-xl border border-white/15 bg-white/[0.055] backdrop-blur-2xl px-2 py-1.5 space-y-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" id={`ledger-items-${t.invoiceNo}`}>
+                            <div className="rounded-xl border border-white/10 bg-black/45 backdrop-blur-2xl px-2 py-1.5 space-y-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_4px_14px_rgba(0,0,0,0.22)]" id={`ledger-items-${t.invoiceNo}`}>
                               <span className="text-[9px] font-bold text-slate-400 font-mono uppercase tracking-wider block text-center">Invoice Line Items ({t.items.length})</span>
                               <div className="space-y-1">
                                 {t.items.map((it, idx) => {
@@ -6122,7 +6122,7 @@ _${businessInfo.name}_`;
                                               e.stopPropagation();
                                               setShowCostEditId(`${t.id}-${idx}`);
                                             }}
-                                            className="text-[9px] leading-none text-emerald-200 hover:text-white font-mono cursor-pointer inline-flex items-center gap-1 bg-white/[0.10] border border-white/15 rounded-md px-2 py-1"
+                                            className="text-[9px] leading-none text-emerald-300 hover:text-emerald-100 font-mono cursor-pointer inline-flex items-center gap-1 bg-emerald-950/75 border border-emerald-800/60 rounded-md px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
                                             title="Override or edit purchase cost rate for this item"
                                           >
                                             {businessInfo.currencySymbol}{buyCost.toLocaleString()} · Edit ✏️
@@ -6136,7 +6136,7 @@ _${businessInfo.name}_`;
                             </div>
                           </div>
 
-                          <div className="rounded-xl border border-white/20 bg-white/[0.075] backdrop-blur-2xl p-2 sm:p-2.5 space-y-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_6px_20px_rgba(0,0,0,0.16)] self-start w-full">
+                          <div className="rounded-xl border border-white/10 bg-black/55 backdrop-blur-2xl p-2 sm:p-2.5 space-y-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_6px_20px_rgba(0,0,0,0.30)] self-start w-full">
                             <span className="text-[9px] uppercase tracking-wider text-slate-300 font-bold block text-center">Price Calculations</span>
                             <div className="flex items-center justify-between gap-2 text-[9px]">
                               <span className="text-slate-400">Discount</span>
@@ -6165,7 +6165,7 @@ _${businessInfo.name}_`;
                           {currentPanel === "admin" && (
                             <button
                               onClick={() => setEditingTx(t)}
-                              className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                              className="min-w-0 h-9 px-1 rounded-lg border border-emerald-800/60 bg-emerald-950/85 hover:bg-emerald-900/95 backdrop-blur-xl text-emerald-200 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_3px_10px_rgba(0,0,0,0.30)] transition-all text-[9px] font-bold"
                               title="Edit Sale Details & Units"
                             >
                               <Edit3 className="w-3.5 h-3.5 shrink-0" /><span>Edit</span>
@@ -6174,7 +6174,7 @@ _${businessInfo.name}_`;
                           <button
                             id={`download-challan-${t.invoiceNo}`}
                             onClick={() => generateDeliveryChallanPDF(t, associatedContact, businessInfo)}
-                            className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                            className="min-w-0 h-9 px-1 rounded-lg border border-sky-800/60 bg-sky-950/85 hover:bg-sky-900/95 backdrop-blur-xl text-sky-200 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_3px_10px_rgba(0,0,0,0.30)] transition-all text-[9px] font-bold"
                             title="Download Delivery Challan"
                           >
                             <FileText className="w-3.5 h-3.5 shrink-0" /><span>Challan</span>
@@ -6182,14 +6182,14 @@ _${businessInfo.name}_`;
                           <button
                             id={`download-pdf-${t.invoiceNo}`}
                             onClick={() => generateInvoicePDF(t, associatedContact, businessInfo)}
-                            className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                            className="min-w-0 h-9 px-1 rounded-lg border border-cyan-800/60 bg-cyan-950/85 hover:bg-cyan-900/95 backdrop-blur-xl text-cyan-200 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_3px_10px_rgba(0,0,0,0.30)] transition-all text-[9px] font-bold"
                             title="Reprint Customer Cash Memo"
                           >
                             <Download className="w-3.5 h-3.5 shrink-0" /><span>PDF Print</span>
                           </button>
                           {currentPanel === "admin" && (
                             deleteTxId === t.id ? (
-                              <div className="min-w-0 h-9 flex items-center justify-center gap-0.5 rounded-lg border border-rose-300/25 bg-white/[0.09] backdrop-blur-xl px-0.5">
+                              <div className="min-w-0 h-9 flex items-center justify-center gap-0.5 rounded-lg border border-rose-800/60 bg-rose-950/85 backdrop-blur-xl px-0.5">
                                 <button
                                   onClick={() => {
                                     handleDeleteTransaction(t.id);
@@ -6209,7 +6209,7 @@ _${businessInfo.name}_`;
                             ) : (
                               <button
                                 onClick={() => setDeleteTxId(t.id)}
-                                className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                                className="min-w-0 h-9 px-1 rounded-lg border border-rose-800/60 bg-rose-950/85 hover:bg-rose-900/95 backdrop-blur-xl text-rose-200 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_3px_10px_rgba(0,0,0,0.30)] transition-all text-[9px] font-bold"
                                 title="Delete transaction memo"
                               >
                                 <Trash2 className="w-3.5 h-3.5 shrink-0" /><span>Delete</span>
