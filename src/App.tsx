@@ -5931,52 +5931,6 @@ _${businessInfo.name}_`;
           {activeTab === "ledger" && (
             <div className="space-y-4 sm:space-y-6 animate-fadeIn" id="view-ledger-container">
               
-              {/* Sticky Top Metrics Summary Pane */}
-              <section className="space-y-3" id="ledger-summary-section"><div className="flex items-center gap-2 px-1"><div className="h-5 w-1 rounded-full bg-emerald-400" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Sales Summary</h3></div><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3" id="ledger-sticky-metrics">
-                
-                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Memos</span>
-                    <span className="text-xl font-black text-white font-mono">{filteredTransactions.length}</span>
-                  </div>
-                  <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400">
-                    <FileSpreadsheet className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Booked Sales</span>
-                    <span className="text-xl font-black text-white font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}</span>
-                  </div>
-                  <div className="p-2.5 bg-[#00B0FF]/10 rounded-xl text-[#00B0FF]">
-                    <TrendingUp className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Settled Cash</span>
-                    <span className="text-xl font-black text-emerald-400 font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.paidAmount, 0).toLocaleString()}</span>
-                  </div>
-                  <div className="p-2.5 bg-[#00E676]/10 rounded-xl text-emerald-400">
-                    <PiggyBank className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-rose-450 block">Outstanding Due</span>
-                    <span className="text-xl font-black text-rose-400 font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.dueBalance, 0).toLocaleString()}</span>
-                  </div>
-                  <div className="p-2.5 bg-red-500/10 rounded-xl text-rose-400">
-                    <AlertCircle className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]"><div className="space-y-1"><span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Units Sold</span><span className="text-xl font-black text-white font-mono">{filteredTransactions.reduce((sum, t) => sum + (t.items || []).reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0), 0).toLocaleString()}</span></div><div className="p-2.5 bg-violet-500/10 rounded-xl text-violet-300"><Package className="w-5 h-5" /></div></div>
-              </div></section>
-
               {/* Shared dashboard-style date filters for the Ledger */}
               <section className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] backdrop-blur-2xl p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.22)] space-y-3" id="ledger-date-section"><div className="flex items-center gap-2 px-1"><Calendar className="w-4 h-4 text-sky-300" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Date Filter</h3></div><div className="flex flex-wrap items-center gap-1.5" id="ledger-date-filter-presets">
                 {[
@@ -6315,6 +6269,53 @@ _${businessInfo.name}_`;
               </div></section>
 
             </div>
+
+              {/* Sticky Top Metrics Summary Pane */}
+              <section className="space-y-3" id="ledger-summary-section"><div className="flex items-center gap-2 px-1"><div className="h-5 w-1 rounded-full bg-emerald-400" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Sales Summary</h3></div><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3" id="ledger-sticky-metrics">
+                
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Memos</span>
+                    <span className="text-xl font-black text-white font-mono">{filteredTransactions.length}</span>
+                  </div>
+                  <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Booked Sales</span>
+                    <span className="text-xl font-black text-white font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}</span>
+                  </div>
+                  <div className="p-2.5 bg-[#00B0FF]/10 rounded-xl text-[#00B0FF]">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Settled Cash</span>
+                    <span className="text-xl font-black text-emerald-400 font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.paidAmount, 0).toLocaleString()}</span>
+                  </div>
+                  <div className="p-2.5 bg-[#00E676]/10 rounded-xl text-emerald-400">
+                    <PiggyBank className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-rose-450 block">Outstanding Due</span>
+                    <span className="text-xl font-black text-rose-400 font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.dueBalance, 0).toLocaleString()}</span>
+                  </div>
+                  <div className="p-2.5 bg-red-500/10 rounded-xl text-rose-400">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]"><div className="space-y-1"><span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Units Sold</span><span className="text-xl font-black text-white font-mono">{filteredTransactions.reduce((sum, t) => sum + (t.items || []).reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0), 0).toLocaleString()}</span></div><div className="p-2.5 bg-violet-500/10 rounded-xl text-violet-300"><Package className="w-5 h-5" /></div></div>
+              </div></section>
+
           )}
 
 
