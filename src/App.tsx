@@ -6265,8 +6265,6 @@ _${businessInfo.name}_`;
                 )}
               </div></section>
 
-            </div>
-
               {/* Sticky Top Metrics Summary Pane */}
               <section className="space-y-3" id="ledger-summary-section"><div className="flex items-center gap-2 px-1"><div className="h-5 w-1 rounded-full bg-emerald-400" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Sales Summary</h3></div><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3" id="ledger-sticky-metrics">
                 
@@ -6313,6 +6311,7 @@ _${businessInfo.name}_`;
                 <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]"><div className="space-y-1"><span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Units Sold</span><span className="text-xl font-black text-white font-mono">{filteredTransactions.reduce((sum, t) => sum + (t.items || []).reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0), 0).toLocaleString()}</span></div><div className="p-2.5 bg-violet-500/10 rounded-xl text-violet-300"><Package className="w-5 h-5" /></div></div>
               </div></section>
 
+            </div>
           )}
 
 
