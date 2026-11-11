@@ -2329,14 +2329,14 @@ export default function App() {
   const [isClassifying, setIsClassifying] = useState(false);
 
   // Expense Date Range States
-  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_expense_date_filter"));
-    if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
       return saved as any;
     }
     return "all";
   });
-  const setExpenseDateFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
   };
@@ -2375,12 +2375,16 @@ export default function App() {
       if (expenseDateFilter === "today") {
         return targetDate.toDateString() === today.toDateString();
       }
+      if (expenseDateFilter === "yesterday") {
+        const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        return targetDate.getFullYear() === yesterday.getFullYear()
+          && targetDate.getMonth() === yesterday.getMonth()
+          && targetDate.getDate() === yesterday.getDate();
+      }
       if (expenseDateFilter === "weekly") {
-        const check7DaysAgo = new Date();
-        check7DaysAgo.setDate(today.getDate() - 7);
         const tDate = new Date(dateStr + "T00:00:00");
         const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-        const sevenDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7, 0, 0, 0);
+        const sevenDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6, 0, 0, 0);
         return tDate.getTime() >= sevenDaysAgo.getTime() && tDate.getTime() <= midnightToday.getTime();
       }
       if (expenseDateFilter === "monthly") {
@@ -6138,6 +6142,7 @@ _${businessInfo.name}_`;
                     {[
                       { id: "all", label: "All Time" },
                       { id: "today", label: "Today" },
+                      { id: "yesterday", label: "Yesterday" },
                       { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
                       { id: "yearly", label: "This Year" },
