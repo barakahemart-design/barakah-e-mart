@@ -140,55 +140,33 @@ export function DashboardView({
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-6 space-y-6 text-slate-200" id="premium-dashboard-panel">
       
-      {/* 1. HEADER HERO BANNER (Title with real-time indicators and Sync actions) */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/40" id="dashboard-header-block">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-indigo-500 rounded-full animate-ping shrink-0" />
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2">
-              Dashboard
-            </h1>
-          </div>
-          <p className="text-xs text-slate-400 mt-1 font-medium">
-            Real-time profit margins, revenue trackers and diagnostic charts.
+      {/* 1. Premium Bismillah & Brand Welcome Banner */}
+      <section
+        id="dashboard-welcome-banner"
+        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#111827]/95 via-[#0b1220]/95 to-[#080d17]/95 px-5 py-8 sm:px-8 sm:py-10 text-center shadow-[0_22px_65px_rgba(0,0,0,0.38)]"
+      >
+        <div className="pointer-events-none absolute -top-20 left-1/2 h-48 w-72 -translate-x-1/2 rounded-full bg-amber-400/10 blur-[80px]" />
+        <div className="pointer-events-none absolute -bottom-24 right-0 h-48 w-48 rounded-full bg-sky-500/10 blur-[80px]" />
+        <div className="relative z-10 mx-auto max-w-3xl">
+          <p
+            lang="ar"
+            dir="rtl"
+            className="font-serif text-2xl sm:text-3xl md:text-4xl leading-relaxed tracking-wide text-amber-200 drop-shadow-[0_2px_18px_rgba(251,191,36,0.22)]"
+          >
+            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+          </p>
+          <div className="mx-auto my-4 h-px w-20 bg-gradient-to-r from-transparent via-amber-300/70 to-transparent" />
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-[0.12em] text-white">
+            BARAKAH <span className="font-semibold lowercase tracking-normal text-amber-200">e</span>-MART
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-sm sm:text-base md:text-lg font-medium leading-relaxed text-slate-300 italic">
+            “A business, like a child, grows beautifully when nurtured with love, patience, and care.”
+          </p>
+          <p className="mt-3 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+            Built with care · Growing with purpose
           </p>
         </div>
-        
-        {/* Right Action buttons mimicking the screenshot */}
-        <div className="flex flex-wrap items-center gap-2.5" id="dashboard-cloud-actions-row">
-          <div className="flex items-center gap-2 bg-[#0d1222]/90 px-3 py-1.5 rounded-xl border border-slate-800/80 text-xs font-semibold">
-            <button
-              onClick={triggerCloudBackupSync}
-              disabled={isBackingUp || isRestoring}
-              className="flex items-center gap-1.5 hover:text-[#00E676] text-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
-              id="sync-cloud-lbl-btn"
-            >
-              <CloudUpload className="w-4 h-4 text-[#00E676]" />
-              <span>Sync Cloud</span>
-            </button>
-            <span className="text-slate-700 font-normal">|</span>
-            <button
-              onClick={triggerCloudBackupRestore}
-              disabled={isBackingUp || isRestoring}
-              className="flex items-center gap-1.5 hover:text-sky-400 text-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
-              id="restore-cloud-lbl-btn"
-            >
-              <CloudDownload className="w-4 h-4 text-sky-400" />
-              <span>Restore Cloud</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#090d16]/80 px-2.5 py-1.5 rounded-lg border border-slate-900 text-[10px] font-mono uppercase tracking-wider text-slate-400 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Cloud: Synced</span>
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#090d16]/80 px-2.5 py-1.5 rounded-lg border border-slate-900 text-[10px] font-mono uppercase tracking-wider text-slate-400 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-            <span>Offline Core: OK</span>
-          </div>
-        </div>
-      </div>
+      </section>
 
       {/* 2. DYNAMIC HORIZON FILTERS (Styled exactly like the pills in the screenshot) */}
       <div className="bg-[#0b0f19] border border-slate-800/80 p-2 sm:p-2.5 rounded-2xl flex flex-wrap items-center gap-3 justify-between" id="dashboard-period-menu-container">
