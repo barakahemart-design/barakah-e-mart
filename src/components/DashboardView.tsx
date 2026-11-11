@@ -143,27 +143,24 @@ export function DashboardView({
       {/* 1. Premium Bismillah & Brand Welcome Banner */}
       <section
         id="dashboard-welcome-banner"
-        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#111827]/95 via-[#0b1220]/95 to-[#080d17]/95 px-5 py-8 sm:px-8 sm:py-10 text-center shadow-[0_22px_65px_rgba(0,0,0,0.38)]"
+        className="relative overflow-hidden rounded-3xl border border-white/15 bg-[linear-gradient(145deg,rgba(22,29,43,0.98),rgba(7,12,22,0.98))] px-4 py-7 text-center shadow-[0_24px_70px_rgba(0,0,0,0.48)] sm:px-8 sm:py-10 lg:px-12 lg:py-12"
       >
-        <div className="pointer-events-none absolute -top-20 left-1/2 h-48 w-72 -translate-x-1/2 rounded-full bg-amber-400/10 blur-[80px]" />
-        <div className="pointer-events-none absolute -bottom-24 right-0 h-48 w-48 rounded-full bg-sky-500/10 blur-[80px]" />
-        <div className="relative z-10 mx-auto max-w-3xl">
+        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-white/20" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/2 h-40 w-3/4 -translate-x-1/2 rounded-full bg-white/[0.035] blur-[70px]" />
+        <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center">
           <p
             lang="ar"
             dir="rtl"
-            className="font-serif text-2xl sm:text-3xl md:text-4xl leading-relaxed tracking-wide text-amber-200 drop-shadow-[0_2px_18px_rgba(251,191,36,0.22)]"
+            className="not-italic font-sans text-xl font-semibold leading-relaxed tracking-normal text-white sm:text-2xl md:text-3xl lg:text-4xl"
           >
             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
           </p>
-          <div className="mx-auto my-4 h-px w-20 bg-gradient-to-r from-transparent via-amber-300/70 to-transparent" />
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-[0.12em] text-white">
-            BARAKAH <span className="font-semibold lowercase tracking-normal text-amber-200">e</span>-MART <span className="ml-1.5 align-middle text-[0.42em] font-bold uppercase tracking-[0.28em] text-slate-400">POS</span>
+          <div className="mx-auto my-4 h-px w-16 bg-white/35 sm:my-5 sm:w-24" />
+          <h1 className="whitespace-nowrap text-xl font-extrabold not-italic tracking-[0.055em] text-white sm:text-3xl md:text-4xl lg:text-5xl">
+            BARAKAH <span className="font-extrabold lowercase not-italic tracking-[0.015em] text-white">e</span>-MART <span className="ml-1.5 inline-block align-middle text-[0.38em] font-bold not-italic tracking-[0.18em] text-white">POS</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-sm sm:text-base md:text-lg font-medium leading-relaxed text-slate-300 italic">
+          <p className="mx-auto mt-4 max-w-2xl text-xs font-medium not-italic leading-relaxed tracking-normal text-white/90 sm:mt-5 sm:text-base md:text-lg lg:text-xl">
             “A business, like a child, grows beautifully when nurtured with love, patience, and care.”
-          </p>
-          <p className="mt-3 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-            Built with care · Growing with purpose
           </p>
         </div>
       </section>
