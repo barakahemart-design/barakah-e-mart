@@ -6039,18 +6039,16 @@ _${businessInfo.name}_`;
                             </span>
                           </div>
 
-                          {/* Client Profile Box */}
-                          <div className="flex items-center gap-2 min-w-0 py-0.5">
-                            <div className="w-7 h-7 rounded-full bg-white/10 backdrop-blur-xl border border-white/15 flex items-center justify-center font-bold text-[10px] text-emerald-300 uppercase select-none shrink-0">
-                              {customerLabel.slice(0,2)}
+                          {/* Customer profile: full name, phone and address above cost controls */}
+                          <div className="flex items-start gap-2.5 min-w-0 rounded-xl border border-white/10 bg-white/[0.045] backdrop-blur-xl p-2.5">
+                            <div className="w-8 h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center font-bold text-[10px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
+                            <div className="min-w-0 leading-snug flex-1">
+                              <strong className="text-white text-xs sm:text-sm block break-words">{customerLabel}</strong>
+                              {customerPhone && <span className="text-[10px] text-slate-300 font-mono block mt-1">{customerPhone}</span>}
+                              {associatedContact?.address && <span className="text-[10px] text-slate-400 block mt-1 whitespace-normal break-words">{associatedContact.address}</span>}
                             </div>
-                            <div className="min-w-0 leading-tight">
-                              <strong className="text-white text-[11px] sm:text-xs block truncate">{customerLabel}</strong>
-                              {customerPhone && (
-                                <span className="text-[9px] text-slate-400 font-mono font-medium block mt-0.5 truncate">{customerPhone}</span>
-                              )}
-                            </div>
-                                          {/* Invoice Items Sub-Drawer */}
+                          </div>
+                          {/* Invoice Items Sub-Drawer */}
                           <div className="bg-black/15 backdrop-blur-xl border border-white/[0.08] rounded-xl p-3 space-y-1.5" id={`ledger-items-${t.invoiceNo}`}>
                             <span className="text-[9px] font-bold text-slate-500 font-mono uppercase tracking-wider block">Invoice Line Items ({t.items.length})</span>
                             <div className="space-y-1">
@@ -6126,7 +6124,7 @@ _${businessInfo.name}_`;
                                             e.stopPropagation();
                                             setShowCostEditId(`${t.id}-${idx}`);
                                           }}
-                                          className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
+                                          className="text-[8px] leading-none text-emerald-300 hover:text-emerald-200 font-mono cursor-pointer inline-flex items-center gap-0.5 bg-white/[0.045] border border-white/10 rounded-md px-1.5 py-1 mt-1"
                                           title="Override or edit purchase cost rate for this item"
                                         >
                                           Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
