@@ -157,7 +157,7 @@ export function DashboardView({
           </p>
           <div className="mx-auto my-4 h-px w-20 bg-gradient-to-r from-transparent via-amber-300/70 to-transparent" />
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-[0.12em] text-white">
-            BARAKAH <span className="font-semibold lowercase tracking-normal text-amber-200">e</span>-MART
+            BARAKAH <span className="font-semibold lowercase tracking-normal text-amber-200">e</span>-MART <span className="ml-1.5 align-middle text-[0.42em] font-bold uppercase tracking-[0.28em] text-slate-400">POS</span>
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm sm:text-base md:text-lg font-medium leading-relaxed text-slate-300 italic">
             “A business, like a child, grows beautifully when nurtured with love, patience, and care.”
