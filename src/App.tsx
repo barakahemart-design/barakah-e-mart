@@ -292,7 +292,11 @@ export default function App() {
       if (!armed || !event.changedTouches.length) return;
       const dy = event.changedTouches[0].clientY - startY;
       const dx = Math.abs(event.changedTouches[0].clientX - startX); armed = false;
-      if (dy > 110 && dy > dx * 1.4) window.location.reload();
+      if (dy > 110 && dy > dx * 1.4) {
+        try { sessionStorage.setItem("barakah_pull_refresh_pending", "1"); } catch (_) {}
+        triggerNotification("Refreshing your workspace…", "info");
+        window.setTimeout(() => window.location.reload(), 250);
+      }
     };
     window.addEventListener("touchstart", onStart, { passive: true });
     window.addEventListener("touchend", onEnd, { passive: true });
@@ -1048,6 +1052,15 @@ export default function App() {
     }
     setTimeout(() => setNotification(null), 4000);
   };
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("barakah_pull_refresh_pending") === "1") {
+        sessionStorage.removeItem("barakah_pull_refresh_pending");
+        triggerNotification("Page refreshed successfully", "success");
+      }
+    } catch (_) {}
+  }, []);
 
   // Handler for guest login
   const handleGuestLogin = () => {
@@ -6253,8 +6266,8 @@ _${businessInfo.name}_`;
           {activeTab === "expenses" && (
             <div className="space-y-6" id="view-expenses-outer-container">
               
-              {/* DATE RANGE FILTER FOR EXPENSES LEDGER */}
-              <div className="bg-[#0b0f19]/90 border border-slate-800 p-4 rounded-2xl shadow-lg" id="expense-period-menu-container">
+              {/* DATE RANGE FILTER — shown only inside Expense History */}
+              {expenseWorkspacePage === "history" && <div className="bg-white/[0.045] backdrop-blur-2xl border border-white/10 p-4 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.22)]" id="expense-period-menu-container">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-wrap gap-1.5" id="preset-expense-pills">
                     {[
@@ -6321,25 +6334,43 @@ _${businessInfo.name}_`;
                     </div>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {expenseWorkspacePage === "home" && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" id="expense-workspace-choices">
-                  <button type="button" onClick={() => setExpenseWorkspacePage("add")} className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-6 text-left hover:bg-emerald-500/10 transition-colors">
+                  <button type="button" onClick={() => setExpenseWorkspacePage("add")} className="group relative overflow-hidden rounded-[1.6rem] border border-white/15 bg-white/[0.075] backdrop-blur-2xl p-5 sm:p-6 text-left shadow-[0_10px_35px_rgba(0,0,0,0.22)] hover:bg-white/[0.12] hover:border-white/25 hover:-translate-y-0.5 transition-all duration-300 before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/10 before:via-transparent before:to-transparent before:pointer-events-none">
                     <PlusCircle className="w-8 h-8 text-emerald-400 mb-3" />
                     <span className="block text-base font-bold text-white">Add Expense</span>
                     <span className="block text-xs text-slate-400 mt-1">Record a new business expense</span>
                   </button>
-                  <button type="button" onClick={() => setExpenseWorkspacePage("history")} className="rounded-2xl border border-sky-500/25 bg-sky-500/5 p-6 text-left hover:bg-sky-500/10 transition-colors">
+                  <button type="button" onClick={() => setExpenseWorkspacePage("history")} className="group relative overflow-hidden rounded-[1.6rem] border border-white/15 bg-white/[0.075] backdrop-blur-2xl p-5 sm:p-6 text-left shadow-[0_10px_35px_rgba(0,0,0,0.22)] hover:bg-white/[0.12] hover:border-white/25 hover:-translate-y-0.5 transition-all duration-300 before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/10 before:via-transparent before:to-transparent before:pointer-events-none">
                     <FileText className="w-8 h-8 text-sky-400 mb-3" />
                     <span className="block text-base font-bold text-white">Expense History</span>
                     <span className="block text-xs text-slate-400 mt-1">View, edit and filter saved expenses</span>
                   </button>
-                  <button type="button" onClick={() => setExpenseWorkspacePage("categories")} className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-6 text-left hover:bg-violet-500/10 transition-colors">
+                  <button type="button" onClick={() => setExpenseWorkspacePage("categories")} className="group relative overflow-hidden rounded-[1.6rem] border border-white/15 bg-white/[0.075] backdrop-blur-2xl p-5 sm:p-6 text-left shadow-[0_10px_35px_rgba(0,0,0,0.22)] hover:bg-white/[0.12] hover:border-white/25 hover:-translate-y-0.5 transition-all duration-300 before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/10 before:via-transparent before:to-transparent before:pointer-events-none">
                     <Settings className="w-8 h-8 text-violet-400 mb-3" />
                     <span className="block text-base font-bold text-white">Manage Categories</span>
                     <span className="block text-xs text-slate-400 mt-1">Add, rename and manage expense categories</span>
                   </button>
+                </div>
+              )}
+
+              {expenseWorkspacePage === "home" && (
+                <div className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] backdrop-blur-2xl p-4 sm:p-5 shadow-[0_8px_32px_rgba(0,0,0,0.18)]" id="expense-home-breakdown">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div><h3 className="text-sm font-bold text-white">Expense Breakdown</h3><p className="text-[10px] text-slate-400 mt-1">Category-wise spending overview</p></div>
+                    <span className="text-[10px] text-slate-400">All recorded expenses</span>
+                  </div>
+                  {(() => {
+                    const grouped = expenses.reduce((acc, item) => { const key = item.category || "Others"; acc[key] = (acc[key] || 0) + Number(item.amount || 0); return acc; }, {} as Record<string, number>);
+                    const rows = Object.entries(grouped).sort((a,b) => b[1]-a[1]);
+                    const total = rows.reduce((sum, row) => sum + row[1], 0);
+                    return rows.length ? <div className="space-y-3">
+                      <div className="flex items-center justify-between"><span className="text-[10px] text-slate-400">Total Expenses</span><strong className="text-base text-rose-300">{businessInfo.currencySymbol} {total.toLocaleString()}</strong></div>
+                      {rows.slice(0,5).map(([category, amount]) => <div key={category} className="space-y-1.5"><div className="flex items-center justify-between gap-3 text-[11px]"><span className="text-slate-300 truncate">{category}</span><span className="font-mono text-slate-200 whitespace-nowrap">{businessInfo.currencySymbol} {amount.toLocaleString()}</span></div><div className="h-1.5 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-rose-400 to-orange-300" style={{width: total > 0 ? `${(amount/total)*100}%` : "0%"}} /></div></div>)}
+                    </div> : <p className="text-xs text-slate-500 py-3">No expense records yet. Your breakdown will appear here.</p>;
+                  })()}
                 </div>
               )}
 
