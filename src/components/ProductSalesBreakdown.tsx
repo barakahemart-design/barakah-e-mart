@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Boxes, Package, ShoppingBag } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Boxes, Package, ShoppingBag, ChevronDown, ChevronRight } from "lucide-react";
 
 interface ProductSalesBreakdownProps {
   products: any[];
@@ -91,6 +91,14 @@ export function ProductSalesBreakdown({
   customStart,
   customEnd
 }: ProductSalesBreakdownProps) {
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+
+  const toggleCategory = (categoryKey: string) => {
+    setExpandedCategories(current => current.includes(categoryKey)
+      ? current.filter(key => key !== categoryKey)
+      : [...current, categoryKey]);
+  };
+
   const report = useMemo(() => {
     const bounds = getPeriodBounds(dashboardFilter, customStart, customEnd);
     const safeProducts = Array.isArray(products) ? products : [];
@@ -207,35 +215,53 @@ export function ProductSalesBreakdown({
             <p className="mt-1 text-[10px] text-slate-500">Try another date range to view sales quantities.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {report.categories.map(category => (
-              <div key={category.name.toLowerCase()} className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#0e1422]">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300"><Boxes className="h-4 w-4" /></div>
-                    <div className="min-w-0">
-                      <h4 className="truncate text-xs font-extrabold text-white">{category.name}</h4>
-                      <p className="mt-0.5 text-[10px] text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"}</p>
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
-                    <div className="text-[9px] uppercase tracking-wider text-slate-500">units</div>
-                  </div>
-                </div>
-                <div className="divide-y divide-slate-800/70">
-                  {category.products.map((product, index) => (
-                    <div key={product.name + "-" + index} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                        <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
+          <div className="space-y-2.5">
+            {report.categories.map(category => {
+              const categoryKey = category.name.toLowerCase();
+              const isExpanded = expandedCategories.includes(categoryKey);
+              return (
+                <div key={categoryKey} className={`group min-w-0 overflow-hidden rounded-2xl border bg-[#0e1422] transition-all duration-200 ${isExpanded ? "border-indigo-500/35 shadow-lg shadow-indigo-950/20" : "border-slate-800/90 hover:border-slate-700"}`}>
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(categoryKey)}
+                    aria-expanded={isExpanded}
+                    className="flex w-full items-center justify-between gap-3 px-3.5 py-3.5 text-left transition-colors hover:bg-white/[0.025] sm:px-4"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${isExpanded ? "border-indigo-400/20 bg-indigo-500/15 text-indigo-200" : "border-slate-700/70 bg-slate-800/70 text-slate-300 group-hover:text-indigo-300"}`}>
+                        <Boxes className="h-[18px] w-[18px]" />
                       </div>
-                      <span className="shrink-0 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
+                      <div className="min-w-0">
+                        <h4 className="truncate text-xs font-bold tracking-wide text-slate-100 sm:text-sm">{category.name}</h4>
+                        <p className="mt-1 text-[10px] font-medium text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"} <span className="px-1 text-slate-700">·</span> {isExpanded ? "Tap to collapse" : "Tap to view products"}</p>
+                      </div>
                     </div>
-                  ))}
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      <div className="text-right">
+                        <div className="text-lg font-extrabold tabular-nums text-sky-300 sm:text-xl">{formatQuantity(category.units)}</div>
+                        <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">Units sold</div>
+                      </div>
+                      <span className={`ml-0.5 flex h-7 w-7 items-center justify-center rounded-full transition-colors ${isExpanded ? "bg-indigo-500/15 text-indigo-200" : "bg-slate-800/80 text-slate-400"}`}>
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-slate-800/90 bg-[#0a101c]/70">
+                      {category.products.map((product, index) => (
+                        <div key={product.name + "-" + index} className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-800/60 px-4 py-3 last:border-b-0 sm:px-5">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                            <span className="min-w-0 break-words text-[11px] font-medium leading-relaxed text-slate-300 sm:text-xs">{product.name}</span>
+                          </div>
+                          <span className="flex h-7 min-w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/70 px-2 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
