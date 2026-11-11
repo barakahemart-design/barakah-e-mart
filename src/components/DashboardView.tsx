@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { ProductSalesBreakdown } from "./ProductSalesBreakdown";
 import { 
   CloudUpload, 
   CloudDownload, 
@@ -26,6 +27,8 @@ import {
 } from "recharts";
 
 interface DashboardViewProps {
+  products: any[];
+  transactions: any[];
   businessInfo: any;
   isBackingUp: boolean;
   isRestoring: boolean;
@@ -56,6 +59,8 @@ interface DashboardViewProps {
 const COLORS = ["#10b981", "#06b6d4", "#f59e0b", "#8b5cf6", "#ef4444", "#ec4899"];
 
 export function DashboardView({
+  products,
+  transactions,
   businessInfo,
   isBackingUp,
   isRestoring,
@@ -227,6 +232,7 @@ export function DashboardView({
           {[
             { id: "all", label: "All Time" },
             { id: "today", label: "Today" },
+            { id: "yesterday", label: "Yesterday" },
             { id: "weekly", label: "7 Days" },
             { id: "monthly", label: "This Month" },
             { id: "yearly", label: "This Year" },
@@ -467,6 +473,14 @@ export function DashboardView({
         </div>
 
       </div>
+
+      <ProductSalesBreakdown
+        products={products}
+        transactions={transactions}
+        dashboardFilter={dashboardFilter}
+        customStart={customStart}
+        customEnd={customEnd}
+      />
 
       {/* 5. COMFORTABLE FILE MANIPULATION CARD (For quick local backup importing in plain English only) */}
       <div 
