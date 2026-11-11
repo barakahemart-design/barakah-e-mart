@@ -3686,7 +3686,7 @@ _${businessInfo.name}_`;
         </header>
 
         {/* -------------------- MAIN SCROLLABLE VIEWPORT CONTENT -------------------- */}
-        <div className="flex-1 p-6 overflow-y-auto space-y-6" id="scrollable-content-area">
+        <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 liquid-glass-page" id="scrollable-content-area">
 
           {/* DYNAMIC SUCCESS POPUP ANIMATION OVERLAY */}
           {successTriggerMsg && (
@@ -8675,11 +8675,11 @@ _${businessInfo.name}_`;
         <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
           <div className="bg-slate-900/85 backdrop-blur-2xl rounded-2xl border border-white/15 shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden max-w-md w-full p-4 sm:p-6 space-y-4 text-slate-100 animate-fadeIn">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold uppercase text-slate-800 flex items-center gap-2 font-sans">
+              <h3 className="text-sm font-extrabold uppercase text-white flex items-center gap-2 font-sans">
                 <PiggyBank className="w-5 h-5 text-amber-500" />
                 Collect Received Cash
               </h3>
-              <button onClick={() => setCollectionTx(null)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 cursor-pointer">
+              <button onClick={() => setCollectionTx(null)} type="button" className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
