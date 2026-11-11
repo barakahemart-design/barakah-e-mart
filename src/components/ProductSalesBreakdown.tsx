@@ -83,14 +83,14 @@ function isInsidePeriod(value: any, bounds: { start: Date; end: Date } | null) {
 function getCategoryIcon(categoryName: string) {
   // Normalize category names first so aliases such as "AC", "Air Conditioners",
   // "Water Heater" and "Small Home Appliances" are recognized consistently.
-  const name = categoryName.toLowerCase().replace(/[^a-z0-9\\s-]/g, " ").replace(/\\s+/g, " ").trim();
+  const name = categoryName.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
 
   if (/delivery|deliver|shipping|courier/.test(name)) return Truck;
   if (/water.?heater|geyser|hot.?water/.test(name)) return Heater;
-  if (/air.?condition|aircon|\\bac\\b|\\bacs\\b/.test(name)) return AirVent;
-  if (/television|\\btv\\b|smart tv/.test(name)) return Tv;
+  if (/air.?condition|aircon|\bac\b|\bacs\b/.test(name)) return AirVent;
+  if (/television|\btv\b|smart tv/.test(name)) return Tv;
   if (/router|network|onu|modem|wifi/.test(name)) return Router;
-  if (/ups|\\bpower\\b|inverter|battery/.test(name)) return BatteryCharging;
+  if (/ups|\bpower\b|inverter|battery/.test(name)) return BatteryCharging;
   if (/microwave|micro.?oven/.test(name)) return Microwave;
   if (/washing.?machine|washer/.test(name)) return WashingMachine;
   if (/refrigerator|fridge/.test(name)) return Refrigerator;
