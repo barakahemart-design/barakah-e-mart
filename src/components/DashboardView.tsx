@@ -13,18 +13,6 @@ import {
   Clock
 } from "lucide-react";
 import { format } from "date-fns";
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell 
-} from "recharts";
 
 interface DashboardViewProps {
   products: any[];
@@ -56,7 +44,6 @@ interface DashboardViewProps {
   expenseCategoryPlotData?: any[];
 }
 
-const COLORS = ["#10b981", "#06b6d4", "#f59e0b", "#8b5cf6", "#ef4444", "#ec4899"];
 
 export function DashboardView({
   products,
@@ -117,29 +104,6 @@ export function DashboardView({
       return String(Math.round(amount || 0));
     }
   };
-
-  // Safe chart data fetching (returns empty or user's active ledger plot data)
-  const getActivePlotData = () => {
-    if (ledgerTrendsPlotData && ledgerTrendsPlotData.length > 0) {
-      return ledgerTrendsPlotData;
-    }
-    return [];
-  };
-
-  const getActiveExpensesData = () => {
-    if (expenseCategoryPlotData && expenseCategoryPlotData.length > 0) {
-      return expenseCategoryPlotData;
-    }
-    return [];
-  };
-
-  const activeExpenses = getActiveExpensesData();
-  const activePlotData = getActivePlotData();
-
-  // Dynamically calculate sum of slice
-  const displayedExpensesTotal = expenseCategoryPlotData && expenseCategoryPlotData.length > 0 
-    ? totalExpensesTk 
-    : activeExpenses.reduce((sum, item) => sum + item.value, 0);
 
   // Handle local JSON file import/upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -355,121 +319,6 @@ export function DashboardView({
           <div className="w-10 h-10 sm:w-11 sm:h-11 bg-sky-500/5 text-sky-400 rounded-xl flex items-center justify-center shrink-0 border border-sky-500/10 shadow-sm transition-transform group-hover:scale-105">
             <Bookmark className="w-4 sm:w-5 h-4 sm:h-5" />
           </div>
-        </div>
-
-      </div>
-
-      {/* 4. MAIN ANALYTICS ROW: 2 COLUMN GRID MAPPING CASH FLOW TRENDS & EXPENSES DONUT */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="dashboard-charts-deck">
-        
-        {/* Left Column: Cash Flow Trends Area Chart */}
-        <div className="bg-[#0e111a]/95 border border-slate-800/95 rounded-2xl p-4 sm:p-5 lg:col-span-2 relative overflow-hidden flex flex-col justify-between shadow-xl" id="cash-flow-trends-widget">
-          <div className="mb-4">
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">Cash Flow Trends</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Daily gross value and direct cash received flows.</p>
-          </div>
-
-          {/* Area Chart mapping Sales Value & Cash Received */}
-          <div className="w-full h-[220px] xs:h-[260px] cursor-default font-mono text-[10px] font-bold" id="cash-charts-frame">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={activePlotData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00E676" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#00E676" stopOpacity={0.01}/>
-                  </linearGradient>
-                  <linearGradient id="colorCash" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.01}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#252c3c/40" vertical={false} />
-                <XAxis dataKey="date" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#0c0f1b', 
-                    borderRadius: '12px', 
-                    border: '1px solid #1e293b',
-                    color: '#fff',
-                    fontFamily: 'monospace'
-                  }} 
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="Sales Value" 
-                  stroke="#00E676" 
-                  strokeWidth={2.5} 
-                  fillOpacity={1} 
-                  fill="url(#colorSales)" 
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="Cash Received" 
-                  stroke="#06b6d4" 
-                  strokeWidth={2.5} 
-                  fillOpacity={1} 
-                  fill="url(#colorCash)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Right Column: Operating Expenses Breakdown Donut Map */}
-        <div className="bg-[#0e111a]/95 border border-slate-800/95 rounded-2xl p-4 sm:p-5 lg:col-span-1 flex flex-col justify-between shadow-xl" id="operating-expenses-widget">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">Expenses Breakdown</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Share of operating expenses by categories.</p>
-          </div>
-
-          <div className="relative w-full h-[155px] flex items-center justify-center mt-3" id="donut-pie-area">
-            {activeExpenses.length > 0 ? (
-              <>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={activeExpenses}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius="65%"
-                      outerRadius="83%"
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {activeExpenses.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-
-                {/* Absoluted overlay labels within the Donut Hole exactly like the sample screenshot */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-2">
-                  <span className="text-[9px] uppercase font-mono tracking-widest text-slate-500 font-bold">TOTAL</span>
-                  <span className="text-sm font-black text-white">{currencySymbol}{formatMoney(displayedExpensesTotal)}</span>
-                </div>
-              </>
-            ) : (
-              <div className="text-slate-500 text-xs text-center">No operating expenses tracked yet inside horizon.</div>
-            )}
-          </div>
-
-          {/* Dynamic categorized legends List matching the screenshot style */}
-          <div className="space-y-1.5 pt-3 border-t border-slate-850" id="expenses-category-legend-list">
-            {activeExpenses.map((entry, idx) => (
-              <div key={idx} className="flex items-center justify-between text-xs py-0.5" id={`legend-cat-row-${idx}`}>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                  <span className="text-slate-400 font-medium truncate max-w-[120px]">{entry.name}</span>
-                </div>
-                <span className="text-white font-bold font-sans">
-                  {currencySymbol}{entry.value ? entry.value.toLocaleString("en-US") : "0"}
-                </span>
-              </div>
-            ))}
-          </div>
-
         </div>
 
       </div>
