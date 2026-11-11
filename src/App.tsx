@@ -272,7 +272,32 @@ export default function App() {
  
 
    // Security Locking Roles state
-   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => { try { const saved = typeof window !== "undefined" ? sessionStorage.getItem("barakah_active_panel") : null; return saved === "admin" || saved === "sales" ? saved : "none"; } catch { return "none"; } });
+  const [selectedExpenseDetails, setSelectedExpenseDetails] = useState<Expense | null>(null);
+
+  useEffect(() => {
+    try { if (currentPanel === "none") sessionStorage.removeItem("barakah_active_panel"); else sessionStorage.setItem("barakah_active_panel", currentPanel); } catch (_) {}
+  }, [currentPanel]);
+
+  useEffect(() => {
+    let startY = 0, startX = 0, armed = false;
+    const onStart = (event: TouchEvent) => {
+      if (currentPanel === "none" || !event.touches.length) return;
+      const target = event.target as HTMLElement | null;
+      if (target && target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if ((document.scrollingElement?.scrollTop ?? window.scrollY) > 0) return;
+      startY = event.touches[0].clientY; startX = event.touches[0].clientX; armed = startY <= 90;
+    };
+    const onEnd = (event: TouchEvent) => {
+      if (!armed || !event.changedTouches.length) return;
+      const dy = event.changedTouches[0].clientY - startY;
+      const dx = Math.abs(event.changedTouches[0].clientX - startX); armed = false;
+      if (dy > 110 && dy > dx * 1.4) window.location.reload();
+    };
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    return () => { window.removeEventListener("touchstart", onStart); window.removeEventListener("touchend", onEnd); };
+  }, [currentPanel]);
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
@@ -6340,7 +6365,7 @@ _${businessInfo.name}_`;
                       />
                     </div>
 
-remove AI control                    <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
+                    <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Expense Category Type *</label>
@@ -6516,7 +6541,42 @@ remove AI control                    <div className="space-y-3 p-3.5 bg-[#050912
                     ))}
                   </div>
 
-                  <div className="overflow-x-auto" id="expenses-table-scroll">
+                  <div className="md:hidden divide-y divide-slate-800/70" id="expenses-mobile-list">
+                    {expenses.filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date)).length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-500">No expenses found for the selected filter.</div>
+                    ) : expenses.filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date)).map((e, index) => (
+                      <div key={e.id} role="button" tabIndex={0} onClick={() => setSelectedExpenseDetails(e)} onKeyDown={event => { if (event.key === "Enter") setSelectedExpenseDetails(e); }} className="px-3 py-3 flex items-center gap-2.5 active:bg-slate-800/60 cursor-pointer">
+                        <span className="w-7 shrink-0 text-center text-[11px] font-mono text-slate-500">{index + 1}</span>
+                        <div className="min-w-0 flex-1 grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 items-center">
+                          <span className="truncate text-[12px] leading-4 font-semibold text-slate-100">{e.description || "Expense"}</span>
+                          <span className="text-[12px] font-bold font-mono text-rose-400 whitespace-nowrap">{businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}</span>
+                          <span className="truncate text-[10px] text-purple-300">{e.category}</span>
+                          <span className="text-[10px] text-slate-500 font-mono whitespace-nowrap">{e.date}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button type="button" onClick={event => { event.stopPropagation(); setEditingExpense(e); setEditExpenseDesc(e.description); setEditExpenseCategory(e.category); setEditExpenseAmount(String(e.amount)); setEditExpenseDate(e.date); }} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400"><Edit3 className="w-4 h-4" /></button>
+                          <button type="button" onClick={event => { event.stopPropagation(); setDeleteExpenseId(e.id); }} className="p-2 rounded-lg bg-rose-500/10 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedExpenseDetails && (
+                    <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3" onClick={() => setSelectedExpenseDetails(null)}>
+                      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <div className="flex items-center justify-between p-4 border-b border-slate-800"><h3 className="text-sm font-bold text-white">Expense Details</h3><button type="button" onClick={() => setSelectedExpenseDetails(null)} className="p-2 rounded-lg bg-slate-800 text-slate-300"><X className="w-4 h-4" /></button></div>
+                        <div className="p-4 space-y-3">
+                          <div><div className="text-[10px] uppercase tracking-wider text-slate-500">Voucher Details</div><div className="text-sm leading-6 text-white break-words">{selectedExpenseDetails.description || "—"}</div></div>
+                          <div className="grid grid-cols-2 gap-3"><div><div className="text-[10px] uppercase tracking-wider text-slate-500">Category</div><div className="text-sm text-purple-300 break-words">{selectedExpenseDetails.category}</div></div><div><div className="text-[10px] uppercase tracking-wider text-slate-500">Date</div><div className="text-sm text-slate-200">{selectedExpenseDetails.date}</div></div></div>
+                          <div className="pt-2 border-t border-slate-800"><div className="text-[10px] uppercase tracking-wider text-slate-500">Paid Amount</div><div className="text-xl font-bold text-rose-400">{businessInfo.currencySymbol} {(selectedExpenseDetails.amount ?? 0).toLocaleString()}</div></div>
+                          <div className="flex gap-2 pt-2">
+                            <button type="button" onClick={() => { const e = selectedExpenseDetails; setEditingExpense(e); setEditExpenseDesc(e.description); setEditExpenseCategory(e.category); setEditExpenseAmount(String(e.amount)); setEditExpenseDate(e.date); setSelectedExpenseDetails(null); }} className="flex-1 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 text-xs font-bold">Edit Expense</button>
+                            <button type="button" onClick={() => { setDeleteExpenseId(selectedExpenseDetails.id); setSelectedExpenseDetails(null); }} className="flex-1 py-2.5 rounded-xl bg-rose-500/15 text-rose-400 text-xs font-bold">Delete Expense</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="hidden md:block overflow-x-auto" id="expenses-table-scroll">
                     <table className="w-full text-slate-300 text-xs">
                       <thead>
                         <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
