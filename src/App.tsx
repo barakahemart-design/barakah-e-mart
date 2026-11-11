@@ -136,6 +136,7 @@ export interface TransactionItem {
   price: number;
   total: number;
   productId?: string;
+  category?: string;
   buyPrice?: number;
   isNegativeSale?: boolean;
 }
@@ -668,6 +669,7 @@ export default function App() {
             price: Number(item.sell_price) || 0,
             total: Number(item.quantity * item.sell_price) || 0,
             productId: item.product_id || undefined,
+            category: item.category || "",
             buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
           }));
         } else {
@@ -855,6 +857,7 @@ export default function App() {
           transaction_id: docData.transaction_id,
           product_id: docData.product_id || null,
           product_name: docData.product_name || "Product Item",
+          category: docData.category || "",
           quantity: Number(docData.quantity) || 0,
           sell_price: Number(docData.sell_price) || 0,
           cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0
@@ -1528,6 +1531,7 @@ export default function App() {
           id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
           name: cartItem.product.name,
           productId: toUUID(cartItem.product.id, cleanEmail),
+          category: cartItem.product.category || "Uncategorized",
           quantity: cartItem.quantity,
           price: itemPrice,
           total: itemPrice * cartItem.quantity,
@@ -2911,14 +2915,14 @@ _${businessInfo.name}_`;
   // -----------------------------------------------------------------
   // DATE RANGE FILTER ENGINE
   // -----------------------------------------------------------------
-  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_dashboard_filter"));
-    if (saved === "today" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
       return saved as any;
     }
     return "all";
   });
-  const setDashboardFilter = (val: "today" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setDashboardFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
     _setDashboardFilter(val);
     localStorage.setItem(getDbKey("barakah_dashboard_filter"), val);
   };
@@ -2949,6 +2953,11 @@ _${businessInfo.name}_`;
       if (dashboardFilter === "all") return true;
       if (dashboardFilter === "today") {
         return targetDate.toDateString() === today.toDateString();
+      }
+      if (dashboardFilter === "yesterday") {
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        return targetDate.toDateString() === yesterday.toDateString();
       }
       if (dashboardFilter === "weekly") {
         const check7DaysAgo = new Date();
@@ -3564,6 +3573,8 @@ _${businessInfo.name}_`;
           {/* -------------------- VIEW 0: BUSINESS DASHBOARD & PERIOD FILTERS -------------------- */}
           {activeTab === "dashboard" && (
             <DashboardView
+              products={products}
+              transactions={transactions}
               businessInfo={businessInfo}
               isBackingUp={isBackingUp}
               isRestoring={isRestoring}
