@@ -6053,7 +6053,7 @@ _${businessInfo.name}_`;
                     return (
                       <div 
                         key={t.id} 
-                        className={`bg-white/[0.055] hover:bg-white/[0.075] backdrop-blur-2xl border border-white/10 hover:border-white/20 rounded-[1.4rem] p-3.5 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-all flex flex-col md:flex-row justify-between gap-4 relative overflow-hidden ${
+                        className={`bg-white/[0.055] hover:bg-white/[0.075] backdrop-blur-2xl border border-white/10 hover:border-white/20 rounded-2xl p-2.5 sm:p-4 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-all flex flex-col md:flex-row justify-between gap-2.5 sm:gap-4 relative overflow-hidden ${
                           t.status === "paid" 
                             ? "border-l-4 border-l-emerald-500" 
                             : t.status === "partial" 
@@ -6086,14 +6086,14 @@ _${businessInfo.name}_`;
                           </div>
 
                           {/* Client Profile Box */}
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-xs text-emerald-400 uppercase select-none">
+                          <div className="flex items-center gap-2 min-w-0 py-0.5">
+                            <div className="w-7 h-7 rounded-full bg-white/10 backdrop-blur-xl border border-white/15 flex items-center justify-center font-bold text-[10px] text-emerald-300 uppercase select-none shrink-0">
                               {customerLabel.slice(0,2)}
                             </div>
-                            <div>
-                              <strong className="text-white text-xs block leading-tight">{customerLabel}</strong>
+                            <div className="min-w-0 leading-tight">
+                              <strong className="text-white text-[11px] sm:text-xs block truncate">{customerLabel}</strong>
                               {customerPhone && (
-                                <span className="text-[10px] text-slate-450 font-mono font-medium block mt-0.5">Mobile: {customerPhone}</span>
+                                <span className="text-[9px] text-slate-400 font-mono font-medium block mt-0.5 truncate">{customerPhone}</span>
                               )}
                             </div>
                                           {/* Invoice Items Sub-Drawer */}
@@ -6224,7 +6224,7 @@ _${businessInfo.name}_`;
                         </div>
 
                         {/* Interactive Admin Tool Belt */}
-                        <div className="flex flex-row md:flex-col items-center justify-end gap-2 shrink-0 md:pl-3 border-t md:border-t-0 border-slate-850/80 pt-3 md:pt-0">
+                        <div className="flex flex-wrap md:flex-col items-center justify-end gap-1.5 shrink-0 md:pl-3 border-t md:border-t-0 border-white/10 pt-2 md:pt-0">
                           
                           {/* Reprint Invoice PDF */}
                           <button
@@ -6251,11 +6251,12 @@ _${businessInfo.name}_`;
                           {/* Collect Remaining Debt */}
                           {t.dueBalance > 0 && (
                             <button
+                              type="button"
                               onClick={() => {
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="p-2 bg-[#00E676] hover:bg-emerald-400 text-slate-950 rounded-xl hover:scale-[1.02] active:scale-95 transition-all text-[10px] font-bold uppercase tracking-wider shrink-0 h-10 w-24 font-sans block shadow-md shadow-[#00E676]/15 cursor-pointer text-center"
+                              className="px-2 py-1.5 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-lg transition-all text-[9px] font-extrabold uppercase tracking-wide shrink-0 h-8 min-w-[68px] font-sans block cursor-pointer text-center"
                             >
                               Collect Due
                             </button>
@@ -8671,8 +8672,8 @@ _${businessInfo.name}_`;
 
       {/* -------------------- DYNAMIC MODALS OVERLAYS -------------------- */}
       {collectionTx && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-w-md w-full p-6 space-y-4 text-slate-700 animate-fadeIn">
+        <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900/85 backdrop-blur-2xl rounded-2xl border border-white/15 shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden max-w-md w-full p-4 sm:p-6 space-y-4 text-slate-100 animate-fadeIn">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="text-sm font-extrabold uppercase text-slate-800 flex items-center gap-2 font-sans">
                 <PiggyBank className="w-5 h-5 text-amber-500" />
@@ -8686,10 +8687,10 @@ _${businessInfo.name}_`;
               <p className="leading-relaxed">
                 Receive outstanding cash for <strong>Invoice {collectionTx.invoiceNo}</strong>.
               </p>
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono">
+              <div className="grid grid-cols-2 gap-3 bg-white/[0.06] backdrop-blur-xl p-3 rounded-xl border border-white/10 font-mono">
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase font-bold">Grand Total</span>
-                  <span className="font-extrabold text-slate-800">{businessInfo.currencySymbol} {collectionTx.total}</span>
+                  <span className="font-extrabold text-white">{businessInfo.currencySymbol} {collectionTx.total}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase font-bold">Outstanding Debt</span>
@@ -8702,23 +8703,34 @@ _${businessInfo.name}_`;
                   type="number"
                   value={collectAmount}
                   onChange={(e) => setCollectAmount(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm outline-none focus:border-amber-500 font-bold text-emerald-600"
+                  className="w-full px-3 py-2 bg-white/[0.07] border border-white/15 rounded-xl font-mono text-sm outline-none focus:border-amber-400 font-bold text-emerald-300"
                 />
               </div>
             </div>
             <div className="flex items-center gap-3 pt-2 font-sans">
               <button
+                type="button"
                 onClick={() => {
-                  incrementDuePayment(collectionTx.invoiceNo, parseFloat(collectAmount) || 0);
+                  const amount = Number(collectAmount);
+                  if (!Number.isFinite(amount) || amount <= 0) {
+                    triggerNotification("Enter a valid collection amount.", "error");
+                    return;
+                  }
+                  if (amount > collectionTx.dueBalance) {
+                    triggerNotification("Collection amount cannot exceed the outstanding due.", "error");
+                    return;
+                  }
+                  incrementDuePayment(collectionTx.invoiceNo, amount);
                   setCollectionTx(null);
                 }}
-                className="flex-1 py-1 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-sm text-center"
+                className="flex-1 py-2 px-4 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-sm text-center"
               >
                 Post Received cash
               </button>
               <button
+                type="button"
                 onClick={() => setCollectionTx(null)}
-                className="flex-1 py-1 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center"
+                className="flex-1 py-2 px-4 bg-white/[0.08] hover:bg-white/[0.14] border border-white/10 text-slate-200 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center"
               >
                 Close Window
               </button>
