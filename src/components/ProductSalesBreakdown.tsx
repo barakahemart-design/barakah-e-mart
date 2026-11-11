@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Boxes, Package, ChevronDown, ChevronRight, Wind, Tv, Router, BatteryCharging, Microwave, WashingMachine, Truck, Refrigerator, Fan, Plug, Shapes } from "lucide-react";
+import { Boxes, Package, ChevronDown, ChevronRight, AirVent, Tv, Router, BatteryCharging, Microwave, WashingMachine, Truck, Refrigerator, Fan, HousePlug, Shapes, Heater } from "lucide-react";
 
 interface ProductSalesBreakdownProps {
   products: any[];
@@ -81,17 +81,21 @@ function isInsidePeriod(value: any, bounds: { start: Date; end: Date } | null) {
 }
 
 function getCategoryIcon(categoryName: string) {
+  // Normalize category names first so aliases such as "AC", "Air Conditioners",
+  // "Water Heater" and "Small Home Appliances" are recognized consistently.
   const name = categoryName.toLowerCase().replace(/[^a-z0-9\\s-]/g, " ").replace(/\\s+/g, " ").trim();
-  if (/delivery|deliver|shipping|courier|ডেলিভারি/.test(name)) return Truck;
-  if (/air.?condition|\\bac\\b|\\bacs\\b|\\bac category\\b/.test(name)) return Wind;
+
+  if (/delivery|deliver|shipping|courier/.test(name)) return Truck;
+  if (/water.?heater|geyser|hot.?water/.test(name)) return Heater;
+  if (/air.?condition|aircon|\\bac\\b|\\bacs\\b/.test(name)) return AirVent;
   if (/television|\\btv\\b|smart tv/.test(name)) return Tv;
   if (/router|network|onu|modem|wifi/.test(name)) return Router;
   if (/ups|\\bpower\\b|inverter|battery/.test(name)) return BatteryCharging;
-  if (/microwave/.test(name)) return Microwave;
+  if (/microwave|micro.?oven/.test(name)) return Microwave;
   if (/washing.?machine|washer/.test(name)) return WashingMachine;
   if (/refrigerator|fridge/.test(name)) return Refrigerator;
   if (/fan|cooler/.test(name)) return Fan;
-  if (/small.?item|small.?appliance|accessor|accessories/.test(name)) return Plug;
+  if (/small.?home.?appliance|small.?appliance|small.?item|kitchen.?appliance|accessor/.test(name)) return HousePlug;
   if (/appliance|home.?appliance/.test(name)) return Shapes;
   return Boxes;
 }
