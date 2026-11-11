@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Boxes, Package, ShoppingBag, ChevronDown, ChevronRight } from "lucide-react";
+import { Boxes, Package, ChevronDown, ChevronRight, Wind, Tv, Router, BatteryCharging, Microwave, WashingMachine, Truck, Refrigerator, Fan, Plug, Shapes } from "lucide-react";
 
 interface ProductSalesBreakdownProps {
   products: any[];
@@ -78,6 +78,22 @@ function isInsidePeriod(value: any, bounds: { start: Date; end: Date } | null) {
   if (!bounds) return true;
   const date = parseSalesDate(value);
   return !!date && date.getTime() >= bounds.start.getTime() && date.getTime() <= bounds.end.getTime();
+}
+
+function getCategoryIcon(categoryName: string) {
+  const name = categoryName.toLowerCase().replace(/[^a-z0-9\\s-]/g, " ").replace(/\\s+/g, " ").trim();
+  if (/delivery|deliver|shipping|courier|ডেলিভারি/.test(name)) return Truck;
+  if (/air.?condition|\\bac\\b|\\bacs\\b|\\bac category\\b/.test(name)) return Wind;
+  if (/television|\\btv\\b|smart tv/.test(name)) return Tv;
+  if (/router|network|onu|modem|wifi/.test(name)) return Router;
+  if (/ups|\\bpower\\b|inverter|battery/.test(name)) return BatteryCharging;
+  if (/microwave/.test(name)) return Microwave;
+  if (/washing.?machine|washer/.test(name)) return WashingMachine;
+  if (/refrigerator|fridge/.test(name)) return Refrigerator;
+  if (/fan|cooler/.test(name)) return Fan;
+  if (/small.?item|small.?appliance|accessor|accessories/.test(name)) return Plug;
+  if (/appliance|home.?appliance/.test(name)) return Shapes;
+  return Boxes;
 }
 
 function formatQuantity(value: number) {
@@ -186,30 +202,12 @@ export function ProductSalesBreakdown({
             <p className="mt-1 text-[10px] text-slate-400 sm:text-xs">Category-wise and product-wise quantities · {periodLabel}</p>
           </div>
         </div>
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-[10px] font-bold text-emerald-300">
-          <ShoppingBag className="h-3.5 w-3.5" />
-          {formatQuantity(report.totalUnits)} units sold
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-[#0e1422] p-3.5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><ShoppingBag className="h-3.5 w-3.5 text-indigo-300" /> Total Units Sold</div>
-          <div className="mt-2 text-2xl font-black tabular-nums text-white">{formatQuantity(report.totalUnits)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-[#0e1422] p-3.5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><Boxes className="h-3.5 w-3.5 text-sky-300" /> Categories Sold</div>
-          <div className="mt-2 text-2xl font-black tabular-nums text-white">{report.categories.length}</div>
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-[#0e1422] p-3.5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><Package className="h-3.5 w-3.5 text-emerald-300" /> Products Sold</div>
-          <div className="mt-2 text-2xl font-black tabular-nums text-white">{report.productCount}</div>
-        </div>
       </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">Category & Product Details</h3>
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">Categories</h3>
           <span className="text-[10px] text-slate-500">Units sold</span>
         </div>
         {report.categories.length === 0 ? (
@@ -223,6 +221,7 @@ export function ProductSalesBreakdown({
             {report.categories.map(category => {
               const categoryKey = category.name.toLowerCase();
               const isExpanded = expandedCategories.includes(categoryKey);
+              const CategoryIcon = getCategoryIcon(category.name);
               return (
                 <div key={categoryKey} className={`group min-w-0 overflow-hidden rounded-2xl border bg-[#0e1422] transition-all duration-200 ${isExpanded ? "border-indigo-500/35 shadow-lg shadow-indigo-950/20" : "border-slate-800/90 hover:border-slate-700"}`}>
                   <button
@@ -233,7 +232,7 @@ export function ProductSalesBreakdown({
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${isExpanded ? "border-indigo-400/20 bg-indigo-500/15 text-indigo-200" : "border-slate-700/70 bg-slate-800/70 text-slate-300 group-hover:text-indigo-300"}`}>
-                        <Boxes className="h-[18px] w-[18px]" />
+                        <CategoryIcon className="h-[18px] w-[18px]" />
                       </div>
                       <div className="min-w-0">
                         <h4 className="truncate text-xs font-bold tracking-wide text-slate-100 sm:text-sm">{category.name}</h4>
