@@ -5829,6 +5829,32 @@ _${businessInfo.name}_`;
 
               </div>
 
+              {/* Shared dashboard-style date filters for the Ledger */}
+              <div className="flex flex-wrap items-center gap-1.5 p-3 bg-[#0b0f19] border border-slate-800/80 rounded-2xl" id="ledger-date-filter-presets">
+                {[
+                  { id: "all", label: "All Time" },
+                  { id: "today", label: "Today" },
+                  { id: "yesterday", label: "Yesterday" },
+                  { id: "weekly", label: "7 Days" },
+                  { id: "monthly", label: "This Month" },
+                  { id: "lastmonth", label: "Last Month" },
+                  { id: "yearly", label: "This Year" },
+                  { id: "custom", label: "Custom Range" }
+                ].map((preset) => (
+                  <button key={preset.id} onClick={() => setDashboardFilter(preset.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border transition-all ${dashboardFilter === preset.id ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "text-slate-400 border-transparent hover:text-white hover:bg-white/5"}`}>
+                    {preset.label}
+                  </button>
+                ))}
+                {dashboardFilter === "custom" && (
+                  <div className="flex items-center gap-2 w-full pt-2">
+                    <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" />
+                    <span className="text-slate-500 text-xs">to</span>
+                    <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" />
+                  </div>
+                )}
+              </div>
+
               {/* Filtering Controls */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 bg-[#1E1E24] border border-slate-800/80 rounded-2xl shadow-xl" id="ledger-filter-bar">
                 
