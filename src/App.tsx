@@ -5929,12 +5929,12 @@ _${businessInfo.name}_`;
               VIEW 3: LEDGER INVOICING ACCOUNTING & DUE COLLECTOR
               ----------------------------------------------------------------- */}
           {activeTab === "ledger" && (
-            <div className="space-y-6 animate-fadeIn" id="view-ledger-container">
+            <div className="space-y-4 sm:space-y-6 animate-fadeIn" id="view-ledger-container">
               
               {/* Sticky Top Metrics Summary Pane */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4" id="ledger-sticky-metrics">
+              <section className="space-y-3" id="ledger-summary-section"><div className="flex items-center gap-2 px-1"><div className="h-5 w-1 rounded-full bg-emerald-400" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Sales Summary</h3></div><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3" id="ledger-sticky-metrics">
                 
-                <div className="bg-[#1E1E24] border border-slate-800/85 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
                   <div className="space-y-1">
                     <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Memos</span>
                     <span className="text-xl font-black text-white font-mono">{filteredTransactions.length}</span>
@@ -5974,10 +5974,11 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
 
-              </div>
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]"><div className="space-y-1"><span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Units Sold</span><span className="text-xl font-black text-white font-mono">{filteredTransactions.reduce((sum, t) => sum + (t.items || []).reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0), 0).toLocaleString()}</span></div><div className="p-2.5 bg-violet-500/10 rounded-xl text-violet-300"><Package className="w-5 h-5" /></div></div>
+              </div></section>
 
               {/* Shared dashboard-style date filters for the Ledger */}
-              <div className="flex flex-wrap items-center gap-1.5 p-3 bg-[#0b0f19] border border-slate-800/80 rounded-2xl" id="ledger-date-filter-presets">
+              <section className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] backdrop-blur-2xl p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.22)] space-y-3" id="ledger-date-section"><div className="flex items-center gap-2 px-1"><Calendar className="w-4 h-4 text-sky-300" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Date Filter</h3></div><div className="flex flex-wrap items-center gap-1.5" id="ledger-date-filter-presets">
                 {[
                   { id: "all", label: "All Time" },
                   { id: "today", label: "Today" },
@@ -6000,10 +6001,10 @@ _${businessInfo.name}_`;
                     <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" />
                   </div>
                 )}
-              </div>
+              </div></section>
 
               {/* Filtering Controls */}
-              <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 bg-[#1E1E24] border border-slate-800/80 rounded-2xl shadow-xl" id="ledger-filter-bar">
+              <section className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] backdrop-blur-2xl p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.22)] space-y-3" id="ledger-filter-section"><div className="flex items-center gap-2 px-1"><Search className="w-4 h-4 text-emerald-300" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Search & Payment Status</h3></div><div className="flex flex-col lg:flex-row items-center justify-between gap-4" id="ledger-filter-bar">
                 
                 <div className="relative w-full lg:w-96" id="ledger-search-wrap">
                   <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
@@ -6034,12 +6035,12 @@ _${businessInfo.name}_`;
                   ))}
                 </div>
 
-              </div>
+              </div></section>
 
               {/* Transactions Timeline List Feed */}
-              <div className="space-y-4" id="ledger-timeline-feed">
+              <section className="space-y-3" id="ledger-customer-history-section"><div className="flex items-center justify-between gap-2 px-1"><div className="flex items-center gap-2"><div className="h-5 w-1 rounded-full bg-sky-400" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Customer & Transaction History</h3></div><span className="text-[10px] text-slate-500 font-mono">{filteredTransactions.length} records</span></div><div className="space-y-3 sm:space-y-4" id="ledger-timeline-feed">
                 {filteredTransactions.length === 0 ? (
-                  <div className="py-16 text-center text-slate-450 italic bg-[#1E1E24] border border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-3">
+                  <div className="py-16 text-center text-slate-400 italic bg-white/[0.045] backdrop-blur-2xl border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-3">
                     <span className="text-4xl text-slate-600">🗄️</span>
                     <p className="text-xs font-mono leading-normal">No custom entries or receipt files found in active filter catalog.</p>
                   </div>
@@ -6052,7 +6053,7 @@ _${businessInfo.name}_`;
                     return (
                       <div 
                         key={t.id} 
-                        className={`bg-[#1E1E24]/90 hover:bg-[#1E1E24] border border-slate-800/70 hover:border-slate-800 rounded-2xl p-5 shadow-lg transition-all flex flex-col md:flex-row justify-between gap-4 relative overflow-hidden ${
+                        className={`bg-white/[0.055] hover:bg-white/[0.075] backdrop-blur-2xl border border-white/10 hover:border-white/20 rounded-[1.4rem] p-3.5 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-all flex flex-col md:flex-row justify-between gap-4 relative overflow-hidden ${
                           t.status === "paid" 
                             ? "border-l-4 border-l-emerald-500" 
                             : t.status === "partial" 
@@ -6096,7 +6097,7 @@ _${businessInfo.name}_`;
                               )}
                             </div>
                                           {/* Invoice Items Sub-Drawer */}
-                          <div className="bg-[#121214] border border-slate-850/65 rounded-xl p-3 space-y-1.5" id={`ledger-items-${t.invoiceNo}`}>
+                          <div className="bg-black/15 backdrop-blur-xl border border-white/[0.08] rounded-xl p-3 space-y-1.5" id={`ledger-items-${t.invoiceNo}`}>
                             <span className="text-[9px] font-bold text-slate-500 font-mono uppercase tracking-wider block">Invoice Line Items ({t.items.length})</span>
                             <div className="space-y-1">
                               {t.items.map((it, idx) => {
@@ -6310,7 +6311,7 @@ _${businessInfo.name}_`;
                     );
                   })
                 )}
-              </div>
+              </div></section>
 
             </div>
           )}
