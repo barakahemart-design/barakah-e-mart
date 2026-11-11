@@ -6018,7 +6018,7 @@ _${businessInfo.name}_`;
                         {/* Transaction Core info column */}
                         <div className="space-y-3 flex-1">
                           
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5 text-center">
                             <span className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs font-mono font-black uppercase tracking-wider block">
                               {t.invoiceNo}
                             </span>
@@ -6040,7 +6040,7 @@ _${businessInfo.name}_`;
                           </div>
 
                           {/* Customer profile: full name, phone and address above cost controls */}
-                          <div className="flex items-start gap-2.5 min-w-0 rounded-xl border border-white/10 bg-white/[0.045] backdrop-blur-xl p-2.5">
+                          <div className="flex items-start gap-2.5 min-w-0 rounded-xl border border-white/15 bg-white/[0.065] backdrop-blur-xl p-3 shadow-inner">
                             <div className="w-8 h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center font-bold text-[10px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
                             <div className="min-w-0 leading-snug flex-1">
                               <strong className="text-white text-xs sm:text-sm block break-words">{customerLabel}</strong>
@@ -6069,20 +6069,14 @@ _${businessInfo.name}_`;
                                 const showEdit = showCostEditId === `${t.id}-${idx}`;
 
                                 return (
-                                  <div key={idx} className="flex justify-between items-center text-[11px] font-sans text-slate-300 py-1 border-b border-slate-800/20 last:border-b-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                  <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-[11px] font-sans text-slate-300 py-2 border-b border-white/[0.07] last:border-b-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                                       <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span> 
                                       <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
-                                      <span className="text-[10px] text-slate-400 font-mono">
-                                        (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
-                                      </span>
-                                      {buyCost > 0 && (
-                                        <span className="text-[9px] text-slate-500 font-mono">
-                                          (Cost: {businessInfo.currencySymbol}{buyCost})
-                                        </span>
-                                      )}
+
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+                                      <span className="text-[9px] text-slate-400 font-mono">Cost price</span>
                                       {showEdit ? (
                                         <div className="flex items-center gap-1 animate-fadeIn">
                                           <input
@@ -6127,12 +6121,9 @@ _${businessInfo.name}_`;
                                           className="text-[8px] leading-none text-emerald-300 hover:text-emerald-200 font-mono cursor-pointer inline-flex items-center gap-0.5 bg-white/[0.045] border border-white/10 rounded-md px-1.5 py-1 mt-1"
                                           title="Override or edit purchase cost rate for this item"
                                         >
-                                          Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
+                                          {businessInfo.currencySymbol}{buyCost.toLocaleString()} · Edit ✏️
                                         </button>
                                       )}
-                                      <span className="font-mono text-[10px] text-slate-400">
-                                        {businessInfo.currencySymbol} {it.total.toLocaleString()}
-                                      </span>
                                     </div>
                                   </div>
                                 );
@@ -6146,44 +6137,37 @@ _${businessInfo.name}_`;
                         {/* Transaction Accounting Column & Cash Math */}
                         <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-x-6 gap-y-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-850/80 shrink-0 font-mono text-right text-xs">
                           
-                          <div className="space-y-1 text-left md:text-right">
-                            <span className="text-[9px] uppercase text-slate-550 font-semibold block">Price Calculations:</span>
-                            <div className="grid grid-cols-2 md:block gap-x-4">
-                              <p className="text-slate-400 text-[11px]">
-                                Discount: <span className="text-[#FF5252]">-{businessInfo.currencySymbol} {t.discount.toLocaleString()}</span>
-                              </p>
-                              <p className="text-white font-black text-sm mt-0.5">
-                                Grand Total: {businessInfo.currencySymbol} {t.total.toLocaleString()}
-                              </p>
+                          <div className="rounded-2xl border border-white/15 bg-white/[0.065] backdrop-blur-xl p-3 sm:p-3.5 space-y-2.5 shadow-inner text-left w-full">
+                            <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block">Price Calculations</span>
+                            <div className="flex items-center justify-between gap-3 text-[10px]">
+                              <span className="text-slate-400">Discount</span>
+                              <strong className="text-rose-300">-{businessInfo.currencySymbol} {t.discount.toLocaleString()}</strong>
                             </div>
-                          </div>
-
-                          <div className="space-y-1 text-right">
-                            <span className="text-[9px] uppercase text-slate-550 font-semibold block">Collected vs Outstanding:</span>
-                            <div className="grid grid-cols-2 md:block gap-x-4">
-                              <p className="text-emerald-400 font-bold">
-                                Received: {businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}
-                              </p>
-                              {t.dueBalance > 0 ? (
-                                <p className="text-rose-455 text-[#FF5252] font-black animate-pulse">
-                                  Due Balance: {businessInfo.currencySymbol} {t.dueBalance.toLocaleString()}
-                                </p>
-                              ) : (
-                                <p className="text-slate-500 text-[10px]">Accounts Settled ✓</p>
-                              )}
+                            <div className="flex items-center justify-between gap-3 pt-1">
+                              <span className="text-slate-200 text-[11px] font-bold">Grand Total</span>
+                              <strong className="text-white font-black text-base">{businessInfo.currencySymbol} {t.total.toLocaleString()}</strong>
                             </div>
+                            {t.dueBalance > 0 && <div className="border-t border-dashed border-rose-400/45 pt-2 mt-1 flex items-center justify-between gap-3">
+                              <span className="text-rose-300 text-[10px] font-bold uppercase">Due Balance</span>
+                              <strong className="text-rose-300 font-black text-sm">{businessInfo.currencySymbol} {t.dueBalance.toLocaleString()}</strong>
+                            </div>}
+                            <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-2">
+                              <span className="text-slate-400 text-[10px]">Received</span>
+                              <strong className="text-emerald-300 text-[11px]">{businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}</strong>
+                            </div>
+                            {t.dueBalance <= 0 && <p className="text-emerald-300 text-[9px] font-bold text-right">Accounts Settled ✓</p>}
                           </div>
 
                         </div>
 
                         {/* Interactive Admin Tool Belt */}
-                        <div className="flex flex-wrap md:flex-col items-center justify-end gap-1.5 shrink-0 md:pl-3 border-t md:border-t-0 border-white/10 pt-2 md:pt-0">
+                        <div className="grid grid-cols-3 md:flex md:flex-col items-stretch justify-end gap-2 w-full md:w-28 shrink-0 md:pl-3 border-t md:border-t-0 border-white/10 pt-3 md:pt-0">
                           
                           {/* Reprint Invoice PDF */}
                           <button
                             id={`download-pdf-${t.invoiceNo}`}
                             onClick={() => generateInvoicePDF(t, associatedContact, businessInfo)}
-                            className="p-2 bg-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-300 hover:text-emerald-400 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-[10px] uppercase tracking-wide shrink-0 h-10 w-24 shadow"
+                            className="px-2 py-2 bg-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-300 hover:text-emerald-400 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wide h-10 w-full shadow"
                             title="Reprint Customer Cash Memo"
                           >
                             <Download className="w-3.5 h-3.5" />
@@ -6194,7 +6178,7 @@ _${businessInfo.name}_`;
                           <button
                             id={`download-challan-${t.invoiceNo}`}
                             onClick={() => generateDeliveryChallanPDF(t, associatedContact, businessInfo)}
-                            className="p-2 bg-slate-900 border border-slate-800 hover:border-[#00E676] text-slate-[#A0A0A5] hover:text-[#00E676] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-[10px] uppercase tracking-wide shrink-0 h-10 w-24 shadow"
+                            className="px-2 py-2 bg-slate-900 border border-slate-800 hover:border-[#00E676] text-slate-300 hover:text-[#00E676] rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wide h-10 w-full shadow"
                             title="Download Delivery Challan"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -6209,7 +6193,7 @@ _${businessInfo.name}_`;
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="px-2 py-1.5 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-lg transition-all text-[9px] font-extrabold uppercase tracking-wide shrink-0 h-8 min-w-[68px] font-sans block cursor-pointer text-center"
+                              className="px-2 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-xl transition-all text-[9px] font-extrabold uppercase tracking-wide h-10 w-full font-sans flex items-center justify-center cursor-pointer text-center"
                             >
                               Collect Due
                             </button>
@@ -6217,7 +6201,7 @@ _${businessInfo.name}_`;
 
                           {/* Modify and Erase buttons */}
                           {currentPanel === "admin" && (
-                            <div className="flex items-center gap-1">
+                            <div className="contents">
                               {deleteTxId === t.id ? (
                                 <div className="flex items-center gap-1 justify-end bg-slate-900 p-1 border border-slate-800 rounded-xl h-10 animate-scaleIn">
                                   <span className="text-[8px] text-slate-400 font-mono uppercase px-1">Erase?</span>
@@ -6241,7 +6225,7 @@ _${businessInfo.name}_`;
                                 <>
                                   <button
                                     onClick={() => setEditingTx(t)}
-                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
+                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-full flex items-center justify-center shadow"
                                     title="Edit Sale Details & Units"
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
@@ -6249,7 +6233,7 @@ _${businessInfo.name}_`;
                                   
                                   <button
                                     onClick={() => setDeleteTxId(t.id)}
-                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-455 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
+                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-400 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-full flex items-center justify-center shadow"
                                     title="Wipe transaction memo"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
