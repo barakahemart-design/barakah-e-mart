@@ -6007,7 +6007,7 @@ _${businessInfo.name}_`;
                     return (
                       <div 
                         key={t.id} 
-                        className={`bg-white/[0.055] hover:bg-white/[0.075] backdrop-blur-2xl border border-white/10 hover:border-white/20 rounded-2xl p-2.5 sm:p-4 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-all flex flex-col md:flex-row justify-between gap-2.5 sm:gap-4 relative overflow-hidden ${
+                        className={`bg-slate-950/55 hover:bg-slate-900/70 backdrop-blur-2xl border border-white/20 hover:border-white/30 ring-1 ring-white/[0.035] rounded-2xl p-2 sm:p-3 shadow-[0_10px_34px_rgba(0,0,0,0.38)] transition-all flex flex-col md:flex-row justify-between gap-2 sm:gap-3 relative overflow-hidden ${
                           t.status === "paid" 
                             ? "border-l-4 border-l-emerald-500" 
                             : t.status === "partial" 
@@ -6016,9 +6016,9 @@ _${businessInfo.name}_`;
                         }`}
                       >
                         {/* Transaction Core info column */}
-                        <div className="space-y-3 flex-1">
+                        <div className="space-y-2.5 flex-1 min-w-0">
                           
-                          <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5 text-center">
+                          <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-black/30 px-2.5 py-2 text-center shadow-inner">
                             <span className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs font-mono font-black uppercase tracking-wider block">
                               {t.invoiceNo}
                             </span>
@@ -6040,16 +6040,16 @@ _${businessInfo.name}_`;
                           </div>
 
                           {/* Customer profile: full name, phone and address above cost controls */}
-                          <div className="flex items-start gap-2.5 min-w-0 rounded-xl border border-white/15 bg-white/[0.065] backdrop-blur-xl p-3 shadow-inner">
-                            <div className="w-8 h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center font-bold text-[10px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
-                            <div className="min-w-0 leading-snug flex-1">
+                          <div className="flex items-start gap-2 min-w-0 rounded-xl border border-white/20 bg-white/[0.055] backdrop-blur-2xl p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                            <div className="w-7 h-7 rounded-full bg-white/[0.08] border border-white/20 flex items-center justify-center font-bold text-[9px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
+                            <div className="min-w-0 leading-tight flex-1">
                               <strong className="text-white text-xs sm:text-sm block break-words">{customerLabel}</strong>
                               {customerPhone && <span className="text-[10px] text-slate-300 font-mono block mt-1">{customerPhone}</span>}
                               {associatedContact?.address && <span className="text-[10px] text-slate-400 block mt-1 whitespace-normal break-words">{associatedContact.address}</span>}
                             </div>
                           </div>
                           {/* Invoice Items Sub-Drawer */}
-                          <div className="bg-black/15 backdrop-blur-xl border border-white/[0.08] rounded-xl p-3 space-y-1.5" id={`ledger-items-${t.invoiceNo}`}>
+                          <div className="bg-black/35 backdrop-blur-2xl border border-white/15 rounded-xl p-2.5 space-y-1 shadow-inner" id={`ledger-items-${t.invoiceNo}`}>
                             <span className="text-[9px] font-bold text-slate-500 font-mono uppercase tracking-wider block">Invoice Line Items ({t.items.length})</span>
                             <div className="space-y-1">
                               {t.items.map((it, idx) => {
@@ -6069,7 +6069,7 @@ _${businessInfo.name}_`;
                                 const showEdit = showCostEditId === `${t.id}-${idx}`;
 
                                 return (
-                                  <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-[11px] font-sans text-slate-300 py-2 border-b border-white/[0.07] last:border-b-0">
+                                  <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 text-[10px] font-sans text-slate-300 py-1.5 border-b border-white/[0.09] last:border-b-0">
                                     <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                                       <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span> 
                                       <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
@@ -6133,9 +6133,9 @@ _${businessInfo.name}_`;
 
 
                         {/* Transaction Accounting Column & Cash Math */}
-                        <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-x-6 gap-y-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-850/80 shrink-0 font-mono text-right text-xs">
+                        <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-x-4 gap-y-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-white/10 shrink-0 font-mono text-right text-xs">
                           
-                          <div className="rounded-2xl border border-white/15 bg-white/[0.065] backdrop-blur-xl p-3 sm:p-3.5 space-y-2.5 shadow-inner text-left w-full">
+                          <div className="rounded-2xl border border-white/20 bg-slate-900/65 backdrop-blur-2xl p-2.5 sm:p-3 space-y-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.055)] text-left w-full">
                             <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block">Price Calculations</span>
                             <div className="flex items-center justify-between gap-3 text-[10px]">
                               <span className="text-slate-400">Discount</span>
@@ -6159,7 +6159,7 @@ _${businessInfo.name}_`;
                         </div>
 
                         {/* Interactive Admin Tool Belt */}
-                        <div className="grid grid-cols-3 md:flex md:flex-col items-stretch justify-end gap-2 w-full md:w-28 shrink-0 md:pl-3 border-t md:border-t-0 border-white/10 pt-3 md:pt-0">
+                        <div className="grid grid-cols-3 md:flex md:flex-col items-stretch justify-end gap-1.5 w-full md:w-28 shrink-0 md:pl-3 border-t md:border-t-0 border-white/10 pt-2.5 md:pt-0">
                           
                           {/* Reprint Invoice PDF */}
                           <button
