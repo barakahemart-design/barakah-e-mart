@@ -6413,7 +6413,7 @@ _${businessInfo.name}_`;
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Amount (৳) *</label>
                           <input
@@ -6449,6 +6449,37 @@ _${businessInfo.name}_`;
 
                   </form>
 
+                  <div className="rounded-xl border border-slate-800 bg-[#050912]/70 p-3 space-y-2" id="expense-category-management">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Manage Expense Categories</div>
+                    {allCategories.map(category => (
+                      <div key={category} className="flex items-center gap-2 justify-between border-b border-slate-800/60 last:border-0 py-1.5">
+                        {editingExpenseCategoryName === category ? (
+                          <input
+                            value={expenseCategoryEditValue}
+                            onChange={e => setExpenseCategoryEditValue(e.target.value)}
+                            className="min-w-0 flex-1 rounded-lg bg-slate-900 border border-slate-700 px-2 py-2 text-xs text-white"
+                            aria-label="Rename expense category"
+                          />
+                        ) : (
+                          <span className="min-w-0 flex-1 text-xs text-slate-200">{category}</span>
+                        )}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {editingExpenseCategoryName === category ? (
+                            <>
+                              <button type="button" onClick={() => renameExpenseCategory(category, expenseCategoryEditValue)} className="px-2.5 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">Save</button>
+                              <button type="button" onClick={() => setEditingExpenseCategoryName(null)} className="px-2.5 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px]">Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" onClick={() => { setEditingExpenseCategoryName(category); setExpenseCategoryEditValue(category); }} className="p-2 rounded-lg text-sky-400 hover:bg-sky-500/10" aria-label={`Edit ${category}`}><Edit3 className="w-3.5 h-3.5" /></button>
+                              <button type="button" onClick={() => deleteExpenseCategory(category)} className="p-2 rounded-lg text-rose-400 hover:bg-rose-500/10" aria-label={`Delete ${category}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-[9px] text-slate-500">Categories already used by saved expenses cannot be deleted; rename them to preserve history.</p>
+                  </div>
                 </div>}
 
                 {/* Expense entries list table */}
