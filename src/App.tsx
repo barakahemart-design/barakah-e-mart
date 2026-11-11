@@ -274,38 +274,66 @@ export default function App() {
    // Security Locking Roles state
    const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => { try { const saved = typeof window !== "undefined" ? sessionStorage.getItem("barakah_active_panel") : null; return saved === "admin" || saved === "sales" ? saved : "none"; } catch { return "none"; } });
   const [selectedExpenseDetails, setSelectedExpenseDetails] = useState<Expense | null>(null);
+  const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
 
   useEffect(() => {
     try { if (currentPanel === "none") sessionStorage.removeItem("barakah_active_panel"); else sessionStorage.setItem("barakah_active_panel", currentPanel); } catch (_) {}
   }, [currentPanel]);
 
   useEffect(() => {
-    let startY = 0, startX = 0, armed = false, maxPull = 0;
+    let startY = 0;
+    let startX = 0;
+    let armed = false;
+    let pullDistance = 0;
+
     const onStart = (event: TouchEvent) => {
       if (currentPanel === "none" || !event.touches.length) return;
       const target = event.target as HTMLElement | null;
-      if (target && target.closest("input, textarea, select, [contenteditable=true], button")) return;
+      if (target?.closest("input, textarea, select, [contenteditable=true], button, a")) return;
       if ((document.scrollingElement?.scrollTop ?? window.scrollY) > 0) return;
-      startY = event.touches[0].clientY; startX = event.touches[0].clientX; maxPull = 0; armed = startY <= 100;
+
+      startY = event.touches[0].clientY;
+      startX = event.touches[0].clientX;
+      pullDistance = 0;
+      armed = startY <= 120;
     };
+
     const onMove = (event: TouchEvent) => {
       if (!armed || !event.touches.length) return;
-      maxPull = Math.max(maxPull, event.touches[0].clientY - startY);
+      const deltaY = event.touches[0].clientY - startY;
+      const deltaX = Math.abs(event.touches[0].clientX - startX);
+      if (deltaY <= 0 || deltaX > 75) {
+        pullDistance = 0;
+        setPullRefreshDistance(0);
+        return;
+      }
+      pullDistance = Math.min(deltaY, 140);
+      setPullRefreshDistance(pullDistance);
     };
-    const onEnd = () => {
+
+    const finishPull = () => {
       if (!armed) return;
-      const dx = Math.abs(startX - (window.innerWidth / 2));
       armed = false;
-      if (maxPull > 115) {
+      if (pullDistance >= 105) {
         try { sessionStorage.setItem("barakah_pull_refresh_pending", "1"); } catch (_) {}
         try { if ("vibrate" in navigator) navigator.vibrate(35); } catch (_) {}
         window.location.reload();
+        return;
       }
+      pullDistance = 0;
+      setPullRefreshDistance(0);
     };
+
     window.addEventListener("touchstart", onStart, { passive: true });
     window.addEventListener("touchmove", onMove, { passive: true });
-    window.addEventListener("touchend", onEnd, { passive: true });
-    return () => { window.removeEventListener("touchstart", onStart); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onEnd); };
+    window.addEventListener("touchend", finishPull, { passive: true });
+    window.addEventListener("touchcancel", finishPull, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", finishPull);
+      window.removeEventListener("touchcancel", finishPull);
+    };
   }, [currentPanel]);
 
   // Current active workspace view tab
@@ -3227,7 +3255,33 @@ _${businessInfo.name}_`;
 
   return (
     <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#121214] text-white font-sans flex flex-col md:flex-row" id="terminal-layout">
-      
+      {/* Mobile refresh control is outside the desktop-only sidebar */}
+      <button
+        type="button"
+        onClick={() => {
+          try { sessionStorage.setItem("barakah_pull_refresh_pending", "1"); } catch (_) {}
+          try { if ("vibrate" in navigator) navigator.vibrate(35); } catch (_) {}
+          window.location.reload();
+        }}
+        aria-label="Refresh app"
+        title="Refresh app"
+        className="fixed top-3 right-3 z-[150] md:hidden flex items-center gap-1.5 rounded-full border border-white/20 bg-slate-900/90 px-3 py-2 text-[11px] font-semibold text-white shadow-xl backdrop-blur-2xl active:scale-95"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        Refresh
+      </button>
+
+      {/* Facebook-style pull-to-refresh indicator */}
+      {pullRefreshDistance > 8 && (
+        <div
+          className="fixed left-1/2 top-0 z-[160] -translate-x-1/2 rounded-b-2xl border border-white/10 bg-slate-900/95 px-4 py-2 text-[11px] font-semibold text-white shadow-xl flex items-center gap-2 pointer-events-none"
+          style={{ transform: `translate(-50%, ${Math.min(pullRefreshDistance * 0.55, 76) - 100}%)` }}
+        >
+          <RefreshCw className={`h-4 w-4 text-emerald-400 ${pullRefreshDistance >= 105 ? "animate-spin" : ""}`} />
+          {pullRefreshDistance >= 105 ? "ছেড়ে দিন, রিফ্রেশ হবে" : "নিচে টানুন রিফ্রেশ করতে"}
+        </div>
+      )}
+
       {/* -------------------- SIDE NAVIGATION RAIL -------------------- */}
       <aside className="hidden md:flex md:w-64 md:h-screen md:sticky md:top-0 bg-[#1E1E24] border-r border-[#2A2A32] p-5 flex flex-col justify-between shrink-0 shadow-xl z-30" id="sidebar">
         
@@ -3249,22 +3303,6 @@ _${businessInfo.name}_`;
               </span>
             </div>
           </div>
-
-          {/* Persistent mobile refresh action */}
-          <button
-            type="button"
-            onClick={() => {
-              try { sessionStorage.setItem("barakah_pull_refresh_pending", "1"); } catch (_) {}
-              try { if ("vibrate" in navigator) navigator.vibrate(35); } catch (_) {}
-              window.location.reload();
-            }}
-            aria-label="Refresh app"
-            title="Refresh app"
-            className="fixed top-3 right-3 z-[150] md:hidden flex items-center gap-1.5 rounded-full border border-white/20 bg-slate-900/75 px-3 py-2 text-[11px] font-semibold text-white shadow-xl backdrop-blur-2xl active:scale-95"
-          >
-            <span className="text-base leading-none">↻</span>
-            Refresh
-          </button>
 
           {/* Core Navigation Links */}
           <nav className="space-y-1.5" id="sidebar-navigation">
