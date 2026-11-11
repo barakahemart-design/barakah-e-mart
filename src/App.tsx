@@ -2677,7 +2677,6 @@ export default function App() {
 
       if (activeUser && !activeUser.isGuest) {
         try {
-          alert(`activeUser.uid: ${activeUser.uid}\nupdatedContact.id: ${updatedContact.id}\nupdatedContact.name: ${updatedContact.name}`);
           await saveCustomer(activeUser.uid, updatedContact);
         } catch (err) {
           console.error("Error saving updated contact to Firestore:", err);
@@ -2704,7 +2703,6 @@ export default function App() {
 
       if (activeUser && !activeUser.isGuest) {
         try {
-          alert(`activeUser.uid: ${activeUser.uid}\nnewContact.id: ${newContact.id}\nnewContact.name: ${newContact.name}`);
           await saveCustomer(activeUser.uid, newContact);
         } catch (err) {
           console.error("Error saving new contact to Firestore:", err);
@@ -7107,7 +7105,11 @@ _${businessInfo.name}_`;
                                           return;
                                         }
                                         await deleteCloudDocument("customers", c.firestoreId ?? c.id);
-                                        setContacts(prev => prev.filter(item => item.id !== c.id));
+                                        const remainingContacts = contacts.filter(item => item.id !== c.id);
+                                        setContacts(remainingContacts);
+                                        if (activeUser?.uid) {
+                                          localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUser.uid), JSON.stringify(remainingContacts));
+                                        }
                                         triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success");
                                         setDeleteContactId(null);
                                       }}
