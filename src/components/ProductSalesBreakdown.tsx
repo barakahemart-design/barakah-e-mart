@@ -93,7 +93,17 @@ export function ProductSalesBreakdown({
           String(product?.name || "").trim().toLowerCase() === itemName.toLowerCase()
         );
 
-        const categoryName = String(item?.category || matchedProduct?.category || "Uncategorized").trim() || "Uncategorized";
+        const savedCategory = String(item?.category || "").trim();
+        const catalogCategory = String(matchedProduct?.category || "").trim();
+        // Legacy invoices may contain the placeholder "Uncategorized"; prefer
+        // the matched product's real catalog category for historical reporting.
+        const categoryName = (
+          savedCategory && savedCategory.toLowerCase() !== "uncategorized"
+            ? savedCategory
+            : catalogCategory && catalogCategory.toLowerCase() !== "uncategorized"
+              ? catalogCategory
+              : savedCategory || catalogCategory || "Uncategorized"
+        ).trim() || "Uncategorized";
         const categoryKey = categoryName.toLowerCase();
         const productKey = itemProductId || String(matchedProduct?.id || itemName.toLowerCase());
 
