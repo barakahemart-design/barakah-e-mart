@@ -6130,7 +6130,6 @@ _${businessInfo.name}_`;
                               })}
                             </div>
                           </div>
-                          </div>
 
 
                         {/* Transaction Accounting Column & Cash Math */}
