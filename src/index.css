@@ -640,3 +640,151 @@ html.light .liquid-glass-page :is(div, section, article)[class*="rounded-xl"][cl
   border-color: rgba(255, 255, 255, 0.72);
   box-shadow: 0 8px 28px rgba(30, 64, 175, 0.08);
 }
+
+
+/* ==========================================================
+   BARAKAH POS — APP-WIDE PREMIUM DARK LIQUID GLASS SYSTEM
+   Visual-only layer: does not change application behavior.
+   ========================================================== */
+html:not(.light) {
+  color-scheme: dark;
+  --glass-bg: rgba(13, 17, 27, 0.72);
+  --glass-bg-strong: rgba(8, 12, 21, 0.88);
+  --glass-bg-soft: rgba(255, 255, 255, 0.045);
+  --glass-border: rgba(148, 163, 184, 0.16);
+  --glass-highlight: rgba(255, 255, 255, 0.10);
+  --glass-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+  --glass-blue: rgba(59, 130, 246, 0.16);
+}
+html:not(.light) body,
+html:not(.light) #root {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(37, 99, 235, 0.10), transparent 34%),
+    radial-gradient(ellipse at 92% 18%, rgba(14, 116, 144, 0.08), transparent 30%),
+    linear-gradient(145deg, #05070c 0%, #090d16 52%, #060910 100%) !important;
+  color: #e8edf7;
+}
+html:not(.light) #auth-screen,
+html:not(.light) #panel-gate-lock {
+  background: transparent !important;
+}
+html:not(.light) #auth-box,
+html:not(.light) #lock-wrapper {
+  background: linear-gradient(145deg, rgba(22, 29, 44, 0.88), rgba(7, 11, 20, 0.92)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(155%);
+  backdrop-filter: blur(30px) saturate(155%);
+}
+
+/* Main panels, cards, workspaces, drawers and grouped content */
+html:not(.light) #root :is(div, section, article, form)[class*="rounded-xl"][class*="bg-"]:not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-amber-"]):not([class*="bg-sky-"]):not([class*="bg-blue-"]),
+html:not(.light) #root :is(div, section, article, form)[class*="rounded-2xl"][class*="bg-"]:not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-amber-"]):not([class*="bg-sky-"]):not([class*="bg-blue-"]),
+html:not(.light) #root :is(div, section, article, form)[class*="rounded-3xl"][class*="bg-"]:not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-amber-"]):not([class*="bg-sky-"]):not([class*="bg-blue-"]) {
+  background-color: var(--glass-bg) !important;
+  background-image: linear-gradient(145deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012)) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,0.055);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  backdrop-filter: blur(22px) saturate(145%);
+}
+html:not(.light) #root [class*="border-[#2D2D35]"],
+html:not(.light) #root [class*="border-[#2b2b35]"],
+html:not(.light) #root [class*="border-slate-800"] {
+  border-color: var(--glass-border) !important;
+}
+
+/* Input controls: product fields, customer forms, search, date filters and settings */
+html:not(.light) #root :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  color: #f1f5f9 !important;
+  background: linear-gradient(145deg, rgba(20, 27, 41, 0.88), rgba(8, 12, 20, 0.88)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.20) !important;
+  border-radius: 0.8rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 5px 16px rgba(0,0,0,0.12);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+html:not(.light) #root :is(input, select, textarea)::placeholder {
+  color: #77849a !important;
+  opacity: 1;
+}
+html:not(.light) #root :is(input, select, textarea):focus {
+  outline: none !important;
+  border-color: rgba(96, 165, 250, 0.72) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+}
+
+/* Buttons keep their functional/status colors, while gaining glass depth */
+html:not(.light) #root button:not(:disabled) {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+html:not(.light) #root button[class*="rounded-"][class*="border"]:not([class*="bg-emerald-500"]):not([class*="bg-emerald-600"]):not([class*="bg-rose-500"]):not([class*="bg-red-"]):not([class*="bg-blue-600"]):not([class*="bg-sky-"]) {
+  border-color: rgba(148, 163, 184, 0.20) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.055), 0 5px 16px rgba(0,0,0,0.16);
+}
+html:not(.light) #root button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+html:not(.light) #root button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.65);
+}
+
+/* Tables, transaction rows, lists and date-range controls */
+html:not(.light) #root table {
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #e2e8f0;
+}
+html:not(.light) #root thead th {
+  background: rgba(18, 26, 40, 0.92) !important;
+  color: #aebbd0 !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+html:not(.light) #root tbody tr {
+  border-color: rgba(148, 163, 184, 0.12) !important;
+}
+html:not(.light) #root tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.075) !important;
+}
+html:not(.light) #root :is(td, th) {
+  border-color: rgba(148, 163, 184, 0.13) !important;
+}
+html:not(.light) #root hr {
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+/* Popovers, dropdowns, floating menus and modal/dialog surfaces */
+html:not(.light) #root [role="dialog"],
+html:not(.light) #root [role="menu"],
+html:not(.light) #root [role="listbox"],
+html:not(.light) #root [role="popover"],
+html:not(.light) #root [class*="z-50"][class*="rounded-"][class*="bg-"] {
+  background: linear-gradient(145deg, rgba(20, 27, 41, 0.96), rgba(7, 11, 19, 0.97)) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+}
+
+/* Scrollbars and selection complete the same dark premium finish */
+html:not(.light) #root * {
+  scrollbar-color: rgba(100, 116, 139, 0.48) transparent;
+  scrollbar-width: thin;
+}
+html:not(.light) #root ::selection {
+  color: #ffffff;
+  background: rgba(59, 130, 246, 0.34);
+}
+html:not(.light) #root :focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.72);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.light) #root :is(button, a, input, select, textarea, [role="button"]) {
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+}
