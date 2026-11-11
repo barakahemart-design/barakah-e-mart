@@ -6591,6 +6591,7 @@ _${businessInfo.name}_`;
 
                 </div>}
               </div>
+              </div>
               )}
             </div>
           )}
