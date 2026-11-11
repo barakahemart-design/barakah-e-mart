@@ -3529,6 +3529,7 @@ _${businessInfo.name}_`;
       <main className="flex-1 min-w-0 bg-[#070b13] flex flex-col md:h-screen md:overflow-hidden pb-20 md:pb-0" id="viewport-workspace">
         
         {/* TOP STATUS BAR */}
+        {activeTab !== "dashboard" && (
         <header className="bg-[#0a101f]/90 backdrop-blur border-b border-slate-800/80 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between gap-2 z-40 sticky top-0 animate-fadeIn" id="top-navbar">
           
           <div id="active-tab-title-display" className="min-w-0">
@@ -3684,6 +3685,7 @@ _${businessInfo.name}_`;
           </div>
 
         </header>
+        )}
 
         {/* -------------------- MAIN SCROLLABLE VIEWPORT CONTENT -------------------- */}
         <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 liquid-glass-page" id="scrollable-content-area">
