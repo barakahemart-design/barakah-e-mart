@@ -3058,6 +3058,7 @@ _${businessInfo.name}_`;
   });
 
   const filteredTransactions = transactions.filter(t => {
+    if (!checkDateInFilter(t.date)) return false;
     const term = ledgerSearch.toLowerCase().trim();
     const contactName = contacts.find(c => c.id === t.contactId)?.name || "Walk-In Customer";
     if (!term) {
@@ -5037,9 +5038,12 @@ _${businessInfo.name}_`;
                     {[
                       { id: "all", label: "All Time" },
                       { id: "today", label: "Today" },
-                      { id: "weekly", label: "Last 7 Days" },
+                      { id: "yesterday", label: "Yesterday" },
+                      { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
-                      { id: "yearly", label: "This Year" }
+                      { id: "lastmonth", label: "Last Month" },
+                      { id: "yearly", label: "This Year" },
+                      { id: "custom", label: "Custom Range" }
                     ].map((preset) => (
                       <button
                         key={preset.id}
@@ -5062,35 +5066,39 @@ _${businessInfo.name}_`;
                 </div>
               </div>
 
+              {duelistFilter === "custom" && (
+                <div className="flex flex-wrap items-center gap-3 p-3 bg-[#0b0f19] border border-slate-800/80 rounded-xl">
+                  <label className="text-xs text-slate-400">Start Date <input type="date" value={duelistCustomStart} onChange={e => setDuelistCustomStart(e.target.value)} className="ml-2 bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
+                  <label className="text-xs text-slate-400">End Date <input type="date" value={duelistCustomEnd} onChange={e => setDuelistCustomEnd(e.target.value)} className="ml-2 bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
+                </div>
+              )}
+
               {/* Helper to calculate values */}
               {(() => {
-                const isPurchaseInDateFilter = (purDateStr: string, filter: "all" | "today" | "weekly" | "monthly" | "yearly") => {
+                const isPurchaseInDateFilter = (purDateStr: string, filter: string) => {
                   if (filter === "all") return true;
                   try {
                     const pDate = new Date(purDateStr);
                     const now = new Date();
                     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-                    
-                    if (filter === "today") {
-                      return pDate >= todayStart && pDate <= todayEnd;
+                    if (filter === "today") return pDate >= todayStart && pDate <= todayEnd;
+                    if (filter === "yesterday") {
+                      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                      return pDate >= start && pDate < todayStart;
                     }
                     if (filter === "weekly") {
-                      const weeklyStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
-                      return pDate >= weeklyStart && pDate <= todayEnd;
+                      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+                      return pDate >= start && pDate <= todayEnd;
                     }
-                    if (filter === "monthly") {
-                      const monthlyStart = new Date(now.getFullYear(), now.getMonth(), 1);
-                      return pDate >= monthlyStart && pDate <= todayEnd;
-                    }
-                    if (filter === "yearly") {
-                      const yearlyStart = new Date(now.getFullYear(), 0, 1);
-                      return pDate >= yearlyStart && pDate <= todayEnd;
-                    }
+                    if (filter === "monthly") return pDate >= new Date(now.getFullYear(), now.getMonth(), 1) && pDate <= todayEnd;
+                    if (filter === "lastmonth") return pDate >= new Date(now.getFullYear(), now.getMonth() - 1, 1) && pDate < new Date(now.getFullYear(), now.getMonth(), 1);
+                    if (filter === "yearly") return pDate >= new Date(now.getFullYear(), 0, 1) && pDate <= todayEnd;
+                    if (filter === "custom") return pDate >= new Date(duelistCustomStart + "T00:00:00") && pDate <= new Date(duelistCustomEnd + "T23:59:59");
                   } catch (e) {
                     console.error("Duelist Date match error:", e);
                   }
-                  return true;
+                  return false;
                 };
 
                 const dueInvoices = purchases.filter(p => {
