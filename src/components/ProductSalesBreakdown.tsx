@@ -145,7 +145,16 @@ export function ProductSalesBreakdown({
         const catalogCategory = String(matchedProduct?.category || "").trim();
         // Older invoices may not have stored a category. Use the matching product's
         // current catalog category; treat the legacy placeholder as missing.
-        const isGreenPlusTv = /green\s*plus/i.test(itemName) && /(32|tv|television)/i.test(itemName);
+        // The two legacy Green Plus television products were saved without a
+        // usable category in some older sales records. Check both the invoice
+        // line and the matched account-local catalog product before grouping
+        // them under China LED TV.
+        const classificationName = [itemName, String(matchedProduct?.name || "")]
+          .filter(Boolean)
+          .join(" ");
+        const isGreenPlusTv =
+          /green\s*plus/i.test(classificationName) &&
+          /(32|tv|television)/i.test(classificationName);
         const categoryName = (
           savedCategory && savedCategory.toLowerCase() !== "uncategorized"
             ? savedCategory
