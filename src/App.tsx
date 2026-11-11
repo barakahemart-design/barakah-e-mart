@@ -6007,7 +6007,7 @@ _${businessInfo.name}_`;
                     return (
                       <div 
                         key={t.id} 
-                        className={`bg-slate-950/55 hover:bg-slate-900/70 backdrop-blur-2xl border border-white/20 hover:border-white/30 ring-1 ring-white/[0.035] rounded-2xl p-2 sm:p-3 shadow-[0_10px_34px_rgba(0,0,0,0.38)] transition-all flex flex-col md:flex-row justify-between gap-2 sm:gap-3 relative overflow-hidden ${
+                        className={`bg-slate-950/55 hover:bg-slate-900/70 backdrop-blur-2xl border border-white/20 hover:border-white/30 ring-1 ring-white/[0.035] rounded-2xl p-2 sm:p-3 shadow-[0_10px_34px_rgba(0,0,0,0.38)] transition-all flex flex-col gap-2 sm:gap-2.5 relative overflow-hidden ${
                           t.status === "paid" 
                             ? "border-l-4 border-l-emerald-500" 
                             : t.status === "partial" 
@@ -6015,234 +6015,208 @@ _${businessInfo.name}_`;
                               : "border-l-4 border-l-[#FF5252]"
                         }`}
                       >
-                        {/* Transaction Core info column */}
-                        <div className="space-y-2.5 flex-1 min-w-0">
-                          
-                          <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-black/30 px-2.5 py-2 text-center shadow-inner">
-                            <span className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs font-mono font-black uppercase tracking-wider block">
-                              {t.invoiceNo}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
-                              {new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </span>
-                            
-                            {/* Color-coded Dynamic Badge */}
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black tracking-wide border font-mono shrink-0 select-none ${
-                              t.status === "paid" 
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                                : t.status === "partial" 
-                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/20" 
-                                  : "bg-red-500/10 text-rose-455 border-red-500/20 text-[#FF5252]"
-                            }`}>
-                              {t.status === 'due' ? 'Due Status' : t.status === 'partial' ? 'Partial Paid' : 'Fully Settled'}
-                            </span>
-                          </div>
-
-                          {/* Customer profile: full name, phone and address above cost controls */}
-                          <div className="flex items-start gap-2 min-w-0 rounded-xl border border-white/20 bg-white/[0.055] backdrop-blur-2xl p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                            <div className="w-7 h-7 rounded-full bg-white/[0.08] border border-white/20 flex items-center justify-center font-bold text-[9px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
-                            <div className="min-w-0 leading-tight flex-1">
-                              <strong className="text-white text-xs sm:text-sm block break-words">{customerLabel}</strong>
-                              {customerPhone && <span className="text-[10px] text-slate-300 font-mono block mt-1">{customerPhone}</span>}
-                              {associatedContact?.address && <span className="text-[10px] text-slate-400 block mt-1 whitespace-normal break-words">{associatedContact.address}</span>}
+                        {/* Transaction details and compact premium layout */}
+                        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_210px] gap-2.5 min-w-0">
+                          <div className="space-y-2 min-w-0">
+                            <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-black/30 px-2 py-1.5 text-center shadow-inner">
+                              <span className="px-2 py-1 bg-slate-900/70 border border-white/10 text-white rounded-lg text-[11px] font-mono font-black uppercase tracking-wider">{t.invoiceNo}</span>
+                              <span className="text-[9px] text-slate-400 font-mono flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
+                                {new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-[8px] uppercase font-black tracking-wide border font-mono shrink-0 select-none ${
+                                t.status === "paid" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                                t.status === "partial" ? "bg-amber-500/15 text-amber-400 border-amber-500/20" :
+                                "bg-red-500/10 text-[#FF5252] border-red-500/20"
+                              }`}>
+                                {t.status === 'due' ? 'Due Status' : t.status === 'partial' ? 'Partial Paid' : 'Fully Settled'}
+                              </span>
                             </div>
-                          </div>
-                          {/* Invoice Items Sub-Drawer */}
-                          <div className="bg-black/35 backdrop-blur-2xl border border-white/15 rounded-xl p-2.5 space-y-1 shadow-inner" id={`ledger-items-${t.invoiceNo}`}>
-                            <span className="text-[9px] font-bold text-slate-500 font-mono uppercase tracking-wider block">Invoice Line Items ({t.items.length})</span>
-                            <div className="space-y-1">
-                              {t.items.map((it, idx) => {
-                                const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
-                                let buyCost = 0;
-                                if (dbProduct && dbProduct.buyPrice > 0) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (it.buyPrice && it.buyPrice > 0) {
-                                  buyCost = it.buyPrice;
-                                } else if (dbProduct) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (it.buyPrice !== undefined) {
-                                  buyCost = it.buyPrice;
-                                } else {
-                                  buyCost = 0;
-                                }
-                                const showEdit = showCostEditId === `${t.id}-${idx}`;
 
-                                return (
-                                  <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 text-[10px] font-sans text-slate-300 py-1.5 border-b border-white/[0.09] last:border-b-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                      <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span> 
-                                      <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
+                            <div className="flex items-center justify-between gap-2 min-w-0 rounded-xl border border-white/20 bg-white/[0.07] backdrop-blur-2xl px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <div className="w-7 h-7 rounded-full bg-white/[0.09] border border-white/20 flex items-center justify-center font-bold text-[9px] text-emerald-300 uppercase shrink-0">{customerLabel.slice(0,2)}</div>
+                                <div className="min-w-0 leading-tight">
+                                  <strong className="text-white text-xs block break-words">{customerLabel}</strong>
+                                  {customerPhone && <span className="text-[9px] text-slate-300 font-mono block mt-0.5">{customerPhone}</span>}
+                                  {associatedContact?.address && <span className="text-[9px] text-slate-400 block mt-0.5 whitespace-normal break-words">{associatedContact.address}</span>}
+                                </div>
+                              </div>
+                              {t.dueBalance > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCollectionTx(t);
+                                    setCollectAmount(t.dueBalance.toString());
+                                  }}
+                                  className="shrink-0 px-2.5 py-2 rounded-lg border border-emerald-200/30 bg-white/[0.14] hover:bg-emerald-300/25 backdrop-blur-xl text-emerald-200 text-[9px] font-extrabold uppercase tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-all"
+                                >
+                                  Collect Due
+                                </button>
+                              )}
+                            </div>
 
-                                    </div>
-                                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-                                      <span className="text-[9px] text-slate-400 font-mono">Cost price</span>
-                                      {showEdit ? (
-                                        <div className="flex items-center gap-1 animate-fadeIn">
-                                          <input
-                                            type="number"
-                                            defaultValue={buyCost}
-                                            id={`buy-cost-${t.id}-${idx}`}
-                                            className="w-16 px-1.5 py-0.5 bg-black border border-slate-800 text-[#00E676] font-mono text-[9px] outline-none rounded"
-                                            onClick={(e) => e.stopPropagation()}
-                                          />
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}`) as HTMLInputElement)?.value);
-                                              if (!isNaN(val)) {
-                                                handleUpdateTransactionItemBuyPrice(t.id, idx, val);
+                            <div className="rounded-xl border border-white/15 bg-white/[0.055] backdrop-blur-2xl px-2 py-1.5 space-y-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" id={`ledger-items-${t.invoiceNo}`}>
+                              <span className="text-[9px] font-bold text-slate-400 font-mono uppercase tracking-wider block text-center">Invoice Line Items ({t.items.length})</span>
+                              <div className="space-y-1">
+                                {t.items.map((it, idx) => {
+                                  const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
+                                  let buyCost = 0;
+                                  if (dbProduct && dbProduct.buyPrice > 0) {
+                                    buyCost = dbProduct.buyPrice;
+                                  } else if (it.buyPrice && it.buyPrice > 0) {
+                                    buyCost = it.buyPrice;
+                                  } else if (dbProduct) {
+                                    buyCost = dbProduct.buyPrice;
+                                  } else if (it.buyPrice !== undefined) {
+                                    buyCost = it.buyPrice;
+                                  }
+                                  const showEdit = showCostEditId === `${t.id}-${idx}`;
+
+                                  return (
+                                    <div key={idx} className="flex flex-col items-center justify-center gap-0.5 text-center py-1 border-b border-white/[0.08] last:border-b-0">
+                                      <div className="text-[10px] leading-tight text-white font-semibold break-words text-center">
+                                        <span className="text-slate-400 font-mono font-bold mr-1">{it.quantity}x</span>
+                                        {dbProduct ? dbProduct.name : (it.name || "Product Item")}
+                                      </div>
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        <span className="text-[8px] text-slate-400 font-mono">Cost</span>
+                                        {showEdit ? (
+                                          <div className="flex items-center justify-center gap-1">
+                                            <input
+                                              type="number"
+                                              defaultValue={buyCost}
+                                              id={`buy-cost-${t.id}-${idx}`}
+                                              className="w-14 px-1 py-0.5 bg-black/60 border border-white/20 text-emerald-200 font-mono text-[9px] outline-none rounded-md"
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}`) as HTMLInputElement)?.value);
+                                                if (!isNaN(val)) {
+                                                  handleUpdateTransactionItemBuyPrice(t.id, idx, val);
+                                                  setShowCostEditId(null);
+                                                }
+                                              }}
+                                              className="bg-white/[0.16] border border-emerald-200/25 text-emerald-200 font-black px-1.5 py-0.5 text-[8px] rounded-md"
+                                            >
+                                              Set
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
                                                 setShowCostEditId(null);
-                                              }
-                                            }}
-                                            className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-1.5 py-0.5 text-[8px] rounded cursor-pointer"
-                                          >
-                                            Set
-                                          </button>
+                                              }}
+                                              className="text-slate-300 text-[9px] px-1"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ) : (
                                           <button
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setShowCostEditId(null);
+                                              setShowCostEditId(`${t.id}-${idx}`);
                                             }}
-                                            className="text-slate-400 hover:text-white text-[9px] px-1 cursor-pointer"
+                                            className="text-[9px] leading-none text-emerald-200 hover:text-white font-mono cursor-pointer inline-flex items-center gap-1 bg-white/[0.10] border border-white/15 rounded-md px-2 py-1"
+                                            title="Override or edit purchase cost rate for this item"
                                           >
-                                            ✕
+                                            {businessInfo.currencySymbol}{buyCost.toLocaleString()} · Edit ✏️
                                           </button>
-                                        </div>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setShowCostEditId(`${t.id}-${idx}`);
-                                          }}
-                                          className="text-[8px] leading-none text-emerald-300 hover:text-emerald-200 font-mono cursor-pointer inline-flex items-center gap-0.5 bg-white/[0.045] border border-white/10 rounded-md px-1.5 py-1 mt-1"
-                                          title="Override or edit purchase cost rate for this item"
-                                        >
-                                          {businessInfo.currencySymbol}{buyCost.toLocaleString()} · Edit ✏️
-                                        </button>
-                                      )}
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Transaction Accounting Column & Cash Math */}
-                        <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-x-4 gap-y-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-white/10 shrink-0 font-mono text-right text-xs">
-                          
-                          <div className="rounded-2xl border border-white/20 bg-slate-900/65 backdrop-blur-2xl p-2.5 sm:p-3 space-y-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.055)] text-left w-full">
-                            <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block">Price Calculations</span>
-                            <div className="flex items-center justify-between gap-3 text-[10px]">
+                          <div className="rounded-xl border border-white/20 bg-white/[0.075] backdrop-blur-2xl p-2 sm:p-2.5 space-y-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_6px_20px_rgba(0,0,0,0.16)] self-start w-full">
+                            <span className="text-[9px] uppercase tracking-wider text-slate-300 font-bold block text-center">Price Calculations</span>
+                            <div className="flex items-center justify-between gap-2 text-[9px]">
                               <span className="text-slate-400">Discount</span>
                               <strong className="text-rose-300">-{businessInfo.currencySymbol} {t.discount.toLocaleString()}</strong>
                             </div>
-                            <div className="flex items-center justify-between gap-3 pt-1">
-                              <span className="text-slate-200 text-[11px] font-bold">Grand Total</span>
-                              <strong className="text-white font-black text-base">{businessInfo.currencySymbol} {t.total.toLocaleString()}</strong>
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <span className="text-slate-200 text-[10px] font-bold">Grand Total</span>
+                              <strong className="text-white font-black text-sm">{businessInfo.currencySymbol} {t.total.toLocaleString()}</strong>
                             </div>
-                            {t.dueBalance > 0 && <div className="border-t border-dashed border-rose-400/45 pt-2 mt-1 flex items-center justify-between gap-3">
-                              <span className="text-rose-300 text-[10px] font-bold uppercase">Due Balance</span>
-                              <strong className="text-rose-300 font-black text-sm">{businessInfo.currencySymbol} {t.dueBalance.toLocaleString()}</strong>
-                            </div>}
-                            <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-2">
-                              <span className="text-slate-400 text-[10px]">Received</span>
-                              <strong className="text-emerald-300 text-[11px]">{businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}</strong>
+                            {t.dueBalance > 0 && (
+                              <div className="border-t border-dashed border-rose-300/40 pt-1.5 mt-1 flex items-center justify-between gap-2">
+                                <span className="text-rose-200 text-[9px] font-bold uppercase">Due Balance</span>
+                                <strong className="text-rose-200 font-black text-xs">{businessInfo.currencySymbol} {t.dueBalance.toLocaleString()}</strong>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-1.5">
+                              <span className="text-slate-400 text-[9px]">Received</span>
+                              <strong className="text-emerald-200 text-[10px]">{businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}</strong>
                             </div>
-                            {t.dueBalance <= 0 && <p className="text-emerald-300 text-[9px] font-bold text-right">Accounts Settled ✓</p>}
+                            {t.dueBalance <= 0 && <p className="text-emerald-200 text-[8px] font-bold text-right">Accounts Settled ✓</p>}
                           </div>
-
                         </div>
 
-                        {/* Interactive Admin Tool Belt */}
-                        <div className="grid grid-cols-3 md:flex md:flex-col items-stretch justify-end gap-1.5 w-full md:w-28 shrink-0 md:pl-3 border-t md:border-t-0 border-white/10 pt-2.5 md:pt-0">
-                          
-                          {/* Reprint Invoice PDF */}
-                          <button
-                            id={`download-pdf-${t.invoiceNo}`}
-                            onClick={() => generateInvoicePDF(t, associatedContact, businessInfo)}
-                            className="px-2 py-2 bg-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-300 hover:text-emerald-400 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wide h-10 w-full shadow"
-                            title="Reprint Customer Cash Memo"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            PDF reprint
-                          </button>
-
-                          {/* Reprint Delivery Challan */}
+                        {/* Four aligned liquid-glass actions */}
+                        <div className="grid grid-cols-4 items-stretch gap-1.5 w-full pt-1">
+                          {currentPanel === "admin" && (
+                            <button
+                              onClick={() => setEditingTx(t)}
+                              className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                              title="Edit Sale Details & Units"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 shrink-0" /><span>Edit</span>
+                            </button>
+                          )}
                           <button
                             id={`download-challan-${t.invoiceNo}`}
                             onClick={() => generateDeliveryChallanPDF(t, associatedContact, businessInfo)}
-                            className="px-2 py-2 bg-slate-900 border border-slate-800 hover:border-[#00E676] text-slate-300 hover:text-[#00E676] rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wide h-10 w-full shadow"
+                            className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
                             title="Download Delivery Challan"
                           >
-                            <FileText className="w-3.5 h-3.5" />
-                            Challan
+                            <FileText className="w-3.5 h-3.5 shrink-0" /><span>Challan</span>
                           </button>
-
-                          {/* Collect Remaining Debt */}
-                          {t.dueBalance > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCollectionTx(t);
-                                setCollectAmount(t.dueBalance.toString());
-                              }}
-                              className="px-2 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-xl transition-all text-[9px] font-extrabold uppercase tracking-wide h-10 w-full font-sans flex items-center justify-center cursor-pointer text-center"
-                            >
-                              Collect Due
-                            </button>
-                          )}
-
-                          {/* Modify and Erase buttons */}
+                          <button
+                            id={`download-pdf-${t.invoiceNo}`}
+                            onClick={() => generateInvoicePDF(t, associatedContact, businessInfo)}
+                            className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                            title="Reprint Customer Cash Memo"
+                          >
+                            <Download className="w-3.5 h-3.5 shrink-0" /><span>PDF Print</span>
+                          </button>
                           {currentPanel === "admin" && (
-                            <div className="contents">
-                              {deleteTxId === t.id ? (
-                                <div className="flex items-center gap-1 justify-end bg-slate-900 p-1 border border-slate-800 rounded-xl h-10 animate-scaleIn">
-                                  <span className="text-[8px] text-slate-400 font-mono uppercase px-1">Erase?</span>
-                                  <button
-                                    onClick={() => {
-                                      handleDeleteTransaction(t.id);
-                                      setDeleteTxId(null);
-                                    }}
-                                    className="bg-[#FF5252] hover:bg-rose-500 text-[#121214] font-black p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-                                  >
-                                    Yes
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteTxId(null)}
-                                    className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-                                  >
-                                    No
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => setEditingTx(t)}
-                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-full flex items-center justify-center shadow"
-                                    title="Edit Sale Details & Units"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  
-                                  <button
-                                    onClick={() => setDeleteTxId(t.id)}
-                                    className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-400 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-full flex items-center justify-center shadow"
-                                    title="Wipe transaction memo"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                            deleteTxId === t.id ? (
+                              <div className="min-w-0 h-9 flex items-center justify-center gap-0.5 rounded-lg border border-rose-300/25 bg-white/[0.09] backdrop-blur-xl px-0.5">
+                                <button
+                                  onClick={() => {
+                                    handleDeleteTransaction(t.id);
+                                    setDeleteTxId(null);
+                                  }}
+                                  className="text-rose-200 font-black px-1 py-1 rounded text-[8px]"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  onClick={() => setDeleteTxId(null)}
+                                  className="text-slate-200 px-1 py-1 rounded text-[8px]"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteTxId(t.id)}
+                                className="min-w-0 h-9 px-1 rounded-lg border border-white/20 bg-white/[0.09] hover:bg-white/[0.16] backdrop-blur-xl text-slate-100 flex items-center justify-center gap-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all text-[9px] font-bold"
+                                title="Delete transaction memo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 shrink-0" /><span>Delete</span>
+                              </button>
+                            )
                           )}
-
                         </div>
-
                       </div>
                     );
                   })
