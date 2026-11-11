@@ -199,6 +199,7 @@ export function DashboardView({
             { id: "yesterday", label: "Yesterday" },
             { id: "weekly", label: "7 Days" },
             { id: "monthly", label: "This Month" },
+            { id: "lastmonth", label: "Last Month" },
             { id: "yearly", label: "This Year" },
             { id: "custom", label: "Custom Range" }
           ].map((preset) => (
