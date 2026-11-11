@@ -2323,7 +2323,7 @@ export default function App() {
   // -----------------------------------------------------------------
   // 4. EXPENSE MANAGER WORKSPACE
   // -----------------------------------------------------------------
-  const [expenseWorkspacePage, setExpenseWorkspacePage] = useState<"home" | "add" | "history">("home");
+  const [expenseWorkspacePage, setExpenseWorkspacePage] = useState<"home" | "add" | "history" | "categories">("home");
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("Others");
   const [expenseCategories, setExpenseCategories] = useState<string[]>(() => {
@@ -6310,6 +6310,11 @@ _${businessInfo.name}_`;
                     <span className="block text-base font-bold text-white">Expense History</span>
                     <span className="block text-xs text-slate-400 mt-1">View, edit and filter saved expenses</span>
                   </button>
+                  <button type="button" onClick={() => setExpenseWorkspacePage("categories")} className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-6 text-left hover:bg-violet-500/10 transition-colors sm:col-span-2">
+                    <Settings2 className="w-8 h-8 text-violet-400 mb-3" />
+                    <span className="block text-base font-bold text-white">Manage Categories</span>
+                    <span className="block text-xs text-slate-400 mt-1">Add, rename and manage expense categories</span>
+                  </button>
                 </div>
               )}
 
@@ -6335,20 +6340,7 @@ _${businessInfo.name}_`;
                       />
                     </div>
 
-                    <div className="flex items-center gap-2" id="ai-classify-outgoing">
-                      <button
-                        type="button"
-                        id="ai-suggest-category-btn"
-                        onClick={fetchAISuggestedCategory}
-                        disabled={isClassifying}
-                        className="text-[11px] font-bold text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        {isClassifying ? "AI Categorizing..." : "✨ Predict Category with AI"}
-                      </button>
-                      <span className="text-[9px] text-slate-500 font-mono">Gemini automatically scans outgo’s category</span>
-                    </div>
-
-                    <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
+remove AI control                    <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Expense Category Type *</label>
@@ -6447,38 +6439,46 @@ _${businessInfo.name}_`;
 
                   </form>
 
-                  <div className="rounded-xl border border-slate-800 bg-[#050912]/70 p-3 space-y-2" id="expense-category-management">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Manage Expense Categories</div>
-                    {allCategories.map(category => (
-                      <div key={category} className="flex items-center gap-2 justify-between border-b border-slate-800/60 last:border-0 py-1.5">
-                        {editingExpenseCategoryName === category ? (
-                          <input
-                            value={expenseCategoryEditValue}
-                            onChange={e => setExpenseCategoryEditValue(e.target.value)}
-                            className="min-w-0 flex-1 rounded-lg bg-slate-900 border border-slate-700 px-2 py-2 text-xs text-white"
-                            aria-label="Rename expense category"
-                          />
-                        ) : (
-                          <span className="min-w-0 flex-1 text-xs text-slate-200">{category}</span>
-                        )}
-                        <div className="flex items-center gap-1 shrink-0">
-                          {editingExpenseCategoryName === category ? (
-                            <>
-                              <button type="button" onClick={() => renameExpenseCategory(category, expenseCategoryEditValue)} className="px-2.5 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">Save</button>
-                              <button type="button" onClick={() => setEditingExpenseCategoryName(null)} className="px-2.5 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px]">Cancel</button>
-                            </>
-                          ) : (
-                            <>
-                              <button type="button" onClick={() => { setEditingExpenseCategoryName(category); setExpenseCategoryEditValue(category); }} className="p-2 rounded-lg text-sky-400 hover:bg-sky-500/10" aria-label={`Edit ${category}`}><Edit3 className="w-3.5 h-3.5" /></button>
-                              <button type="button" onClick={() => deleteExpenseCategory(category)} className="p-2 rounded-lg text-rose-400 hover:bg-rose-500/10" aria-label={`Delete ${category}`}><Trash2 className="w-3.5 h-3.5" /></button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <p className="text-[9px] text-slate-500">Categories already used by saved expenses cannot be deleted; rename them to preserve history.</p>
-                  </div>
+
                 </div>}
+
+                {expenseWorkspacePage === "categories" && (
+                  <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4" id="expense-category-management">
+                    <h3 className="text-sm font-bold text-white">Manage Expense Categories</h3>
+                    <p className="text-xs text-slate-400">Edit or delete categories here. New categories can still be added from Add Expense.</p>
+                                    <div className="rounded-xl border border-slate-800 bg-[#050912]/70 p-3 space-y-2" id="expense-category-management">
+                                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Manage Expense Categories</div>
+                                      {allCategories.map(category => (
+                                        <div key={category} className="flex items-center gap-2 justify-between border-b border-slate-800/60 last:border-0 py-1.5">
+                                          {editingExpenseCategoryName === category ? (
+                                            <input
+                                              value={expenseCategoryEditValue}
+                                              onChange={e => setExpenseCategoryEditValue(e.target.value)}
+                                              className="min-w-0 flex-1 rounded-lg bg-slate-900 border border-slate-700 px-2 py-2 text-xs text-white"
+                                              aria-label="Rename expense category"
+                                            />
+                                          ) : (
+                                            <span className="min-w-0 flex-1 text-xs text-slate-200">{category}</span>
+                                          )}
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            {editingExpenseCategoryName === category ? (
+                                              <>
+                                                <button type="button" onClick={() => renameExpenseCategory(category, expenseCategoryEditValue)} className="px-2.5 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">Save</button>
+                                                <button type="button" onClick={() => setEditingExpenseCategoryName(null)} className="px-2.5 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px]">Cancel</button>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <button type="button" onClick={() => { setEditingExpenseCategoryName(category); setExpenseCategoryEditValue(category); }} className="p-2 rounded-lg text-sky-400 hover:bg-sky-500/10" aria-label={`Edit ${category}`}><Edit3 className="w-3.5 h-3.5" /></button>
+                                                <button type="button" onClick={() => deleteExpenseCategory(category)} className="p-2 rounded-lg text-rose-400 hover:bg-rose-500/10" aria-label={`Delete ${category}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                      <p className="text-[9px] text-slate-500">Categories already used by saved expenses cannot be deleted; rename them to preserve history.</p>
+                                    </div>
+                  </div>
+                )}
 
                 {/* Expense entries list table */}
                 {expenseWorkspacePage === "history" && <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
