@@ -737,7 +737,7 @@ export default function App() {
     const unsubCustomers = subscribeCustomers(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const updatedList = items.map(docData => ({
+      const remoteList = items.map(docData => ({
         id: docData.id,
         firestoreId: docData.firestoreId,
         name: docData.name || "Unnamed Contact",
@@ -746,7 +746,15 @@ export default function App() {
         type: docData.type || "customer",
         created_at: docData.created_at || docData.updated_at || new Date().toISOString()
       }));
-
+      // Keep locally cached profiles when a cloud snapshot is temporarily empty
+      // or incomplete; this prevents customer names in old ledger entries from
+      // silently becoming Walk-in Customer after a transient sync response.
+      const localList = getStored("barakah_contacts", INITIAL_CONTACTS).filter((item: Contact) =>
+        item && item.id && item.name
+      );
+      const mergedById = new Map<string, Contact>();
+      [...localList, ...remoteList].forEach(item => mergedById.set(item.id, { ...mergedById.get(item.id), ...item }));
+      const updatedList = Array.from(mergedById.values());
       localStorage.setItem(getDbKey("barakah_contacts", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
       setContacts(updatedList);
@@ -2315,11 +2323,20 @@ export default function App() {
   // -----------------------------------------------------------------
   // 4. EXPENSE MANAGER WORKSPACE
   // -----------------------------------------------------------------
+  const [expenseWorkspacePage, setExpenseWorkspacePage] = useState<"home" | "add" | "history">("home");
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("Others");
-  const [expenseCategories, setExpenseCategories] = useState<string[]>(["Rent", "Electricity", "Salary", "Marketing", "Others"]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(getDbKey("barakah_expense_categories"));
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length ? parsed : ["Rent", "Electricity", "Salary", "Marketing", "Others"];
+    } catch { return ["Rent", "Electricity", "Salary", "Marketing", "Others"]; }
+  });
   const [customCategory, setCustomCategory] = useState("");
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
+  const [editingExpenseCategoryName, setEditingExpenseCategoryName] = useState<string | null>(null);
+  const [expenseCategoryEditValue, setExpenseCategoryEditValue] = useState("");
   const [expenseFilterCategory, setExpenseFilterCategory] = useState("All");
   const [posSearchQuery, setPosSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -2357,6 +2374,40 @@ export default function App() {
   const setExpenseCustomEnd = (val: string) => {
     _setExpenseCustomEnd(val);
     localStorage.setItem(getDbKey("barakah_expense_custom_end"), val);
+  };
+
+  useEffect(() => {
+    localStorage.setItem(getDbKey("barakah_expense_categories"), JSON.stringify(expenseCategories));
+  }, [expenseCategories, activeUser?.uid]);
+
+  const renameExpenseCategory = (oldName: string, nextName: string) => {
+    const cleanName = nextName.trim();
+    if (!cleanName || cleanName === oldName) { setEditingExpenseCategoryName(null); return; }
+    if (allCategories.some(name => name.toLowerCase() === cleanName.toLowerCase() && name !== oldName)) {
+      triggerNotification("This expense category already exists.", "error");
+      return;
+    }
+    setExpenses(prev => prev.map(item => item.category === oldName ? { ...item, category: cleanName } : item));
+    setExpenseCategories(prev => prev.map(name => name === oldName ? cleanName : name));
+    if (expenseCategory === oldName) setExpenseCategory(cleanName);
+    if (editExpenseCategory === oldName) setEditExpenseCategory(cleanName);
+    if (expenseFilterCategory === oldName) setExpenseFilterCategory(cleanName);
+    setEditingExpenseCategoryName(null);
+    triggerNotification("Expense category updated successfully.", "success");
+  };
+
+  const deleteExpenseCategory = (name: string) => {
+    if (name === "Others") { triggerNotification("The Others category is protected.", "info"); return; }
+    const used = expenses.some(item => item.category === name);
+    if (used) {
+      triggerNotification("This category has saved expenses. Rename it instead so historical records stay intact.", "error");
+      return;
+    }
+    if (!window.confirm(`Delete expense category "${name}"?`)) return;
+    setExpenseCategories(prev => prev.filter(item => item !== name));
+    if (expenseCategory === name) setExpenseCategory("Others");
+    if (expenseFilterCategory === name) setExpenseFilterCategory("All");
+    triggerNotification("Expense category deleted.", "success");
   };
 
   // Edit Expense States
@@ -2649,7 +2700,7 @@ export default function App() {
         created_at: new Date().toISOString()
       };
 
-      setContacts([newContact, ...contacts]);
+      setContacts(prev => [newContact, ...prev]);
 
       if (activeUser && !activeUser.isGuest) {
         try {
@@ -6249,11 +6300,28 @@ _${businessInfo.name}_`;
                 )}
               </div>
 
-              {/* Grid content */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="view-expenses-container">
+              {expenseWorkspacePage === "home" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" id="expense-workspace-choices">
+                  <button type="button" onClick={() => setExpenseWorkspacePage("add")} className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-6 text-left hover:bg-emerald-500/10 transition-colors">
+                    <PlusCircle className="w-8 h-8 text-emerald-400 mb-3" />
+                    <span className="block text-base font-bold text-white">Add Expense</span>
+                    <span className="block text-xs text-slate-400 mt-1">Record a new business expense</span>
+                  </button>
+                  <button type="button" onClick={() => setExpenseWorkspacePage("history")} className="rounded-2xl border border-sky-500/25 bg-sky-500/5 p-6 text-left hover:bg-sky-500/10 transition-colors">
+                    <FileText className="w-8 h-8 text-sky-400 mb-3" />
+                    <span className="block text-base font-bold text-white">Expense History</span>
+                    <span className="block text-xs text-slate-400 mt-1">View, edit and filter saved expenses</span>
+                  </button>
+                </div>
+              )}
+
+              {expenseWorkspacePage !== "home" && (
+              <div className="space-y-4">
+                <button type="button" onClick={() => setExpenseWorkspacePage("home")} className="text-xs font-semibold text-emerald-400 hover:text-white">← Back to Expenses</button>
+                <div className="grid grid-cols-1 gap-6 items-start" id="view-expenses-container">
                 
                 {/* Form panel to entry outgoings (4 Cols) */}
-                <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4" id="add-expense-panel">
+                {expenseWorkspacePage === "add" && <div className="w-full bg-[#0a101f]/80 border border-slate-800 p-4 sm:p-6 rounded-2xl space-y-4" id="add-expense-panel">
                   <h3 className="text-sm font-semibold text-white tracking-wide border-b border-slate-900 pb-2.5">Log Administrative Showroom Outgoings</h3>
                   
                   <form onSubmit={handleAddExpense} className="space-y-4" id="outgoing-add-form">
@@ -6381,10 +6449,10 @@ _${businessInfo.name}_`;
 
                   </form>
 
-                </div>
+                </div>}
 
-                {/* Expense entries list table (8 Cols) */}
-                <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
+                {/* Expense entries list table */}
+                {expenseWorkspacePage === "history" && <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
                   <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3" id="expenses-header">
                     <div className="space-y-0.5">
                       <span className="text-xs font-semibold text-white block">Expenses History & Vouchers</span>
@@ -6492,9 +6560,9 @@ _${businessInfo.name}_`;
                     </table>
                   </div>
 
-                </div>
-
+                </div>}
               </div>
+              )}
             </div>
           )}
 
@@ -7000,8 +7068,15 @@ _${businessInfo.name}_`;
                                           setDeleteContactId(null);
                                           return;
                                         }
+                                        const linkedToSales = transactions.some(t => t.contactId === c.id);
+                                        const linkedToPurchases = purchases.some(p => p.supplierId === c.id);
+                                        if (linkedToSales || linkedToPurchases) {
+                                          triggerNotification("This contact is linked to saved ledger records and cannot be deleted. Keep the profile to preserve customer names in history.", "error");
+                                          setDeleteContactId(null);
+                                          return;
+                                        }
                                         await deleteCloudDocument("customers", c.firestoreId ?? c.id);
-                                        setContacts(contacts.filter(item => item.id !== c.id));
+                                        setContacts(prev => prev.filter(item => item.id !== c.id));
                                         triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success");
                                         setDeleteContactId(null);
                                       }}
