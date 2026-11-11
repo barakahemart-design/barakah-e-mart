@@ -130,8 +130,12 @@ export function ProductSalesBreakdown({
             ? savedCategory
             : catalogCategory && catalogCategory.toLowerCase() !== "uncategorized"
               ? catalogCategory
-              : savedCategory || catalogCategory || "Uncategorized"
-        ).trim() || "Uncategorized";
+              : ""
+        ).trim();
+
+        // Only show products that belong to a real category. Uncategorized
+        // historical lines are intentionally excluded from this report.
+        if (!categoryName) return;
 
         const categoryKey = categoryName.toLowerCase();
         const productKey = itemProductId || String(matchedProduct?.id || itemName.toLowerCase());
