@@ -616,3 +616,27 @@ button, a {
   animation: successPulseEffect 1.2s ease-out infinite;
 }
 
+
+
+/* Shared Liquid Glass surfaces across app workspaces */
+.liquid-glass-page { min-width: 0; isolation: isolate; }
+.liquid-glass-page :is(div, section, article)[class*="rounded-2xl"][class*="bg-"],
+.liquid-glass-page :is(div, section, article)[class*="rounded-xl"][class*="bg-"] {
+  background-color: rgba(255, 255, 255, 0.055) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  backdrop-filter: blur(24px) saturate(145%);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+.liquid-glass-page :is(input, select, textarea) {
+  background-color: rgba(255, 255, 255, 0.065) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+html.light .liquid-glass-page :is(div, section, article)[class*="rounded-2xl"][class*="bg-"],
+html.light .liquid-glass-page :is(div, section, article)[class*="rounded-xl"][class*="bg-"] {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 28px rgba(30, 64, 175, 0.08);
+}
