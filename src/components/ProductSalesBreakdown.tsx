@@ -57,6 +57,11 @@ function getPeriodBounds(filter: string, customStart: string, customEnd: string)
   if (filter === "monthly") {
     return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: todayEnd };
   }
+  if (filter === "lastmonth") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 1).getTime() - 1;
+    return { start, end: new Date(end) };
+  }
   if (filter === "yearly") {
     return { start: new Date(now.getFullYear(), 0, 1), end: todayEnd };
   }
