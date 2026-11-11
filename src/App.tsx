@@ -6130,7 +6130,7 @@ _${businessInfo.name}_`;
                               })}
                             </div>
                           </div>
-
+                        </div>
 
                         {/* Transaction Accounting Column & Cash Math */}
                         <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-x-4 gap-y-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-white/10 shrink-0 font-mono text-right text-xs">
