@@ -6299,7 +6299,7 @@ _${businessInfo.name}_`;
               </div>
 
               {expenseWorkspacePage === "home" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" id="expense-workspace-choices">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" id="expense-workspace-choices">
                   <button type="button" onClick={() => setExpenseWorkspacePage("add")} className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-6 text-left hover:bg-emerald-500/10 transition-colors">
                     <PlusCircle className="w-8 h-8 text-emerald-400 mb-3" />
                     <span className="block text-base font-bold text-white">Add Expense</span>
@@ -6310,8 +6310,8 @@ _${businessInfo.name}_`;
                     <span className="block text-base font-bold text-white">Expense History</span>
                     <span className="block text-xs text-slate-400 mt-1">View, edit and filter saved expenses</span>
                   </button>
-                  <button type="button" onClick={() => setExpenseWorkspacePage("categories")} className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-6 text-left hover:bg-violet-500/10 transition-colors sm:col-span-2">
-                    <Settings2 className="w-8 h-8 text-violet-400 mb-3" />
+                  <button type="button" onClick={() => setExpenseWorkspacePage("categories")} className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-6 text-left hover:bg-violet-500/10 transition-colors">
+                    <Settings className="w-8 h-8 text-violet-400 mb-3" />
                     <span className="block text-base font-bold text-white">Manage Categories</span>
                     <span className="block text-xs text-slate-400 mt-1">Add, rename and manage expense categories</span>
                   </button>
