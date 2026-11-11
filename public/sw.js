@@ -1,4 +1,4 @@
-const CACHE_NAME = 'barakah-pwa-cache-v2';
+const CACHE_NAME = 'barakah-pwa-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
