@@ -336,7 +336,9 @@ export default function App() {
   const [contactTypeFilter, setContactTypeFilter] = useState<"all" | "customer" | "supplier">("all");
 
   // --- DUE LIST STATE DEFINITIONS ---
-  const [duelistFilter, setDuelistFilter] = useState<"all" | "today" | "weekly" | "monthly" | "yearly">("all");
+  const [duelistFilter, setDuelistFilter] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "lastmonth" | "yearly" | "custom">("all");
+  const [duelistCustomStart, setDuelistCustomStart] = useState(() => new Date().toISOString().split("T")[0]);
+  const [duelistCustomEnd, setDuelistCustomEnd] = useState(() => new Date().toISOString().split("T")[0]);
   const [duelistSearch, setDuelistSearch] = useState("");
   const [isAddingDue, setIsAddingDue] = useState(false);
   const [dueSupplierId, setDueSupplierId] = useState("");
@@ -2329,9 +2331,9 @@ export default function App() {
   const [isClassifying, setIsClassifying] = useState(false);
 
   // Expense Date Range States
-  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "lastmonth" | "yearly" | "all" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_expense_date_filter"));
-    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "lastmonth" || saved === "all" || saved === "custom") {
       return saved as any;
     }
     return "all";
@@ -2389,6 +2391,10 @@ export default function App() {
       }
       if (expenseDateFilter === "monthly") {
         return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      }
+      if (expenseDateFilter === "lastmonth") {
+        return targetDate >= new Date(today.getFullYear(), today.getMonth() - 1, 1)
+          && targetDate < new Date(today.getFullYear(), today.getMonth(), 1);
       }
       if (expenseDateFilter === "yearly") {
         return targetDate.getFullYear() === today.getFullYear();
@@ -2970,6 +2976,10 @@ _${businessInfo.name}_`;
       }
       if (dashboardFilter === "monthly") {
         return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      }
+      if (dashboardFilter === "lastmonth") {
+        return targetDate >= new Date(today.getFullYear(), today.getMonth() - 1, 1)
+          && targetDate < new Date(today.getFullYear(), today.getMonth(), 1);
       }
       if (dashboardFilter === "yearly") {
         return targetDate.getFullYear() === today.getFullYear();
@@ -6145,6 +6155,7 @@ _${businessInfo.name}_`;
                       { id: "yesterday", label: "Yesterday" },
                       { id: "weekly", label: "7 Days" },
                       { id: "monthly", label: "This Month" },
+                      { id: "lastmonth", label: "Last Month" },
                       { id: "yearly", label: "This Year" },
                       { id: "custom", label: "Custom Range" }
                     ].map((preset) => (
