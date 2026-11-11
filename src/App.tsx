@@ -6316,7 +6316,7 @@ _${businessInfo.name}_`;
               {expenseWorkspacePage !== "home" && (
               <div className="space-y-4">
                 <button type="button" onClick={() => setExpenseWorkspacePage("home")} className="text-xs font-semibold text-emerald-400 hover:text-white">← Back to Expenses</button>
-                <div className="grid grid-cols-1 gap-6 items-start" id="view-expenses-container">
+
                 
                 {/* Form panel to entry outgoings (4 Cols) */}
                 {expenseWorkspacePage === "add" && <div className="w-full bg-[#0a101f]/80 border border-slate-800 p-4 sm:p-6 rounded-2xl space-y-4" id="add-expense-panel">
@@ -6590,7 +6590,6 @@ _${businessInfo.name}_`;
                   </div>
 
                 </div>}
-              </div>
               </div>
               )}
             </div>
