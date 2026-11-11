@@ -2338,7 +2338,7 @@ export default function App() {
     }
     return "all";
   });
-  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "lastmonth" | "yearly" | "all" | "custom") => {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
   };
@@ -2925,14 +2925,14 @@ _${businessInfo.name}_`;
   // -----------------------------------------------------------------
   // DATE RANGE FILTER ENGINE
   // -----------------------------------------------------------------
-  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [dashboardFilter, _setDashboardFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "lastmonth" | "yearly" | "all" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_dashboard_filter"));
-    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "lastmonth" || saved === "yearly" || saved === "all" || saved === "custom") {
       return saved as any;
     }
     return "all";
   });
-  const setDashboardFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setDashboardFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "lastmonth" | "yearly" | "all" | "custom") => {
     _setDashboardFilter(val);
     localStorage.setItem(getDbKey("barakah_dashboard_filter"), val);
   };
@@ -2970,9 +2970,9 @@ _${businessInfo.name}_`;
         return targetDate.toDateString() === yesterday.toDateString();
       }
       if (dashboardFilter === "weekly") {
-        const check7DaysAgo = new Date();
-        check7DaysAgo.setDate(today.getDate() - 7);
-        return targetTime >= check7DaysAgo.getTime() && targetTime <= today.getTime();
+        const check7DaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+        const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+        return targetTime >= check7DaysAgo.getTime() && targetTime <= endOfToday.getTime();
       }
       if (dashboardFilter === "monthly") {
         return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
