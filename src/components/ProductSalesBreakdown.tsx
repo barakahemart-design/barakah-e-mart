@@ -145,7 +145,7 @@ export function ProductSalesBreakdown({
         const catalogCategory = String(matchedProduct?.category || "").trim();
         // Older invoices may not have stored a category. Use the matching product's
         // current catalog category; treat the legacy placeholder as missing.
-        const isGreenPlusTv = /green\\s*plus/i.test(itemName) && /(32|tv|television)/i.test(itemName);
+        const isGreenPlusTv = /green\s*plus/i.test(itemName) && /(32|tv|television)/i.test(itemName);
         const categoryName = (
           savedCategory && savedCategory.toLowerCase() !== "uncategorized"
             ? savedCategory
