@@ -207,6 +207,7 @@ export function ProductSalesBreakdown({
     : dashboardFilter === "yesterday" ? "Yesterday"
     : dashboardFilter === "weekly" ? "Last 7 Days"
     : dashboardFilter === "monthly" ? "This Month"
+    : dashboardFilter === "lastmonth" ? "Last Month"
     : dashboardFilter === "yearly" ? "This Year"
     : dashboardFilter === "custom" ? "Selected Date Range"
     : "All Time";
