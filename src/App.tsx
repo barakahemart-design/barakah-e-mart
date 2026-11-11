@@ -280,27 +280,32 @@ export default function App() {
   }, [currentPanel]);
 
   useEffect(() => {
-    let startY = 0, startX = 0, armed = false;
+    let startY = 0, startX = 0, armed = false, maxPull = 0;
     const onStart = (event: TouchEvent) => {
       if (currentPanel === "none" || !event.touches.length) return;
       const target = event.target as HTMLElement | null;
-      if (target && target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (target && target.closest("input, textarea, select, [contenteditable=true], button")) return;
       if ((document.scrollingElement?.scrollTop ?? window.scrollY) > 0) return;
-      startY = event.touches[0].clientY; startX = event.touches[0].clientX; armed = startY <= 90;
+      startY = event.touches[0].clientY; startX = event.touches[0].clientX; maxPull = 0; armed = startY <= 100;
     };
-    const onEnd = (event: TouchEvent) => {
-      if (!armed || !event.changedTouches.length) return;
-      const dy = event.changedTouches[0].clientY - startY;
-      const dx = Math.abs(event.changedTouches[0].clientX - startX); armed = false;
-      if (dy > 110 && dy > dx * 1.4) {
+    const onMove = (event: TouchEvent) => {
+      if (!armed || !event.touches.length) return;
+      maxPull = Math.max(maxPull, event.touches[0].clientY - startY);
+    };
+    const onEnd = () => {
+      if (!armed) return;
+      const dx = Math.abs(startX - (window.innerWidth / 2));
+      armed = false;
+      if (maxPull > 115) {
         try { sessionStorage.setItem("barakah_pull_refresh_pending", "1"); } catch (_) {}
-        triggerNotification("Refreshing your workspace…", "info");
-        window.setTimeout(() => window.location.reload(), 250);
+        try { if ("vibrate" in navigator) navigator.vibrate(35); } catch (_) {}
+        window.location.reload();
       }
     };
     window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
     window.addEventListener("touchend", onEnd, { passive: true });
-    return () => { window.removeEventListener("touchstart", onStart); window.removeEventListener("touchend", onEnd); };
+    return () => { window.removeEventListener("touchstart", onStart); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onEnd); };
   }, [currentPanel]);
 
   // Current active workspace view tab
@@ -1058,6 +1063,7 @@ export default function App() {
       if (sessionStorage.getItem("barakah_pull_refresh_pending") === "1") {
         sessionStorage.removeItem("barakah_pull_refresh_pending");
         triggerNotification("Page refreshed successfully", "success");
+        if ("vibrate" in navigator) navigator.vibrate(55);
       }
     } catch (_) {}
   }, []);
@@ -3243,6 +3249,22 @@ _${businessInfo.name}_`;
               </span>
             </div>
           </div>
+
+          {/* Persistent mobile refresh action */}
+          <button
+            type="button"
+            onClick={() => {
+              try { sessionStorage.setItem("barakah_pull_refresh_pending", "1"); } catch (_) {}
+              try { if ("vibrate" in navigator) navigator.vibrate(35); } catch (_) {}
+              window.location.reload();
+            }}
+            aria-label="Refresh app"
+            title="Refresh app"
+            className="fixed top-3 right-3 z-[150] md:hidden flex items-center gap-1.5 rounded-full border border-white/20 bg-slate-900/75 px-3 py-2 text-[11px] font-semibold text-white shadow-xl backdrop-blur-2xl active:scale-95"
+          >
+            <span className="text-base leading-none">↻</span>
+            Refresh
+          </button>
 
           {/* Core Navigation Links */}
           <nav className="space-y-1.5" id="sidebar-navigation">
@@ -6360,16 +6382,23 @@ _${businessInfo.name}_`;
                 <div className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] backdrop-blur-2xl p-4 sm:p-5 shadow-[0_8px_32px_rgba(0,0,0,0.18)]" id="expense-home-breakdown">
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <div><h3 className="text-sm font-bold text-white">Expense Breakdown</h3><p className="text-[10px] text-slate-400 mt-1">Category-wise spending overview</p></div>
-                    <span className="text-[10px] text-slate-400">All recorded expenses</span>
+                    <span className="text-[10px] text-slate-400">{new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
                   </div>
                   {(() => {
-                    const grouped = expenses.reduce((acc, item) => { const key = item.category || "Others"; acc[key] = (acc[key] || 0) + Number(item.amount || 0); return acc; }, {} as Record<string, number>);
+                    const now = new Date();
+                    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                    const currentMonthExpenses = expenses.filter(item => {
+                      const date = new Date((item.date || "") + "T12:00:00");
+                      return !Number.isNaN(date.getTime()) && date >= monthStart && date < nextMonthStart;
+                    });
+                    const grouped = currentMonthExpenses.reduce((acc, item) => { const key = item.category || "Others"; acc[key] = (acc[key] || 0) + Number(item.amount || 0); return acc; }, {} as Record<string, number>);
                     const rows = Object.entries(grouped).sort((a,b) => b[1]-a[1]);
                     const total = rows.reduce((sum, row) => sum + row[1], 0);
                     return rows.length ? <div className="space-y-3">
                       <div className="flex items-center justify-between"><span className="text-[10px] text-slate-400">Total Expenses</span><strong className="text-base text-rose-300">{businessInfo.currencySymbol} {total.toLocaleString()}</strong></div>
                       {rows.slice(0,5).map(([category, amount]) => <div key={category} className="space-y-1.5"><div className="flex items-center justify-between gap-3 text-[11px]"><span className="text-slate-300 truncate">{category}</span><span className="font-mono text-slate-200 whitespace-nowrap">{businessInfo.currencySymbol} {amount.toLocaleString()}</span></div><div className="h-1.5 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-rose-400 to-orange-300" style={{width: total > 0 ? `${(amount/total)*100}%` : "0%"}} /></div></div>)}
-                    </div> : <p className="text-xs text-slate-500 py-3">No expense records yet. Your breakdown will appear here.</p>;
+                    </div> : <p className="text-xs text-slate-500 py-3">No expenses recorded this month yet.</p>;
                   })()}
                 </div>
               )}
