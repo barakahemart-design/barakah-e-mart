@@ -5944,7 +5944,7 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
 
-                <div className="bg-[#1E1E24] border border-slate-800/85 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
                   <div className="space-y-1">
                     <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Booked Sales</span>
                     <span className="text-xl font-black text-white font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}</span>
@@ -5954,7 +5954,7 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
 
-                <div className="bg-[#1E1E24] border border-slate-800/85 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
                   <div className="space-y-1">
                     <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 block">Total Settled Cash</span>
                     <span className="text-xl font-black text-emerald-400 font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.paidAmount, 0).toLocaleString()}</span>
@@ -5964,7 +5964,7 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
 
-                <div className="bg-[#1E1E24] border border-slate-800/85 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="bg-white/[0.055] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-[0_8px_28px_rgba(0,0,0,0.20)]">
                   <div className="space-y-1">
                     <span className="text-[10px] font-semibold uppercase tracking-wider font-mono text-rose-450 block">Outstanding Due</span>
                     <span className="text-xl font-black text-rose-400 font-mono">{businessInfo.currencySymbol} {filteredTransactions.reduce((sum, t) => sum + t.dueBalance, 0).toLocaleString()}</span>
@@ -5996,7 +5996,7 @@ _${businessInfo.name}_`;
                 ))}
                 {dashboardFilter === "custom" && (
                   <div className="flex items-center gap-2 w-full pt-2">
-                    <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" />
+                    <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-white/[0.06] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white backdrop-blur-xl" />
                     <span className="text-slate-500 text-xs">to</span>
                     <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-[#050912] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white" />
                   </div>
@@ -6014,7 +6014,7 @@ _${businessInfo.name}_`;
                     placeholder="Search invoice number, buyer profile, mobile tag..."
                     value={ledgerSearch}
                     onChange={(e) => setLedgerSearch(e.target.value)}
-                    className="w-full px-4 py-3 pl-10 bg-[#121214] border border-slate-805 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-sans transition-all"
+                    className="w-full px-4 py-3 pl-10 bg-white/[0.045] border border-white/10 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-400/50 font-sans transition-all backdrop-blur-xl"
                   />
                   {ledgerSearch && (
                     <button onClick={() => setLedgerSearch("")} className="absolute right-3 top-3 text-slate-500 hover:text-white transition-all">✕</button>
