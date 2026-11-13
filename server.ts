@@ -428,16 +428,22 @@ async function startServer() {
                 // The expense ledger date is user-selected; created_at is only a legacy fallback.\n                date: data.date || data.created_at || new Date().toISOString()
               };
             } else if (tableStr === "purchases") {
+              const quantity = Number(data.quantity) || 0;
+              const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
               itemObj = {
                 id: data.id || id,
-                productId: data.product_id || data.productId,
-                productName: data.product_name || "Purchase Item",
-                supplierId: data.supplier_id || "",
-                supplierName: data.supplier_name || "Main Depot",
-                quantity: Number(data.quantity) || 0,
-                buyPrice: Number(data.buy_price) || 0,
-                totalAmount: Number(data.quantity * data.buy_price) || 0,
-                date: data.created_at || data.date || new Date().toISOString()
+                productId: data.productId || data.product_id || "",
+                productName: data.productName || data.product_name || "Purchase Item",
+                supplierId: data.supplierId || data.supplier_id || "",
+                supplierName: data.supplierName || data.supplier_name || "Main Depot",
+                quantity,
+                buyPrice,
+                totalAmount: Number(data.totalAmount ?? data.total_amount) || quantity * buyPrice,
+                date: data.date || data.created_at || new Date().toISOString(),
+                cashPaid: Number(data.cashPaid ?? data.cash_paid) || 0,
+                dueAmount: Number(data.dueAmount ?? data.due_amount) || 0,
+                invoiceNo: data.invoiceNo || data.invoice_no || "",
+                note: data.note || ""
               };
             } else if (tableStr === "transactions") {
               let mappedItems: any[] = [];
@@ -499,16 +505,22 @@ async function startServer() {
             if (isDelete) {
               updatedBizPurchases = updatedBizPurchases.filter((item: any) => item && item.id !== id);
             } else {
+              const quantity = Number(data.quantity) || 0;
+              const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
               const itemObj = {
                 id: data.id || id,
-                productId: data.product_id || data.productId,
-                productName: data.product_name || "Purchase Item",
-                supplierId: data.supplier_id || "",
-                supplierName: data.supplier_name || "Main Depot",
-                quantity: Number(data.quantity) || 0,
-                buyPrice: Number(data.buy_price) || 0,
-                totalAmount: Number(data.quantity * data.buy_price) || 0,
-                date: data.created_at || data.date || new Date().toISOString()
+                productId: data.productId || data.product_id || "",
+                productName: data.productName || data.product_name || "Purchase Item",
+                supplierId: data.supplierId || data.supplier_id || "",
+                supplierName: data.supplierName || data.supplier_name || "Main Depot",
+                quantity,
+                buyPrice,
+                totalAmount: Number(data.totalAmount ?? data.total_amount) || quantity * buyPrice,
+                date: data.date || data.created_at || new Date().toISOString(),
+                cashPaid: Number(data.cashPaid ?? data.cash_paid) || 0,
+                dueAmount: Number(data.dueAmount ?? data.due_amount) || 0,
+                invoiceNo: data.invoiceNo || data.invoice_no || "",
+                note: data.note || ""
               };
               const existingIdx = updatedBizPurchases.findIndex((item: any) => item && item.id === id);
               if (existingIdx >= 0) {
