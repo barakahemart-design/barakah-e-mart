@@ -67,6 +67,21 @@ import {
   safeEndOfDay,
   safeSubDays
 } from "./lib/dateUtils";
+import {
+  addManualCostLot,
+  addPurchaseCostLot,
+  allocateFifoCost,
+  getAverageCostFromAllocations,
+  getCostAllocationsForItem,
+  normalizeCostLots,
+  removePurchaseCostLot,
+  restoreFifoCost,
+  returnPurchaseCostLot,
+  resizeFifoSaleItem,
+  updateAllCostAllocations,
+  updateOneCostAllocation,
+  updatePurchaseCostLot
+} from "./lib/fifoCosting";
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
@@ -115,6 +130,7 @@ export interface Product {
   imageUrl?: string;
   warranty?: string;
   warrantyDetails?: string;
+  costLots?: any[];
 }
 
 export interface Purchase {
@@ -160,6 +176,7 @@ export interface TransactionItem {
   total: number;
   productId?: string;
   buyPrice?: number;
+  costAllocations?: any[];
   category?: string;
   isNegativeSale?: boolean;
   warranty?: string;
@@ -731,7 +748,8 @@ export default function App() {
             total: Number(item.quantity * item.sell_price) || 0,
             productId: item.product_id || undefined,
             category: item.category || "",
-            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
+            costAllocations: item.cost_allocations || item.costAllocations || undefined
           }));
         } else {
           // Keep existing items if present locally or in t.items to protect against incomplete collections snapshot
@@ -778,7 +796,8 @@ export default function App() {
         sellPrice: Number(docData.sellPrice ?? docData.sell_price) || 0,
         category: docData.category || "Electronics",
         unit: docData.unit || "piece",
-        imageUrl: docData.imageUrl || docData.image_url || undefined
+        imageUrl: docData.imageUrl || docData.image_url || undefined,
+        costLots: Array.isArray(docData.costLots) ? docData.costLots : (Array.isArray(docData.cost_lots) ? docData.cost_lots : undefined)
       }));
 
       localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
@@ -838,17 +857,25 @@ export default function App() {
     const unsubPurchases = subscribePurchases(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const updatedList = items.map(docData => ({
-        id: docData.id,
-        productId: docData.product_id,
-        productName: "Purchase Item",
-        supplierId: "",
-        supplierName: "Main Depot",
-        quantity: Number(docData.quantity) || 0,
-        buyPrice: Number(docData.buy_price) || 0,
-        totalAmount: Number(docData.quantity * docData.buy_price) || 0,
-        date: docData.created_at || new Date().toISOString()
-      }));
+      const updatedList = items.map(docData => {
+        const quantity = Number(docData.quantity) || 0;
+        const buyPrice = Number(docData.buyPrice ?? docData.buy_price) || 0;
+        return {
+          id: docData.id,
+          productId: docData.productId || docData.product_id || "",
+          productName: docData.productName || docData.product_name || "Purchase Item",
+          supplierId: docData.supplierId || docData.supplier_id || "",
+          supplierName: docData.supplierName || docData.supplier_name || "Main Depot",
+          quantity,
+          buyPrice,
+          totalAmount: Number(docData.totalAmount ?? docData.total_amount) || quantity * buyPrice,
+          date: docData.date || docData.created_at || new Date().toISOString(),
+          cashPaid: Number(docData.cashPaid ?? docData.cash_paid) || 0,
+          dueAmount: Number(docData.dueAmount ?? docData.due_amount) || 0,
+          invoiceNo: docData.invoiceNo || docData.invoice_no || "",
+          note: docData.note || ""
+        };
+      });
 
       localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
@@ -914,6 +941,7 @@ export default function App() {
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
         cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
+        cost_allocations: docData.cost_allocations || docData.costAllocations || undefined,
         warranty: docData.warranty || "",
         warranty_details: docData.warranty_details || ""
       }));
@@ -1546,26 +1574,43 @@ export default function App() {
       ? new Date(posCustomDate + "T" + new Date().toTimeString().split(" ")[0]).toISOString()
       : new Date().toISOString();
 
+    // Allocate each sold unit from the oldest available purchase-cost lot.
+    // Legacy stock is represented by an opening lot at the current catalog cost.
+    const fifoProductUpdates = new Map<string, any>();
+    const costedCartItems = posCart.map((cartItem, idx) => {
+      const productId = cartItem.product.id;
+      const sourceProduct = fifoProductUpdates.get(productId) || products.find(p => p.id === productId) || cartItem.product;
+      const negativeAtSale = Number(sourceProduct.stock) < Number(cartItem.quantity);
+      const allocation = allocateFifoCost(sourceProduct, cartItem.quantity, targetDateStr);
+      const nextProduct = {
+        ...allocation.product,
+        hasNegativeSale: negativeAtSale ? true : allocation.product.hasNegativeSale,
+        negativeSaleUpdated: negativeAtSale ? false : allocation.product.negativeSaleUpdated
+      };
+      fifoProductUpdates.set(productId, nextProduct);
+
+      const itemPrice = cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice;
+      return {
+        id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
+        name: cartItem.product.name,
+        productId: toUUID(cartItem.product.id, cleanEmail),
+        category: cartItem.product.category || "Uncategorized",
+        quantity: cartItem.quantity,
+        price: itemPrice,
+        total: itemPrice * cartItem.quantity,
+        buyPrice: allocation.averageUnitCost,
+        costAllocations: allocation.allocations,
+        warranty: cartItem.warranty || "",
+        warrantyDetails: cartItem.product.warrantyDetails || "",
+        isNegativeSale: negativeAtSale
+      };
+    });
+
     const newTransaction: Transaction = {
       id: uniqueTxId,
       invoiceNo: uniqueInvoiceNo,
       date: targetDateStr,
-      items: posCart.map((cartItem, idx) => {
-        const itemPrice = cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice;
-        return {
-          id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
-          name: cartItem.product.name,
-          productId: toUUID(cartItem.product.id, cleanEmail),
-          category: cartItem.product.category || "Uncategorized",
-          quantity: cartItem.quantity,
-          price: itemPrice,
-          total: itemPrice * cartItem.quantity,
-          buyPrice: cartItem.product.buyPrice || 0,
-          warranty: cartItem.warranty || "",
-          warrantyDetails: cartItem.product.warrantyDetails || "",
-          isNegativeSale: cartItem.product.stock < cartItem.quantity
-        };
-      }),
+      items: costedCartItems,
       subtotal: cartSubtotal,
       tax: calculatedTaxAmount,
       discount: customerDiscount,
@@ -1578,27 +1623,9 @@ export default function App() {
       customerSignature: signatureStr
     };
 
-    // Deduct stock levels corresponding to invoice (allowing negative stock per requirements)
-    const updatedProducts = products.map((p) => {
-      const soldItem = posCart.find(cartItem => 
-        cartItem.product.id === p.id || 
-        (p.sku && cartItem.product.sku === p.sku) || 
-        (cartItem.product.name && cartItem.product.name.trim().toLowerCase() === p.name.trim().toLowerCase())
-      );
-      if (soldItem) {
-        const nextStock = p.stock - soldItem.quantity;
-        if (nextStock < 0) {
-          return {
-            ...p,
-            stock: nextStock,
-            hasNegativeSale: true,
-            negativeSaleUpdated: false
-          };
-        }
-        return { ...p, stock: nextStock };
-      }
-      return p;
-    });
+    const updatedProducts = products.map((product) =>
+      fifoProductUpdates.get(product.id) || product
+    );
 
     setProducts(updatedProducts);
     setTransactions([newTransaction, ...transactions]);
@@ -1625,10 +1652,10 @@ export default function App() {
           transaction_id: newTransaction.id,
           product_id: productUUID,
           product_name: nestedIt.name || "Product Item",
-          category: nestedIt.category || "Uncategorized",
           quantity: Number(nestedIt.quantity) || 0,
           sell_price: Number(nestedIt.price) || 0,
           cost_price: Number(nestedIt.buyPrice) || 0,
+          cost_allocations: nestedIt.costAllocations || [],
           warranty: nestedIt.warranty || "",
           warranty_details: nestedIt.warrantyDetails || ""
         };
@@ -1696,6 +1723,7 @@ export default function App() {
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: Number(nestedIt.buyPrice) || 0,
+            cost_allocations: nestedIt.costAllocations || [],
             user_id: activeUserId,
             store_id: cleanEmail,
             email: cleanEmail
@@ -1765,6 +1793,7 @@ export default function App() {
       stock: Number(newProdStock) || 0,
       unit: newProdUnit
     };
+    parsedProduct.costLots = normalizeCostLots(parsedProduct);
 
     setProducts([...products, parsedProduct]);
     if (activeUser && !activeUser.isGuest) {
@@ -2045,14 +2074,18 @@ export default function App() {
     setDangerConfirmText("");
   };
 
-  // Replenish stock count
+  // Replenish stock count with an explicit FIFO cost layer at the current catalog cost.
   const incrementProductStock = (id: string) => {
-    setProducts(products.map((p) => {
-      if (p.id === id) {
-        return { ...p, stock: p.stock + 10 };
+    const lotId = `manual-increment-${id}-${Date.now()}`;
+    const updatedProducts = products.map((product) => {
+      if (product.id !== id) return product;
+      const nextP = addManualCostLot(product, 10, product.buyPrice, lotId);
+      if (activeUser && !activeUser.isGuest) {
+        saveProduct(activeUser.uid, nextP).catch(err => console.error("Manual stock adjustment sync failed:", err));
       }
-      return p;
-    }));
+      return nextP;
+    });
+    setProducts(updatedProducts);
     triggerNotification("10 units added to product stock successfully.");
   };
 
@@ -2061,9 +2094,10 @@ export default function App() {
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
 
+    let manualPurchase: any = null;
     if (addStock && addStock > 0) {
       const invoiceNo = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
-      const newPurchase = {
+      manualPurchase = {
         id: toUUID(`pur_${Date.now()}`, cleanEmail),
         productId: toUUID(id, cleanEmail),
         productName: matchedProd ? matchedProd.name : "Reconciled Item",
@@ -2075,9 +2109,9 @@ export default function App() {
         invoiceNo: invoiceNo,
         date: new Date().toISOString()
       };
-      setPurchases(prev => [newPurchase, ...prev]);
+      setPurchases(prev => [manualPurchase, ...prev]);
       if (activeUser && !activeUser.isGuest && targetUid) {
-        savePurchase(targetUid, newPurchase).catch(err => {
+        savePurchase(targetUid, manualPurchase).catch(err => {
           console.error("Cloud save purchase failed:", err);
         });
       }
@@ -2085,13 +2119,14 @@ export default function App() {
 
     const updatedProds = products.map(p => {
       if (p.id === id) {
-        const nextStock = p.stock + (addStock || 0);
+        const baseProduct = { ...p, buyPrice, sellPrice };
+        const withStock = manualPurchase
+          ? addPurchaseCostLot(baseProduct, manualPurchase)
+          : { ...baseProduct, stock: p.stock + (addStock || 0) };
+        const nextStock = withStock.stock;
         const isStillNegative = nextStock < 0;
         const nextP = {
-          ...p,
-          buyPrice,
-          sellPrice,
-          stock: nextStock,
+          ...withStock,
           hasNegativeSale: isStillNegative,
           negativeSaleUpdated: true
         };
@@ -2122,85 +2157,98 @@ export default function App() {
     triggerNotification(updated ? "Product negative stock marked as green / updated! 🟢" : "Product negative stock reset to red.", "success");
   };
 
-  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
-    // 1. Generate updated transactions list locally to immediately persist flat items
-    const updatedTransactions = transactions.map(t => {
-      if (t.id === txId) {
-        const updatedItems = t.items.map((it, idx) => {
-          if (idx === itemIdx) {
-            return {
-              ...it,
-              buyPrice: newBuyPrice,
-              isNegativeSaleApproved: isApproved !== undefined ? isApproved : it.isNegativeSaleApproved,
-              negativeSaleUpdated: isApproved !== undefined ? isApproved : it.negativeSaleUpdated
-            };
-          }
-          return it;
-        });
-        return {
-          ...t,
-          items: updatedItems
-        };
-      }
-      return t;
+  const persistTransactionItemCost = (txId: string, itemIdx: number, updatedTransactions: any[]) => {
+    const targetTx = updatedTransactions.find(t => t.id === txId);
+    const item = targetTx?.items?.[itemIdx];
+    if (!item) return;
+
+    const itemId = item.id || `${txId}_item_${itemIdx}`;
+    updateDoc(doc(db, "transaction_items", itemId), {
+      cost_price: Number(item.buyPrice) || 0,
+      cost_allocations: item.costAllocations || []
+    }).catch((e) => {
+      console.error("Failed to update transaction item cost in Firestore:", e);
     });
 
-    setTransactions(updatedTransactions);
-
-    // 2. Write only the corresponding transaction_items Firestore document's cost_price
-    const targetTxToUpdate = transactions.find(t => t.id === txId);
-    if (targetTxToUpdate && Array.isArray(targetTxToUpdate.items)) {
-      const item = targetTxToUpdate.items[itemIdx];
-      if (item) {
-        const itemId = item.id || `${txId}_item_${itemIdx}`;
-        updateDoc(doc(db, "transaction_items", itemId), { cost_price: newBuyPrice }).catch((e) => {
-          console.error("Failed to update transaction item cost_price in Firestore:", e);
-        });
-      }
-    }
-
-    // 3. Regenerate and overwrite barakah_flat_transaction_items in localStorage
     try {
       const activeUserId = activeUser?.uid;
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
       let flatItems = JSON.parse(rawLocalItems);
       if (!Array.isArray(flatItems)) flatItems = [];
-
-      const targetTx = updatedTransactions.find(t => t.id === txId);
-      if (targetTx && Array.isArray(targetTx.items)) {
-        targetTx.items.forEach((nestedIt: any, idx: number) => {
-          const itemUUID = nestedIt.id || `${txId}_item_${idx}`;
-          const productUUID = nestedIt.productId || null;
-
-          const flatItem = {
-            id: itemUUID,
-            transaction_id: txId,
-            product_id: productUUID,
-            product_name: nestedIt.name || "Product Item",
-            quantity: Number(nestedIt.quantity) || 0,
-            sell_price: Number(nestedIt.price) || 0,
-            cost_price: Number(nestedIt.buyPrice) || 0
-          };
-
-          const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === txId && x.product_id === productUUID));
-          if (flatIdx >= 0) {
-            flatItems[flatIdx] = {
-              ...flatItems[flatIdx],
-              ...flatItem
-            };
-          } else {
-            flatItems.push(flatItem);
-          }
-        });
-      }
+      const productUUID = item.productId || null;
+      const flatItem = {
+        id: itemId,
+        transaction_id: txId,
+        product_id: productUUID,
+        product_name: item.name || "Product Item",
+        quantity: Number(item.quantity) || 0,
+        sell_price: Number(item.price) || 0,
+        cost_price: Number(item.buyPrice) || 0,
+        cost_allocations: item.costAllocations || []
+      };
+      const flatIdx = flatItems.findIndex((entry: any) =>
+        entry.id === itemId || (entry.transaction_id === txId && entry.product_id === productUUID)
+      );
+      if (flatIdx >= 0) flatItems[flatIdx] = { ...flatItems[flatIdx], ...flatItem };
+      else flatItems.push(flatItem);
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
     } catch (err) {
-      console.warn("Failed to update flat items in localStorage:", err);
+      console.warn("Failed to update unit cost in localStorage:", err);
+    }
+  };
+
+  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
+    const updatedTransactions = transactions.map(t => {
+      if (t.id !== txId) return t;
+      const updatedItems = t.items.map((it, idx) => {
+        if (idx !== itemIdx) return it;
+        return {
+          ...updateAllCostAllocations(it, newBuyPrice),
+          isNegativeSaleApproved: isApproved !== undefined ? isApproved : it.isNegativeSaleApproved,
+          negativeSaleUpdated: isApproved !== undefined ? isApproved : it.negativeSaleUpdated
+        };
+      });
+      return { ...t, items: updatedItems };
+    });
+
+    setTransactions(updatedTransactions);
+    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+
+    // The negative-stock editor's optional checkbox updates only the catalog
+    // default. It never overwrites any other sold unit's saved cost.
+    if (productId) {
+      const updatedProducts = products.map(product => {
+        if (product.id !== productId) return product;
+        const nextProduct = { ...product, buyPrice: newBuyPrice };
+        if (activeUser && !activeUser.isGuest) {
+          saveProduct(activeUser.uid, nextProduct).catch(err =>
+            console.error("Failed to update catalog default cost:", err)
+          );
+        }
+        return nextProduct;
+      });
+      setProducts(updatedProducts);
     }
 
     triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
+  };
+
+  const handleUpdateTransactionItemUnitCost = (txId: string, itemIdx: number, allocationIdx: number, newUnitCost: number) => {
+    if (!Number.isFinite(newUnitCost) || newUnitCost < 0) return;
+
+    const updatedTransactions = transactions.map(t => {
+      if (t.id !== txId) return t;
+      const updatedItems = t.items.map((it, idx) =>
+        idx === itemIdx ? updateOneCostAllocation(it, allocationIdx, newUnitCost) : it
+      );
+      return { ...t, items: updatedItems };
+    });
+
+    setTransactions(updatedTransactions);
+    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+    triggerNotification("Only the selected unit's cost price was updated.", "success");
   };
 
   const handleNavigateToCustomer = (customerName: string) => {
@@ -2249,10 +2297,9 @@ export default function App() {
     const updatedProds = products.map(p => {
       if (p.id === pur.productId) {
         const updatedSellPrice = pur.updatedSellPrice !== undefined ? Number(pur.updatedSellPrice) : p.sellPrice;
+        const withCostLot = addPurchaseCostLot(p, newPur);
         const nextP = {
-          ...p,
-          stock: p.stock + pur.quantity,
-          buyPrice: pur.unitPrice, // New purchase price instantly updates P&L basis
+          ...withCostLot,
           sellPrice: !isNaN(updatedSellPrice) ? updatedSellPrice : p.sellPrice
         };
         if (activeUser && !activeUser.isGuest && targetUid) {
@@ -2275,8 +2322,20 @@ export default function App() {
     }
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
-    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
 
+    const purchaseProduct = products.find(p => p.id === matchingPur.productId);
+    const trackedLot = purchaseProduct?.costLots?.find((lot: any) =>
+      lot.id === id || lot.purchaseId === id
+    );
+    if (trackedLot) {
+      const soldFromLot = Math.max(0, Number(trackedLot.receivedQuantity || 0) - Number(trackedLot.remainingQuantity || 0));
+      if (soldFromLot > 0.000001) {
+        triggerNotification("This purchase batch has already supplied sold units. It cannot be deleted because that would break the sales cost history.", "error");
+        return;
+      }
+    }
+
+    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
     await deleteCloudDocument("purchases", id);
     if (activeUser && !activeUser.isGuest) {
       deletePurchase(id).catch(err => {});
@@ -2284,17 +2343,17 @@ export default function App() {
     setPurchases(purchases.filter(p => p.id !== id));
 
     const updatedProds = products.map(p => {
-      if (p.id === matchingPur.productId) {
-        const nextP = {
-          ...p,
-          stock: Math.max(p.stock - matchingPur.quantity, 0)
-        };
-        if (activeUser && !activeUser.isGuest && targetUid) {
-          saveProduct(targetUid, nextP).catch(err => {});
-        }
-        return nextP;
+      if (p.id !== matchingPur.productId) return p;
+      const hadTrackedLot = Array.isArray(p.costLots) && p.costLots.some((lot: any) => lot.id === id || lot.purchaseId === id);
+      const removedLotProduct = removePurchaseCostLot(p, id);
+      if (!removedLotProduct) return p;
+      const nextP = hadTrackedLot
+        ? removedLotProduct
+        : { ...removedLotProduct, stock: Math.max(0, Number(p.stock || 0) - Number(matchingPur.quantity || 0)) };
+      if (activeUser && !activeUser.isGuest && targetUid) {
+        saveProduct(targetUid, nextP).catch(err => {});
       }
-      return p;
+      return nextP;
     });
     setProducts(updatedProds);
     triggerNotification("Purchase record has been successfully deleted and inventory adjusted.", "success");
@@ -2304,34 +2363,75 @@ export default function App() {
     const originalPur = purchases.find(p => p.id === id);
     if (!originalPur) return;
     const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
+    const updatedPur = {
+      ...originalPur,
+      ...updatedFields,
+      productId: updatedFields.productId ?? originalPur.productId,
+      quantity: Number(updatedFields.quantity ?? originalPur.quantity),
+      buyPrice: Number(updatedFields.unitPrice ?? updatedFields.buyPrice ?? originalPur.buyPrice),
+      totalAmount: Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice)))
+    };
 
-    const updatedPur = { ...originalPur, ...updatedFields };
+    const originalProduct = products.find(prod => prod.id === originalPur.productId);
+    const originalLot = originalProduct?.costLots?.find((lot: any) => lot.id === id || lot.purchaseId === id);
+    const lotSoldQuantity = originalLot
+      ? Math.max(0, Number(originalLot.receivedQuantity || 0) - Number(originalLot.remainingQuantity || 0))
+      : 0;
+
+    if (originalLot && updatedPur.productId !== originalPur.productId && lotSoldQuantity > 0.000001) {
+      triggerNotification("This purchase batch has already supplied sold units. Its product cannot be changed because that would break FIFO cost history.", "error");
+      return;
+    }
+
+    if (originalLot && updatedPur.productId === originalPur.productId) {
+      const checkedUpdate = updatePurchaseCostLot(originalProduct, id, updatedPur);
+      if (!checkedUpdate) {
+        triggerNotification("Purchase quantity cannot be reduced below the quantity already sold from this batch.", "error");
+        return;
+      }
+    }
+
     setPurchases(purchases.map(p => p.id === id ? updatedPur : p));
     if (activeUser && !activeUser.isGuest && targetUid) {
       savePurchase(targetUid, updatedPur).catch(err => {});
     }
 
     const updatedProds = products.map(prod => {
-      let updatedStock = prod.stock;
-      let updatedBuyPrice = prod.buyPrice;
+      if (updatedPur.productId === originalPur.productId && prod.id === originalPur.productId) {
+        if (originalLot) {
+          const nextP = updatePurchaseCostLot(prod, id, updatedPur) || prod;
+          if (activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+          return nextP;
+        }
+        const nextP = {
+          ...prod,
+          stock: Number(prod.stock || 0) - Number(originalPur.quantity || 0) + Number(updatedPur.quantity || 0),
+          buyPrice: updatedPur.buyPrice
+        };
+        if (activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+        return nextP;
+      }
 
-      if (prod.id === originalPur.productId) {
-        updatedStock -= originalPur.quantity;
-      }
-      if (prod.id === updatedFields.productId) {
-        updatedStock += updatedFields.quantity;
-        updatedBuyPrice = updatedFields.unitPrice;
+      if (updatedPur.productId !== originalPur.productId && prod.id === originalPur.productId) {
+        const nextP = originalLot
+          ? removePurchaseCostLot(prod, id)
+          : { ...prod, stock: Math.max(0, Number(prod.stock || 0) - Number(originalPur.quantity || 0)) };
+        if (nextP && activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+        return nextP || prod;
       }
 
-      const nextP = {
-        ...prod,
-        stock: updatedStock,
-        buyPrice: updatedBuyPrice
-      };
-      if ((prod.id === originalPur.productId || prod.id === updatedFields.productId) && activeUser && !activeUser.isGuest && targetUid) {
-        saveProduct(targetUid, nextP).catch(err => {});
+      if (updatedPur.productId !== originalPur.productId && prod.id === updatedPur.productId) {
+        const nextP = originalLot
+          ? addPurchaseCostLot(prod, updatedPur)
+          : {
+              ...prod,
+              stock: Number(prod.stock || 0) + Number(updatedPur.quantity || 0),
+              buyPrice: updatedPur.buyPrice
+            };
+        if (activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+        return nextP;
       }
-      return nextP;
+      return prod;
     });
     setProducts(updatedProds);
 
@@ -2344,47 +2444,58 @@ export default function App() {
 
     const matchedProduct = products.find(p => p.id === pur.productId);
     const availableStock = matchedProduct ? matchedProduct.stock : 0;
-    
+
     if (returnQty > availableStock) {
       triggerNotification(`Not enough item stock in warehouse! Available stock is ${availableStock} pcs, cannot return ${returnQty} pcs.`, "error");
       return;
+    }
+
+    const trackedLot = matchedProduct?.costLots?.find((lot: any) => lot.id === id || lot.purchaseId === id);
+    let nextTrackedProduct: any = null;
+    if (trackedLot && matchedProduct) {
+      nextTrackedProduct = returnPurchaseCostLot(matchedProduct, id, returnQty);
+      if (!nextTrackedProduct) {
+        triggerNotification("This purchase batch does not have enough unsold units available to return. Already-sold units cannot be returned to the supplier.", "error");
+        return;
+      }
     }
 
     const returnVal = parseFloat((returnQty * pur.buyPrice).toFixed(2));
     const oldDue = pur.dueAmount || 0;
     const nextDue = Math.max(0, parseFloat((oldDue - returnVal).toFixed(2)));
     const nextTotal = Math.max(0, parseFloat((pur.totalAmount - returnVal).toFixed(2)));
-    
-    // If return value exceeds outstanding credit debt, decrease cashPaid (representing a supplier refund)
     const refundCash = Math.max(0, parseFloat((returnVal - oldDue).toFixed(2)));
     const nextCashPaid = Math.max(0, parseFloat(((pur.cashPaid || 0) - refundCash).toFixed(2)));
 
-    // Update product stock
-    setProducts(products.map(p => {
-      if (p.id === pur.productId) {
-        return {
-          ...p,
-          stock: Math.max(0, p.stock - returnQty)
-        };
+    const updatedProducts = products.map(product => {
+      if (product.id !== pur.productId) return product;
+      const nextP = trackedLot && nextTrackedProduct
+        ? nextTrackedProduct
+        : { ...product, stock: Math.max(0, product.stock - returnQty) };
+      if (activeUser && !activeUser.isGuest) {
+        saveProduct(activeUser.uid, nextP).catch(err => console.error("Purchase return stock sync failed:", err));
       }
-      return p;
-    }));
+      return nextP;
+    });
+    setProducts(updatedProducts);
 
-    // Update purchase logs
-    setPurchases(purchases.map(item => {
-      if (item.id === pur.id) {
-        const nextQty = Math.max(0, item.quantity - returnQty);
-        return {
-          ...item,
-          quantity: nextQty,
-          totalAmount: nextTotal,
-          dueAmount: nextDue,
-          cashPaid: nextCashPaid,
-          note: (item.note || "") + ` [Returned ${returnQty} pcs on ${safeFormat(new Date(), "dd-MM-yyyy")}]`
-        };
-      }
-      return item;
-    }));
+    const updatedPurchases = purchases.map(item => {
+      if (item.id !== pur.id) return item;
+      const nextQty = Math.max(0, item.quantity - returnQty);
+      return {
+        ...item,
+        quantity: nextQty,
+        totalAmount: nextTotal,
+        dueAmount: nextDue,
+        cashPaid: nextCashPaid,
+        note: (item.note || "") + ` [Returned ${returnQty} pcs on ${safeFormat(new Date(), "dd-MM-yyyy")}]`
+      };
+    });
+    setPurchases(updatedPurchases);
+    const updatedPurchase = updatedPurchases.find(item => item.id === pur.id);
+    if (updatedPurchase && activeUser && !activeUser.isGuest) {
+      savePurchase(activeUser.uid, updatedPurchase).catch(err => console.error("Purchase return ledger sync failed:", err));
+    }
 
     triggerNotification(`Successfully returned ${returnQty} units of ${pur.productName}. Purchase/Due balance reduced by ${businessInfo.currencySymbol} ${returnVal.toLocaleString()}!`, "success");
   };
@@ -2499,20 +2610,21 @@ export default function App() {
       }
     }
 
-    // Refund stock back to products catalog
+    // Restore each sold unit to the same FIFO lot it originally came from.
     const restoredProducts = products.map(prod => {
-      const soldItem = t.items.find(item => item.productId === prod.id || item.id === prod.id);
-      if (soldItem) {
-        const nextP = {
-          ...prod,
-          stock: prod.stock + (soldItem.quantity ?? 0)
-        };
-        if (activeUser && !activeUser.isGuest) {
-          saveProduct(activeUser.uid, nextP).catch(err => {});
-        }
-        return nextP;
+      const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
+        item.productId === prod.id || item.id === prod.id
+      );
+      if (soldItems.length === 0) return prod;
+
+      let nextP: any = prod;
+      soldItems.forEach(soldItem => {
+        nextP = restoreFifoCost(nextP, soldItem);
+      });
+      if (activeUser && !activeUser.isGuest) {
+        saveProduct(activeUser.uid, nextP).catch(err => {});
       }
-      return prod;
+      return nextP;
     });
 
     setProducts(restoredProducts);
@@ -2546,7 +2658,76 @@ export default function App() {
     const originalTx = transactions.find(t => t.id === id);
     if (!originalTx) return;
 
-    const items = updatedFields.items || originalTx.items;
+    const requestedItems = updatedFields.items || originalTx.items;
+    const workingProducts = products.map(product => ({ ...product }));
+    const costedItems: any[] = requestedItems.map(item => ({ ...item }));
+    const matchedRequested = new Set<number>();
+    const needsAllocation = new Set<number>();
+    const findWorkingProduct = (productId?: string) => workingProducts.find(product => product.id === productId);
+    const replaceWorkingProduct = (nextProduct: any) => {
+      const index = workingProducts.findIndex(product => product.id === nextProduct.id);
+      if (index >= 0) workingProducts[index] = nextProduct;
+    };
+
+    // Keep unchanged sold units attached to their original purchase lots.
+    // Return removed/reduced units to their source lot before allocating any additions.
+    (originalTx.items || []).forEach(oldItem => {
+      const oldIdentity = oldItem.id || oldItem.firestoreId;
+      const newIndex = requestedItems.findIndex((candidate: any, index: number) =>
+        !matchedRequested.has(index) &&
+        (oldIdentity
+          ? (candidate.id === oldIdentity || candidate.firestoreId === oldIdentity)
+          : candidate.productId === oldItem.productId)
+      );
+
+      if (newIndex < 0) {
+        const oldProduct = findWorkingProduct(oldItem.productId);
+        if (oldProduct) replaceWorkingProduct(restoreFifoCost(oldProduct, oldItem));
+        return;
+      }
+
+      const candidate = requestedItems[newIndex];
+      if (candidate.productId !== oldItem.productId) {
+        const oldProduct = findWorkingProduct(oldItem.productId);
+        if (oldProduct) replaceWorkingProduct(restoreFifoCost(oldProduct, oldItem));
+        needsAllocation.add(newIndex);
+        return;
+      }
+
+      matchedRequested.add(newIndex);
+      const sameProduct = findWorkingProduct(oldItem.productId);
+      if (sameProduct) {
+        const resized = resizeFifoSaleItem(sameProduct, oldItem, candidate, originalTx.date);
+        replaceWorkingProduct(resized.product);
+        costedItems[newIndex] = resized.item;
+      }
+    });
+
+    // Allocate newly added lines or product replacements from current FIFO stock.
+    requestedItems.forEach((item: any, index: number) => {
+      if (matchedRequested.has(index) && !needsAllocation.has(index)) return;
+      const product = findWorkingProduct(item.productId);
+      if (!product) {
+        costedItems[index] = item;
+        return;
+      }
+      const quantity = Number(item.quantity) || 0;
+      const negativeAtSale = Number(product.stock) < quantity;
+      const allocation = allocateFifoCost(product, quantity, originalTx.date);
+      replaceWorkingProduct({
+        ...allocation.product,
+        hasNegativeSale: negativeAtSale ? true : allocation.product.hasNegativeSale,
+        negativeSaleUpdated: negativeAtSale ? false : allocation.product.negativeSaleUpdated
+      });
+      costedItems[index] = {
+        ...item,
+        buyPrice: allocation.averageUnitCost,
+        costAllocations: allocation.allocations,
+        isNegativeSale: negativeAtSale
+      };
+    });
+
+    const items = costedItems;
     const discount = updatedFields.discount !== undefined ? Math.max(0, Number(updatedFields.discount) || 0) : Math.max(0, Number(originalTx.discount) || 0);
     const originalSubtotal = Number(originalTx.subtotal) || 0;
     const originalTax = Number(originalTx.tax) || 0;
@@ -2559,26 +2740,21 @@ export default function App() {
     const dueBalance = Math.max(total - paidAmount, 0);
     const status = dueBalance === 0 ? "paid" : paidAmount > 0 ? "partial" : "due";
 
-    // Adjust catalog stock levels dynamically: revert old items sold, apply new items sold!
-    const updatedProductsList = products.map(prod => {
-      let updatedStock = prod.stock;
-
-      const oldItem = originalTx.items.find(item => item.productId === prod.id);
-      if (oldItem) {
-        updatedStock += oldItem.quantity;
-      }
-
-      const newItem = items.find(item => item.productId === prod.id);
-      if (newItem) {
-        updatedStock -= newItem.quantity;
-      }
-
-      return {
-        ...prod,
-        stock: updatedStock
-      };
-    });
+    const updatedProductsList = workingProducts;
     setProducts(updatedProductsList);
+    if (activeUser && !activeUser.isGuest) {
+      updatedProductsList.forEach((nextProduct, index) => {
+        const previousProduct = products[index];
+        if (previousProduct && (
+          previousProduct.stock !== nextProduct.stock ||
+          JSON.stringify(previousProduct.costLots || []) !== JSON.stringify(nextProduct.costLots || [])
+        )) {
+          saveProduct(activeUser.uid, nextProduct).catch(err =>
+            console.error("Failed to sync FIFO stock after invoice edit:", err)
+          );
+        }
+      });
+    }
 
     const updatedTransactionsList = transactions.map(t => {
       if (t.id === id) {
@@ -2631,9 +2807,11 @@ export default function App() {
             transaction_id: id,
             product_id: productUUID,
             product_name: nestedIt.name || "Product Item",
+            category: nestedIt.category || "Uncategorized",
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0,
+            cost_allocations: nestedIt.costAllocations || [],
             warranty: nestedIt.warranty || "",
             warranty_details: nestedIt.warrantyDetails || ""
           };
@@ -2701,6 +2879,7 @@ export default function App() {
           product_name: item.name || "Product Item",
           product_id: item.productId || null,
           cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+          cost_allocations: item.costAllocations || [],
           warranty: item.warranty || "",
           warranty_details: item.warrantyDetails || ""
         }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
@@ -2743,6 +2922,7 @@ export default function App() {
         total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
         productId: item.productId || "",
         buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+        costAllocations: item.costAllocations || [],
         warranty: item.warranty || "",
         warrantyDetails: item.warrantyDetails || "",
         isNegativeSale: item.isNegativeSale || false
@@ -6212,16 +6392,20 @@ _${businessInfo.name}_`;
                               };
 
                               setPurchases([newPur, ...purchases]);
-                              setProducts(products.map(p => {
+                              if (activeUser && !activeUser.isGuest) {
+                                savePurchase(activeUser.uid, newPur).catch(err => console.error("Supplier credit purchase sync failed:", err));
+                              }
+                              const updatedDueProducts = products.map(p => {
                                 if (p.id === dueProductId) {
-                                  return {
-                                    ...p,
-                                    stock: p.stock + qty,
-                                    buyPrice: rate
-                                  };
+                                  const nextP = addPurchaseCostLot(p, newPur);
+                                  if (activeUser && !activeUser.isGuest) {
+                                    saveProduct(activeUser.uid, nextP).catch(err => console.error("Supplier credit stock sync failed:", err));
+                                  }
+                                  return nextP;
                                 }
                                 return p;
-                              }));
+                              });
+                              setProducts(updatedDueProducts);
 
                               // Reset input fields
                               setDueQuantity("");
@@ -6800,82 +6984,41 @@ _${businessInfo.name}_`;
                             <div className="space-y-1">
                               {t.items.map((it, idx) => {
                                 const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
-                                let buyCost = 0;
-                                if (it.buyPrice && it.buyPrice > 0) {
-                                  buyCost = it.buyPrice;
-                                } else if (dbProduct && dbProduct.buyPrice > 0) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (dbProduct) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (it.buyPrice !== undefined) {
-                                  buyCost = it.buyPrice;
-                                } else {
-                                  buyCost = 0;
-                                }
+                                const buyCost = getAverageCostFromAllocations(it, dbProduct?.buyPrice ?? 0);
+                                const unitCosts = getCostAllocationsForItem(it, buyCost);
                                 const showEdit = showCostEditId === `${t.id}-${idx}`;
+                                const costSummary = unitCosts.map(allocation =>
+                                  `${businessInfo.currencySymbol || "৳"}${Number(allocation.unitCost).toLocaleString()}`
+                                ).join(" / ");
 
                                 return (
-                                  <div key={idx} className="flex justify-between items-center text-[11px] font-sans text-slate-300 py-1 border-b border-slate-800/20 last:border-b-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span> 
-                                      <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
-                                      <span className="text-[10px] text-slate-400 font-mono">
-                                        (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
-                                      </span>
-                                      {currentPanel === "admin" && buyCost > 0 && (
-                                        <span className="text-[9px] text-slate-500 font-mono">
-                                          (Cost: {businessInfo.currencySymbol}{buyCost})
+                                  <div key={idx} className="py-2 border-b border-slate-800/20 last:border-b-0">
+                                    <div className="flex justify-between items-center gap-3 text-[11px] font-sans text-slate-300">
+                                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                        <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span>
+                                        <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                          (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
                                         </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {currentPanel === "admin" && (
-                                        showEdit ? (
-                                          <div className="flex items-center gap-1 animate-fadeIn">
-                                            <input
-                                              type="number"
-                                              defaultValue={buyCost}
-                                              id={`buy-cost-${t.id}-${idx}`}
-                                              className="w-16 px-1.5 py-0.5 bg-black border border-slate-800 text-[#00E676] font-mono text-[9px] outline-none rounded"
-                                              onClick={(e) => e.stopPropagation()}
-                                            />
+                                        {currentPanel === "admin" && (
+                                          <span className="text-[9px] text-slate-500 font-mono">
+                                            (Unit Cost: {costSummary || "Not set"})
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        {currentPanel === "admin" && (
+                                          <>
                                             <button
                                               type="button"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}`) as HTMLInputElement)?.value);
-                                                if (!isNaN(val)) {
-                                                  handleUpdateTransactionItemBuyPrice(t.id, idx, val);
-                                                  setShowCostEditId(null);
-                                                }
-                                              }}
-                                              className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-1.5 py-0.5 text-[8px] rounded cursor-pointer"
-                                            >
-                                              Set
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowCostEditId(null);
-                                              }}
-                                              className="text-slate-400 hover:text-white text-[9px] px-1 cursor-pointer"
-                                            >
-                                              ✕
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowCostEditId(t.id + "-" + idx);
+                                                setShowCostEditId(showEdit ? null : `${t.id}-${idx}`);
                                               }}
                                               className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
-                                              title="Override or edit purchase cost rate for this item"
+                                              title="Edit the cost of each sold unit independently"
                                             >
-                                              Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
+                                              {showEdit ? "Close Unit Costs" : "Edit Unit Costs"} ✏️
                                             </button>
                                             <button
                                               type="button"
@@ -6888,11 +7031,46 @@ _${businessInfo.name}_`;
                                             >
                                               Delete Item
                                             </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {currentPanel === "admin" && showEdit && (
+                                      <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-slate-800 bg-black/30 p-2">
+                                        {unitCosts.map((allocation, allocationIdx) => (
+                                          <div key={allocation.id || allocationIdx} className="flex items-center gap-1.5 rounded-md bg-slate-900/70 px-2 py-1">
+                                            <label className="text-[9px] text-slate-400 font-mono whitespace-nowrap">
+                                              Unit {allocationIdx + 1}
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              step="0.01"
+                                              defaultValue={allocation.unitCost}
+                                              id={`buy-cost-${t.id}-${idx}-${allocationIdx}`}
+                                              className="w-20 px-1.5 py-1 bg-black border border-slate-700 text-[#00E676] font-mono text-[10px] outline-none rounded"
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}-${allocationIdx}`) as HTMLInputElement)?.value);
+                                                if (!isNaN(val) && val >= 0) {
+                                                  handleUpdateTransactionItemUnitCost(t.id, idx, allocationIdx, val);
+                                                }
+                                              }}
+                                              className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-2 py-1 text-[9px] rounded cursor-pointer"
+                                            >
+                                              Save
+                                            </button>
                                           </div>
-                                      ))}
-                                      <span className="font-mono text-[10px] text-slate-400">
-                                        {businessInfo.currencySymbol} {it.total.toLocaleString()}
-                                      </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="font-mono text-[10px] text-slate-400 text-right mt-1">
+                                      {businessInfo.currencySymbol} {Number(it.total ?? (Number(it.price || 0) * Number(it.quantity || 0))).toLocaleString()}
                                     </div>
                                   </div>
                                 );

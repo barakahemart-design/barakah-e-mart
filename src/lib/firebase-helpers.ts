@@ -647,6 +647,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               category: p.category || "Electronics",
               unit: p.unit || "piece",
               imageUrl: p.imageUrl || p.image_url || undefined,
+              ...(Array.isArray(p.costLots) ? { costLots: p.costLots } : (Array.isArray(p.cost_lots) ? { costLots: p.cost_lots } : {})),
               warranty: p.warranty || p.warranty_period || "",
               warrantyDetails: p.warrantyDetails || p.warranty_details || ""
             };
@@ -713,6 +714,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
                 total: Number(item.quantity * item.sell_price) || 0,
                 productId: item.product_id || undefined,
                 buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
+                costAllocations: item.cost_allocations || item.costAllocations || undefined,
                 warranty: item.warranty || "",
                 warrantyDetails: item.warrantyDetails || item.warranty_details || ""
               };
@@ -742,16 +744,22 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         if (!purchasesRes.empty) {
           const sqlPurchases = purchasesRes.docs.map(docSnapshot => {
             const p = docSnapshot.data();
+            const quantity = Number(p.quantity) || 0;
+            const buyPrice = Number(p.buyPrice ?? p.buy_price) || 0;
             return {
-              id: p.id,
-              productId: p.product_id,
-              productName: "Purchase Item",
-              supplierId: "",
-              supplierName: "Main Depot",
-              quantity: Number(p.quantity) || 0,
-              buyPrice: Number(p.buy_price) || 0,
-              totalAmount: Number(p.quantity * p.buy_price) || 0,
-              date: p.created_at || new Date().toISOString()
+              id: p.id || docSnapshot.id,
+              productId: p.productId || p.product_id || "",
+              productName: p.productName || p.product_name || "Purchase Item",
+              supplierId: p.supplierId || p.supplier_id || "",
+              supplierName: p.supplierName || p.supplier_name || "Main Depot",
+              quantity,
+              buyPrice,
+              totalAmount: Number(p.totalAmount ?? p.total_amount) || quantity * buyPrice,
+              date: p.date || p.created_at || new Date().toISOString(),
+              cashPaid: Number(p.cashPaid ?? p.cash_paid) || 0,
+              dueAmount: Number(p.dueAmount ?? p.due_amount) || 0,
+              invoiceNo: p.invoiceNo || p.invoice_no || "",
+              note: p.note || ""
             };
           });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
