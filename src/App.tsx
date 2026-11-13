@@ -2075,9 +2075,10 @@ export default function App() {
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
 
+    let manualPurchase: any = null;
     if (addStock && addStock > 0) {
       const invoiceNo = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
-      const newPurchase = {
+      manualPurchase = {
         id: toUUID(`pur_${Date.now()}`, cleanEmail),
         productId: toUUID(id, cleanEmail),
         productName: matchedProd ? matchedProd.name : "Reconciled Item",
@@ -2089,9 +2090,9 @@ export default function App() {
         invoiceNo: invoiceNo,
         date: new Date().toISOString()
       };
-      setPurchases(prev => [newPurchase, ...prev]);
+      setPurchases(prev => [manualPurchase, ...prev]);
       if (activeUser && !activeUser.isGuest && targetUid) {
-        savePurchase(targetUid, newPurchase).catch(err => {
+        savePurchase(targetUid, manualPurchase).catch(err => {
           console.error("Cloud save purchase failed:", err);
         });
       }
@@ -2099,13 +2100,14 @@ export default function App() {
 
     const updatedProds = products.map(p => {
       if (p.id === id) {
-        const nextStock = p.stock + (addStock || 0);
+        const baseProduct = { ...p, buyPrice, sellPrice };
+        const withStock = manualPurchase
+          ? addPurchaseCostLot(baseProduct, manualPurchase)
+          : { ...baseProduct, stock: p.stock + (addStock || 0) };
+        const nextStock = withStock.stock;
         const isStillNegative = nextStock < 0;
         const nextP = {
-          ...p,
-          buyPrice,
-          sellPrice,
-          stock: nextStock,
+          ...withStock,
           hasNegativeSale: isStillNegative,
           negativeSaleUpdated: true
         };
