@@ -407,7 +407,8 @@ async function startServer() {
                 sellPrice: Number(data.sell_price) || 0,
                 category: data.category || "Electronics",
                 unit: data.unit || "piece",
-                imageUrl: data.image_url || undefined
+                imageUrl: data.image_url || undefined,
+                costLots: Array.isArray(data.costLots) ? data.costLots : (Array.isArray(data.cost_lots) ? data.cost_lots : undefined)
               };
             } else if (tableStr === "customers" || tableStr === "contacts") {
               itemObj = {
