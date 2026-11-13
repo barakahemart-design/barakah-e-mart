@@ -744,16 +744,22 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         if (!purchasesRes.empty) {
           const sqlPurchases = purchasesRes.docs.map(docSnapshot => {
             const p = docSnapshot.data();
+            const quantity = Number(p.quantity) || 0;
+            const buyPrice = Number(p.buyPrice ?? p.buy_price) || 0;
             return {
-              id: p.id,
-              productId: p.product_id,
-              productName: "Purchase Item",
-              supplierId: "",
-              supplierName: "Main Depot",
-              quantity: Number(p.quantity) || 0,
-              buyPrice: Number(p.buy_price) || 0,
-              totalAmount: Number(p.quantity * p.buy_price) || 0,
-              date: p.created_at || new Date().toISOString()
+              id: p.id || docSnapshot.id,
+              productId: p.productId || p.product_id || "",
+              productName: p.productName || p.product_name || "Purchase Item",
+              supplierId: p.supplierId || p.supplier_id || "",
+              supplierName: p.supplierName || p.supplier_name || "Main Depot",
+              quantity,
+              buyPrice,
+              totalAmount: Number(p.totalAmount ?? p.total_amount) || quantity * buyPrice,
+              date: p.date || p.created_at || new Date().toISOString(),
+              cashPaid: Number(p.cashPaid ?? p.cash_paid) || 0,
+              dueAmount: Number(p.dueAmount ?? p.due_amount) || 0,
+              invoiceNo: p.invoiceNo || p.invoice_no || "",
+              note: p.note || ""
             };
           });
           if (!finalData) finalData = { id: syncId, linked_email: cleanEmail };
