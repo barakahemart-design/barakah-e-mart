@@ -647,6 +647,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               category: p.category || "Electronics",
               unit: p.unit || "piece",
               imageUrl: p.imageUrl || p.image_url || undefined,
+              ...(Array.isArray(p.costLots) ? { costLots: p.costLots } : (Array.isArray(p.cost_lots) ? { costLots: p.cost_lots } : {})),
               warranty: p.warranty || p.warranty_period || "",
               warrantyDetails: p.warrantyDetails || p.warranty_details || ""
             };
