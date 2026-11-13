@@ -2591,20 +2591,21 @@ export default function App() {
       }
     }
 
-    // Refund stock back to products catalog
+    // Restore each sold unit to the same FIFO lot it originally came from.
     const restoredProducts = products.map(prod => {
-      const soldItem = t.items.find(item => item.productId === prod.id || item.id === prod.id);
-      if (soldItem) {
-        const nextP = {
-          ...prod,
-          stock: prod.stock + (soldItem.quantity ?? 0)
-        };
-        if (activeUser && !activeUser.isGuest) {
-          saveProduct(activeUser.uid, nextP).catch(err => {});
-        }
-        return nextP;
+      const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
+        item.productId === prod.id || item.id === prod.id
+      );
+      if (soldItems.length === 0) return prod;
+
+      let nextP: any = prod;
+      soldItems.forEach(soldItem => {
+        nextP = restoreFifoCost(nextP, soldItem);
+      });
+      if (activeUser && !activeUser.isGuest) {
+        saveProduct(activeUser.uid, nextP).catch(err => {});
       }
-      return prod;
+      return nextP;
     });
 
     setProducts(restoredProducts);
