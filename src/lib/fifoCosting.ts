@@ -431,7 +431,9 @@ export function getCostAllocationsForItem(item: any, fallbackUnitCost = 0): Cost
       if (Number.isInteger(allocationQty) && allocationQty <= 1000) {
         for (let unitIndex = 0; unitIndex < allocationQty; unitIndex += 1) {
           expanded.push({
-            id: `${String(allocation?.id || `allocation-${index + 1}`)}-${unitIndex + 1}`,
+            id: allocationQty === 1
+              ? String(allocation?.id || `allocation-${index + 1}`)
+              : `${String(allocation?.id || `allocation-${index + 1}`)}-${unitIndex + 1}`,
             ...base,
             quantity: 1
           });
