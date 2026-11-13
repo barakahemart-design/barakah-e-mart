@@ -2344,34 +2344,75 @@ export default function App() {
     const originalPur = purchases.find(p => p.id === id);
     if (!originalPur) return;
     const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
+    const updatedPur = {
+      ...originalPur,
+      ...updatedFields,
+      productId: updatedFields.productId ?? originalPur.productId,
+      quantity: Number(updatedFields.quantity ?? originalPur.quantity),
+      buyPrice: Number(updatedFields.unitPrice ?? updatedFields.buyPrice ?? originalPur.buyPrice),
+      totalAmount: Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice)))
+    };
 
-    const updatedPur = { ...originalPur, ...updatedFields };
+    const originalProduct = products.find(prod => prod.id === originalPur.productId);
+    const originalLot = originalProduct?.costLots?.find((lot: any) => lot.id === id || lot.purchaseId === id);
+    const lotSoldQuantity = originalLot
+      ? Math.max(0, Number(originalLot.receivedQuantity || 0) - Number(originalLot.remainingQuantity || 0))
+      : 0;
+
+    if (originalLot && updatedPur.productId !== originalPur.productId && lotSoldQuantity > 0.000001) {
+      triggerNotification("This purchase batch has already supplied sold units. Its product cannot be changed because that would break FIFO cost history.", "error");
+      return;
+    }
+
+    if (originalLot && updatedPur.productId === originalPur.productId) {
+      const checkedUpdate = updatePurchaseCostLot(originalProduct, id, updatedPur);
+      if (!checkedUpdate) {
+        triggerNotification("Purchase quantity cannot be reduced below the quantity already sold from this batch.", "error");
+        return;
+      }
+    }
+
     setPurchases(purchases.map(p => p.id === id ? updatedPur : p));
     if (activeUser && !activeUser.isGuest && targetUid) {
       savePurchase(targetUid, updatedPur).catch(err => {});
     }
 
     const updatedProds = products.map(prod => {
-      let updatedStock = prod.stock;
-      let updatedBuyPrice = prod.buyPrice;
+      if (updatedPur.productId === originalPur.productId && prod.id === originalPur.productId) {
+        if (originalLot) {
+          const nextP = updatePurchaseCostLot(prod, id, updatedPur) || prod;
+          if (activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+          return nextP;
+        }
+        const nextP = {
+          ...prod,
+          stock: Number(prod.stock || 0) - Number(originalPur.quantity || 0) + Number(updatedPur.quantity || 0),
+          buyPrice: updatedPur.buyPrice
+        };
+        if (activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+        return nextP;
+      }
 
-      if (prod.id === originalPur.productId) {
-        updatedStock -= originalPur.quantity;
-      }
-      if (prod.id === updatedFields.productId) {
-        updatedStock += updatedFields.quantity;
-        updatedBuyPrice = updatedFields.unitPrice;
+      if (updatedPur.productId !== originalPur.productId && prod.id === originalPur.productId) {
+        const nextP = originalLot
+          ? removePurchaseCostLot(prod, id)
+          : { ...prod, stock: Math.max(0, Number(prod.stock || 0) - Number(originalPur.quantity || 0)) };
+        if (nextP && activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+        return nextP || prod;
       }
 
-      const nextP = {
-        ...prod,
-        stock: updatedStock,
-        buyPrice: updatedBuyPrice
-      };
-      if ((prod.id === originalPur.productId || prod.id === updatedFields.productId) && activeUser && !activeUser.isGuest && targetUid) {
-        saveProduct(targetUid, nextP).catch(err => {});
+      if (updatedPur.productId !== originalPur.productId && prod.id === updatedPur.productId) {
+        const nextP = originalLot
+          ? addPurchaseCostLot(prod, updatedPur)
+          : {
+              ...prod,
+              stock: Number(prod.stock || 0) + Number(updatedPur.quantity || 0),
+              buyPrice: updatedPur.buyPrice
+            };
+        if (activeUser && !activeUser.isGuest && targetUid) saveProduct(targetUid, nextP).catch(err => {});
+        return nextP;
       }
-      return nextP;
+      return prod;
     });
     setProducts(updatedProds);
 
