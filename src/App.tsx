@@ -67,6 +67,19 @@ import {
   safeEndOfDay,
   safeSubDays
 } from "./lib/dateUtils";
+import {
+  addPurchaseCostLot,
+  allocateFifoCost,
+  getAverageCostFromAllocations,
+  getCostAllocationsForItem,
+  normalizeCostLots,
+  removePurchaseCostLot,
+  restoreFifoCost,
+  returnPurchaseCostLot,
+  updateAllCostAllocations,
+  updateOneCostAllocation,
+  updatePurchaseCostLot
+} from "./lib/fifoCosting";
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
@@ -115,6 +128,7 @@ export interface Product {
   imageUrl?: string;
   warranty?: string;
   warrantyDetails?: string;
+  costLots?: any[];
 }
 
 export interface Purchase {
@@ -160,6 +174,7 @@ export interface TransactionItem {
   total: number;
   productId?: string;
   buyPrice?: number;
+  costAllocations?: any[];
   isNegativeSale?: boolean;
   warranty?: string;
   warrantyDetails?: string;
@@ -729,7 +744,8 @@ export default function App() {
             price: Number(item.sell_price) || 0,
             total: Number(item.quantity * item.sell_price) || 0,
             productId: item.product_id || undefined,
-            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined
+            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
+            costAllocations: item.cost_allocations || item.costAllocations || undefined
           }));
         } else {
           // Keep existing items if present locally or in t.items to protect against incomplete collections snapshot
@@ -776,7 +792,8 @@ export default function App() {
         sellPrice: Number(docData.sellPrice ?? docData.sell_price) || 0,
         category: docData.category || "Electronics",
         unit: docData.unit || "piece",
-        imageUrl: docData.imageUrl || docData.image_url || undefined
+        imageUrl: docData.imageUrl || docData.image_url || undefined,
+        costLots: Array.isArray(docData.costLots) ? docData.costLots : (Array.isArray(docData.cost_lots) ? docData.cost_lots : undefined)
       }));
 
       localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(updatedList));
@@ -911,6 +928,7 @@ export default function App() {
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
         cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
+        cost_allocations: docData.cost_allocations || docData.costAllocations || undefined,
         warranty: docData.warranty || "",
         warranty_details: docData.warranty_details || ""
       }));
@@ -1624,6 +1642,7 @@ export default function App() {
           quantity: Number(nestedIt.quantity) || 0,
           sell_price: Number(nestedIt.price) || 0,
           cost_price: Number(nestedIt.buyPrice) || 0,
+          cost_allocations: nestedIt.costAllocations || [],
           warranty: nestedIt.warranty || "",
           warranty_details: nestedIt.warrantyDetails || ""
         };
@@ -1690,6 +1709,7 @@ export default function App() {
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: Number(nestedIt.buyPrice) || 0,
+            cost_allocations: nestedIt.costAllocations || [],
             user_id: activeUserId,
             store_id: cleanEmail,
             email: cleanEmail
@@ -2173,7 +2193,8 @@ export default function App() {
             product_name: nestedIt.name || "Product Item",
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
-            cost_price: Number(nestedIt.buyPrice) || 0
+            cost_price: Number(nestedIt.buyPrice) || 0,
+            cost_allocations: nestedIt.costAllocations || []
           };
 
           const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === txId && x.product_id === productUUID));
@@ -2628,6 +2649,7 @@ export default function App() {
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0,
+            cost_allocations: nestedIt.costAllocations || [],
             warranty: nestedIt.warranty || "",
             warranty_details: nestedIt.warrantyDetails || ""
           };
