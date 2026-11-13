@@ -413,22 +413,62 @@ export function resizeFifoSaleItem(product: any, oldItem: any, newItem: any, sal
 
 /** Legacy sale lines are expanded to individual units for the ledger editor. */
 export function getCostAllocationsForItem(item: any, fallbackUnitCost = 0): CostAllocation[] {
+  const targetQuantity = cleanQty(item?.quantity);
+  const fallbackCost = Math.max(0, num(item?.buyPrice ?? fallbackUnitCost));
+  if (targetQuantity <= EPSILON) return [];
+
   if (Array.isArray(item?.costAllocations) && item.costAllocations.length) {
-    return item.costAllocations.map((allocation: any, index: number) => ({
-      id: String(allocation?.id || `allocation-${index + 1}`),
-      ...(allocation?.lotId ? { lotId: String(allocation.lotId) } : {}),
-      ...(allocation?.purchaseId ? { purchaseId: String(allocation.purchaseId) } : {}),
-      source: String(allocation?.source || "legacy"),
-      quantity: cleanQty(allocation?.quantity) || 1,
-      unitCost: Math.max(0, num(allocation?.unitCost))
-    }));
+    const expanded: CostAllocation[] = [];
+    item.costAllocations.forEach((allocation: any, index: number) => {
+      const allocationQty = cleanQty(allocation?.quantity) || 1;
+      const unitCost = Math.max(0, num(allocation?.unitCost));
+      const base = {
+        ...(allocation?.lotId ? { lotId: String(allocation.lotId) } : {}),
+        ...(allocation?.purchaseId ? { purchaseId: String(allocation.purchaseId) } : {}),
+        source: String(allocation?.source || "legacy"),
+        unitCost
+      };
+      if (Number.isInteger(allocationQty) && allocationQty <= 1000) {
+        for (let unitIndex = 0; unitIndex < allocationQty; unitIndex += 1) {
+          expanded.push({
+            id: `${String(allocation?.id || `allocation-${index + 1}`)}-${unitIndex + 1}`,
+            ...base,
+            quantity: 1
+          });
+        }
+      } else {
+        expanded.push({
+          id: String(allocation?.id || `allocation-${index + 1}`),
+          ...base,
+          quantity: allocationQty
+        });
+      }
+    });
+
+    const normalized: CostAllocation[] = [];
+    let remaining = targetQuantity;
+    for (const allocation of expanded) {
+      if (remaining <= EPSILON) break;
+      const keep = Math.min(allocation.quantity, remaining);
+      normalized.push({ ...allocation, quantity: keep });
+      remaining -= keep;
+    }
+    if (remaining > EPSILON) {
+      normalized.push(...makeUnitAllocations(
+        remaining,
+        fallbackCost,
+        undefined,
+        undefined,
+        "legacy-fill",
+        `legacy-fill-${item?.id || "item"}`
+      ));
+    }
+    return normalized;
   }
 
-  const qty = cleanQty(item?.quantity);
-  const cost = Math.max(0, num(item?.buyPrice ?? fallbackUnitCost));
   return makeUnitAllocations(
-    qty,
-    cost,
+    targetQuantity,
+    fallbackCost,
     undefined,
     undefined,
     "legacy",
