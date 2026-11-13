@@ -68,6 +68,7 @@ import {
   safeSubDays
 } from "./lib/dateUtils";
 import {
+  addManualCostLot,
   addPurchaseCostLot,
   allocateFifoCost,
   getAverageCostFromAllocations,
@@ -2060,14 +2061,18 @@ export default function App() {
     setDangerConfirmText("");
   };
 
-  // Replenish stock count
+  // Replenish stock count with an explicit FIFO cost layer at the current catalog cost.
   const incrementProductStock = (id: string) => {
-    setProducts(products.map((p) => {
-      if (p.id === id) {
-        return { ...p, stock: p.stock + 10 };
+    const lotId = `manual-increment-${id}-${Date.now()}`;
+    const updatedProducts = products.map((product) => {
+      if (product.id !== id) return product;
+      const nextP = addManualCostLot(product, 10, product.buyPrice, lotId);
+      if (activeUser && !activeUser.isGuest) {
+        saveProduct(activeUser.uid, nextP).catch(err => console.error("Manual stock adjustment sync failed:", err));
       }
-      return p;
-    }));
+      return nextP;
+    });
+    setProducts(updatedProducts);
     triggerNotification("10 units added to product stock successfully.");
   };
 
@@ -6371,16 +6376,20 @@ _${businessInfo.name}_`;
                               };
 
                               setPurchases([newPur, ...purchases]);
-                              setProducts(products.map(p => {
+                              if (activeUser && !activeUser.isGuest) {
+                                savePurchase(activeUser.uid, newPur).catch(err => console.error("Supplier credit purchase sync failed:", err));
+                              }
+                              const updatedDueProducts = products.map(p => {
                                 if (p.id === dueProductId) {
-                                  return {
-                                    ...p,
-                                    stock: p.stock + qty,
-                                    buyPrice: rate
-                                  };
+                                  const nextP = addPurchaseCostLot(p, newPur);
+                                  if (activeUser && !activeUser.isGuest) {
+                                    saveProduct(activeUser.uid, nextP).catch(err => console.error("Supplier credit stock sync failed:", err));
+                                  }
+                                  return nextP;
                                 }
                                 return p;
-                              }));
+                              });
+                              setProducts(updatedDueProducts);
 
                               // Reset input fields
                               setDueQuantity("");
