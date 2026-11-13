@@ -76,6 +76,7 @@ import {
   removePurchaseCostLot,
   restoreFifoCost,
   returnPurchaseCostLot,
+  resizeFifoSaleItem,
   updateAllCostAllocations,
   updateOneCostAllocation,
   updatePurchaseCostLot
@@ -2639,7 +2640,76 @@ export default function App() {
     const originalTx = transactions.find(t => t.id === id);
     if (!originalTx) return;
 
-    const items = updatedFields.items || originalTx.items;
+    const requestedItems = updatedFields.items || originalTx.items;
+    const workingProducts = products.map(product => ({ ...product }));
+    const costedItems: any[] = requestedItems.map(item => ({ ...item }));
+    const matchedRequested = new Set<number>();
+    const needsAllocation = new Set<number>();
+    const findWorkingProduct = (productId?: string) => workingProducts.find(product => product.id === productId);
+    const replaceWorkingProduct = (nextProduct: any) => {
+      const index = workingProducts.findIndex(product => product.id === nextProduct.id);
+      if (index >= 0) workingProducts[index] = nextProduct;
+    };
+
+    // Keep unchanged sold units attached to their original purchase lots.
+    // Return removed/reduced units to their source lot before allocating any additions.
+    (originalTx.items || []).forEach(oldItem => {
+      const oldIdentity = oldItem.id || oldItem.firestoreId;
+      const newIndex = requestedItems.findIndex((candidate: any, index: number) =>
+        !matchedRequested.has(index) &&
+        (oldIdentity
+          ? (candidate.id === oldIdentity || candidate.firestoreId === oldIdentity)
+          : candidate.productId === oldItem.productId)
+      );
+
+      if (newIndex < 0) {
+        const oldProduct = findWorkingProduct(oldItem.productId);
+        if (oldProduct) replaceWorkingProduct(restoreFifoCost(oldProduct, oldItem));
+        return;
+      }
+
+      const candidate = requestedItems[newIndex];
+      if (candidate.productId !== oldItem.productId) {
+        const oldProduct = findWorkingProduct(oldItem.productId);
+        if (oldProduct) replaceWorkingProduct(restoreFifoCost(oldProduct, oldItem));
+        needsAllocation.add(newIndex);
+        return;
+      }
+
+      matchedRequested.add(newIndex);
+      const sameProduct = findWorkingProduct(oldItem.productId);
+      if (sameProduct) {
+        const resized = resizeFifoSaleItem(sameProduct, oldItem, candidate, originalTx.date);
+        replaceWorkingProduct(resized.product);
+        costedItems[newIndex] = resized.item;
+      }
+    });
+
+    // Allocate newly added lines or product replacements from current FIFO stock.
+    requestedItems.forEach((item: any, index: number) => {
+      if (matchedRequested.has(index) && !needsAllocation.has(index)) return;
+      const product = findWorkingProduct(item.productId);
+      if (!product) {
+        costedItems[index] = item;
+        return;
+      }
+      const quantity = Number(item.quantity) || 0;
+      const negativeAtSale = Number(product.stock) < quantity;
+      const allocation = allocateFifoCost(product, quantity, originalTx.date);
+      replaceWorkingProduct({
+        ...allocation.product,
+        hasNegativeSale: negativeAtSale ? true : allocation.product.hasNegativeSale,
+        negativeSaleUpdated: negativeAtSale ? false : allocation.product.negativeSaleUpdated
+      });
+      costedItems[index] = {
+        ...item,
+        buyPrice: allocation.averageUnitCost,
+        costAllocations: allocation.allocations,
+        isNegativeSale: negativeAtSale
+      };
+    });
+
+    const items = costedItems;
     const discount = updatedFields.discount !== undefined ? Math.max(0, Number(updatedFields.discount) || 0) : Math.max(0, Number(originalTx.discount) || 0);
     const originalSubtotal = Number(originalTx.subtotal) || 0;
     const originalTax = Number(originalTx.tax) || 0;
@@ -2652,26 +2722,21 @@ export default function App() {
     const dueBalance = Math.max(total - paidAmount, 0);
     const status = dueBalance === 0 ? "paid" : paidAmount > 0 ? "partial" : "due";
 
-    // Adjust catalog stock levels dynamically: revert old items sold, apply new items sold!
-    const updatedProductsList = products.map(prod => {
-      let updatedStock = prod.stock;
-
-      const oldItem = originalTx.items.find(item => item.productId === prod.id);
-      if (oldItem) {
-        updatedStock += oldItem.quantity;
-      }
-
-      const newItem = items.find(item => item.productId === prod.id);
-      if (newItem) {
-        updatedStock -= newItem.quantity;
-      }
-
-      return {
-        ...prod,
-        stock: updatedStock
-      };
-    });
+    const updatedProductsList = workingProducts;
     setProducts(updatedProductsList);
+    if (activeUser && !activeUser.isGuest) {
+      updatedProductsList.forEach((nextProduct, index) => {
+        const previousProduct = products[index];
+        if (previousProduct && (
+          previousProduct.stock !== nextProduct.stock ||
+          JSON.stringify(previousProduct.costLots || []) !== JSON.stringify(nextProduct.costLots || [])
+        )) {
+          saveProduct(activeUser.uid, nextProduct).catch(err =>
+            console.error("Failed to sync FIFO stock after invoice edit:", err)
+          );
+        }
+      });
+    }
 
     const updatedTransactionsList = transactions.map(t => {
       if (t.id === id) {
@@ -2795,6 +2860,7 @@ export default function App() {
           product_name: item.name || "Product Item",
           product_id: item.productId || null,
           cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+          cost_allocations: item.costAllocations || [],
           warranty: item.warranty || "",
           warranty_details: item.warrantyDetails || ""
         }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
@@ -2837,6 +2903,7 @@ export default function App() {
         total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
         productId: item.productId || "",
         buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+        costAllocations: item.costAllocations || [],
         warranty: item.warranty || "",
         warrantyDetails: item.warrantyDetails || "",
         isNegativeSale: item.isNegativeSale || false
