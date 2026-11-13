@@ -177,6 +177,7 @@ export interface TransactionItem {
   productId?: string;
   buyPrice?: number;
   costAllocations?: any[];
+  category?: string;
   isNegativeSale?: boolean;
   warranty?: string;
   warrantyDetails?: string;
@@ -746,6 +747,7 @@ export default function App() {
             price: Number(item.sell_price) || 0,
             total: Number(item.quantity * item.sell_price) || 0,
             productId: item.product_id || undefined,
+            category: item.category || "",
             buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
             costAllocations: item.cost_allocations || item.costAllocations || undefined
           }));
@@ -935,6 +937,7 @@ export default function App() {
         transaction_id: docData.transaction_id,
         product_id: docData.product_id || null,
         product_name: docData.product_name || "Product Item",
+        category: docData.category || "",
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
         cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
@@ -1591,6 +1594,7 @@ export default function App() {
         id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
         name: cartItem.product.name,
         productId: toUUID(cartItem.product.id, cleanEmail),
+        category: cartItem.product.category || "Uncategorized",
         quantity: cartItem.quantity,
         price: itemPrice,
         total: itemPrice * cartItem.quantity,
@@ -1715,6 +1719,7 @@ export default function App() {
             transaction_id: newTransaction.id,
             product_id: productUUID,
             product_name: nestedIt.name || "Product Item",
+            category: nestedIt.category || "Uncategorized",
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: Number(nestedIt.buyPrice) || 0,
@@ -2802,6 +2807,7 @@ export default function App() {
             transaction_id: id,
             product_id: productUUID,
             product_name: nestedIt.name || "Product Item",
+            category: nestedIt.category || "Uncategorized",
             quantity: Number(nestedIt.quantity) || 0,
             sell_price: Number(nestedIt.price) || 0,
             cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0,
@@ -4484,6 +4490,8 @@ _${businessInfo.name}_`;
           {/* -------------------- VIEW 0: BUSINESS DASHBOARD & PERIOD FILTERS -------------------- */}
           {activeTab === "dashboard" && (
             <DashboardView
+              products={products}
+              transactions={transactions}
               businessInfo={businessInfo}
               isBackingUp={isBackingUp}
               isRestoring={isRestoring}
