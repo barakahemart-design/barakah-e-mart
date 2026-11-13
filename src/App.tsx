@@ -855,17 +855,25 @@ export default function App() {
     const unsubPurchases = subscribePurchases(activeUserId, (items) => {
       markRemoteUpdateActive();
 
-      const updatedList = items.map(docData => ({
-        id: docData.id,
-        productId: docData.product_id,
-        productName: "Purchase Item",
-        supplierId: "",
-        supplierName: "Main Depot",
-        quantity: Number(docData.quantity) || 0,
-        buyPrice: Number(docData.buy_price) || 0,
-        totalAmount: Number(docData.quantity * docData.buy_price) || 0,
-        date: docData.created_at || new Date().toISOString()
-      }));
+      const updatedList = items.map(docData => {
+        const quantity = Number(docData.quantity) || 0;
+        const buyPrice = Number(docData.buyPrice ?? docData.buy_price) || 0;
+        return {
+          id: docData.id,
+          productId: docData.productId || docData.product_id || "",
+          productName: docData.productName || docData.product_name || "Purchase Item",
+          supplierId: docData.supplierId || docData.supplier_id || "",
+          supplierName: docData.supplierName || docData.supplier_name || "Main Depot",
+          quantity,
+          buyPrice,
+          totalAmount: Number(docData.totalAmount ?? docData.total_amount) || quantity * buyPrice,
+          date: docData.date || docData.created_at || new Date().toISOString(),
+          cashPaid: Number(docData.cashPaid ?? docData.cash_paid) || 0,
+          dueAmount: Number(docData.dueAmount ?? docData.due_amount) || 0,
+          invoiceNo: docData.invoiceNo || docData.invoice_no || "",
+          note: docData.note || ""
+        };
+      });
 
       localStorage.setItem(getDbKey("barakah_purchases", undefined, activeUserId), JSON.stringify(updatedList));
       initialLoadedRef.current = false;
