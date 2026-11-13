@@ -1561,25 +1561,42 @@ export default function App() {
       ? new Date(posCustomDate + "T" + new Date().toTimeString().split(" ")[0]).toISOString()
       : new Date().toISOString();
 
+    // Allocate each sold unit from the oldest available purchase-cost lot.
+    // Legacy stock is represented by an opening lot at the current catalog cost.
+    const fifoProductUpdates = new Map<string, any>();
+    const costedCartItems = posCart.map((cartItem, idx) => {
+      const productId = cartItem.product.id;
+      const sourceProduct = fifoProductUpdates.get(productId) || products.find(p => p.id === productId) || cartItem.product;
+      const negativeAtSale = Number(sourceProduct.stock) < Number(cartItem.quantity);
+      const allocation = allocateFifoCost(sourceProduct, cartItem.quantity, targetDateStr);
+      const nextProduct = {
+        ...allocation.product,
+        hasNegativeSale: negativeAtSale ? true : allocation.product.hasNegativeSale,
+        negativeSaleUpdated: negativeAtSale ? false : allocation.product.negativeSaleUpdated
+      };
+      fifoProductUpdates.set(productId, nextProduct);
+
+      const itemPrice = cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice;
+      return {
+        id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
+        name: cartItem.product.name,
+        productId: toUUID(cartItem.product.id, cleanEmail),
+        quantity: cartItem.quantity,
+        price: itemPrice,
+        total: itemPrice * cartItem.quantity,
+        buyPrice: allocation.averageUnitCost,
+        costAllocations: allocation.allocations,
+        warranty: cartItem.warranty || "",
+        warrantyDetails: cartItem.product.warrantyDetails || "",
+        isNegativeSale: negativeAtSale
+      };
+    });
+
     const newTransaction: Transaction = {
       id: uniqueTxId,
       invoiceNo: uniqueInvoiceNo,
       date: targetDateStr,
-      items: posCart.map((cartItem, idx) => {
-        const itemPrice = cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice;
-        return {
-          id: toUUID(`ti_${idx}_${Date.now()}`, cleanEmail),
-          name: cartItem.product.name,
-          productId: toUUID(cartItem.product.id, cleanEmail),
-          quantity: cartItem.quantity,
-          price: itemPrice,
-          total: itemPrice * cartItem.quantity,
-          buyPrice: cartItem.product.buyPrice || 0,
-          warranty: cartItem.warranty || "",
-          warrantyDetails: cartItem.product.warrantyDetails || "",
-          isNegativeSale: cartItem.product.stock < cartItem.quantity
-        };
-      }),
+      items: costedCartItems,
       subtotal: cartSubtotal,
       tax: calculatedTaxAmount,
       discount: customerDiscount,
@@ -1592,27 +1609,9 @@ export default function App() {
       customerSignature: signatureStr
     };
 
-    // Deduct stock levels corresponding to invoice (allowing negative stock per requirements)
-    const updatedProducts = products.map((p) => {
-      const soldItem = posCart.find(cartItem => 
-        cartItem.product.id === p.id || 
-        (p.sku && cartItem.product.sku === p.sku) || 
-        (cartItem.product.name && cartItem.product.name.trim().toLowerCase() === p.name.trim().toLowerCase())
-      );
-      if (soldItem) {
-        const nextStock = p.stock - soldItem.quantity;
-        if (nextStock < 0) {
-          return {
-            ...p,
-            stock: nextStock,
-            hasNegativeSale: true,
-            negativeSaleUpdated: false
-          };
-        }
-        return { ...p, stock: nextStock };
-      }
-      return p;
-    });
+    const updatedProducts = products.map((product) =>
+      fifoProductUpdates.get(product.id) || product
+    );
 
     setProducts(updatedProducts);
     setTransactions([newTransaction, ...transactions]);
