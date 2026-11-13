@@ -39,8 +39,8 @@ function makeUnitAllocations(
   if (Number.isInteger(qty) && qty <= 100) {
     return Array.from({ length: qty }, (_, index) => ({
       id: `${seed}-${index + 1}`,
-      lotId,
-      purchaseId,
+      ...(lotId ? { lotId } : {}),
+      ...(purchaseId ? { purchaseId } : {}),
       source,
       quantity: 1,
       unitCost
@@ -49,8 +49,8 @@ function makeUnitAllocations(
 
   return [{
     id: seed,
-    lotId,
-    purchaseId,
+    ...(lotId ? { lotId } : {}),
+    ...(purchaseId ? { purchaseId } : {}),
     source,
     quantity: qty,
     unitCost
@@ -80,7 +80,7 @@ export function normalizeCostLots(product: any): CostLot[] {
 
   const lots: CostLot[] = rawLots.map((lot: any, index: number) => ({
     id: String(lot?.id || `legacy-lot-${index}`),
-    purchaseId: lot?.purchaseId ? String(lot.purchaseId) : undefined,
+    ...(lot?.purchaseId ? { purchaseId: String(lot.purchaseId) } : {}),
     source: (lot?.source || "purchase") as CostLot["source"],
     receivedAt: String(lot?.receivedAt || "1970-01-01T00:00:00.000Z"),
     receivedQuantity: cleanQty(lot?.receivedQuantity ?? lot?.remainingQuantity),
@@ -394,8 +394,8 @@ export function getCostAllocationsForItem(item: any, fallbackUnitCost = 0): Cost
   if (Array.isArray(item?.costAllocations) && item.costAllocations.length) {
     return item.costAllocations.map((allocation: any, index: number) => ({
       id: String(allocation?.id || `allocation-${index + 1}`),
-      lotId: allocation?.lotId ? String(allocation.lotId) : undefined,
-      purchaseId: allocation?.purchaseId ? String(allocation.purchaseId) : undefined,
+      ...(allocation?.lotId ? { lotId: String(allocation.lotId) } : {}),
+      ...(allocation?.purchaseId ? { purchaseId: String(allocation.purchaseId) } : {}),
       source: String(allocation?.source || "legacy"),
       quantity: cleanQty(allocation?.quantity) || 1,
       unitCost: Math.max(0, num(allocation?.unitCost))
