@@ -2425,47 +2425,58 @@ export default function App() {
 
     const matchedProduct = products.find(p => p.id === pur.productId);
     const availableStock = matchedProduct ? matchedProduct.stock : 0;
-    
+
     if (returnQty > availableStock) {
       triggerNotification(`Not enough item stock in warehouse! Available stock is ${availableStock} pcs, cannot return ${returnQty} pcs.`, "error");
       return;
+    }
+
+    const trackedLot = matchedProduct?.costLots?.find((lot: any) => lot.id === id || lot.purchaseId === id);
+    let nextTrackedProduct: any = null;
+    if (trackedLot && matchedProduct) {
+      nextTrackedProduct = returnPurchaseCostLot(matchedProduct, id, returnQty);
+      if (!nextTrackedProduct) {
+        triggerNotification("This purchase batch does not have enough unsold units available to return. Already-sold units cannot be returned to the supplier.", "error");
+        return;
+      }
     }
 
     const returnVal = parseFloat((returnQty * pur.buyPrice).toFixed(2));
     const oldDue = pur.dueAmount || 0;
     const nextDue = Math.max(0, parseFloat((oldDue - returnVal).toFixed(2)));
     const nextTotal = Math.max(0, parseFloat((pur.totalAmount - returnVal).toFixed(2)));
-    
-    // If return value exceeds outstanding credit debt, decrease cashPaid (representing a supplier refund)
     const refundCash = Math.max(0, parseFloat((returnVal - oldDue).toFixed(2)));
     const nextCashPaid = Math.max(0, parseFloat(((pur.cashPaid || 0) - refundCash).toFixed(2)));
 
-    // Update product stock
-    setProducts(products.map(p => {
-      if (p.id === pur.productId) {
-        return {
-          ...p,
-          stock: Math.max(0, p.stock - returnQty)
-        };
+    const updatedProducts = products.map(product => {
+      if (product.id !== pur.productId) return product;
+      const nextP = trackedLot && nextTrackedProduct
+        ? nextTrackedProduct
+        : { ...product, stock: Math.max(0, product.stock - returnQty) };
+      if (activeUser && !activeUser.isGuest) {
+        saveProduct(activeUser.uid, nextP).catch(err => console.error("Purchase return stock sync failed:", err));
       }
-      return p;
-    }));
+      return nextP;
+    });
+    setProducts(updatedProducts);
 
-    // Update purchase logs
-    setPurchases(purchases.map(item => {
-      if (item.id === pur.id) {
-        const nextQty = Math.max(0, item.quantity - returnQty);
-        return {
-          ...item,
-          quantity: nextQty,
-          totalAmount: nextTotal,
-          dueAmount: nextDue,
-          cashPaid: nextCashPaid,
-          note: (item.note || "") + ` [Returned ${returnQty} pcs on ${safeFormat(new Date(), "dd-MM-yyyy")}]`
-        };
-      }
-      return item;
-    }));
+    const updatedPurchases = purchases.map(item => {
+      if (item.id !== pur.id) return item;
+      const nextQty = Math.max(0, item.quantity - returnQty);
+      return {
+        ...item,
+        quantity: nextQty,
+        totalAmount: nextTotal,
+        dueAmount: nextDue,
+        cashPaid: nextCashPaid,
+        note: (item.note || "") + ` [Returned ${returnQty} pcs on ${safeFormat(new Date(), "dd-MM-yyyy")}]`
+      };
+    });
+    setPurchases(updatedPurchases);
+    const updatedPurchase = updatedPurchases.find(item => item.id === pur.id);
+    if (updatedPurchase && activeUser && !activeUser.isGuest) {
+      savePurchase(activeUser.uid, updatedPurchase).catch(err => console.error("Purchase return ledger sync failed:", err));
+    }
 
     triggerNotification(`Successfully returned ${returnQty} units of ${pur.productName}. Purchase/Due balance reduced by ${businessInfo.currencySymbol} ${returnVal.toLocaleString()}!`, "success");
   };
