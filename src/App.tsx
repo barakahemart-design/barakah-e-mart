@@ -2138,86 +2138,98 @@ export default function App() {
     triggerNotification(updated ? "Product negative stock marked as green / updated! 🟢" : "Product negative stock reset to red.", "success");
   };
 
-  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
-    // 1. Generate updated transactions list locally to immediately persist flat items
-    const updatedTransactions = transactions.map(t => {
-      if (t.id === txId) {
-        const updatedItems = t.items.map((it, idx) => {
-          if (idx === itemIdx) {
-            return {
-              ...it,
-              buyPrice: newBuyPrice,
-              isNegativeSaleApproved: isApproved !== undefined ? isApproved : it.isNegativeSaleApproved,
-              negativeSaleUpdated: isApproved !== undefined ? isApproved : it.negativeSaleUpdated
-            };
-          }
-          return it;
-        });
-        return {
-          ...t,
-          items: updatedItems
-        };
-      }
-      return t;
+  const persistTransactionItemCost = (txId: string, itemIdx: number, updatedTransactions: any[]) => {
+    const targetTx = updatedTransactions.find(t => t.id === txId);
+    const item = targetTx?.items?.[itemIdx];
+    if (!item) return;
+
+    const itemId = item.id || `${txId}_item_${itemIdx}`;
+    updateDoc(doc(db, "transaction_items", itemId), {
+      cost_price: Number(item.buyPrice) || 0,
+      cost_allocations: item.costAllocations || []
+    }).catch((e) => {
+      console.error("Failed to update transaction item cost in Firestore:", e);
     });
 
-    setTransactions(updatedTransactions);
-
-    // 2. Write only the corresponding transaction_items Firestore document's cost_price
-    const targetTxToUpdate = transactions.find(t => t.id === txId);
-    if (targetTxToUpdate && Array.isArray(targetTxToUpdate.items)) {
-      const item = targetTxToUpdate.items[itemIdx];
-      if (item) {
-        const itemId = item.id || `${txId}_item_${itemIdx}`;
-        updateDoc(doc(db, "transaction_items", itemId), { cost_price: newBuyPrice }).catch((e) => {
-          console.error("Failed to update transaction item cost_price in Firestore:", e);
-        });
-      }
-    }
-
-    // 3. Regenerate and overwrite barakah_flat_transaction_items in localStorage
     try {
       const activeUserId = activeUser?.uid;
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
       let flatItems = JSON.parse(rawLocalItems);
       if (!Array.isArray(flatItems)) flatItems = [];
-
-      const targetTx = updatedTransactions.find(t => t.id === txId);
-      if (targetTx && Array.isArray(targetTx.items)) {
-        targetTx.items.forEach((nestedIt: any, idx: number) => {
-          const itemUUID = nestedIt.id || `${txId}_item_${idx}`;
-          const productUUID = nestedIt.productId || null;
-
-          const flatItem = {
-            id: itemUUID,
-            transaction_id: txId,
-            product_id: productUUID,
-            product_name: nestedIt.name || "Product Item",
-            quantity: Number(nestedIt.quantity) || 0,
-            sell_price: Number(nestedIt.price) || 0,
-            cost_price: Number(nestedIt.buyPrice) || 0,
-            cost_allocations: nestedIt.costAllocations || []
-          };
-
-          const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === txId && x.product_id === productUUID));
-          if (flatIdx >= 0) {
-            flatItems[flatIdx] = {
-              ...flatItems[flatIdx],
-              ...flatItem
-            };
-          } else {
-            flatItems.push(flatItem);
-          }
-        });
-      }
+      const productUUID = item.productId || null;
+      const flatItem = {
+        id: itemId,
+        transaction_id: txId,
+        product_id: productUUID,
+        product_name: item.name || "Product Item",
+        quantity: Number(item.quantity) || 0,
+        sell_price: Number(item.price) || 0,
+        cost_price: Number(item.buyPrice) || 0,
+        cost_allocations: item.costAllocations || []
+      };
+      const flatIdx = flatItems.findIndex((entry: any) =>
+        entry.id === itemId || (entry.transaction_id === txId && entry.product_id === productUUID)
+      );
+      if (flatIdx >= 0) flatItems[flatIdx] = { ...flatItems[flatIdx], ...flatItem };
+      else flatItems.push(flatItem);
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
     } catch (err) {
-      console.warn("Failed to update flat items in localStorage:", err);
+      console.warn("Failed to update unit cost in localStorage:", err);
+    }
+  };
+
+  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
+    const updatedTransactions = transactions.map(t => {
+      if (t.id !== txId) return t;
+      const updatedItems = t.items.map((it, idx) => {
+        if (idx !== itemIdx) return it;
+        return {
+          ...updateAllCostAllocations(it, newBuyPrice),
+          isNegativeSaleApproved: isApproved !== undefined ? isApproved : it.isNegativeSaleApproved,
+          negativeSaleUpdated: isApproved !== undefined ? isApproved : it.negativeSaleUpdated
+        };
+      });
+      return { ...t, items: updatedItems };
+    });
+
+    setTransactions(updatedTransactions);
+    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+
+    // The negative-stock editor's optional checkbox updates only the catalog
+    // default. It never overwrites any other sold unit's saved cost.
+    if (productId) {
+      const updatedProducts = products.map(product => {
+        if (product.id !== productId) return product;
+        const nextProduct = { ...product, buyPrice: newBuyPrice };
+        if (activeUser && !activeUser.isGuest) {
+          saveProduct(activeUser.uid, nextProduct).catch(err =>
+            console.error("Failed to update catalog default cost:", err)
+          );
+        }
+        return nextProduct;
+      });
+      setProducts(updatedProducts);
     }
 
     triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
+  };
+
+  const handleUpdateTransactionItemUnitCost = (txId: string, itemIdx: number, allocationIdx: number, newUnitCost: number) => {
+    if (!Number.isFinite(newUnitCost) || newUnitCost < 0) return;
+
+    const updatedTransactions = transactions.map(t => {
+      if (t.id !== txId) return t;
+      const updatedItems = t.items.map((it, idx) =>
+        idx === itemIdx ? updateOneCostAllocation(it, allocationIdx, newUnitCost) : it
+      );
+      return { ...t, items: updatedItems };
+    });
+
+    setTransactions(updatedTransactions);
+    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+    triggerNotification("Only the selected unit's cost price was updated.", "success");
   };
 
   const handleNavigateToCustomer = (customerName: string) => {
