@@ -267,6 +267,28 @@ export function addPurchaseCostLot(product: any, purchase: any): any {
   };
 }
 
+/** Record a manual stock increase as its own cost lot at the supplied unit cost. */
+export function addManualCostLot(product: any, quantity: number, unitCost: number, lotId?: string, receivedAt?: string): any {
+  const lots = normalizeCostLots(product);
+  const qty = cleanQty(quantity);
+  if (qty > EPSILON) {
+    lots.push({
+      id: lotId || `manual-${product?.id || "product"}-${Date.now()}`,
+      source: "manual",
+      receivedAt: receivedAt || new Date().toISOString(),
+      receivedQuantity: qty,
+      remainingQuantity: qty,
+      unitCost: Math.max(0, num(unitCost))
+    });
+  }
+  return {
+    ...product,
+    stock: num(product?.stock) + qty,
+    buyPrice: Math.max(0, num(unitCost)),
+    costLots: lots
+  };
+}
+
 /** Update a purchase lot. Returns null when the edit would erase already-sold units. */
 export function updatePurchaseCostLot(product: any, purchaseId: string, purchase: any): any | null {
   const lots = normalizeCostLots(product);
