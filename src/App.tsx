@@ -2303,8 +2303,20 @@ export default function App() {
     }
     const matchingPur = purchases.find(p => p.id === id);
     if (!matchingPur) return;
-    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
 
+    const purchaseProduct = products.find(p => p.id === matchingPur.productId);
+    const trackedLot = purchaseProduct?.costLots?.find((lot: any) =>
+      lot.id === id || lot.purchaseId === id
+    );
+    if (trackedLot) {
+      const soldFromLot = Math.max(0, Number(trackedLot.receivedQuantity || 0) - Number(trackedLot.remainingQuantity || 0));
+      if (soldFromLot > 0.000001) {
+        triggerNotification("This purchase batch has already supplied sold units. It cannot be deleted because that would break the sales cost history.", "error");
+        return;
+      }
+    }
+
+    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
     await deleteCloudDocument("purchases", id);
     if (activeUser && !activeUser.isGuest) {
       deletePurchase(id).catch(err => {});
@@ -2312,17 +2324,17 @@ export default function App() {
     setPurchases(purchases.filter(p => p.id !== id));
 
     const updatedProds = products.map(p => {
-      if (p.id === matchingPur.productId) {
-        const nextP = {
-          ...p,
-          stock: Math.max(p.stock - matchingPur.quantity, 0)
-        };
-        if (activeUser && !activeUser.isGuest && targetUid) {
-          saveProduct(targetUid, nextP).catch(err => {});
-        }
-        return nextP;
+      if (p.id !== matchingPur.productId) return p;
+      const hadTrackedLot = Array.isArray(p.costLots) && p.costLots.some((lot: any) => lot.id === id || lot.purchaseId === id);
+      const removedLotProduct = removePurchaseCostLot(p, id);
+      if (!removedLotProduct) return p;
+      const nextP = hadTrackedLot
+        ? removedLotProduct
+        : { ...removedLotProduct, stock: Math.max(0, Number(p.stock || 0) - Number(matchingPur.quantity || 0)) };
+      if (activeUser && !activeUser.isGuest && targetUid) {
+        saveProduct(targetUid, nextP).catch(err => {});
       }
-      return p;
+      return nextP;
     });
     setProducts(updatedProds);
     triggerNotification("Purchase record has been successfully deleted and inventory adjusted.", "success");
