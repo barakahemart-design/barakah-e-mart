@@ -712,7 +712,8 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
                 price: Number(item.sell_price) || 0,
                 total: Number(item.quantity * item.sell_price) || 0,
                 productId: item.product_id || undefined,
-                buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,\n                costAllocations: item.cost_allocations || item.costAllocations || undefined,
+                buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
+                costAllocations: item.cost_allocations || item.costAllocations || undefined,
                 warranty: item.warranty || "",
                 warrantyDetails: item.warrantyDetails || item.warranty_details || ""
               };
