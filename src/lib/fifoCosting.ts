@@ -121,7 +121,7 @@ export function normalizeCostLots(product: any): CostLot[] {
     }
   }
 
-  return lots.filter(lot => lot.remainingQuantity > EPSILON);
+  return lots;
 }
 
 /** Consume available stock from the oldest cost lots first. Any oversold
@@ -291,7 +291,7 @@ export function updatePurchaseCostLot(product: any, purchaseId: string, purchase
     ...product,
     stock: num(product?.stock) + delta,
     buyPrice: Math.max(0, num(purchase.buyPrice)),
-    costLots: lots.filter(item => item.remainingQuantity > EPSILON)
+    costLots: lots
   };
 }
 
@@ -323,7 +323,7 @@ export function returnPurchaseCostLot(product: any, purchaseId: string, quantity
   return {
     ...product,
     stock: Math.max(0, num(product?.stock) - qty),
-    costLots: lots.filter(item => item.remainingQuantity > EPSILON)
+    costLots: lots
   };
 }
 
