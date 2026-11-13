@@ -1778,6 +1778,7 @@ export default function App() {
       stock: Number(newProdStock) || 0,
       unit: newProdUnit
     };
+    parsedProduct.costLots = normalizeCostLots(parsedProduct);
 
     setProducts([...products, parsedProduct]);
     if (activeUser && !activeUser.isGuest) {
@@ -2263,10 +2264,9 @@ export default function App() {
     const updatedProds = products.map(p => {
       if (p.id === pur.productId) {
         const updatedSellPrice = pur.updatedSellPrice !== undefined ? Number(pur.updatedSellPrice) : p.sellPrice;
+        const withCostLot = addPurchaseCostLot(p, newPur);
         const nextP = {
-          ...p,
-          stock: p.stock + pur.quantity,
-          buyPrice: pur.unitPrice, // New purchase price instantly updates P&L basis
+          ...withCostLot,
           sellPrice: !isNaN(updatedSellPrice) ? updatedSellPrice : p.sellPrice
         };
         if (activeUser && !activeUser.isGuest && targetUid) {
