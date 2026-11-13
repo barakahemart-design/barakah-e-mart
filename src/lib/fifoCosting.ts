@@ -212,7 +212,7 @@ export function restoreFifoCost(product: any, item: any): any {
         targetLot.receivedQuantity,
         targetLot.remainingQuantity + allocationQty
       );
-    } else {
+    } else if (allocation.source !== "unallocated" && item?.isNegativeSale !== true) {
       lots.push({
         id: `recovered-${item?.id || Date.now()}-${allocation.id}`,
         source: "recovered",
