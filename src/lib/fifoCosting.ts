@@ -327,6 +327,68 @@ export function returnPurchaseCostLot(product: any, purchaseId: string, quantity
   };
 }
 
+/** Resize an already-sold line while preserving the cost of units that remain sold. */
+export function resizeFifoSaleItem(product: any, oldItem: any, newItem: any, saleDate?: string): {
+  product: any;
+  item: any;
+} {
+  const oldQuantity = cleanQty(oldItem?.quantity);
+  const newQuantity = cleanQty(newItem?.quantity);
+  const oldAllocations = getCostAllocationsForItem(oldItem, product?.buyPrice ?? 0);
+
+  const kept: CostAllocation[] = [];
+  const released: CostAllocation[] = [];
+  let keepRemaining = Math.min(oldQuantity, newQuantity);
+
+  for (const allocation of oldAllocations) {
+    const allocationQty = cleanQty(allocation.quantity);
+    if (keepRemaining <= EPSILON) {
+      released.push({ ...allocation });
+      continue;
+    }
+    const keepQty = Math.min(allocationQty, keepRemaining);
+    if (keepQty > EPSILON) kept.push({ ...allocation, quantity: keepQty });
+    const releaseQty = allocationQty - keepQty;
+    if (releaseQty > EPSILON) {
+      released.push({
+        ...allocation,
+        id: `${allocation.id}-released`,
+        quantity: releaseQty
+      });
+    }
+    keepRemaining -= keepQty;
+  }
+
+  let nextProduct = product;
+  let nextAllocations = kept;
+
+  if (newQuantity < oldQuantity) {
+    const releasedQuantity = oldQuantity - newQuantity;
+    const releasedItem = {
+      ...oldItem,
+      quantity: releasedQuantity,
+      costAllocations: released,
+      buyPrice: getAverageCostFromAllocations({ quantity: releasedQuantity, costAllocations: released }, oldItem?.buyPrice ?? 0)
+    };
+    nextProduct = restoreFifoCost(nextProduct, releasedItem);
+  } else if (newQuantity > oldQuantity) {
+    const additional = allocateFifoCost(nextProduct, newQuantity - oldQuantity, saleDate);
+    nextProduct = additional.product;
+    nextAllocations = [...kept, ...additional.allocations];
+  }
+
+  const totalQty = nextAllocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
+  const totalCost = nextAllocations.reduce((sum, allocation) => sum + allocation.quantity * allocation.unitCost, 0);
+  return {
+    product: nextProduct,
+    item: {
+      ...newItem,
+      costAllocations: nextAllocations,
+      buyPrice: totalQty > EPSILON ? totalCost / totalQty : Math.max(0, num(newItem?.buyPrice))
+    }
+  };
+}
+
 /** Legacy sale lines are expanded to individual units for the ledger editor. */
 export function getCostAllocationsForItem(item: any, fallbackUnitCost = 0): CostAllocation[] {
   if (Array.isArray(item?.costAllocations) && item.costAllocations.length) {
