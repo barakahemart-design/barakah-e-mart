@@ -39,10 +39,14 @@ import {
   safeEndOfDay,
   safeSubDays
 } from "../lib/dateUtils";
+import { getAverageCostFromAllocations } from "../lib/fifoCosting";
 
 // Helper to accurately resolve item cost price preferring updated transaction item cost prices first
 function getItemBuyCost(item: any, dbProduct?: any): number {
   if (!item || typeof item !== "object") return 0;
+  if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
+    return getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+  }
   
   const itemBuyPrice = item.buyPrice !== undefined && item.buyPrice !== null && !isNaN(Number(item.buyPrice))
     ? Number(item.buyPrice)
