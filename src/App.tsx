@@ -6827,82 +6827,41 @@ _${businessInfo.name}_`;
                             <div className="space-y-1">
                               {t.items.map((it, idx) => {
                                 const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
-                                let buyCost = 0;
-                                if (it.buyPrice && it.buyPrice > 0) {
-                                  buyCost = it.buyPrice;
-                                } else if (dbProduct && dbProduct.buyPrice > 0) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (dbProduct) {
-                                  buyCost = dbProduct.buyPrice;
-                                } else if (it.buyPrice !== undefined) {
-                                  buyCost = it.buyPrice;
-                                } else {
-                                  buyCost = 0;
-                                }
+                                const buyCost = getAverageCostFromAllocations(it, dbProduct?.buyPrice ?? 0);
+                                const unitCosts = getCostAllocationsForItem(it, buyCost);
                                 const showEdit = showCostEditId === `${t.id}-${idx}`;
+                                const costSummary = unitCosts.map(allocation =>
+                                  `${businessInfo.currencySymbol || "৳"}${Number(allocation.unitCost).toLocaleString()}`
+                                ).join(" / ");
 
                                 return (
-                                  <div key={idx} className="flex justify-between items-center text-[11px] font-sans text-slate-300 py-1 border-b border-slate-800/20 last:border-b-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span> 
-                                      <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
-                                      <span className="text-[10px] text-slate-400 font-mono">
-                                        (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
-                                      </span>
-                                      {currentPanel === "admin" && buyCost > 0 && (
-                                        <span className="text-[9px] text-slate-500 font-mono">
-                                          (Cost: {businessInfo.currencySymbol}{buyCost})
+                                  <div key={idx} className="py-2 border-b border-slate-800/20 last:border-b-0">
+                                    <div className="flex justify-between items-center gap-3 text-[11px] font-sans text-slate-300">
+                                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                        <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span>
+                                        <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                          (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
                                         </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {currentPanel === "admin" && (
-                                        showEdit ? (
-                                          <div className="flex items-center gap-1 animate-fadeIn">
-                                            <input
-                                              type="number"
-                                              defaultValue={buyCost}
-                                              id={`buy-cost-${t.id}-${idx}`}
-                                              className="w-16 px-1.5 py-0.5 bg-black border border-slate-800 text-[#00E676] font-mono text-[9px] outline-none rounded"
-                                              onClick={(e) => e.stopPropagation()}
-                                            />
+                                        {currentPanel === "admin" && (
+                                          <span className="text-[9px] text-slate-500 font-mono">
+                                            (Unit Cost: {costSummary || "Not set"})
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        {currentPanel === "admin" && (
+                                          <>
                                             <button
                                               type="button"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}`) as HTMLInputElement)?.value);
-                                                if (!isNaN(val)) {
-                                                  handleUpdateTransactionItemBuyPrice(t.id, idx, val);
-                                                  setShowCostEditId(null);
-                                                }
-                                              }}
-                                              className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-1.5 py-0.5 text-[8px] rounded cursor-pointer"
-                                            >
-                                              Set
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowCostEditId(null);
-                                              }}
-                                              className="text-slate-400 hover:text-white text-[9px] px-1 cursor-pointer"
-                                            >
-                                              ✕
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowCostEditId(t.id + "-" + idx);
+                                                setShowCostEditId(showEdit ? null : `${t.id}-${idx}`);
                                               }}
                                               className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
-                                              title="Override or edit purchase cost rate for this item"
+                                              title="Edit the cost of each sold unit independently"
                                             >
-                                              Edit Cost: {businessInfo.currencySymbol}{buyCost} ✏️
+                                              {showEdit ? "Close Unit Costs" : "Edit Unit Costs"} ✏️
                                             </button>
                                             <button
                                               type="button"
@@ -6915,11 +6874,46 @@ _${businessInfo.name}_`;
                                             >
                                               Delete Item
                                             </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {currentPanel === "admin" && showEdit && (
+                                      <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-slate-800 bg-black/30 p-2">
+                                        {unitCosts.map((allocation, allocationIdx) => (
+                                          <div key={allocation.id || allocationIdx} className="flex items-center gap-1.5 rounded-md bg-slate-900/70 px-2 py-1">
+                                            <label className="text-[9px] text-slate-400 font-mono whitespace-nowrap">
+                                              Unit {allocationIdx + 1}
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              step="0.01"
+                                              defaultValue={allocation.unitCost}
+                                              id={`buy-cost-${t.id}-${idx}-${allocationIdx}`}
+                                              className="w-20 px-1.5 py-1 bg-black border border-slate-700 text-[#00E676] font-mono text-[10px] outline-none rounded"
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}-${allocationIdx}`) as HTMLInputElement)?.value);
+                                                if (!isNaN(val) && val >= 0) {
+                                                  handleUpdateTransactionItemUnitCost(t.id, idx, allocationIdx, val);
+                                                }
+                                              }}
+                                              className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-2 py-1 text-[9px] rounded cursor-pointer"
+                                            >
+                                              Save
+                                            </button>
                                           </div>
-                                      ))}
-                                      <span className="font-mono text-[10px] text-slate-400">
-                                        {businessInfo.currencySymbol} {it.total.toLocaleString()}
-                                      </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="font-mono text-[10px] text-slate-400 text-right mt-1">
+                                      {businessInfo.currencySymbol} {Number(it.total ?? (Number(it.price || 0) * Number(it.quantity || 0))).toLocaleString()}
                                     </div>
                                   </div>
                                 );
