@@ -280,8 +280,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   });
 
   let contactString = `Phone: ${businessInfo.phoneNumber}`;
-  if (businessInfo.email) {
-    contactString += `   |   Email: ${businessInfo.email}`;
+  if (businessInfo.invoiceDisplayEmail) {
+    contactString += `   |   Email: ${businessInfo.invoiceDisplayEmail}`;
   }
   maxContentWidth = Math.max(maxContentWidth, doc.getTextWidth(contactString));
 
