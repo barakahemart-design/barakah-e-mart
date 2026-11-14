@@ -1365,7 +1365,7 @@ export default function App() {
       setTempPartnerLogos(businessInfo.partnerLogos || []);
       setTempPresetBrands(businessInfo.presetBrands || []);
       setTempFont(businessInfo.selectedFont || "Inter");
-      setTempInvoiceTemplate(businessInfo.selectedInvoiceTemplate || "classic");
+      setTempInvoiceTemplate("classic");
       setTempLogoAlignment(businessInfo.logoAlignment || "left");
       setTempStartingInvoiceNumber(businessInfo.startingInvoiceNumber || 1001);
       const savedScale = (localStorage.getItem("font_size_scale") as "Regular" | "Medium" | "Large") || "Regular";
@@ -8432,7 +8432,7 @@ _${businessInfo.name}_`;
                   <div className="space-y-3 pt-2" id="settings-invoice-template-selection-container">
                     <label className="text-[10px] font-black uppercase tracking-widest font-mono text-slate-400 pl-1 block flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-slate-200" />
-                      SELECT INVOICE DESIGN & LAYOUT TEMPLATE (Choose 1 of 7 Designs)
+                      SELECT INVOICE DESIGN & LAYOUT TEMPLATE
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" id="invoice-templates-grid">
                       
@@ -8463,192 +8463,6 @@ _${businessInfo.name}_`;
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "classic" ? "Activated" : "Select Style"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Template 2: Modern Minimalist */}
-                      <div 
-                        onClick={() => setTempInvoiceTemplate("modern_minimal")}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
-                          tempInvoiceTemplate === "modern_minimal"
-                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
-                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 02</span>
-                            <span className="text-[9px] bg-white/10 text-slate-200 font-bold px-2 py-0.5 rounded uppercase font-mono">Clean Space</span>
-                          </div>
-                          <h5 className="text-xs font-black text-white">Clean Tech Minimalist</h5>
-                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                            Sophisticated layout emphasizing clean margins, light teal separators, plenty of white space, and zero bulky boxes.
-                          </p>
-                        </div>
-                        <div className="mt-3 flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "modern_minimal" ? "border-white" : "border-slate-700"
-                          }`}>
-                            {tempInvoiceTemplate === "modern_minimal" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
-                            {tempInvoiceTemplate === "modern_minimal" ? "Activated" : "Select Style"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Template 3: Executive Premium Navy */}
-                      <div 
-                        onClick={() => setTempInvoiceTemplate("premium_navy")}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
-                          tempInvoiceTemplate === "premium_navy"
-                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
-                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 03</span>
-                            <span className="text-[9px] bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Executive</span>
-                          </div>
-                          <h5 className="text-xs font-black text-white">Premium Navy Executive</h5>
-                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                            Solid Deep Navy blue head bars, elegant subtle underline ribbons, and clean grid separators. Promotes unmatched corporate prestige.
-                          </p>
-                        </div>
-                        <div className="mt-3 flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "premium_navy" ? "border-white" : "border-slate-700"
-                          }`}>
-                            {tempInvoiceTemplate === "premium_navy" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
-                            {tempInvoiceTemplate === "premium_navy" ? "Activated" : "Select Style"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Template 4: Cosmic Dark Elite */}
-                      <div 
-                        onClick={() => setTempInvoiceTemplate("cosmic_dark")}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
-                          tempInvoiceTemplate === "cosmic_dark"
-                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
-                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 04</span>
-                            <span className="text-[9px] bg-purple-500/10 text-purple-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Sci-Fi Bold</span>
-                          </div>
-                          <h5 className="text-xs font-black text-white">Cosmic Dark Elite</h5>
-                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                            Futuristic high-contrast tech look. Features bold dark-graphite background boxes and bright lime-accent inline borders.
-                          </p>
-                        </div>
-                        <div className="mt-3 flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "cosmic_dark" ? "border-white" : "border-slate-700"
-                          }`}>
-                            {tempInvoiceTemplate === "cosmic_dark" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
-                            {tempInvoiceTemplate === "cosmic_dark" ? "Activated" : "Select Style"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Template 5: Vintage Editorial */}
-                      <div 
-                        onClick={() => setTempInvoiceTemplate("vintage_editorial")}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
-                          tempInvoiceTemplate === "vintage_editorial"
-                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
-                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 05</span>
-                            <span className="text-[9px] bg-amber-500/10 text-amber-550 font-bold px-2 py-0.5 rounded uppercase font-mono">Luxury Serif</span>
-                          </div>
-                          <h5 className="text-xs font-black text-white">Vintage Editorial Serif</h5>
-                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                            Warm literary slate tones. Features beautiful thin rules, double dashed spacers, and elegant classic serif headings.
-                          </p>
-                        </div>
-                        <div className="mt-3 flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "vintage_editorial" ? "border-white" : "border-slate-700"
-                          }`}>
-                            {tempInvoiceTemplate === "vintage_editorial" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
-                            {tempInvoiceTemplate === "vintage_editorial" ? "Activated" : "Select Style"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Template 6: Bold Accent Emerald */}
-                      <div 
-                        onClick={() => setTempInvoiceTemplate("bold_emerald")}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
-                          tempInvoiceTemplate === "bold_emerald"
-                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
-                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 06</span>
-                            <span className="text-[9px] bg-emerald-500/10 text-slate-200 font-bold px-2 py-0.5 rounded uppercase font-mono">Fresh Green</span>
-                          </div>
-                          <h5 className="text-xs font-black text-white">Vibrant Emerald Accent</h5>
-                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                            Fresh, striking, and energetic. Framed by a thick emerald top band and matching green table headers & payment status pills.
-                          </p>
-                        </div>
-                        <div className="mt-3 flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "bold_emerald" ? "border-white" : "border-slate-700"
-                          }`}>
-                            {tempInvoiceTemplate === "bold_emerald" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
-                            {tempInvoiceTemplate === "bold_emerald" ? "Activated" : "Select Style"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Template 7: Compact POS Receipt */}
-                      <div 
-                        onClick={() => setTempInvoiceTemplate("compact_pos")}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
-                          tempInvoiceTemplate === "compact_pos"
-                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
-                            : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 07</span>
-                            <span className="text-[9px] bg-yellow-500/10 text-yellow-500 font-bold px-2 py-0.5 rounded uppercase font-mono">Thermal POS</span>
-                          </div>
-                          <h5 className="text-xs font-black text-white">Compact Thermal Ticket</h5>
-                          <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                            Narrow receipts format optimized with high-density spacing. Compact font sizes and light dashed separators. Perfect for thermal desk rolls.
-                          </p>
-                        </div>
-                        <div className="mt-3 flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "compact_pos" ? "border-white" : "border-slate-700"
-                          }`}>
-                            {tempInvoiceTemplate === "compact_pos" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
-                            {tempInvoiceTemplate === "compact_pos" ? "Activated" : "Select Style"}
                           </span>
                         </div>
                       </div>
