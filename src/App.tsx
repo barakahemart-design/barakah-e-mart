@@ -1743,7 +1743,7 @@ export default function App() {
           warranty_details: nestedIt.warrantyDetails || ""
         };
 
-        const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === newTransaction.id && x.product_id === productUUID));
+        const flatIdx = flatItems.findIndex((x: any) => String(x.firestoreId || x.id || "") === String(itemUUID));
         if (flatIdx >= 0) {
           flatItems[flatIdx] = {
             ...flatItems[flatIdx],
@@ -2276,7 +2276,7 @@ export default function App() {
         cost_allocations: item.costAllocations || []
       };
       const flatIdx = flatItems.findIndex((entry: any) =>
-        entry.id === itemId || (entry.transaction_id === txId && entry.product_id === productUUID)
+        String(entry.firestoreId || entry.id || "") === String(itemId)
       );
       if (flatIdx >= 0) flatItems[flatIdx] = { ...flatItems[flatIdx], ...flatItem };
       else flatItems.push(flatItem);
@@ -2693,7 +2693,7 @@ export default function App() {
       if (Array.isArray(t.items)) {
         t.items.forEach(item => {
           if (item.id) {
-            deleteDoc(doc(db, "transaction_items", item.id)).catch(err => {});
+            deleteDoc(doc(db, "transaction_items", item.firestoreId || item.id)).catch(err => {});
           }
         });
       }
@@ -2731,10 +2731,19 @@ export default function App() {
       triggerNotification("A transaction must keep at least one product line. To remove the whole invoice, use the transaction delete action.", "info");
       return;
     }
-    const item = targetTx.items[itemIndex];
+    const normalizedItems = targetTx.items.map((entry: any, index: number, allItems: any[]) => {
+      const identity = String(entry.firestoreId || entry.id || "");
+      const identityCount = allItems.filter((candidate: any) =>
+        String(candidate.firestoreId || candidate.id || "") === identity
+      ).length;
+      return !identity || identityCount > 1
+        ? { ...entry, id: `${transactionId}_line_${index}_${Date.now()}` }
+        : entry;
+    });
+    const item = normalizedItems[itemIndex];
     if (!item) return;
     if (!window.confirm("Remove \"" + item.name + "\" from Invoice " + targetTx.invoiceNo + "? Only this product line will be removed; the invoice and other items will remain.")) return;
-    const updatedItems = targetTx.items.filter((_, idx) => idx !== itemIndex);
+    const updatedItems = normalizedItems.filter((_, idx) => idx !== itemIndex);
     handleEditTransaction(transactionId, { items: updatedItems });
     setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
   };
@@ -2747,7 +2756,21 @@ export default function App() {
     const originalTx = transactions.find(t => t.id === id);
     if (!originalTx) return;
 
-    const requestedItems = updatedFields.items || originalTx.items;
+    // Give each invoice line a stable identity independent of its product/model ID.
+    const ensureUniqueLineIdentities = (sourceItems: any[]) => {
+      const seen = new Set<string>();
+      return (Array.isArray(sourceItems) ? sourceItems : []).map((sourceItem, index) => {
+        const item = { ...sourceItem };
+        const identity = String(item.firestoreId || item.id || "");
+        if (!identity || seen.has(identity)) {
+          item.id = `${id}_line_${index}_${Date.now()}`;
+        }
+        seen.add(String(item.firestoreId || item.id));
+        return item;
+      });
+    };
+    const originalItems = ensureUniqueLineIdentities(originalTx.items || []);
+    const requestedItems = ensureUniqueLineIdentities(updatedFields.items || originalItems);
     const workingProducts = products.map(product => ({ ...product }));
     const costedItems: any[] = requestedItems.map(item => ({ ...item }));
     const matchedRequested = new Set<number>();
@@ -2760,13 +2783,12 @@ export default function App() {
 
     // Keep unchanged sold units attached to their original purchase lots.
     // Return removed/reduced units to their source lot before allocating any additions.
-    (originalTx.items || []).forEach(oldItem => {
-      const oldIdentity = oldItem.id || oldItem.firestoreId;
+    originalItems.forEach(oldItem => {
+      const oldIdentity = String(oldItem.firestoreId || oldItem.id || "");
       const newIndex = requestedItems.findIndex((candidate: any, index: number) =>
         !matchedRequested.has(index) &&
-        (oldIdentity
-          ? (candidate.id === oldIdentity || candidate.firestoreId === oldIdentity)
-          : candidate.productId === oldItem.productId)
+        oldIdentity !== "" &&
+        String(candidate.firestoreId || candidate.id || "") === oldIdentity
       );
 
       if (newIndex < 0) {
@@ -2876,19 +2898,16 @@ export default function App() {
       if (targetTx && Array.isArray(targetTx.items)) {
         const activeItemKeys = new Set<string>();
         targetTx.items.forEach((nestedIt: any, idx: number) => {
-          const itemUUID = nestedIt.id || (id + "_item_" + idx);
-          const productUUID = nestedIt.productId || null;
-          activeItemKeys.add(itemUUID);
-          if (productUUID) activeItemKeys.add("product:" + productUUID);
+          const itemUUID = nestedIt.firestoreId || nestedIt.id || (id + "_item_" + idx);
+          activeItemKeys.add(String(itemUUID));
         });
+        // Keep only the exact line IDs still present; product IDs are not unique per invoice.
         flatItems = flatItems.filter((x: any) => {
           if (x.transaction_id !== id) return true;
-          const itemId = x.id || "";
-          const productId = x.product_id || null;
-          return activeItemKeys.has(itemId) || (!!productId && activeItemKeys.has("product:" + productId));
+          return activeItemKeys.has(String(x.firestoreId || x.id || ""));
         });
         targetTx.items.forEach((nestedIt: any, idx: number) => {
-          const itemUUID = nestedIt.id || `${id}_item_${idx}`;
+          const itemUUID = nestedIt.firestoreId || nestedIt.id || `${id}_item_${idx}`;
           const productUUID = nestedIt.productId || null;
 
           const flatItem = {
@@ -2905,7 +2924,7 @@ export default function App() {
             warranty_details: nestedIt.warrantyDetails || ""
           };
 
-          const flatIdx = flatItems.findIndex((x: any) => x.id === itemUUID || (x.transaction_id === id && x.product_id === productUUID));
+          const flatIdx = flatItems.findIndex((x: any) => String(x.firestoreId || x.id || "") === String(itemUUID));
           if (flatIdx >= 0) {
             flatItems[flatIdx] = {
               ...flatItems[flatIdx],
@@ -2974,7 +2993,7 @@ export default function App() {
         }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
       }
     });
-    originalTx.items.forEach(oldItem => {
+    originalItems.forEach(oldItem => {
       const oldDocId = oldItem.firestoreId || oldItem.id;
       const stillExists = items.some(item => (item.firestoreId || item.id) === oldDocId);
       if (oldDocId && !stillExists && !remainingDocIds.has(oldDocId)) {
