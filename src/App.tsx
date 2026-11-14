@@ -2986,7 +2986,7 @@ export default function App() {
   // -----------------------------------------------------------------
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("Others");
-  const [expenseSection, setExpenseSection] = useState<"add" | "history" | "categories">("add");
+  const [expenseSection, setExpenseSection] = useState<"home" | "add" | "history" | "categories">("home");
   
   
   useEffect(() => {
@@ -7186,64 +7186,81 @@ _${businessInfo.name}_`;
             const money = (amount: number) => `${businessInfo.currencySymbol || "৳"} ${(Number(amount) || 0).toLocaleString()}`;
 
             return (
-              <div className="space-y-5 animate-fade-in" id="view-expenses-outer-container">
-                <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg">
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <h2 className="text-base sm:text-lg font-black text-white">Expenses Management</h2>
-                      <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Record, review and manage business expenses.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date Filter</div>
-                      <div className="flex flex-wrap gap-1.5 sm:gap-2" id="expense-date-presets">
-                        {[
-                          { id: "today", label: "Today" },
-                          { id: "yesterday", label: "Yesterday" },
-                          { id: "weekly", label: "7 Days" },
-                          { id: "monthly", label: "This Month" },
-                          { id: "yearly", label: "This Year" },
-                          { id: "custom", label: "Custom Date / Range" }
-                        ].map(preset => (
-                          <button key={preset.id} type="button" onClick={() => setExpenseDateFilter(preset.id as any)}
-                            className={`px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all ${expenseDateFilter === preset.id ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-400 shadow-sm" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
-                            {preset.label}
-                          </button>
-                        ))}
+              const renderExpenseDateFilters = () => (
+                <div className="space-y-2">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date Filter</div>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2" id="expense-date-presets">
+                    {[
+                      { id: "today", label: "Today" },
+                      { id: "yesterday", label: "Yesterday" },
+                      { id: "weekly", label: "7 Days" },
+                      { id: "monthly", label: "This Month" },
+                      { id: "yearly", label: "This Year" },
+                      { id: "custom", label: "Custom Date / Range" }
+                    ].map(preset => (
+                      <button key={preset.id} type="button" onClick={() => setExpenseDateFilter(preset.id as any)}
+                        className={`px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all ${expenseDateFilter === preset.id ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-400 shadow-sm" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  {expenseDateFilter === "custom" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-emerald-500/20 bg-[#121722] p-3" id="expense-custom-date-range">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">From Date</label>
+                        <input type="date" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
                       </div>
-                      {expenseDateFilter === "custom" && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-emerald-500/20 bg-[#121722] p-3" id="expense-custom-date-range">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">From Date</label>
-                            <input type="date" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">To Date</label>
-                            <input type="date" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
-                          </div>
-                          <p className="sm:col-span-2 text-[10px] text-slate-500">Select the same start and end date to view expenses for one specific day.</p>
-                          {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-rose-400">From Date cannot be later than To Date.</p>}
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">To Date</label>
+                        <input type="date" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
+                      </div>
+                      <p className="sm:col-span-2 text-[10px] text-slate-500">Select the same start and end date to view expenses for one specific day.</p>
+                      {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-rose-400">From Date cannot be later than To Date.</p>}
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full">
+                  )}
+                </div>
+              );
+
+              return (
+              <div className="space-y-5 animate-fade-in" id="view-expenses-outer-container">
+                {expenseSection === "home" ? (
+                  <div className="space-y-4">
+                    <div className="bg-[#0b0f19]/90 border border-slate-800 p-4 sm:p-5 rounded-2xl">
+                      <h2 className="text-base sm:text-lg font-black text-white">Expenses Management</h2>
+                      <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Choose a workspace to continue.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                       {[
-                        { id: "add", label: "Add Expenses", Icon: PlusCircle },
-                        { id: "history", label: "Expenses History", Icon: History },
-                        { id: "categories", label: "Add Category", Icon: Tag }
+                        { id: "add", label: "Add Expenses", description: "Record a new business expense", Icon: PlusCircle },
+                        { id: "history", label: "Expenses History", description: "Review, filter, edit and delete expenses", Icon: History },
+                        { id: "categories", label: "Add Category", description: "Create and manage expense categories", Icon: Tag }
                       ].map(item => {
                         const Icon = item.Icon;
-                        const active = expenseSection === item.id;
                         return (
                           <button key={item.id} type="button" onClick={() => setExpenseSection(item.id as any)}
-                            className={`min-w-0 rounded-xl border px-2 py-3 sm:px-4 sm:py-3 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 text-center transition-all ${active ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
-                            <Icon className="w-4 h-4 shrink-0" />
-                            <span className="text-[9px] sm:text-xs font-bold leading-tight">{item.label}</span>
+                            className="min-h-[132px] bg-[#0a101f]/90 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-5 flex flex-col items-start justify-between gap-4 text-left transition-all hover:bg-[#101a2a]">
+                            <span className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center"><Icon className="w-5 h-5" /></span>
+                            <span className="block">
+                              <span className="block text-sm font-extrabold text-white">{item.label}</span>
+                              <span className="block text-[10px] text-slate-400 mt-1">{item.description}</span>
+                            </span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg space-y-4">
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => setExpenseSection("home")} className="shrink-0 px-3 py-2 rounded-xl border border-slate-700 bg-[#121722] text-slate-200 hover:text-emerald-400 text-xs font-bold">← Back</button>
+                      <div className="min-w-0">
+                        <h2 className="text-base sm:text-lg font-black text-white">{expenseSection === "add" ? "Add Expenses" : expenseSection === "history" ? "Expenses History" : "Add Category"}</h2>
+                        <p className="text-[10px] sm:text-xs text-slate-400 mt-1">{expenseSection === "add" ? "Record and review expenses for the selected period." : expenseSection === "history" ? "Search and manage saved expense records." : "Create and manage your expense categories."}</p>
+                      </div>
+                    </div>
+                    {(expenseSection === "add" || expenseSection === "history") && renderExpenseDateFilters()}
+                  </div>
+                )}
 
                 {expenseSection === "add" && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -7378,6 +7395,7 @@ _${businessInfo.name}_`;
                     </div>
                   </div>
                 )}
+                {expenseSection === "history" && (
                 <section className="bg-[#0b0f19]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4" id="monthly-expense-breakdown">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -7407,6 +7425,8 @@ _${businessInfo.name}_`;
                     <div className="rounded-xl border border-dashed border-slate-800 py-6 text-center text-xs text-slate-500">No expenses recorded for this month yet.</div>
                   )}
                 </section>
+                )}
+
 
               </div>
             );
