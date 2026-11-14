@@ -6991,71 +6991,92 @@ _${businessInfo.name}_`;
 
                         <div className="my-3 border-t border-slate-700/80" />
 
-                        {/* Purchased products: name first, unit-cost editor immediately below */}
+                        {/* Products grouped by model with visible total quantity; unit-cost allocations remain individually editable */}
                         <div className="space-y-2" id={`ledger-items-${t.invoiceNo}`}>
-                          {t.items.map((it, idx) => {
-                            const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
-                            const buyCost = getAverageCostFromAllocations(it, dbProduct?.buyPrice ?? 0);
-                            const unitCosts = getCostAllocationsForItem(it, buyCost);
-                            const showEdit = showCostEditId === `${t.id}-${idx}`;
+                          {(() => {
+                            const groupedItems = t.items.reduce((groups: any[], item, itemIdx) => {
+                              const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+                              const productName = dbProduct ? dbProduct.name : (item.name || "Product Item");
+                              const groupKey = String(item.productId || productName).trim().toLowerCase();
+                              let group = groups.find(entry => entry.key === groupKey);
+                              if (!group) {
+                                group = { key: groupKey, name: productName, quantity: 0, entries: [] };
+                                groups.push(group);
+                              }
+                              const buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+                              group.quantity += Math.max(0, Number(item.quantity) || 0);
+                              group.entries.push({ item, itemIdx, unitCosts: getCostAllocationsForItem(item, buyCost) });
+                              return groups;
+                            }, []);
 
-                            return (
-                              <div key={idx} className="rounded-lg px-1 py-1.5">
-                                <p className="text-center text-[11px] font-semibold leading-snug text-white">
-                                  {dbProduct ? dbProduct.name : (it.name || "Product Item")}
-                                </p>
-                                {currentPanel === "admin" && (
-                                  <div className="mt-1 flex justify-center">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowCostEditId(showEdit ? null : `${t.id}-${idx}`);
-                                      }}
-                                      className="rounded-md border border-slate-700 bg-black/25 px-2.5 py-1 text-[9px] font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
-                                      title="Edit the cost of each purchased unit independently"
-                                    >
-                                      {showEdit ? "Close Unit Cost" : "Edit Unit Cost"}
-                                    </button>
-                                  </div>
-                                )}
+                            return groupedItems.map((group) => {
+                              const editorKey = `${t.id}-${group.key}`;
+                              const showEdit = showCostEditId === editorKey;
+                              return (
+                                <div key={group.key} className="rounded-lg px-1 py-1.5">
+                                  <p className="flex flex-wrap items-center justify-center gap-x-2 text-center text-[11px] font-semibold leading-snug text-white">
+                                    <span>{group.name}</span>
+                                    <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[9px] font-bold text-white">
+                                      ({group.quantity} {group.quantity === 1 ? "Pc" : "Pcs"})
+                                    </span>
+                                  </p>
+                                  {currentPanel === "admin" && (
+                                    <div className="mt-1 flex justify-center">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShowCostEditId(showEdit ? null : editorKey);
+                                        }}
+                                        className="min-w-[150px] rounded-full border border-white/80 bg-white/95 px-5 py-1 text-[9px] font-semibold tracking-wide text-black shadow-[0_2px_12px_rgba(255,255,255,0.10)] backdrop-blur-xl transition-all hover:bg-white hover:shadow-[0_3px_16px_rgba(255,255,255,0.18)] active:scale-[0.98]"
+                                        title="Edit the cost of each purchased unit independently"
+                                      >
+                                        {showEdit ? "Close Unit Cost" : "Edit Unit Cost"}
+                                      </button>
+                                    </div>
+                                  )}
 
-                                {currentPanel === "admin" && showEdit && (
-                                  <div className="mt-2 flex flex-wrap justify-center gap-2 rounded-lg border border-slate-800 bg-black/30 p-2">
-                                    {unitCosts.map((allocation, allocationIdx) => (
-                                      <div key={allocation.id || allocationIdx} className="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/70 px-2 py-1.5">
-                                        <label className="whitespace-nowrap text-[9px] text-slate-400">
-                                          Unit {allocationIdx + 1}
-                                        </label>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          defaultValue={allocation.unitCost}
-                                          id={`buy-cost-${t.id}-${idx}-${allocationIdx}`}
-                                          className="w-20 rounded border border-slate-700 bg-black px-1.5 py-1 text-[10px] text-white outline-none focus:border-white/50"
-                                          onClick={(e) => e.stopPropagation()}
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}-${allocationIdx}`) as HTMLInputElement)?.value);
-                                            if (!isNaN(val) && val >= 0) {
-                                              handleUpdateTransactionItemUnitCost(t.id, idx, allocationIdx, val);
-                                            }
-                                          }}
-                                          className="rounded bg-white px-2 py-1 text-[9px] font-bold text-black transition-colors hover:bg-slate-200"
-                                        >
-                                          Save
-                                        </button>
+                                  {currentPanel === "admin" && showEdit && (
+                                    <div className="mx-auto mt-2 w-full max-w-2xl rounded-xl border border-white/15 bg-white/[0.06] p-3 shadow-inner backdrop-blur-xl">
+                                      <div className="flex flex-wrap justify-center gap-2">
+                                        {group.entries.flatMap((entry: any) =>
+                                          entry.unitCosts.map((allocation: any, allocationIdx: number) => (
+                                            <div key={`${entry.itemIdx}-${allocation.id || allocationIdx}`} className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/35 px-2.5 py-2">
+                                              <label className="whitespace-nowrap text-[9px] text-slate-300">
+                                                Unit {allocationIdx + 1 + group.entries.slice(0, group.entries.indexOf(entry)).reduce((sum: number, previous: any) => sum + previous.unitCosts.length, 0)}
+                                              </label>
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                defaultValue={allocation.unitCost}
+                                                id={`buy-cost-${t.id}-${entry.itemIdx}-${allocationIdx}`}
+                                                className="w-24 rounded-md border border-white/20 bg-black/70 px-2 py-1.5 text-[10px] text-white outline-none focus:border-white/60"
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${entry.itemIdx}-${allocationIdx}`) as HTMLInputElement)?.value);
+                                                  if (!isNaN(val) && val >= 0) {
+                                                    handleUpdateTransactionItemUnitCost(t.id, entry.itemIdx, allocationIdx, val);
+                                                  }
+                                                }}
+                                                className="rounded-md border border-white/80 bg-white px-3 py-1.5 text-[9px] font-bold text-black transition-colors hover:bg-slate-200"
+                                              >
+                                                Save
+                                              </button>
+                                            </div>
+                                          ))
+                                        )}
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
                         </div>
 
                         <div className="my-3 border-t border-slate-700/80" />
