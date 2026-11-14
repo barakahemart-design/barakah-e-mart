@@ -145,8 +145,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
 
   let primaryColor: [number, number, number] = [15, 23, 42];        // slate-900 (Main headings/accents)
   let secondaryColor: [number, number, number] = [71, 85, 105];     // slate-600 (Meta text/labels)
-  let tableHeadBg: [number, number, number] = [15, 23, 42];         // Charcoal block headers default
-  let tableHeadTextColor: [number, number, number] = [255, 255, 255];
+  let tableHeadBg: [number, number, number] = [255, 255, 255];       // Printer-friendly white header
+  let tableHeadTextColor: [number, number, number] = [15, 23, 42];   // Black header text
   let accentLineColor: [number, number, number] = [150, 150, 155];  // Clean dark-gray divider line
   let billToBg: [number, number, number] = [255, 255, 255];         // white background Default
   let billToBorderColor: [number, number, number] = [210, 210, 215]; // Clean border outline
@@ -502,26 +502,27 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     margin: { left: 15, right: 15 },
     head: tableHeaders,
     body: tableBody,
-    theme: template === "modern_minimal" || isVintageEditorial ? "grid" : "striped",
+    // Classic Retail Standard: white page, black text and thin outlined header cells.
+    theme: "grid",
     styles: {
       fontSize: 8.5 * sizeFactor,
       font: pdfFontName,
       cellPadding: isCompactPOS ? 2.5 : 3.5,
-      textColor: [51, 65, 85], // slate-700
-      lineColor: [241, 245, 249],
-      lineWidth: 0.1
+      textColor: [35, 35, 35],
+      lineColor: [205, 205, 205],
+      lineWidth: 0.15
     },
     headStyles: {
-      fillColor: tableHeadBg,
-      textColor: tableHeadTextColor,
+      fillColor: [255, 255, 255],
+      textColor: [15, 23, 42],
       fontSize: 9 * sizeFactor,
       fontStyle: 'bold',
       cellPadding: 4,
-      lineWidth: isVintageEditorial ? 0.3 : 0,
-      lineColor: isVintageEditorial ? primaryColor : [255, 255, 255]
+      lineWidth: 0.25,
+      lineColor: [15, 23, 42]
     },
     alternateRowStyles: {
-      fillColor: template === "cosmic_dark" ? [250, 250, 250] : [248, 250, 252] // subtle gray rows
+      fillColor: [250, 250, 250]
     }
   });
 
