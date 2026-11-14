@@ -7198,30 +7198,32 @@ _${businessInfo.name}_`;
                       { id: "custom", label: "Custom Date / Range" }
                     ].map(preset => (
                       <button key={preset.id} type="button" onClick={() => setExpenseDateFilter(preset.id as any)}
-                        className={`px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all ${expenseDateFilter === preset.id ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-400 shadow-sm" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
+                        className={`px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all ${expenseDateFilter === preset.id ? "bg-white/[0.14] border-white/[0.28] text-white shadow-sm" : "bg-white/[0.035] border-white/[0.09] text-slate-400 hover:text-white hover:border-white/[0.20]"}`}>
                         {preset.label}
                       </button>
                     ))}
                   </div>
                   {expenseDateFilter === "custom" && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-emerald-500/20 bg-[#121722] p-3" id="expense-custom-date-range">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-white/[0.10] bg-white/[0.045] p-3" id="expense-custom-date-range">
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">From Date</label>
-                        <input type="date" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
+                        <input type="date" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-black/25 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-white/40" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">To Date</label>
-                        <input type="date" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
+                        <input type="date" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-black/25 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-white/40" />
                       </div>
                       <p className="sm:col-span-2 text-[10px] text-slate-500">Select the same start and end date to view expenses for one specific day.</p>
-                      {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-rose-400">From Date cannot be later than To Date.</p>}
+                      {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-white">From Date cannot be later than To Date.</p>}
                     </div>
                   )}
                 </div>
               );
 
               return (
-              <div className="space-y-5 animate-fade-in" id="view-expenses-outer-container">
+              <div className="relative isolate space-y-5 overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#040508] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.42)] animate-fade-in sm:p-5 lg:p-6" id="view-expenses-outer-container">
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-80" style={{ backgroundImage: "radial-gradient(ellipse at 12% 5%, rgba(255,255,255,0.045), transparent 42%), radial-gradient(ellipse at 90% 90%, rgba(255,255,255,0.03), transparent 40%), linear-gradient(rgba(255,255,255,0.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.014) 1px, transparent 1px)", backgroundSize: "auto, auto, 42px 42px, 42px 42px" }} />
+                <div className="relative z-10 space-y-5">
                 {expenseSection === "home" ? (
                   <section
                     className="relative isolate min-h-[68vh] overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#040508] shadow-[0_24px_80px_rgba(0,0,0,0.42)]"
@@ -7393,9 +7395,9 @@ _${businessInfo.name}_`;
                     </div>
                   </section>
                 ) : (
-                  <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg space-y-4">
+                  <div className="relative z-10 rounded-2xl border border-white/[0.10] bg-white/[0.035] p-3 shadow-lg shadow-black/20 backdrop-blur-2xl space-y-4 sm:p-5">
                     <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => setExpenseSection("home")} className="shrink-0 px-3 py-2 rounded-xl border border-slate-700 bg-[#121722] text-slate-200 hover:text-emerald-400 text-xs font-bold">← Back</button>
+                      <button type="button" onClick={() => setExpenseSection("home")} className="shrink-0 px-3 py-2 rounded-xl border border-white/[0.12] bg-white/[0.045] text-slate-200 hover:bg-white/[0.09] hover:text-white text-xs font-bold transition-colors">← Back</button>
                       <div className="min-w-0">
                         <h2 className="text-base sm:text-lg font-black text-white">{expenseSection === "add" ? "Add Expenses" : expenseSection === "history" ? "Expenses History" : "Add Category"}</h2>
                         <p className="text-[10px] sm:text-xs text-slate-400 mt-1">{expenseSection === "add" ? "Record and review expenses for the selected period." : expenseSection === "history" ? "Search and manage saved expense records." : "Create and manage your expense categories."}</p>
@@ -7407,7 +7409,7 @@ _${businessInfo.name}_`;
 
                 {expenseSection === "add" && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                    <div className="lg:col-span-7 bg-[#0a101f]/90 border border-slate-800 p-4 sm:p-6 rounded-2xl space-y-5">
+                    <div className="lg:col-span-7 rounded-2xl border border-white/[0.10] bg-white/[0.035] p-4 shadow-xl shadow-black/20 backdrop-blur-2xl space-y-5 sm:p-6">
                       <div>
                         <h3 className="text-sm font-bold text-white">Add New Expense</h3>
                         <p className="text-[10px] text-slate-400 mt-1">Enter the date, category, amount and reason for the expense.</p>
@@ -7417,12 +7419,12 @@ _${businessInfo.name}_`;
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Date *</label>
                             <input type="date" required value={expenseDate} onChange={e => setExpenseDate(e.target.value)}
-                              className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500" />
+                              className="w-full px-3 py-3 bg-black/25 border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-white/40" />
                           </div>
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Category *</label>
                             <select required value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}
-                              className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500">
+                              className="w-full px-3 py-3 bg-black/25 border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-white/40">
                               {allCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                             </select>
                           </div>
@@ -7430,60 +7432,60 @@ _${businessInfo.name}_`;
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Amount ({businessInfo.currencySymbol || "৳"}) *</label>
                           <input type="number" min="0.01" step="0.01" required value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)}
-                            placeholder="Enter expense amount" className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500 font-mono" />
+                            placeholder="Enter expense amount" className="w-full px-3 py-3 bg-black/25 border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-white/40 font-mono" />
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Details / Reason *</label>
                           <textarea required value={expenseDesc} onChange={e => setExpenseDesc(e.target.value)}
                             placeholder="Write why this expense was made. Example: showroom electricity bill for November."
-                            rows={5} className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500 resize-y" />
+                            rows={5} className="w-full px-3 py-3 bg-black/25 border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-white/40 resize-y" />
                         </div>
-                        <button type="submit" className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2">
+                        <button type="submit" className="w-full py-3.5 bg-white hover:bg-slate-200 text-[#08090d] font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2">
                           <PlusCircle className="w-4 h-4" /> Save Expense
                         </button>
                       </form>
                     </div>
-                    <div className="lg:col-span-5 bg-[#0a101f]/90 border border-slate-800 p-4 sm:p-5 rounded-2xl space-y-3">
+                    <div className="lg:col-span-5 rounded-2xl border border-white/[0.10] bg-white/[0.035] p-4 shadow-xl shadow-black/20 backdrop-blur-2xl space-y-3 sm:p-5">
                       <h3 className="text-sm font-bold text-white">Quick Overview</h3>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Selected Period</span><strong className="text-sm text-rose-400 font-mono">{money(selectedPeriodTotal)}</strong></div>
-                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Entries</span><strong className="text-sm text-white font-mono">{selectedPeriodExpenses.length}</strong></div>
+                        <div className="bg-white/[0.045] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Selected Period</span><strong className="text-sm text-white font-mono">{money(selectedPeriodTotal)}</strong></div>
+                        <div className="bg-white/[0.045] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Entries</span><strong className="text-sm text-white font-mono">{selectedPeriodExpenses.length}</strong></div>
                       </div>
                       <h4 className="text-[10px] uppercase tracking-wider text-slate-400 font-bold pt-2">Highest Expense Categories</h4>
                       {selectedPeriodCategoryTotals.slice(0, 5).length ? selectedPeriodCategoryTotals.slice(0, 5).map(item => (
                         <div key={item.category} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 text-xs">
-                          <span className="text-slate-300 truncate">{item.category}</span><strong className="text-rose-300 font-mono shrink-0">{money(item.total)}</strong>
+                          <span className="text-slate-300 truncate">{item.category}</span><strong className="text-white/85 font-mono shrink-0">{money(item.total)}</strong>
                         </div>
                       )) : <p className="text-xs text-slate-500">No category totals yet.</p>}
-                      <button type="button" onClick={() => setExpenseSection("history")} className="w-full mt-2 py-2.5 border border-slate-700 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-slate-300 hover:text-emerald-400">View Expenses History</button>
+                      <button type="button" onClick={() => setExpenseSection("history")} className="w-full mt-2 py-2.5 border border-slate-700 hover:border-white/30 rounded-xl text-xs font-bold text-slate-300 hover:text-white">View Expenses History</button>
                     </div>
                   </div>
                 )}
 
                 {expenseSection === "history" && (
-                  <div className="bg-[#0a101f]/90 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
+                  <div className="rounded-2xl border border-white/[0.10] bg-transparent overflow-hidden" id="expenses-list-panel">
                     <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div><h3 className="text-sm font-bold text-white">Expenses History</h3><p className="text-[10px] text-slate-400 mt-1">Review every saved expense and its reason.</p></div>
-                      <div className="sm:text-right"><span className="block text-[9px] text-slate-500 uppercase">Filtered Total</span><strong className="text-sm text-rose-400 font-mono">{money(sortedHistory.reduce((sum,e)=>sum+(Number(e.amount)||0),0))}</strong></div>
+                      <div className="sm:text-right"><span className="block text-[9px] text-slate-500 uppercase">Filtered Total</span><strong className="text-sm text-white font-mono">{money(sortedHistory.reduce((sum,e)=>sum+(Number(e.amount)||0),0))}</strong></div>
                     </div>
                     <div className="p-3 sm:p-4 border-b border-slate-800">
-                      <select value={expenseFilterCategory} onChange={e => setExpenseFilterCategory(e.target.value)} className="w-full sm:w-64 px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white">
+                      <select value={expenseFilterCategory} onChange={e => setExpenseFilterCategory(e.target.value)} className="w-full sm:w-64 px-3 py-2.5 bg-black/25 border border-slate-800 rounded-xl text-xs text-white">
                         {["All", ...allCategories].map(cat => <option key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</option>)}
                       </select>
                     </div>
                     <div className="p-3 sm:p-4 space-y-3 max-h-[720px] overflow-y-auto">
                       {sortedHistory.length ? sortedHistory.map(e => (
-                        <article key={e.id} className="bg-[#151b28] border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <article key={e.id} className="border-b border-white/[0.09] bg-transparent rounded-none p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3 last:border-b-0 hover:bg-white/[0.025] transition-colors">
                           <div className="min-w-0 flex-1 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2"><span className="px-2 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[10px] font-bold">{e.category}</span><span className="text-[10px] text-slate-500">{e.date}</span></div>
+                            <div className="flex flex-wrap items-center gap-2"><span className="px-2 py-1 rounded-lg bg-white/[0.06] border border-white/[0.12] text-white/85 text-[10px] font-bold">{e.category}</span><span className="text-[10px] text-slate-500">{e.date}</span></div>
                             <p className="text-xs text-slate-200 whitespace-pre-line break-words">{e.description}</p>
                           </div>
                           <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 sm:shrink-0">
-                            <strong className="text-sm text-rose-300 font-mono">{money(e.amount)}</strong>
+                            <strong className="text-sm text-white/85 font-mono">{money(e.amount)}</strong>
                             <div className="flex gap-2">
                               <button type="button" onClick={() => { setEditingExpense(e); setEditExpenseDesc(e.description); setEditExpenseCategory(e.category); setEditExpenseAmount(String(e.amount)); setEditExpenseDate(e.date); }}
-                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
-                              <button type="button" onClick={() => setDeleteExpenseId(e.id)} className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 text-[10px] font-bold flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
+                                className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-slate-200 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
+                              <button type="button" onClick={() => setDeleteExpenseId(e.id)} className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/85 text-[10px] font-bold flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
                             </div>
                           </div>
                         </article>
@@ -7494,7 +7496,7 @@ _${businessInfo.name}_`;
 
                 {expenseSection === "categories" && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                    <div className="lg:col-span-5 bg-[#0a101f]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                    <div className="lg:col-span-5 rounded-2xl border border-white/[0.10] bg-white/[0.035] p-4 shadow-xl shadow-black/20 backdrop-blur-2xl space-y-4 sm:p-5">
                       <div><h3 className="text-sm font-bold text-white">Add Expense Category</h3><p className="text-[10px] text-slate-400 mt-1">Create a category to organize future expenses.</p></div>
                       <form onSubmit={e => {
                         e.preventDefault();
@@ -7507,20 +7509,20 @@ _${businessInfo.name}_`;
                         triggerNotification("Expense category added successfully.", "success");
                       }} className="space-y-3">
                         <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} placeholder="e.g. Internet Bill, Transport, Repair" required
-                          className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-sm text-white outline-none focus:border-emerald-500" />
-                        <button type="submit" className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Add Category</button>
+                          className="w-full px-3 py-3 bg-black/25 border border-slate-800 rounded-xl text-sm text-white outline-none focus:border-white/40" />
+                        <button type="submit" className="w-full py-3 rounded-xl bg-white hover:bg-slate-200 text-[#08090d] text-xs font-extrabold flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Add Category</button>
                       </form>
                     </div>
-                    <div className="lg:col-span-7 bg-[#0a101f]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+                    <div className="lg:col-span-7 rounded-2xl border border-white/[0.10] bg-white/[0.035] p-4 shadow-xl shadow-black/20 backdrop-blur-2xl space-y-3 sm:p-5">
                       <div><h3 className="text-sm font-bold text-white">Manage Expense Categories</h3><p className="text-[10px] text-slate-400 mt-1">Edit or delete a category. Existing expense records will be preserved.</p></div>
                       {allCategories.map(cat => (
-                        <div key={cat} className="bg-[#151b28] border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                        <div key={cat} className="border-b border-white/[0.09] bg-transparent rounded-none p-3 flex flex-col sm:flex-row sm:items-center gap-2 last:border-b-0 hover:bg-white/[0.025] transition-colors">
                           {categoryToManage === cat ? (
                             <>
-                              <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} className="flex-1 min-w-0 px-3 py-2 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white" autoFocus />
+                              <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} className="flex-1 min-w-0 px-3 py-2 bg-black/25 border border-slate-700 rounded-lg text-xs text-white" autoFocus />
                               <div className="flex gap-2">
-                                <button type="button" onClick={() => handleEditExpenseCategory(cat,newCategoryName)} className="px-3 py-2 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-bold">Save</button>
-                                <button type="button" onClick={() => {setCategoryToManage(null);setNewCategoryName("");}} className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-bold">Cancel</button>
+                                <button type="button" onClick={() => handleEditExpenseCategory(cat,newCategoryName)} className="px-3 py-2 rounded-lg bg-white text-[#08090d] text-[10px] font-bold">Save</button>
+                                <button type="button" onClick={() => {setCategoryToManage(null);setNewCategoryName("");}} className="px-3 py-2 rounded-lg bg-white/[0.06] text-slate-300 text-[10px] font-bold">Cancel</button>
                               </div>
                             </>
                           ) : (
@@ -7528,8 +7530,8 @@ _${businessInfo.name}_`;
                               <span className="flex-1 text-xs font-semibold text-slate-200">{cat}</span>
                               <span className="text-[10px] text-slate-500">{expenses.filter(e=>e.category===cat).length} records · {money(expenses.filter(e=>e.category===cat).reduce((sum,e)=>sum+(Number(e.amount)||0),0))} total</span>
                               <div className="flex gap-2">
-                                <button type="button" onClick={() => {setCategoryToManage(cat);setNewCategoryName(cat);}} className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
-                                <button type="button" disabled={cat === "Others"} onClick={() => handleDeleteExpenseCategory(cat)} className="px-3 py-2 rounded-lg bg-rose-500/10 text-rose-300 text-[10px] font-bold flex items-center gap-1 disabled:opacity-30"><Trash2 className="w-3 h-3" /> Delete</button>
+                                <button type="button" onClick={() => {setCategoryToManage(cat);setNewCategoryName(cat);}} className="px-3 py-2 rounded-lg bg-white/[0.06] text-slate-300 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
+                                <button type="button" disabled={cat === "Others"} onClick={() => handleDeleteExpenseCategory(cat)} className="px-3 py-2 rounded-lg bg-white/[0.06] text-white/85 text-[10px] font-bold flex items-center gap-1 disabled:opacity-30"><Trash2 className="w-3 h-3" /> Delete</button>
                               </div>
                             </>
                           )}
@@ -7538,39 +7540,10 @@ _${businessInfo.name}_`;
                     </div>
                   </div>
                 )}
-                {expenseSection === "history" && (
-                <section className="bg-[#0b0f19]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4" id="monthly-expense-breakdown">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-extrabold text-white">This Month Expense Breakdown</h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5">See which expense categories are costing the most.</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="block text-[9px] text-slate-500 uppercase tracking-wider font-bold">Total This Month</span>
-                      <strong className="text-base sm:text-lg text-rose-400 font-mono">{money(monthTotal)}</strong>
-                    </div>
-                  </div>
-                  {categoryTotals.length ? (
-                    <div className="space-y-3">
-                      {categoryTotals.map(item => (
-                        <div key={item.category} className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-3 text-[11px]">
-                            <span className="text-slate-200 font-semibold truncate">{item.category} <span className="text-slate-500 font-normal">({item.count})</span></span>
-                            <span className="text-rose-300 font-mono font-bold shrink-0">{money(item.total)}</span>
-                          </div>
-                          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-rose-600 to-amber-400" style={{ width: `${Math.max(2, (item.total / maxCategoryTotal) * 100)}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-800 py-6 text-center text-xs text-slate-500">No expenses recorded for this month yet.</div>
-                  )}
-                </section>
-                )}
 
 
+
+                </div>
               </div>
             );
           })()}
