@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { toUUID } from "../lib/firebase-helpers";
 import { Boxes, Package, ShoppingBag } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
@@ -72,6 +72,7 @@ export function ProductSalesBreakdown({
   customStart,
   customEnd
 }: ProductSalesBreakdownProps) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const todayKey = new Date().toDateString();
   const report = useMemo(() => {
     const bounds = getPeriodBounds(dashboardFilter, customStart, customEnd);
@@ -194,31 +195,32 @@ export function ProductSalesBreakdown({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-[#0e1422] p-3.5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            <ShoppingBag className="h-3.5 w-3.5 text-indigo-300" /> Total Units Sold
-          </div>
-          <div className="mt-2 text-2xl font-black text-white tabular-nums">{formatQuantity(report.totalUnits)}</div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">Category Sales Summary</h3>
+          <span className="text-[10px] text-slate-500">Highest sales first · Units sold</span>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-[#0e1422] p-3.5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            <Boxes className="h-3.5 w-3.5 text-sky-300" /> Categories Sold
+        {report.categories.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-700 bg-[#0e1422]/60 px-4 py-6 text-center text-xs text-slate-400">No category sales found for this period.</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {report.categories.map((category, index) => (
+              <div key={category.name.toLowerCase()} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0e1422] px-3.5 py-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-[10px] font-black text-indigo-300">{index + 1}</span>
+                  <span className="truncate text-xs font-bold text-white">{category.name}</span>
+                </div>
+                <span className="shrink-0 text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</span>
+              </div>
+            ))}
           </div>
-          <div className="mt-2 text-2xl font-black text-white tabular-nums">{report.categories.length}</div>
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-[#0e1422] p-3.5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            <Package className="h-3.5 w-3.5 text-emerald-300" /> Products Sold
-          </div>
-          <div className="mt-2 text-2xl font-black text-white tabular-nums">{report.productCount}</div>
-        </div>
+        )}
       </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">Category & Product Details</h3>
-          <span className="text-[10px] text-slate-500">Units sold</span>
+          <span className="text-[10px] text-slate-500">Select a category to view products</span>
         </div>
 
         {report.categories.length === 0 ? (
@@ -228,40 +230,50 @@ export function ProductSalesBreakdown({
             <p className="mt-1 text-[10px] text-slate-500">Try another date range to view sales quantities.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {report.categories.map(category => (
-              <div key={category.name.toLowerCase()} className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#0e1422]">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
-                      <Boxes className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="truncate text-xs font-extrabold text-white">{category.name}</h4>
-                      <p className="mt-0.5 text-[10px] text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"}</p>
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
-                    <div className="text-[9px] uppercase tracking-wider text-slate-500">units</div>
-                  </div>
-                </div>
-                <div className="divide-y divide-slate-800/70">
-                  {category.products.map(product => (
-                    <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                        <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
+          <div className="space-y-2">
+            {report.categories.map(category => {
+              const isExpanded = expandedCategory === category.name;
+              return (
+                <div key={category.name.toLowerCase()} className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#0e1422]">
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpandedCategory(isExpanded ? null : category.name)}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-800/40"
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
+                        <Boxes className="h-4 w-4" />
                       </div>
-                      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
-                        <span className="text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
-
+                      <div className="min-w-0">
+                        <h4 className="truncate text-xs font-extrabold text-white">{category.name}</h4>
+                        <p className="mt-0.5 text-[10px] text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"} · Click to {isExpanded ? "hide" : "view"} details</p>
                       </div>
                     </div>
-                  ))}
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-slate-500">units sold</div>
+                      </div>
+                      <span className="text-slate-400" aria-hidden="true">{isExpanded ? "−" : "+"}</span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-slate-800/80 divide-y divide-slate-800/70">
+                      {category.products.map(product => (
+                        <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                            <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
+                          </div>
+                          <span className="shrink-0 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
