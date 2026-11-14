@@ -102,10 +102,10 @@ export function ProductSalesBreakdown({
             productId ? toUUID(productId, storeEmail) : "",
             firestoreId ? toUUID(firestoreId, storeEmail) : ""
           ].filter(Boolean).forEach(id => productById.set(id, product));
-          const normalizedName = String(product?.name || "").trim().toLocaleLowerCase().replace(/\\s+/g, " ");
+          const normalizedName = String(product?.name || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
           if (normalizedName) productByName.set(normalizedName, product);
         });
-        const normalizedItemName = itemName.toLocaleLowerCase().replace(/\\s+/g, " ");
+        const normalizedItemName = itemName.toLocaleLowerCase().replace(/\s+/g, " ");
         const matchedProduct = (itemProductId ? productById.get(itemProductId) : undefined)
           || productByName.get(normalizedItemName);
 
