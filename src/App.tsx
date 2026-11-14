@@ -8166,9 +8166,9 @@ _${businessInfo.name}_`;
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h4 className="text-sm font-bold text-white">Settings Workspace</h4>
-                      <p className="text-[10px] text-slate-500 mt-1">Select a section to view and update its settings.</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Select a section to view and update its settings.</p>
                     </div>
-                    <span className="text-[9px] uppercase tracking-widest text-slate-500 border border-white/10 rounded-full px-3 py-1">6 Sections</span>
+                    <span className="text-[9px] uppercase tracking-widest text-slate-400 border border-white/10 rounded-full px-3 py-1">6 Sections</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                     {[
@@ -8192,10 +8192,10 @@ _${businessInfo.name}_`;
                             <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${isDanger ? "bg-rose-500/5 border-rose-500/20 text-rose-300" : "bg-white/5 border-white/10 text-slate-100"}`}>
                               <Icon className="w-5 h-5" />
                             </div>
-                            <span className="text-slate-500 group-hover:text-white transition-colors text-lg leading-none">↗</span>
+                            <span className="text-slate-400 group-hover:text-white transition-colors text-lg leading-none">↗</span>
                           </div>
                           <div className="mt-4">
-                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-semibold">{item.meta}</span>
+                            <span className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold">{item.meta}</span>
                             <h5 className="text-sm font-bold text-white mt-1 leading-snug">{item.title}</h5>
                             <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">{item.desc}</p>
                           </div>
@@ -8217,13 +8217,13 @@ _${businessInfo.name}_`;
                       <Undo2 className="w-4 h-4" /> Back
                     </button>
                     <div className="min-w-0">
-                      <p className="text-[9px] uppercase tracking-widest text-slate-500">Settings Workspace</p>
+                      <p className="text-[9px] uppercase tracking-widest text-slate-400">Settings Workspace</p>
                       <p className="text-xs sm:text-sm font-bold text-white truncate">
                         {({ shop: "Registered Shop Information", font: "Font Customization & Settings", invoice: "Invoice & PDF Layout Customization", sales: "Sales Panel & Assistant Restrictions", security: "Security & Panel Passcodes", danger: "Danger Zone" } as Record<string, string>)[activeSettingsSection]}
                       </p>
                     </div>
                   </div>
-                  <span className="text-[9px] text-slate-500 border border-white/10 rounded-full px-3 py-1">Changes are saved per section</span>
+                  <span className="text-[9px] text-slate-400 border border-white/10 rounded-full px-3 py-1">Changes are saved per section</span>
                 </div>
               )}
               {activeSettingsSection === "shop" && (
@@ -8247,7 +8247,7 @@ _${businessInfo.name}_`;
                       type="text"
                       value={tempShopName}
                       onChange={(e) => setTempShopName(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-sans font-bold transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                      className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-sans font-bold transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                     />
                   </div>
 
@@ -8257,7 +8257,7 @@ _${businessInfo.name}_`;
                       type="text"
                       value={tempShopAddress}
                       onChange={(e) => setTempShopAddress(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-sans transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                      className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-sans transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                     />
                   </div>
 
@@ -8268,7 +8268,7 @@ _${businessInfo.name}_`;
                         type="text"
                         value={tempShopPhone}
                         onChange={(e) => setTempShopPhone(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
 
@@ -8278,7 +8278,7 @@ _${businessInfo.name}_`;
                         type="email"
                         value={tempShopEmail}
                         onChange={(e) => setTempShopEmail(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
                   </div>
@@ -8290,7 +8290,7 @@ _${businessInfo.name}_`;
                         type="text"
                         value={tempVatRegNo}
                         onChange={(e) => setTempVatRegNo(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
 
@@ -8299,7 +8299,7 @@ _${businessInfo.name}_`;
                       <select
                         value={tempCurrency}
                         onChange={(e) => setTempCurrency(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-slate-400 font-mono transition-all focus:ring-1 focus:ring-white/10"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono transition-all focus:ring-1 focus:ring-white/10"
                       >
                         <option value="৳">৳ (BDT Taka - TK)</option>
                         <option value="$">$ (USD Dollar)</option>
@@ -8315,7 +8315,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveShopInfo}
-                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
+                    className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
                     Save Shop Details
@@ -8347,7 +8347,7 @@ _${businessInfo.name}_`;
                       <select
                         value={tempFont}
                         onChange={(e) => setTempFont(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-slate-400 font-sans transition-all focus:ring-1 focus:ring-white/10 font-bold"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-sans transition-all focus:ring-1 focus:ring-white/10 font-bold"
                       >
                         <option value="Inter">Inter (Default Modern & Clean)</option>
                         <option value="Roboto">Roboto (Standard Professional)</option>
@@ -8361,7 +8361,7 @@ _${businessInfo.name}_`;
 
                     <div className="space-y-1.5" id="settings-scale-select-field">
                       <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1 block">Global UI & Print Font Scale</label>
-                      <div className="grid grid-cols-3 gap-2 bg-[#121214] p-1.5 border border-slate-800 rounded-xl">
+                      <div className="grid grid-cols-3 gap-2 bg-[#171A20] p-1.5 border border-slate-600 rounded-xl">
                         {(["Regular", "Medium", "Large"] as const).map((sz) => (
                           <button
                             key={sz}
@@ -8370,25 +8370,25 @@ _${businessInfo.name}_`;
                             className={`py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
                               tempFontSizeScale === sz
                                 ? "bg-white text-slate-950 shadow"
-                                : "text-slate-500 hover:text-white hover:bg-slate-800/10"
+                                : "bg-[#252A33] border border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46]"
                             }`}
                           >
                             {sz}
                           </button>
                         ))}
                       </div>
-                      <p className="text-[9px] text-slate-500 italic pl-1 leading-normal block">
+                      <p className="text-[9px] text-slate-400 italic pl-1 leading-normal block">
                         Adjusts system-wide display text density and PDF invoice sizes dynamically.
                       </p>
                     </div>
                   </div>
 
                   <div className="p-4 bg-[#121214] border border-slate-800 rounded-xl space-y-3">
-                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest font-mono block">Selected Font Preview:</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono block">Selected Font Preview:</span>
                     <div style={{ fontFamily: `'${tempFont}', sans-serif` }} className="text-white space-y-1.5">
                       <p className="text-base font-black leading-tight font-sans">Barakah E-Mart</p>
                       <p className="text-xs text-slate-400">Invoicing, Ledger, CRM & POS Terminal.</p>
-                      <div className="flex gap-2 items-center pt-2 border-t border-slate-800/60 font-mono text-[10px] text-slate-500">
+                      <div className="flex gap-2 items-center pt-2 border-t border-slate-800/60 font-mono text-[10px] text-slate-400">
                         <span>Font: {tempFont}</span>
                         <span>•</span>
                         <span>Scale: {tempFontSizeScale}</span>
@@ -8401,7 +8401,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveFontSettings}
-                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
+                    className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
                     Save Font
@@ -8447,7 +8447,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 01</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 01</span>
                             <span className="text-[9px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded uppercase font-mono">Retail Default</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Classic Retail Standard</h5>
@@ -8478,7 +8478,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 02</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 02</span>
                             <span className="text-[9px] bg-white/10 text-slate-200 font-bold px-2 py-0.5 rounded uppercase font-mono">Clean Space</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Clean Tech Minimalist</h5>
@@ -8509,7 +8509,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 03</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 03</span>
                             <span className="text-[9px] bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Executive</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Premium Navy Executive</h5>
@@ -8540,7 +8540,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 04</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 04</span>
                             <span className="text-[9px] bg-purple-500/10 text-purple-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Sci-Fi Bold</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Cosmic Dark Elite</h5>
@@ -8571,7 +8571,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 05</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 05</span>
                             <span className="text-[9px] bg-amber-500/10 text-amber-550 font-bold px-2 py-0.5 rounded uppercase font-mono">Luxury Serif</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Vintage Editorial Serif</h5>
@@ -8602,7 +8602,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 06</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 06</span>
                             <span className="text-[9px] bg-emerald-500/10 text-slate-200 font-bold px-2 py-0.5 rounded uppercase font-mono">Fresh Green</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Vibrant Emerald Accent</h5>
@@ -8633,7 +8633,7 @@ _${businessInfo.name}_`;
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 07</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-400">Template 07</span>
                             <span className="text-[9px] bg-yellow-500/10 text-yellow-500 font-bold px-2 py-0.5 rounded uppercase font-mono">Thermal POS</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Compact Thermal Ticket</h5>
@@ -8665,7 +8665,7 @@ _${businessInfo.name}_`;
                           Live PDF Design Blueprint Preview (Demo Mockup)
                         </span>
                       </div>
-                      <span className="text-[9px] font-mono text-slate-500 uppercase font-black">
+                      <span className="text-[9px] font-mono text-slate-400 uppercase font-black">
                         Simulated Document Display
                       </span>
                     </div>
@@ -8680,7 +8680,7 @@ _${businessInfo.name}_`;
                               topAccent: "h-1 bg-gradient-to-r from-emerald-400 to-teal-500",
                               header: "pb-4 border-b border-teal-100",
                               primaryText: "text-teal-600 font-sans font-bold",
-                              secondaryText: "text-slate-500 text-xs",
+                              secondaryText: "text-slate-400 text-xs",
                               accentLine: "border-teal-100",
                               tableHeader: "bg-teal-50 text-teal-900 text-xs font-bold",
                               tableRow: "border-b border-slate-100 text-slate-700",
@@ -8688,7 +8688,7 @@ _${businessInfo.name}_`;
                               totalsBox: "border border-teal-200/60 bg-teal-50/20 text-slate-800 p-3 rounded-lg",
                               sigLine: "border-teal-200",
                               fontFamily: "font-sans",
-                              sigColor: "text-slate-500"
+                              sigColor: "text-slate-400"
                             };
                           case "premium_navy":
                             return {
@@ -8696,7 +8696,7 @@ _${businessInfo.name}_`;
                               topAccent: "h-2 bg-blue-900",
                               header: "pb-4 border-b border-blue-100 bg-blue-50/50 p-4 rounded-t-lg",
                               primaryText: "text-blue-900 font-sans font-black tracking-normal",
-                              secondaryText: "text-slate-500 text-xs",
+                              secondaryText: "text-slate-400 text-xs",
                               accentLine: "border-blue-200",
                               tableHeader: "bg-blue-900 text-white text-xs font-bold",
                               tableRow: "border-b border-blue-50 text-slate-700",
@@ -8760,7 +8760,7 @@ _${businessInfo.name}_`;
                               topAccent: "border-t border-dashed border-slate-400",
                               header: "text-center pb-3 border-b border-dashed border-slate-300",
                               primaryText: "text-slate-900 font-mono font-bold tracking-tighter text-medium uppercase",
-                              secondaryText: "text-slate-500 text-[10px]",
+                              secondaryText: "text-slate-400 text-[10px]",
                               accentLine: "border-dashed border-b border-slate-300",
                               tableHeader: "bg-slate-100 text-slate-800 text-[10px] font-bold border-y border-dashed border-slate-400 py-1",
                               tableRow: "border-b border-dashed border-slate-200 text-slate-800 text-[10px]",
@@ -8776,7 +8776,7 @@ _${businessInfo.name}_`;
                               topAccent: "h-1 bg-slate-800",
                               header: "pb-4 border-b border-slate-200 p-3",
                               primaryText: "text-slate-900 font-sans font-extrabold tracking-tight",
-                              secondaryText: "text-slate-500 text-xs",
+                              secondaryText: "text-slate-400 text-xs",
                               accentLine: "border-slate-200",
                               tableHeader: "bg-slate-900 text-white text-xs font-bold",
                               tableRow: "border-b border-slate-200 text-slate-800",
@@ -9032,7 +9032,7 @@ _${businessInfo.name}_`;
                         ) : (
                           <div className="text-center space-y-1">
                             <span className="text-2xl block">🧩</span>
-                            <span className="text-[10px] text-slate-500 block">No Custom Logo</span>
+                            <span className="text-[10px] text-slate-400 block">No Custom Logo</span>
                           </div>
                         )}
                         <span className="text-[8px] font-mono text-[#A0A0A5] mt-2 uppercase tracking-tight">LOGO CORE CACHE</span>
@@ -9054,7 +9054,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempShowLogo(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9066,7 +9066,7 @@ _${businessInfo.name}_`;
                       value={tempTerms}
                       onChange={(e) => setTempTerms(e.target.value)}
                       placeholder="Enter legal specifications, warranty policies, or return rules..."
-                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-sans leading-relaxed transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                      className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-sans leading-relaxed transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                     />
                   </div>
 
@@ -9112,7 +9112,7 @@ _${businessInfo.name}_`;
                     
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1 block">Logo Alignment on PDF Invoice</label>
-                      <div className="grid grid-cols-3 gap-2 bg-[#121214] p-1.5 border border-slate-800 rounded-xl">
+                      <div className="grid grid-cols-3 gap-2 bg-[#171A20] p-1.5 border border-slate-600 rounded-xl">
                         {(["left", "center", "right"] as const).map((align) => (
                           <button
                             key={align}
@@ -9128,7 +9128,7 @@ _${businessInfo.name}_`;
                           </button>
                         ))}
                       </div>
-                      <p className="text-[9px] text-slate-500 italic pl-1 leading-normal block font-sans">
+                      <p className="text-[9px] text-slate-400 italic pl-1 leading-normal block font-sans">
                         Determines the company logo positioning relative to page margins.
                       </p>
                     </div>
@@ -9140,10 +9140,10 @@ _${businessInfo.name}_`;
                         min={1}
                         value={tempStartingInvoiceNumber}
                         onChange={(e) => setTempStartingInvoiceNumber(parseInt(e.target.value) || 1001)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                         placeholder="e.g. 1001 or 50001"
                       />
-                      <p className="text-[9px] text-slate-500 italic pl-1 leading-normal block font-sans">
+                      <p className="text-[9px] text-slate-400 italic pl-1 leading-normal block font-sans">
                         Initial serial key offset. Successive invoices increment chronologically from here.
                       </p>
                     </div>
@@ -9210,7 +9210,7 @@ _${businessInfo.name}_`;
                               value={newCustomBrandName}
                               onChange={(e) => setNewCustomBrandName(e.target.value)}
                               placeholder="e.g. APPLE or DELL"
-                              className="w-full px-3 py-2 bg-[#1E1E24] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 transition-all"
+                              className="w-full px-3 py-2 bg-[#1E1E24] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 transition-all"
                             />
                             <button
                               type="button"
@@ -9256,7 +9256,7 @@ _${businessInfo.name}_`;
                                 className="hidden" 
                               />
                             </label>
-                            <span className="text-[9px] text-slate-500 italic leading-normal">
+                            <span className="text-[9px] text-slate-400 italic leading-normal">
                               Supports PNG, JPG, or JPEG formats. Transparent landscape icons display beautifully on receipts.
                             </span>
                           </div>
@@ -9296,7 +9296,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveInvoiceConfig}
-                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
+                    className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
                     Save Customizations
@@ -9335,7 +9335,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempCanEditSales(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9351,7 +9351,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempCanDeleteSales(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9367,7 +9367,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempCanOverridePrices(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9377,7 +9377,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveSalesRestrictions}
-                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
+                    className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
                     Save Restrictions
@@ -9414,10 +9414,10 @@ _${businessInfo.name}_`;
                         value={tempAdminPasscode}
                         onChange={(e) => setTempAdminPasscode(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 1234"
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono font-bold transition-all placeholder:text-slate-700 focus:ring-1 focus:ring-white/10"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono font-bold transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
-                    <span className="text-[9px] text-slate-500 font-sans block pl-1 leading-normal">
+                    <span className="text-[9px] text-slate-400 font-sans block pl-1 leading-normal">
                       Required PIN to access Admin dashboard, purchases ledger, expenses ledger, and critical settings.
                     </span>
                   </div>
@@ -9433,10 +9433,10 @@ _${businessInfo.name}_`;
                         value={tempSalesPasscode}
                         onChange={(e) => setTempSalesPasscode(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 5555"
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono font-bold transition-all placeholder:text-slate-700 focus:ring-1 focus:ring-cyan-500/20"
+                        className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono font-bold transition-all placeholder:text-slate-400 focus:ring-1 focus:ring-cyan-500/20"
                       />
                     </div>
-                    <span className="text-[9px] text-slate-500 font-sans block pl-1 leading-normal">
+                    <span className="text-[9px] text-slate-400 font-sans block pl-1 leading-normal">
                       Required PIN for salesmen to lock admin view or operate standard checkout registers.
                     </span>
                   </div>
@@ -9446,7 +9446,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveSecurityPasscodes}
-                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
+                    className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
                     Save Passcodes
@@ -9567,7 +9567,7 @@ _${businessInfo.name}_`;
         </div>
 
         {/* WORKSPACE COMPREHENSIVE TERMINAL FOOTER */}
-        <footer className="bg-white border-t border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between text-[10px] text-slate-500 font-mono" id="terminal-footer">
+        <footer className="bg-white border-t border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between text-[10px] text-slate-400 font-mono" id="terminal-footer">
           <span>Logged in: {activeUser?.email}</span>
           <span className="hidden sm:inline">Designed for Barakah Stores | Enterprise POS Platform</span>
           <span>© 2026 Barakah Bill Pro</span>
@@ -9603,7 +9603,7 @@ _${businessInfo.name}_`;
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Collection Amount ({businessInfo.currencySymbol})</label>
+                <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">Collection Amount ({businessInfo.currencySymbol})</label>
                 <input
                   type="number"
                   value={collectAmount}
@@ -9648,7 +9648,7 @@ _${businessInfo.name}_`;
             <div className="space-y-4 text-xs font-sans">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Invoice Date / Time</label>
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">Invoice Date / Time</label>
                   <input
                     type="datetime-local"
                     value={safeFormat(editingTx.date, "yyyy-MM-dd'T'HH:mm", "")}
@@ -9666,7 +9666,7 @@ _${businessInfo.name}_`;
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Set Customer contact</label>
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">Set Customer contact</label>
                   <select
                     value={editingTx.contactId || ""}
                     onChange={(e) => setEditingTx({ ...editingTx, contactId: e.target.value || undefined })}
@@ -9681,7 +9681,7 @@ _${businessInfo.name}_`;
               </div>
 
               <div className="border border-slate-150 rounded-xl overflow-hidden">
-                <div className="p-2.5 bg-slate-50 border-b border-slate-200 font-bold text-[10px] uppercase text-slate-500 font-mono">Invoice items</div>
+                <div className="p-2.5 bg-slate-50 border-b border-slate-200 font-bold text-[10px] uppercase text-slate-400 font-mono">Invoice items</div>
                 <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
                   {editingTx.items.map((item, idx) => {
                     const matchedProd = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
@@ -9689,7 +9689,7 @@ _${businessInfo.name}_`;
                       <div key={idx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white">
                         <div className="space-y-0.5 font-sans min-w-[140px]">
                           <strong className="font-bold text-slate-800 block text-xs">{matchedProd ? matchedProd.name : (item.name || "Unknown Item")}</strong>
-                          <span className="text-[9px] text-slate-500 font-mono block">
+                          <span className="text-[9px] text-slate-400 font-mono block">
                             Catalog rate: {businessInfo.currencySymbol || "৳"}{(matchedProd ? matchedProd.sellPrice : (item.price ?? 0)).toLocaleString()}/unit
                           </span>
                         </div>
@@ -9760,7 +9760,7 @@ _${businessInfo.name}_`;
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Invoice Discount ({businessInfo.currencySymbol})</label>
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">Invoice Discount ({businessInfo.currencySymbol})</label>
                   <input
                     type="number"
                     value={editingTx.discount}
@@ -9770,7 +9770,7 @@ _${businessInfo.name}_`;
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Amount Paid ({businessInfo.currencySymbol})</label>
+                  <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">Amount Paid ({businessInfo.currencySymbol})</label>
                   <input
                     type="number"
                     value={editingTx.paidAmount}
