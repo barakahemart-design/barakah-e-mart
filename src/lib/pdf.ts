@@ -141,7 +141,7 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   }
 
   // 1. CHOOSE CORRESPONDING DESIGN VARIABLES
-  const template = businessInfo.selectedInvoiceTemplate || "classic";
+  const template = "classic"; // Only Classic Retail Standard is currently supported.
 
   let primaryColor: [number, number, number] = [15, 23, 42];        // slate-900 (Main headings/accents)
   let secondaryColor: [number, number, number] = [71, 85, 105];     // slate-600 (Meta text/labels)
