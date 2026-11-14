@@ -1,10 +1,11 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Boxes, Package, ShoppingBag } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
 
 interface ProductSalesBreakdownProps {
   products: any[];
   transactions: any[];
+  onUpdateProductCategory: (productId: string, category: string) => void;
   dashboardFilter: string;
   customStart: string;
   customEnd: string;
@@ -65,16 +66,25 @@ function formatQuantity(value: number) {
 export function ProductSalesBreakdown({
   products = [],
   transactions = [],
+  onUpdateProductCategory,
   dashboardFilter,
   customStart,
   customEnd
 }: ProductSalesBreakdownProps) {
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const availableCategories = useMemo(() => Array.from(new Set(
+    (Array.isArray(products) ? products : [])
+      .map((product: any) => String(product?.category || "").trim())
+      .filter((category: string) => category && category.toLowerCase() !== "uncategorized")
+  )).sort((a, b) => a.localeCompare(b)), [products]);
+
   const todayKey = new Date().toDateString();
   const report = useMemo(() => {
     const bounds = getPeriodBounds(dashboardFilter, customStart, customEnd);
     const safeProducts = Array.isArray(products) ? products : [];
     const safeTransactions = Array.isArray(transactions) ? transactions : [];
-    const categoryMap = new Map<string, { name: string; units: number; products: Map<string, { name: string; units: number }> }>();
+    const categoryMap = new Map<string, { name: string; units: number; products: Map<string, { name: string; units: number; productId?: string }> }>();
     let totalUnits = 0;
 
     safeTransactions.forEach((transaction: any) => {
@@ -93,7 +103,15 @@ export function ProductSalesBreakdown({
           String(product?.name || "").trim().toLowerCase() === itemName.toLowerCase()
         );
 
-        const categoryName = String(item?.category || matchedProduct?.category || "Uncategorized").trim() || "Uncategorized";
+        const savedItemCategory = String(item?.category || "").trim();
+        const productCategory = String(matchedProduct?.category || "").trim();
+        // If a sale snapshot says Uncategorized, use the product's current category
+        // after the user has corrected that product from this dashboard.
+        const categoryName = (
+          savedItemCategory && savedItemCategory.toLowerCase() !== "uncategorized"
+            ? savedItemCategory
+            : productCategory
+        ) || "Uncategorized";
         const categoryKey = categoryName.toLowerCase();
         const productKey = itemProductId || String(matchedProduct?.id || itemName.toLowerCase());
 
@@ -107,7 +125,11 @@ export function ProductSalesBreakdown({
         if (existingProduct) {
           existingProduct.units += quantity;
         } else {
-          category.products.set(productKey, { name: itemName, units: quantity });
+          category.products.set(productKey, {
+            name: itemName,
+            units: quantity,
+            productId: String(matchedProduct?.id || itemProductId || "") || undefined
+          });
         }
         category.units += quantity;
         totalUnits += quantity;
@@ -205,12 +227,65 @@ export function ProductSalesBreakdown({
                 </div>
                 <div className="divide-y divide-slate-800/70">
                   {category.products.map(product => (
-                    <div key={product.name + product.units} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex min-w-0 items-center gap-2">
                         <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                         <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
                       </div>
-                      <span className="shrink-0 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
+                      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+                        <span className="text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
+                        {category.name.trim().toLowerCase() === "uncategorized" && product.productId && (
+                          editingProductId === product.productId ? (
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                aria-label={`Choose category for ${product.name}`}
+                                value={selectedCategory}
+                                onChange={(event) => setSelectedCategory(event.target.value)}
+                                className="max-w-[155px] rounded-lg border border-slate-700 bg-[#080d17] px-2 py-1.5 text-[10px] font-semibold text-white outline-none focus:border-indigo-400"
+                              >
+                                <option value="">Select category</option>
+                                {availableCategories.map(option => (
+                                  <option key={option} value={option}>{option}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                disabled={!selectedCategory}
+                                onClick={() => {
+                                  onUpdateProductCategory(product.productId!, selectedCategory);
+                                  setEditingProductId(null);
+                                  setSelectedCategory("");
+                                }}
+                                className="rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-[10px] font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingProductId(null);
+                                  setSelectedCategory("");
+                                }}
+                                className="rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] font-semibold text-slate-400 hover:text-white"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={availableCategories.length === 0}
+                              onClick={() => {
+                                setEditingProductId(product.productId!);
+                                setSelectedCategory(availableCategories[0] || "");
+                              }}
+                              className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1.5 text-[10px] font-bold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Edit Category
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
