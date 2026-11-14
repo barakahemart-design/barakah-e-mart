@@ -79,6 +79,7 @@ export interface BusinessInfo {
   vatRegNo: string;
   currencySymbol: string;
   email?: string;
+  invoiceDisplayEmail?: string;
   adminPasscode?: string;
   salesPasscode?: string;
   companyLogo?: string;
@@ -113,6 +114,7 @@ export const INITIAL_BUSINESS_INFO: BusinessInfo = {
   vatRegNo: "",
   currencySymbol: "৳",
   email: "",
+  invoiceDisplayEmail: "",
   adminPasscode: "1234",
   salesPasscode: "5555",
   companyLogo: "",
