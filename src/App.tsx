@@ -6873,14 +6873,14 @@ _${businessInfo.name}_`;
                   )}
                 </div>
 
-                <div className="flex w-full flex-col items-stretch gap-2 md:w-auto md:flex-row md:flex-wrap md:items-center" id="ledger-filter-tabs">
-                  <span className="w-full text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:w-auto md:mr-1">Reciprocal Filter:</span>
+                <div className="grid w-full grid-cols-4 items-stretch gap-2 md:flex md:w-auto md:flex-wrap md:items-center" id="ledger-filter-tabs">
+                  <span className="col-span-4 text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:col-span-1 md:mr-1">Reciprocal Filter:</span>
                   {["all", "paid", "partial", "due"].map((status) => (
                     <button
                       key={status}
                       id={`ledger-filter-${status}`}
                       onClick={() => setLedgerStatusFilter(status)}
-                      className={`w-full text-center md:w-auto px-4 py-2 rounded-xl text-xs font-mono font-bold capitalize cursor-pointer transition-all ${ledgerStatusFilter === status ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/10' : 'bg-[#121214] border border-slate-800 text-slate-400 hover:text-white'}`}
+                      className={`w-full min-w-0 whitespace-normal break-words px-1.5 py-2 text-center text-[9px] leading-tight md:w-auto md:px-4 md:text-xs rounded-xl font-mono font-bold capitalize cursor-pointer transition-all ${ledgerStatusFilter === status ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/10' : 'bg-[#121214] border border-slate-800 text-slate-400 hover:text-white'}`}
                     >
                       {status === 'all' ? 'All Transactions' : status === 'paid' ? 'Paid' : status === 'partial' ? 'Partial' : 'Due Balance'}
                     </button>
@@ -6891,14 +6891,14 @@ _${businessInfo.name}_`;
 
               {/* Date Preset Filter Bar */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-5 p-5 bg-[#1E1E24] border border-[#2D2D35] rounded-2xl shadow-lg relative overflow-hidden mt-4" id="ledger-date-filter-bar">
-                <div className="flex w-full flex-col items-stretch gap-2 md:w-auto md:flex-row md:flex-wrap md:items-center" id="ledger-date-presets">
-                  <span className="w-full text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:w-auto md:mr-1">Date Range:</span>
+                <div className="grid w-full grid-cols-7 items-stretch gap-1 md:flex md:w-auto md:flex-wrap md:items-center md:gap-2" id="ledger-date-presets">
+                  <span className="col-span-7 text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:col-span-1 md:mr-1">Date Range:</span>
                   {(["all", "today", "yesterday", "weekly", "monthly", "yearly", "custom"] as const).map((preset) => (
                     <button
                       key={preset}
                       id={`ledger-date-filter-${preset}`}
                       onClick={() => setLedgerDateFilterType(preset)}
-                      className={`w-full text-center md:w-auto px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wider transition-all border cursor-pointer uppercase font-mono ${
+                      className={`w-full min-w-0 whitespace-normal break-words px-0.5 py-2 text-center text-[7px] leading-tight sm:text-[8px] md:w-auto md:px-3.5 md:text-[11px] rounded-xl font-bold tracking-wider transition-all border cursor-pointer uppercase font-mono ${
                         ledgerDateFilterType === preset
                           ? "bg-gradient-to-r from-[#00E676] to-[#00B0FF] text-slate-950 border-emerald-400 shadow-lg scale-102"
                           : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
