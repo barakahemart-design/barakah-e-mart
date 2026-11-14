@@ -3013,32 +3013,16 @@ export default function App() {
   const [isClassifying, setIsClassifying] = useState(false);
 
   // Expense Date Range States
-  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom">(() => {
+  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_expense_date_filter"));
-    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "all" || saved === "custom") {
-      return saved as any;
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly") {
+      return saved;
     }
-    return "all";
+    return "monthly";
   });
-  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "all" | "custom") => {
+  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly") => {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
-  };
-
-  const [expenseCustomStart, _setExpenseCustomStart] = useState<string>(() => {
-    return localStorage.getItem(getDbKey("barakah_expense_custom_start")) || new Date().toISOString().split("T")[0];
-  });
-  const setExpenseCustomStart = (val: string) => {
-    _setExpenseCustomStart(val);
-    localStorage.setItem(getDbKey("barakah_expense_custom_start"), val);
-  };
-
-  const [expenseCustomEnd, _setExpenseCustomEnd] = useState<string>(() => {
-    return localStorage.getItem(getDbKey("barakah_expense_custom_end")) || new Date().toISOString().split("T")[0];
-  });
-  const setExpenseCustomEnd = (val: string) => {
-    _setExpenseCustomEnd(val);
-    localStorage.setItem(getDbKey("barakah_expense_custom_end"), val);
   };
 
   // Edit Expense States
@@ -3058,45 +3042,33 @@ export default function App() {
   const checkExpenseDateInFilter = (dateStr: string) => {
     try {
       if (!dateStr) return false;
-      const targetDate = new Date(dateStr);
-      const targetTime = targetDate.getTime();
-      
+      const targetDate = new Date(dateStr + "T12:00:00");
+      if (Number.isNaN(targetDate.getTime())) return false;
       const today = new Date();
-      if (expenseDateFilter === "all") return true;
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
+      if (expenseDateFilter === "today") {
+        return targetDate >= startOfToday && targetDate <= endOfToday;
+      }
+      if (expenseDateFilter === "yesterday") {
+        const yesterday = new Date(startOfToday);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const endOfYesterday = new Date(startOfToday.getTime() - 1);
+        return targetDate >= yesterday && targetDate <= endOfYesterday;
+      }
+      if (expenseDateFilter === "weekly") {
+        const sevenDaysAgo = new Date(startOfToday);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        return targetDate >= sevenDaysAgo && targetDate <= endOfToday;
+      }
+      if (expenseDateFilter === "monthly") {
+        return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      }
       if (expenseDateFilter === "yearly") {
         return targetDate.getFullYear() === today.getFullYear();
       }
-
-      if (expenseDateFilter === "custom") {
-        const start = new Date(expenseCustomStart + "T00:00:00");
-        const end = new Date(expenseCustomEnd + "T23:59:59");
-        const currentTarget = new Date(dateStr + "T12:00:00");
-        return currentTarget.getTime() >= start.getTime() && currentTarget.getTime() <= end.getTime();
-      }
-
-      // Restrict all preset date filters (today, yesterday, weekly, monthly) to the current month
-      const isCurrentMonth = targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
-      if (!isCurrentMonth) return false;
-
-      if (expenseDateFilter === "monthly") {
-        return true;
-      }
-      if (expenseDateFilter === "today") {
-        return targetDate.toDateString() === today.toDateString();
-      }
-      if (expenseDateFilter === "yesterday") {
-        const yesterday = new Date();
-        yesterday.setDate(today.getDate() - 1);
-        return targetDate.toDateString() === yesterday.toDateString();
-      }
-      if (expenseDateFilter === "weekly") {
-        const tDate = new Date(dateStr + "T00:00:00");
-        const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-        const sevenDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7, 0, 0, 0);
-        return tDate.getTime() >= sevenDaysAgo.getTime() && tDate.getTime() <= midnightToday.getTime();
-      }
-      return true;
+      return false;
     } catch (e) {
       return false;
     }
@@ -7212,6 +7184,12 @@ _${businessInfo.name}_`;
               count: monthExpenses.filter(e => e.category === category).length
             })).filter(item => item.total > 0).sort((a, b) => b.total - a.total);
             const maxCategoryTotal = Math.max(1, ...categoryTotals.map(item => item.total));
+            const selectedPeriodExpenses = expenses.filter(e => checkExpenseDateInFilter(e.date));
+            const selectedPeriodTotal = selectedPeriodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            const selectedPeriodCategoryTotals = allCategories.map(category => ({
+              category,
+              total: selectedPeriodExpenses.filter(e => e.category === category).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+            })).filter(item => item.total > 0).sort((a, b) => b.total - a.total);
             const sortedHistory = expenses
               .filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date))
               .slice()
@@ -7221,12 +7199,29 @@ _${businessInfo.name}_`;
             return (
               <div className="space-y-5 animate-fade-in" id="view-expenses-outer-container">
                 <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex flex-col gap-4">
                     <div>
                       <h2 className="text-base sm:text-lg font-black text-white">Expenses Management</h2>
                       <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Record, review and manage business expenses.</p>
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full sm:w-auto">
+                    <div className="space-y-2">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date Filter</div>
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2" id="expense-date-presets">
+                        {[
+                          { id: "today", label: "Today" },
+                          { id: "yesterday", label: "Yesterday" },
+                          { id: "weekly", label: "7 Days" },
+                          { id: "monthly", label: "This Month" },
+                          { id: "yearly", label: "This Year" }
+                        ].map(preset => (
+                          <button key={preset.id} type="button" onClick={() => setExpenseDateFilter(preset.id as any)}
+                            className={`px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all ${expenseDateFilter === preset.id ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-400 shadow-sm" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full">
                       {[
                         { id: "add", label: "Add Expenses", Icon: PlusCircle },
                         { id: "history", label: "Expenses History", Icon: History },
@@ -7245,36 +7240,6 @@ _${businessInfo.name}_`;
                     </div>
                   </div>
                 </div>
-
-                <section className="bg-[#0b0f19]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4" id="monthly-expense-breakdown">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-extrabold text-white">This Month Expense Breakdown</h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5">See which expense categories are costing the most.</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="block text-[9px] text-slate-500 uppercase tracking-wider font-bold">Total This Month</span>
-                      <strong className="text-base sm:text-lg text-rose-400 font-mono">{money(monthTotal)}</strong>
-                    </div>
-                  </div>
-                  {categoryTotals.length ? (
-                    <div className="space-y-3">
-                      {categoryTotals.map(item => (
-                        <div key={item.category} className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-3 text-[11px]">
-                            <span className="text-slate-200 font-semibold truncate">{item.category} <span className="text-slate-500 font-normal">({item.count})</span></span>
-                            <span className="text-rose-300 font-mono font-bold shrink-0">{money(item.total)}</span>
-                          </div>
-                          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-rose-600 to-amber-400" style={{ width: `${Math.max(2, (item.total / maxCategoryTotal) * 100)}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-800 py-6 text-center text-xs text-slate-500">No expenses recorded for this month yet.</div>
-                  )}
-                </section>
 
                 {expenseSection === "add" && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -7321,11 +7286,11 @@ _${businessInfo.name}_`;
                     <div className="lg:col-span-5 bg-[#0a101f]/90 border border-slate-800 p-4 sm:p-5 rounded-2xl space-y-3">
                       <h3 className="text-sm font-bold text-white">Quick Overview</h3>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">This Month</span><strong className="text-sm text-rose-400 font-mono">{money(monthTotal)}</strong></div>
-                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Entries</span><strong className="text-sm text-white font-mono">{monthExpenses.length}</strong></div>
+                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Selected Period</span><strong className="text-sm text-rose-400 font-mono">{money(selectedPeriodTotal)}</strong></div>
+                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Entries</span><strong className="text-sm text-white font-mono">{selectedPeriodExpenses.length}</strong></div>
                       </div>
                       <h4 className="text-[10px] uppercase tracking-wider text-slate-400 font-bold pt-2">Highest Expense Categories</h4>
-                      {categoryTotals.slice(0, 5).length ? categoryTotals.slice(0, 5).map(item => (
+                      {selectedPeriodCategoryTotals.slice(0, 5).length ? selectedPeriodCategoryTotals.slice(0, 5).map(item => (
                         <div key={item.category} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 text-xs">
                           <span className="text-slate-300 truncate">{item.category}</span><strong className="text-rose-300 font-mono shrink-0">{money(item.total)}</strong>
                         </div>
@@ -7341,17 +7306,10 @@ _${businessInfo.name}_`;
                       <div><h3 className="text-sm font-bold text-white">Expenses History</h3><p className="text-[10px] text-slate-400 mt-1">Review every saved expense and its reason.</p></div>
                       <div className="sm:text-right"><span className="block text-[9px] text-slate-500 uppercase">Filtered Total</span><strong className="text-sm text-rose-400 font-mono">{money(sortedHistory.reduce((sum,e)=>sum+(Number(e.amount)||0),0))}</strong></div>
                     </div>
-                    <div className="p-3 sm:p-4 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                      <select value={expenseFilterCategory} onChange={e => setExpenseFilterCategory(e.target.value)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white">
+                    <div className="p-3 sm:p-4 border-b border-slate-800">
+                      <select value={expenseFilterCategory} onChange={e => setExpenseFilterCategory(e.target.value)} className="w-full sm:w-64 px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white">
                         {["All", ...allCategories].map(cat => <option key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</option>)}
                       </select>
-                      <select value={expenseDateFilter} onChange={e => setExpenseDateFilter(e.target.value as any)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white">
-                        {[["all","All Dates"],["today","Today"],["yesterday","Yesterday"],["weekly","Last 7 Days"],["monthly","This Month"],["yearly","This Year"],["custom","Custom Range"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                      {expenseDateFilter === "custom" && <>
-                        <input type="date" value={expenseCustomStart} onChange={e => setExpenseCustomStart(e.target.value)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white" />
-                        <input type="date" value={expenseCustomEnd} onChange={e => setExpenseCustomEnd(e.target.value)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white" />
-                      </>}
                     </div>
                     <div className="p-3 sm:p-4 space-y-3 max-h-[720px] overflow-y-auto">
                       {sortedHistory.length ? sortedHistory.map(e => (
@@ -7420,6 +7378,36 @@ _${businessInfo.name}_`;
                     </div>
                   </div>
                 )}
+                <section className="bg-[#0b0f19]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4" id="monthly-expense-breakdown">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-white">This Month Expense Breakdown</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">See which expense categories are costing the most.</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[9px] text-slate-500 uppercase tracking-wider font-bold">Total This Month</span>
+                      <strong className="text-base sm:text-lg text-rose-400 font-mono">{money(monthTotal)}</strong>
+                    </div>
+                  </div>
+                  {categoryTotals.length ? (
+                    <div className="space-y-3">
+                      {categoryTotals.map(item => (
+                        <div key={item.category} className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-3 text-[11px]">
+                            <span className="text-slate-200 font-semibold truncate">{item.category} <span className="text-slate-500 font-normal">({item.count})</span></span>
+                            <span className="text-rose-300 font-mono font-bold shrink-0">{money(item.total)}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-rose-600 to-amber-400" style={{ width: `${Math.max(2, (item.total / maxCategoryTotal) * 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-800 py-6 text-center text-xs text-slate-500">No expenses recorded for this month yet.</div>
+                  )}
+                </section>
+
               </div>
             );
           })()}
