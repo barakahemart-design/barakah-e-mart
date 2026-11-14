@@ -8470,338 +8470,97 @@ _${businessInfo.name}_`;
                     </div>
                   </div>
 
-                  {/* INVOICE TEMPLATE LIVE DEMO LAYOUT REPRESENTATION */}
-                  <div className="space-y-4 p-5 bg-[#121214] border border-slate-800 rounded-xl" id="invoice-template-live-demo-preview">
-                    <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-slate-200" />
-                        <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-200">
-                          Live PDF Design Blueprint Preview (Demo Mockup)
+                  {/* COMPACT PREVIEW MATCHING THE PRINTED CLASSIC RETAIL PDF */}
+                  <div className="space-y-3 p-4 bg-[#121214] border border-slate-800 rounded-xl" id="invoice-template-live-demo-preview">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-slate-200 shrink-0" />
+                        <span className="text-[10px] font-black uppercase tracking-wider font-mono text-slate-200">
+                          Classic Retail Standard — Print Preview
                         </span>
                       </div>
-                      <span className="text-[9px] font-mono text-slate-400 uppercase font-black">
-                        Simulated Document Display
-                      </span>
+                      <span className="text-[8px] font-mono text-slate-400 uppercase shrink-0">A4 · Actual PDF Style</span>
                     </div>
 
-                    {/* DYNAMIC DESIGN CONTAINER */}
-                    {(() => {
-                      const styles = (() => {
-                        switch (tempInvoiceTemplate) {
-                          case "modern_minimal":
-                            return {
-                              container: "bg-white text-slate-900 border-2 border-teal-500/20 rounded-xl font-sans",
-                              topAccent: "h-1 bg-gradient-to-r from-emerald-400 to-teal-500",
-                              header: "pb-4 border-b border-teal-100",
-                              primaryText: "text-teal-600 font-sans font-bold",
-                              secondaryText: "text-slate-400 text-xs",
-                              accentLine: "border-teal-100",
-                              tableHeader: "bg-teal-50 text-teal-900 text-xs font-bold",
-                              tableRow: "border-b border-slate-100 text-slate-700",
-                              statusBadge: "border border-slate-400 text-emerald-600 font-bold text-[10px] uppercase rounded-full px-2 py-0.5",
-                              totalsBox: "border border-teal-200/60 bg-teal-50/20 text-slate-800 p-3 rounded-lg",
-                              sigLine: "border-teal-200",
-                              fontFamily: "font-sans",
-                              sigColor: "text-slate-400"
-                            };
-                          case "premium_navy":
-                            return {
-                              container: "bg-[#FAFCFF] text-slate-1000 border border-blue-200 rounded-xl font-sans",
-                              topAccent: "h-2 bg-blue-900",
-                              header: "pb-4 border-b border-blue-100 bg-blue-50/50 p-4 rounded-t-lg",
-                              primaryText: "text-blue-900 font-sans font-black tracking-normal",
-                              secondaryText: "text-slate-400 text-xs",
-                              accentLine: "border-blue-200",
-                              tableHeader: "bg-blue-900 text-white text-xs font-bold",
-                              tableRow: "border-b border-blue-50 text-slate-700",
-                              statusBadge: "bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase rounded-lg px-2.5 py-0.5",
-                              totalsBox: "border-2 border-blue-900 bg-blue-50/30 text-slate-800 p-3",
-                              sigLine: "border-blue-900",
-                              fontFamily: "font-sans",
-                              sigColor: "text-slate-650"
-                            };
-                          case "cosmic_dark":
-                            return {
-                              container: "bg-[#18181B] text-zinc-300 border border-zinc-800 rounded-xl font-mono",
-                              topAccent: "h-1 bg-white",
-                              header: "pb-3 border-b border-zinc-800 p-3 bg-zinc-900/60",
-                              primaryText: "text-white font-mono font-bold tracking-widest",
-                              secondaryText: "text-zinc-500 text-[11px]",
-                              accentLine: "border-white/35",
-                              tableHeader: "bg-zinc-800 text-zinc-100 text-xs font-mono tracking-tight",
-                              tableRow: "border-b border-zinc-900 text-zinc-300",
-                              statusBadge: "border border-white text-white text-[10px] font-bold rounded px-1.5 py-0.5 bg-white/5",
-                              totalsBox: "border border-zinc-800 bg-zinc-900/80 text-zinc-300 p-3",
-                              sigLine: "border-zinc-750",
-                              fontFamily: "font-mono",
-                              sigColor: "text-zinc-500"
-                            };
-                          case "vintage_editorial":
-                            return {
-                              container: "bg-[#FEFBF6] text-amber-950 border border-amber-200 rounded-xl font-serif",
-                              topAccent: "h-0.5 bg-amber-800 border-b border-amber-800",
-                              header: "pb-4 border-b-2 border-double border-amber-300",
-                              primaryText: "text-amber-800 font-serif font-black italic tracking-wide text-lg",
-                              secondaryText: "text-amber-900/60 text-xs",
-                              accentLine: "border-amber-305",
-                              tableHeader: "bg-[#FEF3C7] text-amber-900 text-xs font-serif font-bold italic border-b border-amber-300",
-                              tableRow: "border-b border-amber-100 text-amber-950",
-                              statusBadge: "border border-amber-800 text-amber-800 font-serif font-black text-[10px] uppercase px-2 py-0.5 whitespace-nowrap",
-                              totalsBox: "border border-amber-300 bg-amber-50/50 text-amber-900 p-3",
-                              sigLine: "border-amber-800",
-                              fontFamily: "font-serif",
-                              sigColor: "text-amber-800"
-                            };
-                          case "bold_emerald":
-                            return {
-                              container: "bg-white text-slate-900 border border-slate-400 rounded-xl font-sans",
-                              topAccent: "h-2.5 bg-emerald-700",
-                              header: "pb-4 border-b border-emerald-100 bg-emerald-50/20 p-3",
-                              primaryText: "text-emerald-700 font-sans font-black tracking-tight",
-                              secondaryText: "text-slate-600 text-xs",
-                              accentLine: "border-emerald-200",
-                              tableHeader: "bg-emerald-700 text-white text-xs font-bold",
-                              tableRow: "border-b border-slate-100 text-slate-800",
-                              statusBadge: "bg-emerald-600 text-white font-bold text-[10px] uppercase rounded px-2 py-0.5",
-                              totalsBox: "border-l-4 border-emerald-700 bg-slate-50 text-slate-800 p-3 rounded-r-lg",
-                              sigLine: "border-emerald-700",
-                              fontFamily: "font-sans",
-                              sigColor: "text-emerald-800"
-                            };
-                          case "compact_pos":
-                            return {
-                              container: "bg-white text-slate-950 border border-dashed border-slate-400 p-3 rounded font-mono max-w-sm mx-auto shadow-sm",
-                              topAccent: "border-t border-dashed border-slate-400",
-                              header: "text-center pb-3 border-b border-dashed border-slate-300",
-                              primaryText: "text-slate-900 font-mono font-bold tracking-tighter text-medium uppercase",
-                              secondaryText: "text-slate-400 text-[10px]",
-                              accentLine: "border-dashed border-b border-slate-300",
-                              tableHeader: "bg-slate-100 text-slate-800 text-[10px] font-bold border-y border-dashed border-slate-400 py-1",
-                              tableRow: "border-b border-dashed border-slate-200 text-slate-800 text-[10px]",
-                              statusBadge: "border border-slate-950 text-slate-950 text-[9px] font-mono font-semibold uppercase px-1 py-0.5",
-                              totalsBox: "border border-dashed border-slate-400 bg-slate-50 p-2.5",
-                              sigLine: "border-dashed border-slate-400",
-                              fontFamily: "font-mono",
-                              sigColor: "text-slate-600"
-                            };
-                          default: // classic
-                            return {
-                              container: "bg-slate-50 text-slate-900 border border-slate-200 rounded-xl font-sans",
-                              topAccent: "h-1 bg-slate-800",
-                              header: "pb-4 border-b border-slate-200 p-3",
-                              primaryText: "text-slate-900 font-sans font-extrabold tracking-tight",
-                              secondaryText: "text-slate-400 text-xs",
-                              accentLine: "border-slate-200",
-                              tableHeader: "bg-slate-900 text-white text-xs font-bold",
-                              tableRow: "border-b border-slate-200 text-slate-800",
-                              statusBadge: "bg-slate-900 text-white font-bold text-[10px] uppercase rounded px-2.5 py-0.5",
-                              totalsBox: "border border-slate-900 bg-slate-100 text-slate-900 p-3",
-                              sigLine: "border-slate-900",
-                              fontFamily: "font-sans",
-                              sigColor: "text-slate-900"
-                            };
-                        }
-                      })();
-
-                      return (
-                        <div className={`p-4 border rounded-xl overflow-hidden transition-all duration-300 ${styles.container}`}>
-                          {/* Top Accent line strip */}
-                          <div className={styles.topAccent} />
-
-                          {/* Inner Content spacing */}
-                          <div className="space-y-4 pt-3 text-left">
-                            
-                            {/* Brand and Metadata Header block */}
-                            <div className={`flex flex-row items-center justify-center text-left gap-6 w-full border-b pb-4 ${styles.header}`}>
-                              {tempShowLogo && tempLogoBase64 && (
-                                <div className="flex-shrink-0 self-center">
-                                  {tempLogoBase64.startsWith("data:") || tempLogoBase64.startsWith("http") ? (
-                                    <img
-                                      src={tempLogoBase64}
-                                      alt="Company Logo"
-                                      className="h-24 w-auto object-contain max-w-[160px] self-center"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  ) : (
-                                    <div className="w-24 h-24 rounded-full bg-slate-500/15 flex items-center justify-center text-3xl font-black text-slate-750 dark:text-zinc-250 border border-slate-500/20 self-center shadow-sm">
-                                      {tempLogoBase64.substring(0, 3)}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              <div className="flex-initial flex flex-col items-start justify-center self-center space-y-1">
-                                <h4 className={`text-xl sm:text-2xl md:text-3xl font-black tracking-tight ${styles.primaryText}`}>
-                                  {businessInfo?.name || "BARAKAH E-MART"}
-                                </h4>
-                                <p className={`${styles.secondaryText} text-xs sm:text-sm mt-1 max-w-xl font-medium text-left`}>
-                                  {businessInfo?.address || "Mirpur Showroom Complex, Dhaka, Bangladesh"}
-                                </p>
-                                <p className={`${styles.secondaryText} text-xs sm:text-sm mt-0.5 max-w-xl font-medium text-left`}>
-                                  Phone: {businessInfo?.phoneNumber || "+880 1987-654321"} {businessInfo?.email ? ` | Email: ${businessInfo.email}` : ""} {businessInfo?.vatRegNo ? ` | VAT: ${businessInfo.vatRegNo}` : ""}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Client particulars bill to container */}
-                            <div className={`p-4 bg-opacity-70 border rounded-xl ${styles.accentLine} bg-neutral-200/5`}>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Left Column: INVOICE DETAILS */}
-                                <div className="space-y-1">
-                                  <div className="text-[9px] font-mono tracking-wider text-slate-400 uppercase font-bold">
-                                    INVOICE METADATA DETAILS:
-                                  </div>
-                                  <div className={`text-xs font-bold ${styles.primaryText.split(" ")[0]}`}>
-                                    INVOICE #: INV-2026-6202
-                                  </div>
-                                  <p className={styles.secondaryText}>Issue Date: 03/06/2026</p>
-                                  <p className={styles.secondaryText}>Issue Time: 02:45 PM</p>
-                                  <p className={styles.secondaryText}>Sales Agent: Showroom Account Executive</p>
-                                  <p className={styles.secondaryText}>Payment Mode: CASH / MOB-PAY</p>
-                                </div>
-
-                                {/* Right Column: CUSTOMER BIOGRAPHY & SHIPPING ADDRESS */}
-                                <div className="space-y-1">
-                                  <div className="text-[9px] font-mono tracking-wider text-slate-400 uppercase font-bold">
-                                    CUSTOMER & SHIPPING DETAILS:
-                                  </div>
-                                  <div className="text-xs font-black text-slate-900 dark:text-zinc-100">Mst. Sabrina Rahman</div>
-                                  <div className={styles.secondaryText}>Phone: +880 1712-345678</div>
-                                  <div className={styles.secondaryText}>Address: House 12, Sector 10, Uttara, Dhaka</div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Itemized list of values */}
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left border-collapse">
-                                <thead>
-                                  <tr className={styles.tableHeader}>
-                                    <th className="p-1 px-2 text-[10px] w-8">SL</th>
-                                    <th className="p-1 px-2 text-[10px]">Item Details / SKU</th>
-                                    <th className="p-1 px-2 text-[10px] text-center w-12">Qty</th>
-                                    <th className="p-1 px-2 text-[10px] text-right w-24">Unit Rate</th>
-                                    <th className="p-1 px-2 text-[10px] text-right w-28">Total BDT</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <tr className={styles.tableRow}>
-                                    <td className="p-1.5 px-2 text-xs font-mono">01</td>
-                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-850 dark:text-zinc-100">
-                                      Walton Primo H10 (Elite Black, 8/128)
-                                    </td>
-                                    <td className="p-1.5 px-2 text-xs text-center font-mono">1</td>
-                                    <td className="p-1.5 px-2 text-xs text-right font-mono">14,500.00</td>
-                                    <td className="p-1.5 px-2 text-xs text-right font-mono">14,500.00</td>
-                                  </tr>
-                                  <tr className={styles.tableRow}>
-                                    <td className="p-1.5 px-2 text-xs font-mono">02</td>
-                                    <td className="p-1.5 px-2 text-xs font-bold text-slate-850 dark:text-zinc-100">
-                                      Gree 1.5 Ton Split AC (Inverter-Extreme)
-                                    </td>
-                                    <td className="p-1.5 px-2 text-xs text-center font-mono">1</td>
-                                    <td className="p-1.5 px-2 text-xs text-right font-mono">65,000.00</td>
-                                    <td className="p-1.5 px-2 text-xs text-right font-mono">65,000.00</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-
-                            {/* Summary Calculations and Signatures */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                              {/* Left column declaration wordings - FLUSHED AND CLEAN ALIGNMENT */}
-                              <div className="space-y-4 pl-0 text-left">
-                                <div className="pl-0">
-                                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider font-mono">
-                                    TOTAL BILL IN WORDS:
-                                  </span>
-                                  <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block mt-0.5 pl-0">
-                                    Seventy-Seven Thousand BDT Only.
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-slate-550 dark:text-zinc-400 space-y-1 pl-0 font-sans leading-relaxed">
-                                  <strong className="block text-slate-705 dark:text-zinc-300 uppercase text-[9px] tracking-wider">OFFICIAL WARRANTY, TERMS & CONDITIONS:</strong>
-                                  <div>1. Original cash receipt/invoice is strictly required for any warranty or replacement registration claims.</div>
-                                  <div>2. Warranty is void if products display physical damage, burned ICs, power surge trails, or fluid exposure.</div>
-                                  <div>3. Discrepancies if any must be brought to notice of the showroom management within 3 days of product issue.</div>
-                                   {/* Right column calculated totals - REDESIGNED PREMIUM & STRUCTURED PANEL */}
-                              <div className="pl-0">
-                                <div className={`space-y-2.5 rounded-xl p-4 border border-slate-200/80 dark:border-zinc-805/40 bg-slate-50/50 dark:bg-zinc-900/30 backdrop-blur-sm`}>
-                                  <div className="flex justify-between items-center text-xs text-slate-600 dark:text-zinc-400">
-                                    <span className="font-sans font-medium">Gross Subtotal:</span>
-                                    <span className="font-mono font-bold text-right">79,500.00 BDT</span>
-                                  </div>
-                                  <div className="flex justify-between items-center text-xs text-slate-600 dark:text-zinc-400">
-                                    <span className="font-sans font-medium">VAT Surcharges (0.00%):</span>
-                                    <span className="font-mono font-bold text-right">0.00 BDT</span>
-                                  </div>
-                                  <div className="flex justify-between items-center text-xs text-rose-500 font-medium pb-0.5">
-                                    <span className="font-sans font-bold">Special Discount:</span>
-                                    <span className="font-mono font-bold text-right">-2,500.00 BDT</span>
-                                  </div>
-                                  
-                                  <div className="border-t border-slate-250 dark:border-zinc-800 my-1 pb-1" />
-                                  
-                                  <div className="flex justify-between items-center bg-slate-900/5 dark:bg-white/5 p-2 rounded-lg border border-slate-900/10 dark:border-white/10">
-                                    <span className="text-xs font-black text-slate-1000 dark:text-white uppercase tracking-wider font-sans">
-                                      GRAND BILL TOTAL:
-                                    </span>
-                                    <span className="font-mono text-sm font-black text-slate-900 dark:text-white text-right">
-                                      77,000.00 BDT
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex justify-between items-center text-xs text-emerald-600 font-bold px-1">
-                                    <span>Total Cash Received:</span>
-                                    <span className="font-mono text-right">77,000.00 BDT</span>
-                                  </div>
- 
-                                  <div className="border-t border-slate-250 dark:border-zinc-800 my-1 pb-1" />
- 
-                                  {/* CONDITIONAL STATUS STYLING BADGES */}
-                                  <div className="space-y-2 pt-1">
-                                    {/* Demo state for Paid - Centered badge/stamp highlight, hiding plain text */}
-                                    <div className="flex justify-center items-center bg-emerald-100 dark:bg-emerald-950/40 border-2 border-dashed border-slate-400/50 px-4 py-2 rounded-xl shadow-inner">
-                                      <span className="text-xs font-black text-emerald-850 dark:text-slate-200 uppercase tracking-widest font-sans flex items-center gap-1.5 font-bold">
-                                        ★ FULL PAID ★
-                                      </span>
-                                    </div>
-                                    
-                                    {/* Demo state for Due (to fulfill the conditional DUE styling preview beautifully) */}
-                                    <div className="flex justify-between items-center bg-rose-50 dark:bg-rose-950/25 border border-rose-200/50 dark:border-rose-800/30 px-3 py-1.5 rounded-lg">
-                                      <span className="text-[10px] font-bold text-rose-800 dark:text-rose-450 uppercase tracking-wider font-sans">
-                                        Dues Outstanding:
-                                      </span>
-                                      <span className="text-[11px] font-black text-rose-600 dark:text-rose-400 font-mono text-right font-bold">
-                                        15,500.00 BDT
-                                      </span>
-                                    </div>
-                                  </div>
- 
-                                </div>
-                              </div>                             </div>
-                              </div>
-                            </div>
-
-                            {/* Stamp and Authorization Sigs */}
-                            <div className="grid grid-cols-2 gap-4 pt-6 text-center">
-                              <div className="space-y-1">
-                                <span className="border-b border-slate-300 block w-full mx-auto max-w-[140px] pt-4" />
-                                <span className={`text-[9px] font-extrabold uppercase tracking-widest block font-mono ${styles.sigColor}`}>
-                                  CUSTOMER SIGN-OFF
-                                </span>
-                              </div>
-                              <div className="space-y-1">
-                                <span className={`border-b block w-full mx-auto max-w-[140px] pt-3 ${styles.sigLine}`} />
-                                <span className={`text-[9px] font-extrabold uppercase tracking-widest block font-mono ${styles.sigColor}`}>
-                                  AUTHORIZED BRAND SIGN
-                                </span>
-                              </div>
-                            </div>
-
+                    <div className="w-full max-w-[520px] mx-auto bg-white text-black border border-slate-300 shadow-lg p-3 sm:p-4">
+                      {/* Business identity — logo and shop details */}
+                      <div className="flex items-center justify-center gap-3 border-b border-slate-400 pb-2">
+                        {tempShowLogo && tempLogoBase64 && (
+                          <div className="shrink-0 w-12 h-12 flex items-center justify-center">
+                            {tempLogoBase64.startsWith("data:") || tempLogoBase64.startsWith("http") ? (
+                              <img src={tempLogoBase64} alt="Company Logo" className="max-h-12 max-w-12 object-contain" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span className="w-10 h-10 rounded-full border border-black flex items-center justify-center text-sm font-bold">{tempLogoBase64.substring(0, 3)}</span>
+                            )}
                           </div>
+                        )}
+                        <div className="min-w-0 text-left">
+                          <h4 className="text-[13px] sm:text-sm font-black leading-tight">{businessInfo?.name || "BARAKAH E-MART"}</h4>
+                          <p className="text-[8px] sm:text-[9px] leading-snug mt-0.5">{businessInfo?.address || "Showroom Address, Dhaka"}</p>
+                          <p className="text-[8px] sm:text-[9px] leading-snug">Phone: {businessInfo?.phoneNumber || "Business Phone"}{businessInfo?.email ? ` | Email: ${businessInfo.email}` : ""}</p>
+                          {businessInfo?.vatRegNo && <p className="text-[8px] leading-snug">VAT Reg No: {businessInfo.vatRegNo}</p>}
                         </div>
-                      );
-                    })()}
+                      </div>
+
+                      {/* Invoice and customer details */}
+                      <div className="grid grid-cols-2 gap-3 border border-black p-2 mt-2">
+                        <div className="space-y-0.5">
+                          <p className="text-[7px] font-bold uppercase">Invoice Metadata Details</p>
+                          <p className="text-[8px] font-bold">INVOICE #: INV-2026-6202</p>
+                          <p className="text-[7px]">Issue Date: 03/06/2026</p>
+                          <p className="text-[7px]">Issue Time: 02:45 PM</p>
+                          <p className="text-[7px]">Payment Mode: CASH</p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-[7px] font-bold uppercase">Customer & Shipping Details</p>
+                          <p className="text-[8px] font-bold">Customer Name</p>
+                          <p className="text-[7px]">Phone: 01XXXXXXXXX</p>
+                          <p className="text-[7px]">Address: Dhaka, Bangladesh</p>
+                        </div>
+                      </div>
+
+                      {/* Item table — white header with thin black outline */}
+                      <table className="w-full border-collapse mt-2 text-[7px] sm:text-[8px]">
+                        <thead>
+                          <tr className="bg-white text-black">
+                            {["SL", "Item Model / Specification / SKU", "Qty", "Unit Rate", "Warranty", "Total Amount"].map((heading) => (
+                              <th key={heading} className="border border-black px-1 py-1 text-left font-bold leading-tight">{heading}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="border border-slate-300 px-1 py-1">01</td>
+                            <td className="border border-slate-300 px-1 py-1 font-semibold">Product Name / Model</td>
+                            <td className="border border-slate-300 px-1 py-1 text-center">1</td>
+                            <td className="border border-slate-300 px-1 py-1 text-right">৳ 00.00</td>
+                            <td className="border border-slate-300 px-1 py-1">1 Year</td>
+                            <td className="border border-slate-300 px-1 py-1 text-right">৳ 00.00</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Compact totals, policy and signature footer */}
+                      <div className="grid grid-cols-2 gap-3 mt-2 text-[7px]">
+                        <div className="space-y-1">
+                          <p className="font-bold uppercase">Total Bill in Words</p>
+                          <p>Zero Taka Only</p>
+                          <p className="font-bold uppercase mt-1">Warranty & Terms</p>
+                          <p>Original invoice required for warranty claims.</p>
+                        </div>
+                        <div className="border border-black p-2 space-y-1">
+                          <div className="flex justify-between"><span>Subtotal</span><b>৳ 00.00</b></div>
+                          <div className="flex justify-between"><span>Discount</span><b>৳ 00.00</b></div>
+                          <div className="border-t border-black pt-1 flex justify-between text-[8px]"><b>Grand Total</b><b>৳ 00.00</b></div>
+                          <div className="flex justify-between"><span>Paid</span><b>৳ 00.00</b></div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-8 mt-5 text-center text-[7px]">
+                        <div><div className="border-t border-black pt-1">Customer Signature</div></div>
+                        <div><div className="border-t border-black pt-1">Authorized Signature</div></div>
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-slate-400 text-center">Compact visual preview of the same white-page, black-text PDF layout used for printing.</p>
                   </div>
 
                   <hr className="border-slate-850 my-4" />
