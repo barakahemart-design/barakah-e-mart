@@ -78,17 +78,17 @@ export function ProductSalesBreakdown({
     const safeProducts = Array.isArray(products) ? products : [];
     const safeTransactions = Array.isArray(transactions) ? transactions : [];
     const categoryMap = new Map<string, { name: string; units: number; products: Map<string, { name: string; units: number; productId?: string }> }>();
+    // Normalize category/product names conservatively. Do not use SKU/model aliases:
+    // those can be shared or formatted differently and may assign an item to another category.
     const normalize = (value: any) => String(value ?? "")
       .trim()
       .toLocaleLowerCase()
-      .replace(/[^\\p{L}\\p{N}]+/gu, " ")
-      .replace(/\\s+/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
 
-    // Build product lookups once. Product IDs can be stored in either their
-    // original form or the account-scoped UUID used by checkout/cloud restore.
     const productById = new Map<string, any>();
-    const productByAlias = new Map<string, any>();
+    const productsByName = new Map<string, any | null>();
     safeProducts.forEach((product: any) => {
       if (!product) return;
       const ids = [
@@ -99,15 +99,12 @@ export function ProductSalesBreakdown({
       ids.map((id: any) => String(id || "").trim()).filter(Boolean)
         .forEach((id: string) => productById.set(id, product));
 
-      const aliases = [
-        product.name, product.productName, product.product_name,
-        product.sku, product.model, product.modelNo, product.modelNumber,
-        product.barcode, product.code, product.productCode
-      ];
-      aliases.map(normalize).filter(Boolean)
-        .forEach((alias: string) => {
-          if (!productByAlias.has(alias)) productByAlias.set(alias, product);
-        });
+      const productName = normalize(product.name || product.productName || product.product_name);
+      if (productName) {
+        // A duplicate name is ambiguous: never guess which product/category it means.
+        if (productsByName.has(productName)) productsByName.set(productName, null);
+        else productsByName.set(productName, product);
+      }
     });
 
     let totalUnits = 0;
@@ -119,12 +116,12 @@ export function ProductSalesBreakdown({
 
         const itemName = String(item?.name || item?.productName || item?.product_name || "Unnamed Product").trim() || "Unnamed Product";
         const itemProductId = String(item?.productId || item?.product_id || item?.productID || "").trim();
+        // Prefer exact product identifiers. If an old sale has no resolvable ID,
+        // use only a unique exact product-name match; never match by model/SKU fragments.
+        const normalizedItemName = normalize(itemName);
         const matchedProduct = (itemProductId ? productById.get(itemProductId) : undefined)
           || (itemProductId ? productById.get(toUUID(itemProductId, storeEmail)) : undefined)
-          || [
-            itemName, item?.productName, item?.product_name, item?.sku,
-            item?.model, item?.modelNo, item?.barcode, item?.code
-          ].map(normalize).filter(Boolean).map((alias: string) => productByAlias.get(alias)).find(Boolean);
+          || (normalizedItemName ? productsByName.get(normalizedItemName) || undefined : undefined);
 
         const currentProductCategory = String(matchedProduct?.category || matchedProduct?.productCategory || matchedProduct?.product_category || "").trim();
         const savedItemCategory = String(item?.category || item?.productCategory || item?.product_category || "").trim();
