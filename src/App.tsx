@@ -8893,51 +8893,39 @@ _${businessInfo.name}_`;
 
                 <div className="space-y-4">
                   
-                  <div className="flex items-center justify-between p-3 bg-[#121214] border border-slate-850 rounded-xl">
-                    <div className="space-y-0.5 max-w-[80%] pr-2">
+                  <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all duration-200 ${tempCanEditSales ? "bg-sky-500/[0.09] border-sky-400/40 shadow-[inset_3px_0_0_rgba(56,189,248,0.9)]" : "bg-amber-500/[0.07] border-amber-400/35 shadow-[inset_3px_0_0_rgba(251,191,36,0.85)]"}`}>
+                    <div className="space-y-1 max-w-[80%] pr-2">
                       <span className="text-xs font-bold text-white block">Allow salesman to edit historical Sales</span>
-                      <span className="text-[10px] text-[#A0A0A5] leading-normal block">If disabled, edits on existing memos are locked to admin authority view.</span>
+                      <span className="text-[10px] text-slate-300/80 leading-normal block">When OFF, edits on existing memos are locked to admin authority view.</span>
+                      <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-black tracking-widest ${tempCanEditSales ? "bg-sky-400/15 text-sky-300" : "bg-amber-400/15 text-amber-300"}`}>{tempCanEditSales ? "ON · ACCESS ALLOWED" : "OFF · ADMIN ONLY"}</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
-                      <input 
-                        type="checkbox"
-                        checked={tempCanEditSales}
-                        onChange={(e) => setTempCanEditSales(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                      <input type="checkbox" checked={tempCanEditSales} onChange={(e) => setTempCanEditSales(e.target.checked)} className="sr-only peer" />
+                      <div className="w-12 h-7 rounded-full border border-amber-300/50 bg-amber-500/30 peer-checked:bg-sky-500/70 peer-checked:border-sky-300/70 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-sky-300/60 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-inner"></div>
                     </label>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-[#121214] border border-slate-850 rounded-xl">
-                    <div className="space-y-0.5 max-w-[80%] pr-2">
+                  <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all duration-200 ${tempCanDeleteSales ? "bg-rose-500/[0.09] border-rose-400/40 shadow-[inset_3px_0_0_rgba(251,113,133,0.9)]" : "bg-amber-500/[0.07] border-amber-400/35 shadow-[inset_3px_0_0_rgba(251,191,36,0.85)]"}`}>
+                    <div className="space-y-1 max-w-[80%] pr-2">
                       <span className="text-xs font-bold text-white block">Allow salesman to delete transactions</span>
-                      <span className="text-[10px] text-[#A0A0A5] leading-normal block">If disabled, transaction erasures are securely locked to the core admin.</span>
+                      <span className="text-[10px] text-slate-300/80 leading-normal block">When OFF, transaction erasures remain restricted to the core admin.</span>
+                      <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-black tracking-widest ${tempCanDeleteSales ? "bg-rose-400/15 text-rose-300" : "bg-amber-400/15 text-amber-300"}`}>{tempCanDeleteSales ? "ON · DELETE ACCESS" : "OFF · ADMIN ONLY"}</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
-                      <input 
-                        type="checkbox"
-                        checked={tempCanDeleteSales}
-                        onChange={(e) => setTempCanDeleteSales(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                      <input type="checkbox" checked={tempCanDeleteSales} onChange={(e) => setTempCanDeleteSales(e.target.checked)} className="sr-only peer" />
+                      <div className="w-12 h-7 rounded-full border border-amber-300/50 bg-amber-500/30 peer-checked:bg-rose-500/70 peer-checked:border-rose-300/70 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-rose-300/60 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-inner"></div>
                     </label>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-[#121214] border border-slate-850 rounded-xl">
-                    <div className="space-y-0.5 max-w-[80%] pr-2">
+                  <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all duration-200 ${tempCanOverridePrices ? "bg-violet-500/[0.09] border-violet-400/40 shadow-[inset_3px_0_0_rgba(167,139,250,0.9)]" : "bg-amber-500/[0.07] border-amber-400/35 shadow-[inset_3px_0_0_rgba(251,191,36,0.85)]"}`}>
+                    <div className="space-y-1 max-w-[80%] pr-2">
                       <span className="text-xs font-bold text-white block">Allow salesman to override unit prices inside Cart</span>
-                      <span className="text-[10px] text-[#A0A0A5] leading-normal block">If disabled, salesmen cannot manipulate retail pricing blocks for custom invoice outputs.</span>
+                      <span className="text-[10px] text-slate-300/80 leading-normal block">When OFF, salesmen cannot change retail pricing inside the cart.</span>
+                      <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-black tracking-widest ${tempCanOverridePrices ? "bg-violet-400/15 text-violet-300" : "bg-amber-400/15 text-amber-300"}`}>{tempCanOverridePrices ? "ON · PRICE ACCESS" : "OFF · PRICE LOCKED"}</span>
                     </div>
-                    <label className="relative inline-flex inline-flex items-center cursor-pointer select-none shrink-0">
-                      <input 
-                        type="checkbox"
-                        checked={tempCanOverridePrices}
-                        onChange={(e) => setTempCanOverridePrices(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-600 border border-slate-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                      <input type="checkbox" checked={tempCanOverridePrices} onChange={(e) => setTempCanOverridePrices(e.target.checked)} className="sr-only peer" />
+                      <div className="w-12 h-7 rounded-full border border-amber-300/50 bg-amber-500/30 peer-checked:bg-violet-500/70 peer-checked:border-violet-300/70 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-violet-300/60 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-inner"></div>
                     </label>
                   </div>
 
