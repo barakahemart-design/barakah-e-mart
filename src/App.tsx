@@ -6948,268 +6948,202 @@ _${businessInfo.name}_`;
                     const customerPhone = associatedContact ? associatedContact.phone : null;
                     
                     return (
-                      <div 
-                        key={t.id} 
-                        className={`bg-[#1E1E24]/90 hover:bg-[#1E1E24] border border-slate-800/70 hover:border-slate-800 rounded-2xl p-5 shadow-lg transition-all flex flex-col md:flex-row justify-between gap-4 relative overflow-hidden ${
-                          t.status === "paid" 
-                            ? "border-l-4 border-l-emerald-500" 
-                            : t.status === "partial" 
-                              ? "border-l-4 border-l-amber-500 animate-pulse-subtle" 
-                              : "border-l-4 border-l-[#FF5252]"
+                      <div
+                        key={t.id}
+                        className={`mx-auto w-full max-w-5xl rounded-2xl border border-slate-800/80 bg-[#1E1E24]/95 p-3 shadow-lg transition-all hover:border-slate-700 sm:p-4 ${
+                          t.status === "paid" ? "border-t-2 border-t-emerald-500" : t.status === "partial" ? "border-t-2 border-t-amber-500" : "border-t-2 border-t-[#FF5252]"
                         }`}
                       >
-                        {/* Transaction Core info column */}
-                        <div className="space-y-3 flex-1">
-                          
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-white rounded-lg text-xs font-mono font-black uppercase tracking-wider block">
-                              {t.invoiceNo}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
-                              {new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </span>
-                            
-                            {/* Color-coded Dynamic Badge */}
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-black tracking-wide border font-mono shrink-0 select-none ${
-                              t.status === "paid" 
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                                : t.status === "partial" 
-                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/20" 
-                                  : "bg-red-500/10 text-rose-455 border-red-500/20 text-[#FF5252]"
-                            }`}>
-                              {t.status === 'due' ? 'Due Status' : t.status === 'partial' ? 'Partial Paid' : 'Fully Settled'}
-                            </span>
-                          </div>
-
-                          {/* Client Profile Box */}
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-xs text-emerald-400 uppercase select-none">
-                              {customerLabel.slice(0,2)}
-                            </div>
-                            <div>
-                              <strong className="text-white text-xs block leading-tight">{customerLabel}</strong>
-                              {customerPhone && (
-                                <span className="text-[10px] text-slate-450 font-mono font-medium block mt-0.5">Mobile: {customerPhone}</span>
-                              )}
-                            </div>
-                                          {/* Invoice Items Sub-Drawer */}
-                          <div className="bg-[#121214] border border-slate-850/65 rounded-xl p-3 space-y-1.5" id={`ledger-items-${t.invoiceNo}`}>
-                            <span className="text-[9px] font-bold text-slate-500 font-mono uppercase tracking-wider block">Invoice Line Items ({t.items.length})</span>
-                            <div className="space-y-1">
-                              {t.items.map((it, idx) => {
-                                const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
-                                const buyCost = getAverageCostFromAllocations(it, dbProduct?.buyPrice ?? 0);
-                                const unitCosts = getCostAllocationsForItem(it, buyCost);
-                                const showEdit = showCostEditId === `${t.id}-${idx}`;
-                                const costSummary = unitCosts.map(allocation =>
-                                  `${businessInfo.currencySymbol || "৳"}${Number(allocation.unitCost).toLocaleString()}`
-                                ).join(" / ");
-
-                                return (
-                                  <div key={idx} className="py-2 border-b border-slate-800/20 last:border-b-0">
-                                    <div className="flex justify-between items-center gap-3 text-[11px] font-sans text-slate-300">
-                                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                        <span className="text-slate-500 font-mono font-bold">{it.quantity}x</span>
-                                        <span className="text-white font-semibold">{dbProduct ? dbProduct.name : (it.name || "Product Item")}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono">
-                                          (@ {businessInfo.currencySymbol || "৳"}{(it.price ?? 0).toLocaleString()}/unit)
-                                        </span>
-                                        {currentPanel === "admin" && (
-                                          <span className="text-[9px] text-slate-500 font-mono">
-                                            (Unit Cost: {costSummary || "Not set"})
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        {currentPanel === "admin" && (
-                                          <>
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowCostEditId(showEdit ? null : `${t.id}-${idx}`);
-                                              }}
-                                              className="text-[9px] text-[#00E676]/90 hover:text-[#00E676] hover:underline font-mono cursor-pointer flex items-center gap-0.5 bg-transparent border-0 p-0"
-                                              title="Edit the cost of each sold unit independently"
-                                            >
-                                              {showEdit ? "Close Unit Costs" : "Edit Unit Costs"} ✏️
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteTransactionItem(t.id, idx);
-                                              }}
-                                              className="text-[9px] text-rose-500 hover:text-rose-600 hover:underline font-mono cursor-pointer bg-transparent border-0 p-0"
-                                              title="Delete only this product line"
-                                            >
-                                              Delete Item
-                                            </button>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {currentPanel === "admin" && showEdit && (
-                                      <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-slate-800 bg-black/30 p-2">
-                                        {unitCosts.map((allocation, allocationIdx) => (
-                                          <div key={allocation.id || allocationIdx} className="flex items-center gap-1.5 rounded-md bg-slate-900/70 px-2 py-1">
-                                            <label className="text-[9px] text-slate-400 font-mono whitespace-nowrap">
-                                              Unit {allocationIdx + 1}
-                                            </label>
-                                            <input
-                                              type="number"
-                                              min="0"
-                                              step="0.01"
-                                              defaultValue={allocation.unitCost}
-                                              id={`buy-cost-${t.id}-${idx}-${allocationIdx}`}
-                                              className="w-20 px-1.5 py-1 bg-black border border-slate-700 text-[#00E676] font-mono text-[10px] outline-none rounded"
-                                              onClick={(e) => e.stopPropagation()}
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}-${allocationIdx}`) as HTMLInputElement)?.value);
-                                                if (!isNaN(val) && val >= 0) {
-                                                  handleUpdateTransactionItemUnitCost(t.id, idx, allocationIdx, val);
-                                                }
-                                              }}
-                                              className="bg-[#00E676] hover:bg-emerald-400 text-slate-950 font-black px-2 py-1 text-[9px] rounded cursor-pointer"
-                                            >
-                                              Save
-                                            </button>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                    <div className="font-mono text-[10px] text-slate-400 text-right mt-1">
-                                      {businessInfo.currencySymbol} {Number(it.total ?? (Number(it.price || 0) * Number(it.quantity || 0))).toLocaleString()}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>             </div>
-
+                        {/* Centered invoice identity */}
+                        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
+                          <span className="rounded-md border border-slate-700 bg-black/35 px-2.5 py-1 text-[11px] font-black tracking-wide text-white">
+                            {t.invoiceNo}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(t.date).toLocaleDateString()} · {new Date(t.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide ${
+                            t.status === "paid"
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                              : t.status === "partial"
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                                : "border-rose-500/30 bg-rose-500/10 text-rose-400"
+                          }`}>
+                            {t.status === "due" ? "Due Status" : t.status === "partial" ? "Partially Settled" : "Fully Settled"}
+                          </span>
                         </div>
 
-                        {/* Transaction Accounting Column & Cash Math */}
-                        <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-x-6 gap-y-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-850/80 shrink-0 font-mono text-right text-xs">
-                          
-                          <div className="space-y-1 text-left md:text-right">
-                            <span className="text-[9px] uppercase text-slate-550 font-semibold block">Price Calculations:</span>
-                            <div className="grid grid-cols-2 md:block gap-x-4">
-                              <p className="text-slate-400 text-[11px]">
-                                Discount: <span className="text-[#FF5252]">-{businessInfo.currencySymbol} {t.discount.toLocaleString()}</span>
-                              </p>
-                              <p className="text-white font-black text-sm mt-0.5">
-                                Grand Total: {businessInfo.currencySymbol} {t.total.toLocaleString()}
-                              </p>
-                            </div>
+                        {/* Compact centered customer details */}
+                        <div className="mx-auto mt-2 max-w-3xl text-center">
+                          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                            <strong className="text-[12px] font-semibold text-white">{customerLabel}</strong>
+                            {customerPhone && (
+                              <span className="text-[10px] font-mono text-slate-400">{customerPhone}</span>
+                            )}
                           </div>
+                          {associatedContact?.address && (
+                            <p className="mx-auto mt-1 max-w-2xl break-words text-[10px] leading-relaxed text-slate-500">
+                              {associatedContact.address}
+                            </p>
+                          )}
+                        </div>
 
-                          <div className="space-y-1 text-right">
-                            <span className="text-[9px] uppercase text-slate-550 font-semibold block">Collected vs Outstanding:</span>
-                            <div className="grid grid-cols-2 md:block gap-x-4">
-                              <p className="text-emerald-400 font-bold">
-                                Received: {businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}
-                              </p>
-                              {t.dueBalance > 0 ? (
-                                <p className="text-rose-455 text-[#FF5252] font-black animate-pulse">
-                                  Due Balance: {businessInfo.currencySymbol} {t.dueBalance.toLocaleString()}
+                        <div className="my-3 border-t border-slate-700/80" />
+
+                        {/* Purchased products: name first, unit-cost editor immediately below */}
+                        <div className="space-y-2" id={`ledger-items-${t.invoiceNo}`}>
+                          {t.items.map((it, idx) => {
+                            const dbProduct = products.find(p => p.id === it.productId || p.id === it.id || p.name === it.name);
+                            const buyCost = getAverageCostFromAllocations(it, dbProduct?.buyPrice ?? 0);
+                            const unitCosts = getCostAllocationsForItem(it, buyCost);
+                            const showEdit = showCostEditId === `${t.id}-${idx}`;
+
+                            return (
+                              <div key={idx} className="rounded-lg px-1 py-1.5">
+                                <p className="text-center text-[11px] font-semibold leading-snug text-white">
+                                  {dbProduct ? dbProduct.name : (it.name || "Product Item")}
                                 </p>
-                              ) : (
-                                <p className="text-slate-500 text-[10px]">Accounts Settled ✓</p>
-                              )}
-                            </div>
-                          </div>
+                                {currentPanel === "admin" && (
+                                  <div className="mt-1 flex justify-center">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowCostEditId(showEdit ? null : `${t.id}-${idx}`);
+                                      }}
+                                      className="rounded-md border border-slate-700 bg-black/25 px-2.5 py-1 text-[9px] font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                                      title="Edit the cost of each purchased unit independently"
+                                    >
+                                      {showEdit ? "Close Unit Cost" : "Edit Unit Cost"}
+                                    </button>
+                                  </div>
+                                )}
 
+                                {currentPanel === "admin" && showEdit && (
+                                  <div className="mt-2 flex flex-wrap justify-center gap-2 rounded-lg border border-slate-800 bg-black/30 p-2">
+                                    {unitCosts.map((allocation, allocationIdx) => (
+                                      <div key={allocation.id || allocationIdx} className="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/70 px-2 py-1.5">
+                                        <label className="whitespace-nowrap text-[9px] text-slate-400">
+                                          Unit {allocationIdx + 1}
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          defaultValue={allocation.unitCost}
+                                          id={`buy-cost-${t.id}-${idx}-${allocationIdx}`}
+                                          className="w-20 rounded border border-slate-700 bg-black px-1.5 py-1 text-[10px] text-white outline-none focus:border-white/50"
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const val = parseFloat((document.getElementById(`buy-cost-${t.id}-${idx}-${allocationIdx}`) as HTMLInputElement)?.value);
+                                            if (!isNaN(val) && val >= 0) {
+                                              handleUpdateTransactionItemUnitCost(t.id, idx, allocationIdx, val);
+                                            }
+                                          }}
+                                          className="rounded bg-white px-2 py-1 text-[9px] font-bold text-black transition-colors hover:bg-slate-200"
+                                        >
+                                          Save
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
 
-                        {/* Interactive Admin Tool Belt */}
-                        <div className="flex flex-row md:flex-col items-center justify-end gap-2 shrink-0 md:pl-3 border-t md:border-t-0 border-slate-850/80 pt-3 md:pt-0">
-                          
-                          {/* Reprint Invoice PDF */}
+                        <div className="my-3 border-t border-slate-700/80" />
+
+                        {/* Compact one-line financial summary */}
+                        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[10px] font-mono sm:gap-x-6">
+                          <span className="font-bold text-white">
+                            Grand Total: {businessInfo.currencySymbol} {t.total.toLocaleString()}
+                          </span>
+                          <span className="text-emerald-400">
+                            Collected: {businessInfo.currencySymbol} {t.paidAmount.toLocaleString()}
+                          </span>
+                          {t.dueBalance > 0 ? (
+                            <span className="font-bold text-rose-400">
+                              Outstanding Due: {businessInfo.currencySymbol} {t.dueBalance.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">No Outstanding Due</span>
+                          )}
+                        </div>
+
+                        {/* All transaction actions stay on one horizontal row */}
+                        <div className="mt-3 flex flex-nowrap items-center justify-center gap-1.5 overflow-x-auto border-t border-slate-800/80 pt-3">
                           <button
                             id={`download-pdf-${t.invoiceNo}`}
                             onClick={() => generateInvoicePDF(t, associatedContact, businessInfo)}
-                            className="p-2 bg-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-300 hover:text-emerald-400 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-[10px] uppercase tracking-wide shrink-0 h-10 w-24 shadow"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-700 bg-black/25 px-2 text-[9px] font-semibold text-slate-200 transition-colors hover:border-white/50 hover:text-white"
                             title="Reprint Customer Cash Memo"
                           >
-                            <Download className="w-3.5 h-3.5" />
-                            PDF reprint
+                            <Download className="h-3 w-3" /> PDF
                           </button>
-
-                          {/* Reprint Delivery Challan */}
                           <button
                             id={`download-challan-${t.invoiceNo}`}
                             onClick={() => generateDeliveryChallanPDF(t, associatedContact, businessInfo)}
-                            className="p-2 bg-slate-900 border border-slate-800 hover:border-[#00E676] text-slate-[#A0A0A5] hover:text-[#00E676] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-[10px] uppercase tracking-wide shrink-0 h-10 w-24 shadow"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-700 bg-black/25 px-2 text-[9px] font-semibold text-slate-200 transition-colors hover:border-white/50 hover:text-white"
                             title="Download Delivery Challan"
                           >
-                            <FileText className="w-3.5 h-3.5" />
-                            Challan
+                            <FileText className="h-3 w-3" /> Challan
                           </button>
-
-                          {/* Collect Remaining Debt */}
                           {t.dueBalance > 0 && (
                             <button
                               onClick={() => {
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="p-2 bg-[#00E676] hover:bg-emerald-400 text-slate-950 rounded-xl hover:scale-[1.02] active:scale-95 transition-all text-[10px] font-bold uppercase tracking-wider shrink-0 h-10 w-24 font-sans block shadow-md shadow-[#00E676]/15 cursor-pointer text-center"
+                              className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg bg-white px-2 text-[9px] font-bold text-black transition-colors hover:bg-slate-200"
                             >
                               Collect Due
                             </button>
                           )}
-
-                          {/* Modify selling price & Erase buttons */}
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => setEditingTx(t)}
-                              className="p-2 bg-slate-900 border border-slate-805 hover:border-[#00B0FF] text-slate-400 hover:text-[#00B0FF] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
-                              title="Edit Sale Details & Selling Price"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-
-                            {currentPanel === "admin" && (
-                              deleteTxId === t.id ? (
-                                <div className="flex items-center gap-1 justify-end bg-slate-900 p-1 border border-slate-800 rounded-xl h-10 animate-scaleIn">
-                                  <span className="text-[8px] text-slate-400 font-mono uppercase px-1">Erase?</span>
-                                  <button
-                                    onClick={() => {
-                                      handleDeleteTransaction(t.id);
-                                      setDeleteTxId(null);
-                                    }}
-                                    className="bg-[#FF5252] hover:bg-rose-500 text-[#121214] font-black p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-                                  >
-                                    Yes
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteTxId(null)}
-                                    className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-                                  >
-                                    No
-                                  </button>
-                                </div>
-                              ) : (
+                          <button
+                            onClick={() => setEditingTx(t)}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-black/25 text-slate-300 transition-colors hover:border-white/50 hover:text-white"
+                            title="Edit Sale Details & Selling Price"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          {currentPanel === "admin" && (
+                            deleteTxId === t.id ? (
+                              <div className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-slate-700 bg-black/40 px-1">
+                                <span className="px-1 text-[8px] text-slate-400">Delete?</span>
                                 <button
-                                  onClick={() => setDeleteTxId(t.id)}
-                                  className="p-2 bg-slate-900 border border-slate-805 hover:border-[#FF5252] text-slate-455 hover:text-[#FF5252] rounded-xl transition-all cursor-pointer h-10 w-10 flex items-center justify-center shadow"
-                                  title="Wipe transaction memo"
+                                  onClick={() => {
+                                    handleDeleteTransaction(t.id);
+                                    setDeleteTxId(null);
+                                  }}
+                                  className="rounded bg-rose-500 px-2 py-1 text-[9px] font-bold text-white"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Yes
                                 </button>
-                              )
-                            )}
-                          </div>
-
+                                <button
+                                  onClick={() => setDeleteTxId(null)}
+                                  className="rounded bg-slate-700 px-2 py-1 text-[9px] text-white"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteTxId(t.id)}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-black/25 text-slate-300 transition-colors hover:border-rose-500 hover:text-rose-400"
+                                title="Delete transaction memo"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )
+                          )}
                         </div>
-
                       </div>
                     );
                   })
