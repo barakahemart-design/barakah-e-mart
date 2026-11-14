@@ -4492,6 +4492,23 @@ _${businessInfo.name}_`;
             <DashboardView
               products={products}
               transactions={transactions}
+              onUpdateProductCategory={(productId, category) => {
+                const currentProduct = products.find(p => String(p.id) === String(productId));
+                if (!currentProduct) {
+                  triggerNotification("Product could not be found. Please refresh and try again.", "error");
+                  return;
+                }
+                const updatedProduct = { ...currentProduct, category };
+                setProducts(products.map(p => String(p.id) === String(productId) ? updatedProduct : p));
+                if (activeUser && !activeUser.isGuest) {
+                  const targetUid = firebaseAuth.currentUser?.uid || activeUser.uid;
+                  saveProduct(targetUid, updatedProduct).catch(err => {
+                    console.error("Cloud category update failed:", err);
+                    triggerNotification("Category update could not be synced. Please try again.", "error");
+                  });
+                }
+                triggerNotification(`${updatedProduct.name} moved to ${category}.`);
+              }}
               businessInfo={businessInfo}
               isBackingUp={isBackingUp}
               isRestoring={isRestoring}
