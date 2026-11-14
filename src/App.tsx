@@ -1302,6 +1302,7 @@ export default function App() {
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(true);
 
   // Local temp states for Settings with individual block saves
+  const [activeSettingsSection, setActiveSettingsSection] = useState<"overview" | "shop" | "font" | "invoice" | "sales" | "security" | "danger">("overview");
   const [tempShopName, setTempShopName] = useState("");
   const [tempShopAddress, setTempShopAddress] = useState("");
   const [tempShopPhone, setTempShopPhone] = useState("");
@@ -1853,6 +1854,7 @@ export default function App() {
     };
     persistBusinessInfoState(updated);
     triggerNotification("Shop Information changes saved successfully!", "success");
+    setActiveSettingsSection("overview");
   };
 
   // Save Invoice Customization Config Block
@@ -1873,6 +1875,7 @@ export default function App() {
     };
     persistBusinessInfoState(updated);
     triggerNotification("Invoice Customization changes saved successfully!", "success");
+    setActiveSettingsSection("overview");
   };
 
   // Save Font Settings Block
@@ -1885,6 +1888,7 @@ export default function App() {
     setFontSizeScale(tempFontSizeScale);
     localStorage.setItem("font_size_scale", tempFontSizeScale);
     triggerNotification(`Corporate typography changed to ${tempFont} and scaled to [${tempFontSizeScale}] globally!`, "success");
+    setActiveSettingsSection("overview");
   };
 
   // Save Sales Panel Restrictions Block
@@ -1899,6 +1903,7 @@ export default function App() {
     };
     persistBusinessInfoState(updated);
     triggerNotification("Sales Panel Restrictions saved successfully!", "success");
+    setActiveSettingsSection("overview");
   };
 
   // Save Security Passcodes settings change
@@ -1925,6 +1930,7 @@ export default function App() {
     };
     persistBusinessInfoState(updated);
     triggerNotification("Admin and Sales security passcodes updated successfully!", "success");
+    setActiveSettingsSection("overview");
   };
 
   // Logo upload processing inside App.tsx with Canvas-level compression and no size limits
@@ -8142,16 +8148,90 @@ _${businessInfo.name}_`;
           {activeTab === "settings" && (
             <div className="max-w-3xl mx-auto space-y-6 animate-fadeIn" id="view-settings-container">
               
-              {/* Introduction Banner */}
-              <div className="border-b border-slate-800 pb-4" id="settings-heading-intro">
-                <h3 className="text-lg font-bold text-white font-display tracking-tight">System Configuration & Customization</h3>
-                <p className="text-xs text-slate-400 mt-1">Refine transaction profiles, layout options, dynamic PDF printouts, and system storage nodes.</p>
+              {/* Settings Overview */}
+              <div className="border-b border-white/10 pb-5" id="settings-heading-intro">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white shadow-lg">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-bold text-white font-display tracking-tight">Settings & Configuration</h3>
+                    <p className="text-xs text-slate-400 mt-1">Manage your store profile, appearance, invoices, access controls and system safety.</p>
+                  </div>
+                </div>
               </div>
 
+              {activeSettingsSection === "overview" && (
+                <div className="space-y-4 animate-fadeIn" id="settings-workspace-overview">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Settings Workspace</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Select a section to view and update its settings.</p>
+                    </div>
+                    <span className="text-[9px] uppercase tracking-widest text-slate-500 border border-white/10 rounded-full px-3 py-1">6 Sections</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {[
+                      { id: "shop" as const, title: "Registered Shop Information", desc: "Business name, address, contact, VAT and currency", Icon: Building2, meta: "Business profile" },
+                      { id: "font" as const, title: "Font Customization & Settings", desc: "System font, display scale and typography preview", Icon: Type, meta: "Appearance" },
+                      { id: "invoice" as const, title: "Invoice & PDF Layout", desc: "Invoice templates, logo, signatures and print details", Icon: FileText, meta: "Print customization" },
+                      { id: "sales" as const, title: "Sales Panel & Assistant Restrictions", desc: "Control editing, deleting and price override permissions", Icon: SlidersHorizontal, meta: "Access permissions" },
+                      { id: "security" as const, title: "Security & Panel Passcodes", desc: "Manage Admin and Sales panel access PINs", Icon: ShieldCheck, meta: "Account security" },
+                      { id: "danger" as const, title: "Danger Zone", desc: "Review high-risk reset and deletion actions", Icon: AlertTriangle, meta: "Advanced actions" }
+                    ].map((item) => {
+                      const Icon = item.Icon;
+                      const isDanger = item.id === "danger";
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setActiveSettingsSection(item.id)}
+                          className="group w-full min-h-[142px] text-left rounded-2xl border border-white/10 bg-[#101319]/95 hover:bg-[#171b23] hover:border-white/20 p-4 sm:p-5 transition-all duration-200 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-white/20"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${isDanger ? "bg-rose-500/5 border-rose-500/20 text-rose-300" : "bg-white/5 border-white/10 text-slate-100"}`}>
+                              <Icon className="w-5 h-5" />
+                            </div>
+                            <span className="text-slate-500 group-hover:text-white transition-colors text-lg leading-none">↗</span>
+                          </div>
+                          <div className="mt-4">
+                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-semibold">{item.meta}</span>
+                            <h5 className="text-sm font-bold text-white mt-1 leading-snug">{item.title}</h5>
+                            <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">{item.desc}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-[#101319]/70 px-4 py-3 flex items-start gap-3">
+                    <ShieldCheck className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                    <p className="text-[10px] leading-relaxed text-slate-400">Each section has its own save action. Changes are saved through the existing settings and database workflow; unrelated POS modules are not part of this workspace.</p>
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsSection !== "overview" && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#101319]/90 p-3 sm:p-4 animate-fadeIn" id="settings-workspace-toolbar">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button type="button" onClick={() => setActiveSettingsSection("overview")} className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors">
+                      <Undo2 className="w-4 h-4" /> Back
+                    </button>
+                    <div className="min-w-0">
+                      <p className="text-[9px] uppercase tracking-widest text-slate-500">Settings Workspace</p>
+                      <p className="text-xs sm:text-sm font-bold text-white truncate">
+                        {({ shop: "Registered Shop Information", font: "Font Customization & Settings", invoice: "Invoice & PDF Layout Customization", sales: "Sales Panel & Assistant Restrictions", security: "Security & Panel Passcodes", danger: "Danger Zone" } as Record<string, string>)[activeSettingsSection]}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-slate-500 border border-white/10 rounded-full px-3 py-1">Changes are saved per section</span>
+                </div>
+              )}
+              {activeSettingsSection === "shop" && (
+                <>
               {/* 1. Shop Information Card Block */}
-              <div className="bg-[#1E1E24]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl" id="settings-shop-info-block">
+              <div className="bg-[#101319]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl" id="settings-shop-info-block">
                 <div className="flex items-center gap-3 border-b border-slate-850 pb-3">
-                  <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                  <div className="p-2 bg-white/5 rounded-lg text-slate-100">
                     <Building2 className="w-5 h-5" />
                   </div>
                   <div>
@@ -8167,7 +8247,7 @@ _${businessInfo.name}_`;
                       type="text"
                       value={tempShopName}
                       onChange={(e) => setTempShopName(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans font-bold transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-sans font-bold transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                     />
                   </div>
 
@@ -8177,7 +8257,7 @@ _${businessInfo.name}_`;
                       type="text"
                       value={tempShopAddress}
                       onChange={(e) => setTempShopAddress(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-sans transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                     />
                   </div>
 
@@ -8188,7 +8268,7 @@ _${businessInfo.name}_`;
                         type="text"
                         value={tempShopPhone}
                         onChange={(e) => setTempShopPhone(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
 
@@ -8198,7 +8278,7 @@ _${businessInfo.name}_`;
                         type="email"
                         value={tempShopEmail}
                         onChange={(e) => setTempShopEmail(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
                   </div>
@@ -8210,7 +8290,7 @@ _${businessInfo.name}_`;
                         type="text"
                         value={tempVatRegNo}
                         onChange={(e) => setTempVatRegNo(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
 
@@ -8219,7 +8299,7 @@ _${businessInfo.name}_`;
                       <select
                         value={tempCurrency}
                         onChange={(e) => setTempCurrency(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono transition-all focus:ring-1 focus:ring-emerald-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-slate-400 font-mono transition-all focus:ring-1 focus:ring-white/10"
                       >
                         <option value="৳">৳ (BDT Taka - TK)</option>
                         <option value="$">$ (USD Dollar)</option>
@@ -8235,7 +8315,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveShopInfo}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-emerald-500/10 hover:from-emerald-400 hover:to-emerald-300 active:scale-95"
+                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
                   >
                     <Check className="w-4 h-4" />
                     Save Shop Details
@@ -8243,10 +8323,15 @@ _${businessInfo.name}_`;
                 </div>
               </div>
 
+                </>
+              )}
+
+              {activeSettingsSection === "font" && (
+                <>
               {/* 1.1 Premium Corporate Font Settings Card Block */}
-              <div className="bg-[#1E1E24]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl animate-fadeIn" id="settings-font-settings-block">
+              <div className="bg-[#101319]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl animate-fadeIn" id="settings-font-settings-block">
                 <div className="flex items-center gap-3 border-b border-slate-850 pb-3">
-                  <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                  <div className="p-2 bg-white/5 rounded-lg text-slate-100">
                     <Type className="w-5 h-5" />
                   </div>
                   <div>
@@ -8262,7 +8347,7 @@ _${businessInfo.name}_`;
                       <select
                         value={tempFont}
                         onChange={(e) => setTempFont(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-sans transition-all focus:ring-1 focus:ring-emerald-500/20 font-bold"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-slate-400 font-sans transition-all focus:ring-1 focus:ring-white/10 font-bold"
                       >
                         <option value="Inter">Inter (Default Modern & Clean)</option>
                         <option value="Roboto">Roboto (Standard Professional)</option>
@@ -8284,8 +8369,8 @@ _${businessInfo.name}_`;
                             onClick={() => setTempFontSizeScale(sz)}
                             className={`py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
                               tempFontSizeScale === sz
-                                ? "bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 shadow"
-                                : "text-slate-450 hover:text-white hover:bg-slate-800/10"
+                                ? "bg-white text-slate-950 shadow"
+                                : "text-slate-500 hover:text-white hover:bg-slate-800/10"
                             }`}
                           >
                             {sz}
@@ -8316,7 +8401,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveFontSettings}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-emerald-500/10 hover:from-emerald-400 hover:to-emerald-300 active:scale-95"
+                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
                   >
                     <Check className="w-4 h-4" />
                     Save Font
@@ -8324,10 +8409,15 @@ _${businessInfo.name}_`;
                 </div>
               </div>
 
+                </>
+              )}
+
+              {activeSettingsSection === "invoice" && (
+                <>
               {/* 2. Invoice Customization Card Block */}
-              <div className="bg-[#1E1E24]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl" id="settings-invoice-customization-block">
+              <div className="bg-[#101319]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl" id="settings-invoice-customization-block">
                 <div className="flex items-center gap-3 border-b border-slate-850 pb-3">
-                  <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                  <div className="p-2 bg-white/5 rounded-lg text-slate-100">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
@@ -8341,7 +8431,7 @@ _${businessInfo.name}_`;
                   {/* BRAND NEW: SEPARATE FIELD FOR INVOICES - SEVEN PREMIUM TEMPLATE SELECTION CARD GRID */}
                   <div className="space-y-3 pt-2" id="settings-invoice-template-selection-container">
                     <label className="text-[10px] font-black uppercase tracking-widest font-mono text-slate-400 pl-1 block flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                      <Layers className="w-3.5 h-3.5 text-slate-200" />
                       SELECT INVOICE DESIGN & LAYOUT TEMPLATE (Choose 1 of 7 Designs)
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" id="invoice-templates-grid">
@@ -8351,7 +8441,7 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("classic")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "classic"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
@@ -8367,9 +8457,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "classic" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "classic" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "classic" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "classic" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "classic" ? "Activated" : "Select Style"}
@@ -8382,14 +8472,14 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("modern_minimal")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "modern_minimal"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 02</span>
-                            <span className="text-[9px] bg-[#00E676]/10 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Clean Space</span>
+                            <span className="text-[9px] bg-white/10 text-slate-200 font-bold px-2 py-0.5 rounded uppercase font-mono">Clean Space</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Clean Tech Minimalist</h5>
                           <p className="text-[10px] text-slate-400 leading-normal font-sans">
@@ -8398,9 +8488,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "modern_minimal" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "modern_minimal" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "modern_minimal" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "modern_minimal" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "modern_minimal" ? "Activated" : "Select Style"}
@@ -8413,7 +8503,7 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("premium_navy")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "premium_navy"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
@@ -8429,9 +8519,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "premium_navy" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "premium_navy" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "premium_navy" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "premium_navy" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "premium_navy" ? "Activated" : "Select Style"}
@@ -8444,7 +8534,7 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("cosmic_dark")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "cosmic_dark"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
@@ -8460,9 +8550,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "cosmic_dark" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "cosmic_dark" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "cosmic_dark" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "cosmic_dark" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "cosmic_dark" ? "Activated" : "Select Style"}
@@ -8475,7 +8565,7 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("vintage_editorial")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "vintage_editorial"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
@@ -8491,9 +8581,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "vintage_editorial" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "vintage_editorial" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "vintage_editorial" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "vintage_editorial" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "vintage_editorial" ? "Activated" : "Select Style"}
@@ -8506,14 +8596,14 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("bold_emerald")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "bold_emerald"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-slate-500">Template 06</span>
-                            <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase font-mono">Fresh Green</span>
+                            <span className="text-[9px] bg-emerald-500/10 text-slate-200 font-bold px-2 py-0.5 rounded uppercase font-mono">Fresh Green</span>
                           </div>
                           <h5 className="text-xs font-black text-white">Vibrant Emerald Accent</h5>
                           <p className="text-[10px] text-slate-400 leading-normal font-sans">
@@ -8522,9 +8612,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "bold_emerald" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "bold_emerald" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "bold_emerald" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "bold_emerald" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "bold_emerald" ? "Activated" : "Select Style"}
@@ -8537,7 +8627,7 @@ _${businessInfo.name}_`;
                         onClick={() => setTempInvoiceTemplate("compact_pos")}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left select-none ${
                           tempInvoiceTemplate === "compact_pos"
-                            ? "bg-[#00E676]/5 border-[#00E676] shadow shadow-[#00E676]/10"
+                            ? "bg-white/5 border-white/50 shadow shadow-white/5"
                             : "bg-[#121214] border-slate-800 hover:border-slate-700 hover:bg-slate-900/45"
                         }`}
                       >
@@ -8553,9 +8643,9 @@ _${businessInfo.name}_`;
                         </div>
                         <div className="mt-3 flex items-center gap-1.5">
                           <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
-                            tempInvoiceTemplate === "compact_pos" ? "border-[#00E676]" : "border-slate-700"
+                            tempInvoiceTemplate === "compact_pos" ? "border-white" : "border-slate-700"
                           }`}>
-                            {tempInvoiceTemplate === "compact_pos" && <div className="w-1.5 h-1.5 rounded-full bg-[#00E676]" />}
+                            {tempInvoiceTemplate === "compact_pos" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
                           <span className="text-[10px] font-bold font-mono text-slate-400">
                             {tempInvoiceTemplate === "compact_pos" ? "Activated" : "Select Style"}
@@ -8570,7 +8660,7 @@ _${businessInfo.name}_`;
                   <div className="space-y-4 p-5 bg-[#121214] border border-slate-800 rounded-xl" id="invoice-template-live-demo-preview">
                     <div className="flex items-center justify-between border-b border-slate-850 pb-2">
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <CheckCircle2 className="w-4 h-4 text-slate-200" />
                         <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-200">
                           Live PDF Design Blueprint Preview (Demo Mockup)
                         </span>
@@ -8594,7 +8684,7 @@ _${businessInfo.name}_`;
                               accentLine: "border-teal-100",
                               tableHeader: "bg-teal-50 text-teal-900 text-xs font-bold",
                               tableRow: "border-b border-slate-100 text-slate-700",
-                              statusBadge: "border border-emerald-500 text-emerald-600 font-bold text-[10px] uppercase rounded-full px-2 py-0.5",
+                              statusBadge: "border border-slate-400 text-emerald-600 font-bold text-[10px] uppercase rounded-full px-2 py-0.5",
                               totalsBox: "border border-teal-200/60 bg-teal-50/20 text-slate-800 p-3 rounded-lg",
                               sigLine: "border-teal-200",
                               fontFamily: "font-sans",
@@ -8619,14 +8709,14 @@ _${businessInfo.name}_`;
                           case "cosmic_dark":
                             return {
                               container: "bg-[#18181B] text-zinc-300 border border-zinc-800 rounded-xl font-mono",
-                              topAccent: "h-1 bg-[#00E676]",
+                              topAccent: "h-1 bg-white",
                               header: "pb-3 border-b border-zinc-800 p-3 bg-zinc-900/60",
-                              primaryText: "text-[#00E676] font-mono font-bold tracking-widest",
+                              primaryText: "text-white font-mono font-bold tracking-widest",
                               secondaryText: "text-zinc-500 text-[11px]",
-                              accentLine: "border-[#00E676]/35",
+                              accentLine: "border-white/35",
                               tableHeader: "bg-zinc-800 text-zinc-100 text-xs font-mono tracking-tight",
                               tableRow: "border-b border-zinc-900 text-zinc-300",
-                              statusBadge: "border border-[#00E676] text-[#00E676] text-[10px] font-bold rounded px-1.5 py-0.5 bg-[#00E676]/5",
+                              statusBadge: "border border-white text-white text-[10px] font-bold rounded px-1.5 py-0.5 bg-white/5",
                               totalsBox: "border border-zinc-800 bg-zinc-900/80 text-zinc-300 p-3",
                               sigLine: "border-zinc-750",
                               fontFamily: "font-mono",
@@ -8650,7 +8740,7 @@ _${businessInfo.name}_`;
                             };
                           case "bold_emerald":
                             return {
-                              container: "bg-white text-slate-900 border border-emerald-500 rounded-xl font-sans",
+                              container: "bg-white text-slate-900 border border-slate-400 rounded-xl font-sans",
                               topAccent: "h-2.5 bg-emerald-700",
                               header: "pb-4 border-b border-emerald-100 bg-emerald-50/20 p-3",
                               primaryText: "text-emerald-700 font-sans font-black tracking-tight",
@@ -8856,8 +8946,8 @@ _${businessInfo.name}_`;
                                   {/* CONDITIONAL STATUS STYLING BADGES */}
                                   <div className="space-y-2 pt-1">
                                     {/* Demo state for Paid - Centered badge/stamp highlight, hiding plain text */}
-                                    <div className="flex justify-center items-center bg-emerald-100 dark:bg-emerald-950/40 border-2 border-dashed border-emerald-500/50 px-4 py-2 rounded-xl shadow-inner">
-                                      <span className="text-xs font-black text-emerald-850 dark:text-emerald-400 uppercase tracking-widest font-sans flex items-center gap-1.5 font-bold">
+                                    <div className="flex justify-center items-center bg-emerald-100 dark:bg-emerald-950/40 border-2 border-dashed border-slate-400/50 px-4 py-2 rounded-xl shadow-inner">
+                                      <span className="text-xs font-black text-emerald-850 dark:text-slate-200 uppercase tracking-widest font-sans flex items-center gap-1.5 font-bold">
                                         ★ FULL PAID ★
                                       </span>
                                     </div>
@@ -8964,7 +9054,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempShowLogo(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -8976,7 +9066,7 @@ _${businessInfo.name}_`;
                       value={tempTerms}
                       onChange={(e) => setTempTerms(e.target.value)}
                       placeholder="Enter legal specifications, warranty policies, or return rules..."
-                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans leading-relaxed transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                      className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-sans leading-relaxed transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                     />
                   </div>
 
@@ -8995,7 +9085,7 @@ _${businessInfo.name}_`;
                           onChange={(e) => setTempShowCustSig(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                       </label>
                     </div>
 
@@ -9011,7 +9101,7 @@ _${businessInfo.name}_`;
                           onChange={(e) => setTempShowAuthSig(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                       </label>
                     </div>
 
@@ -9030,7 +9120,7 @@ _${businessInfo.name}_`;
                             onClick={() => setTempLogoAlignment(align)}
                             className={`py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer uppercase font-mono ${
                               tempLogoAlignment === align
-                                ? "bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 shadow"
+                                ? "bg-white text-slate-950 shadow"
                                 : "text-slate-400 hover:text-white hover:bg-slate-800/10"
                             }`}
                           >
@@ -9050,7 +9140,7 @@ _${businessInfo.name}_`;
                         min={1}
                         value={tempStartingInvoiceNumber}
                         onChange={(e) => setTempStartingInvoiceNumber(parseInt(e.target.value) || 1001)}
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono transition-all placeholder:text-slate-600 focus:ring-1 focus:ring-white/10"
                         placeholder="e.g. 1001 or 50001"
                       />
                       <p className="text-[9px] text-slate-500 italic pl-1 leading-normal block font-sans">
@@ -9074,7 +9164,7 @@ _${businessInfo.name}_`;
                           onChange={(e) => setTempShowPartners(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                       </label>
                     </div>
 
@@ -9100,7 +9190,7 @@ _${businessInfo.name}_`;
                                   }}
                                   className={`px-3 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer transition-all border ${
                                     isSelected 
-                                      ? "bg-emerald-500/10 border-emerald-500/80 text-emerald-400 font-sans" 
+                                      ? "bg-emerald-500/10 border-slate-400/80 text-slate-200 font-sans" 
                                       : "bg-[#1E1E24] border-slate-800 text-slate-400 hover:text-white"
                                   }`}
                                 >
@@ -9120,7 +9210,7 @@ _${businessInfo.name}_`;
                               value={newCustomBrandName}
                               onChange={(e) => setNewCustomBrandName(e.target.value)}
                               placeholder="e.g. APPLE or DELL"
-                              className="w-full px-3 py-2 bg-[#1E1E24] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 transition-all"
+                              className="w-full px-3 py-2 bg-[#1E1E24] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 transition-all"
                             />
                             <button
                               type="button"
@@ -9206,7 +9296,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveInvoiceConfig}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-emerald-500/10 hover:from-emerald-400 hover:to-emerald-300 active:scale-95"
+                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
                   >
                     <Check className="w-4 h-4" />
                     Save Customizations
@@ -9214,10 +9304,15 @@ _${businessInfo.name}_`;
                 </div>
               </div>
 
+                </>
+              )}
+
+              {activeSettingsSection === "sales" && (
+                <>
               {/* 3. Sales Panel Restrictions Block */}
-              <div className="bg-[#1E1E24]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl" id="settings-sales-restrictions-block">
+              <div className="bg-[#101319]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl" id="settings-sales-restrictions-block">
                 <div className="flex items-center gap-3 border-b border-slate-850 pb-3">
-                  <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                  <div className="p-2 bg-white/5 rounded-lg text-slate-100">
                     <SlidersHorizontal className="w-5 h-5" />
                   </div>
                   <div>
@@ -9240,7 +9335,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempCanEditSales(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9256,7 +9351,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempCanDeleteSales(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9272,7 +9367,7 @@ _${businessInfo.name}_`;
                         onChange={(e) => setTempCanOverridePrices(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-slate-950"></div>
                     </label>
                   </div>
 
@@ -9282,7 +9377,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveSalesRestrictions}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-emerald-500/10 hover:from-emerald-400 hover:to-emerald-300 active:scale-95"
+                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
                   >
                     <Check className="w-4 h-4" />
                     Save Restrictions
@@ -9290,10 +9385,15 @@ _${businessInfo.name}_`;
                 </div>
               </div>
 
+                </>
+              )}
+
+              {activeSettingsSection === "security" && (
+                <>
               {/* 3. Panel Passcodes & Account Security Settings */}
-              <div className="bg-[#1E1E24]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl animate-fadeIn" id="settings-panel-passcode-block">
+              <div className="bg-[#101319]/95 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl animate-fadeIn" id="settings-panel-passcode-block">
                 <div className="flex items-center gap-3 border-b border-slate-850 pb-3">
-                  <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                  <div className="p-2 bg-white/5 rounded-lg text-slate-100">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
@@ -9314,7 +9414,7 @@ _${businessInfo.name}_`;
                         value={tempAdminPasscode}
                         onChange={(e) => setTempAdminPasscode(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 1234"
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono font-bold transition-all placeholder:text-slate-700 focus:ring-1 focus:ring-emerald-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono font-bold transition-all placeholder:text-slate-700 focus:ring-1 focus:ring-white/10"
                       />
                     </div>
                     <span className="text-[9px] text-slate-500 font-sans block pl-1 leading-normal">
@@ -9333,7 +9433,7 @@ _${businessInfo.name}_`;
                         value={tempSalesPasscode}
                         onChange={(e) => setTempSalesPasscode(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 5555"
-                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-cyan-500 font-mono font-bold transition-all placeholder:text-slate-700 focus:ring-1 focus:ring-cyan-500/20"
+                        className="w-full px-4 py-2.5 bg-[#121214] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-slate-400 font-mono font-bold transition-all placeholder:text-slate-700 focus:ring-1 focus:ring-cyan-500/20"
                       />
                     </div>
                     <span className="text-[9px] text-slate-500 font-sans block pl-1 leading-normal">
@@ -9346,7 +9446,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveSecurityPasscodes}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-emerald-500/10 hover:from-emerald-400 hover:to-emerald-300 active:scale-95"
+                    className="px-5 py-2.5 bg-white text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow shadow-white/5 hover:bg-slate-200 active:scale-95"
                   >
                     <Check className="w-4 h-4" />
                     Save Passcodes
@@ -9358,7 +9458,7 @@ _${businessInfo.name}_`;
               <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-850 space-y-2 text-xs font-mono text-slate-400" id="settings-metadata-status">
                 <p className="flex justify-between">
                   <span>Billing Engine core database version:</span>
-                  <span className="text-emerald-400 font-bold">BarakahBillPro v2.4.5 (Premium)</span>
+                  <span className="text-slate-200 font-bold">BarakahBillPro v2.4.5 (Premium)</span>
                 </p>
                 <p className="flex justify-between">
                   <span>Pin encryption level:</span>
@@ -9366,6 +9466,11 @@ _${businessInfo.name}_`;
                 </p>
               </div>
 
+                </>
+              )}
+
+              {activeSettingsSection === "danger" && (
+                <>
               {/* 4. Danger Zone (Modular destruction actions) */}
               <div className="border-[#FF5252]/30 border-2 bg-[#121214] rounded-2xl p-6 space-y-5 shadow-2xl" id="settings-danger-zone-block">
                 <div className="flex items-center gap-3 border-b border-rose-950 pb-3">
@@ -9452,7 +9557,8 @@ _${businessInfo.name}_`;
 
                 </div>
               </div>
-
+                </>
+              )}
 
 
             </div>
