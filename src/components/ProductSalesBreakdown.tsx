@@ -83,7 +83,7 @@ export function ProductSalesBreakdown({
     const normalize = (value: any) => String(value ?? "")
       .trim()
       .toLocaleLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
