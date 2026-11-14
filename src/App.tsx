@@ -7185,8 +7185,7 @@ _${businessInfo.name}_`;
               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
             const money = (amount: number) => `${businessInfo.currencySymbol || "৳"} ${(Number(amount) || 0).toLocaleString()}`;
 
-            return (
-              const renderExpenseDateFilters = () => (
+            const renderExpenseDateFilters = () => (
                 <div className="space-y-2">
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date Filter</div>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2" id="expense-date-presets">
