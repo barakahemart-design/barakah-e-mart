@@ -125,11 +125,14 @@ export function ProductSalesBreakdown({
 
         const currentProductCategory = String(matchedProduct?.category || matchedProduct?.productCategory || matchedProduct?.product_category || "").trim();
         const savedItemCategory = String(item?.category || item?.productCategory || item?.product_category || "").trim();
-        const categoryName = currentProductCategory && normalize(currentProductCategory) !== "uncategorized"
-          ? currentProductCategory
-          : savedItemCategory && normalize(savedItemCategory) !== "uncategorized"
-            ? savedItemCategory
-            : currentProductCategory || savedItemCategory || "Uncategorized";
+
+        // The Products list is the source of truth for a matched product.
+        // Do not let an old transaction's saved category override its current category.
+        // Only fall back to the historical sale category when the product cannot be matched
+        // or the product record has no category value at all.
+        const categoryName = matchedProduct
+          ? (currentProductCategory || "Uncategorized")
+          : (savedItemCategory || "Uncategorized");
 
         const categoryKey = normalize(categoryName) || "uncategorized";
         const productKey = String(matchedProduct?.id || itemProductId || normalize(itemName));
