@@ -29,6 +29,7 @@ import {
 interface DashboardViewProps {
   products: any[];
   transactions: any[];
+  onUpdateProductCategory: (productId: string, category: string) => void;
   businessInfo: any;
   isBackingUp: boolean;
   isRestoring: boolean;
@@ -61,6 +62,7 @@ const COLORS = ["#10b981", "#06b6d4", "#f59e0b", "#8b5cf6", "#ef4444", "#ec4899"
 export function DashboardView({
   products,
   transactions,
+  onUpdateProductCategory,
   businessInfo,
   isBackingUp,
   isRestoring,
@@ -362,6 +364,7 @@ export function DashboardView({
       <ProductSalesBreakdown
         products={products}
         transactions={transactions}
+        onUpdateProductCategory={onUpdateProductCategory}
         dashboardFilter={dashboardFilter}
         customStart={customStart}
         customEnd={customEnd}
