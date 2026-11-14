@@ -8433,10 +8433,11 @@ _${businessInfo.name}_`;
                             key={sz}
                             type="button"
                             onClick={() => setTempFontSizeScale(sz)}
-                            className={`py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                            aria-pressed={tempFontSizeScale === sz}
+                            className={`py-2 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer ${
                               tempFontSizeScale === sz
-                                ? "bg-white text-slate-950 shadow"
-                                : "bg-[#252A33] border border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46]"
+                                ? "bg-emerald-400 text-slate-950 border-emerald-300 shadow-lg shadow-emerald-400/20 ring-2 ring-emerald-300/40"
+                                : "bg-[#252A33] border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46] hover:border-slate-400"
                             }`}
                           >
                             {sz}
@@ -8547,7 +8548,7 @@ _${businessInfo.name}_`;
                     </div>
                     <div className="mx-auto w-full max-w-[460px] aspect-[210/297] overflow-hidden bg-white border border-slate-300 shadow-xl">
                       {invoicePreviewDataUrl ? (
-                        <iframe src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&view=Fit"} title="Exact Classic Retail Standard A4 invoice PDF preview" className="w-full h-full border-0 bg-white" />
+                        <iframe src={invoicePreviewDataUrl + (typeof window !== "undefined" && window.innerWidth < 640 ? "#toolbar=0&navpanes=0&scrollbar=0&view=Fit&zoom=70" : "#toolbar=0&navpanes=0&scrollbar=0&view=Fit")} title="Exact Classic Retail Standard A4 invoice PDF preview" className="w-full h-full border-0 bg-white" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-center p-6 text-slate-600">
                           <div className="space-y-2">
@@ -8688,10 +8689,11 @@ _${businessInfo.name}_`;
                             key={align}
                             type="button"
                             onClick={() => setTempLogoAlignment(align)}
-                            className={`py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer uppercase font-mono ${
+                            aria-pressed={tempLogoAlignment === align}
+                            className={`py-2 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer uppercase font-mono ${
                               tempLogoAlignment === align
-                                ? "bg-white text-slate-950 shadow"
-                                : "text-slate-400 hover:text-white hover:bg-slate-800/10"
+                                ? "bg-sky-400 text-slate-950 border-sky-300 shadow-lg shadow-sky-400/20 ring-2 ring-sky-300/40"
+                                : "bg-[#252A33] border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46] hover:border-slate-400"
                             }`}
                           >
                             {align}
