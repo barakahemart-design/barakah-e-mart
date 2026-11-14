@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
+import { toUUID } from "../lib/firebase-helpers";
 import { Boxes, Package, ShoppingBag } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
 
 interface ProductSalesBreakdownProps {
   products: any[];
   transactions: any[];
-  onUpdateProductCategory: (productId: string, category: string) => Promise<void>;
+  storeEmail: string;
   dashboardFilter: string;
   customStart: string;
   customEnd: string;
@@ -66,23 +67,11 @@ function formatQuantity(value: number) {
 export function ProductSalesBreakdown({
   products = [],
   transactions = [],
-  onUpdateProductCategory,
+  storeEmail,
   dashboardFilter,
   customStart,
   customEnd
 }: ProductSalesBreakdownProps) {
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [creatingCategory, setCreatingCategory] = useState(false);
-  const [savingCategory, setSavingCategory] = useState(false);
-  const [categorySaveError, setCategorySaveError] = useState("");
-  const availableCategories = useMemo(() => Array.from(new Set(
-    (Array.isArray(products) ? products : [])
-      .map((product: any) => String(product?.category || "").trim())
-      .filter((category: string) => category && category.toLowerCase() !== "uncategorized")
-  )).sort((a, b) => a.localeCompare(b)), [products]);
-
   const todayKey = new Date().toDateString();
   const report = useMemo(() => {
     const bounds = getPeriodBounds(dashboardFilter, customStart, customEnd);
@@ -99,13 +88,26 @@ export function ProductSalesBreakdown({
         if (!Number.isFinite(quantity) || quantity <= 0) return;
 
         const itemName = String(item?.name || item?.product_name || "Unnamed Product").trim() || "Unnamed Product";
-        const itemProductId = String(item?.productId || item?.product_id || "");
-        const matchedProduct = safeProducts.find((product: any) =>
-          (itemProductId && String(product?.id || "") === itemProductId) ||
-          (!itemProductId && String(product?.name || "").trim().toLowerCase() === itemName.toLowerCase())
-        ) || safeProducts.find((product: any) =>
-          String(product?.name || "").trim().toLowerCase() === itemName.toLowerCase()
-        );
+        const itemProductId = String(item?.productId || item?.product_id || item?.productID || "").trim();
+
+        // Sale records store product IDs through toUUID(id, storeEmail). Match
+        // both the original product ID and that account-scoped ID so historical
+        // sales resolve to the product's CURRENT category reliably.
+        const productById = new Map<string, any>();
+        const productByName = new Map<string, any>();
+        safeProducts.forEach((product: any) => {
+          const productId = String(product?.id || "").trim();
+          const firestoreId = String(product?.firestoreId || "").trim();
+          [productId, firestoreId,
+            productId ? toUUID(productId, storeEmail) : "",
+            firestoreId ? toUUID(firestoreId, storeEmail) : ""
+          ].filter(Boolean).forEach(id => productById.set(id, product));
+          const normalizedName = String(product?.name || "").trim().toLocaleLowerCase().replace(/\\s+/g, " ");
+          if (normalizedName) productByName.set(normalizedName, product);
+        });
+        const normalizedItemName = itemName.toLocaleLowerCase().replace(/\\s+/g, " ");
+        const matchedProduct = (itemProductId ? productById.get(itemProductId) : undefined)
+          || productByName.get(normalizedItemName);
 
         const savedItemCategory = String(item?.category || "").trim();
         const productCategory = String(matchedProduct?.category || "").trim();
@@ -238,106 +240,7 @@ export function ProductSalesBreakdown({
                       </div>
                       <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
                         <span className="text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
-                        {category.name.trim().toLowerCase() === "uncategorized" && product.productId && (
-                          editingProductId === product.productId ? (
-                            <div className="flex min-w-0 flex-col items-stretch gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-2 sm:min-w-[280px]">
-                              <div className="text-[10px] font-bold text-indigo-200">
-                                Assign product: <span className="text-white">{product.name}</span>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <select
-                                  aria-label={`Choose category for ${product.name}`}
-                                  value={creatingCategory ? "__create_new__" : selectedCategory}
-                                  onChange={(event) => {
-                                    const value = event.target.value;
-                                    setCategorySaveError("");
-                                    if (value === "__create_new__") {
-                                      setCreatingCategory(true);
-                                      setSelectedCategory("");
-                                    } else {
-                                      setCreatingCategory(false);
-                                      setNewCategoryName("");
-                                      setSelectedCategory(value);
-                                    }
-                                  }}
-                                  className="min-w-[145px] flex-1 rounded-lg border border-slate-700 bg-[#080d17] px-2 py-1.5 text-[10px] font-semibold text-white outline-none focus:border-indigo-400"
-                                >
-                                  <option value="">Select existing category</option>
-                                  {availableCategories.map(option => (
-                                    <option key={option} value={option}>{option}</option>
-                                  ))}
-                                  <option value="__create_new__">+ Create new category</option>
-                                </select>
-                                {creatingCategory && (
-                                  <input
-                                    aria-label={`New category name for ${product.name}`}
-                                    value={newCategoryName}
-                                    onChange={(event) => setNewCategoryName(event.target.value)}
-                                    placeholder="Type new category name"
-                                    maxLength={60}
-                                    className="min-w-[145px] flex-1 rounded-lg border border-slate-700 bg-[#080d17] px-2 py-1.5 text-[10px] font-semibold text-white outline-none placeholder:text-slate-500 focus:border-indigo-400"
-                                  />
-                                )}
-                                <button
-                                  type="button"
-                                  disabled={savingCategory || (creatingCategory ? !newCategoryName.trim() : !selectedCategory)}
-                                  onClick={async () => {
-                                    const categoryToSave = creatingCategory ? newCategoryName.trim() : selectedCategory.trim();
-                                    if (!categoryToSave) return;
-                                    setSavingCategory(true);
-                                    setCategorySaveError("");
-                                    try {
-                                      await onUpdateProductCategory(product.productId!, categoryToSave);
-                                      setEditingProductId(null);
-                                      setSelectedCategory("");
-                                      setNewCategoryName("");
-                                      setCreatingCategory(false);
-                                    } catch (error) {
-                                      const reason = error instanceof Error ? error.message : String(error || "Unknown error");
-                                      console.error("Dashboard category save failed:", error);
-                                      setCategorySaveError(`Save failed: ${reason}`);
-                                    } finally {
-                                      setSavingCategory(false);
-                                    }
-                                  }}
-                                  className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-[10px] font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  {savingCategory ? "Saving..." : "Save"}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={savingCategory}
-                                  onClick={() => {
-                                    setEditingProductId(null);
-                                    setSelectedCategory("");
-                                    setNewCategoryName("");
-                                    setCreatingCategory(false);
-                                    setCategorySaveError("");
-                                  }}
-                                  className="rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] font-semibold text-slate-400 hover:text-white"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                              {categorySaveError && <span className="text-[10px] font-semibold text-rose-300">{categorySaveError}</span>}
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={availableCategories.length === 0}
-                              onClick={() => {
-                                setEditingProductId(product.productId!);
-                                setSelectedCategory("");
-                                setNewCategoryName("");
-                                setCreatingCategory(false);
-                                setCategorySaveError("");
-                              }}
-                              className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1.5 text-[10px] font-bold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              Edit Category
-                            </button>
-                          )
-                        )}
+
                       </div>
                     </div>
                   ))}
