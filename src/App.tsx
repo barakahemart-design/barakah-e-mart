@@ -106,7 +106,6 @@ import {
   subscribeExpenses,
   subscribePurchases,
   saveProduct,
-  updateProductCategory,
   saveCustomer,
   saveTransaction,
   saveExpense,
@@ -4493,34 +4492,7 @@ _${businessInfo.name}_`;
             <DashboardView
               products={products}
               transactions={transactions}
-              onUpdateProductCategory={async (productId, category) => {
-                const currentProduct = products.find(p => String(p.id) === String(productId));
-                if (!currentProduct) {
-                  triggerNotification("Product could not be found. Please refresh and try again.", "error");
-                  throw new Error("Product not found");
-                }
-                const cleanCategory = String(category || "").trim();
-                if (!cleanCategory) throw new Error("Category name is required");
-                const updatedProduct = { ...currentProduct, category: cleanCategory };
-
-                if (activeUser && !activeUser.isGuest) {
-                  const signedInUser = firebaseAuth.currentUser;
-                  if (!signedInUser || signedInUser.uid !== activeUser.uid) {
-                    triggerNotification("Your cloud session is not ready. Please refresh and try again.", "error");
-                    throw new Error("Firebase authentication is not ready");
-                  }
-                  try {
-                    await updateProductCategory(signedInUser.uid, currentProduct, cleanCategory);
-                  } catch (err) {
-                    console.error("Cloud category update failed:", err);
-                    triggerNotification("Category could not be saved to the cloud. No local changes were made.", "error");
-                    throw err;
-                  }
-                }
-
-                setProducts(prev => prev.map(p => String(p.id) === String(productId) ? updatedProduct : p));
-                triggerNotification(`${updatedProduct.name} moved to ${cleanCategory}.`);
-              }}
+              storeEmail={activeUser?.email || firebaseAuth.currentUser?.email || ""}
               businessInfo={businessInfo}
               isBackingUp={isBackingUp}
               isRestoring={isRestoring}
