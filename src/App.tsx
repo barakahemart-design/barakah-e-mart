@@ -7223,33 +7223,82 @@ _${businessInfo.name}_`;
               return (
               <div className="space-y-5 animate-fade-in" id="view-expenses-outer-container">
                 {expenseSection === "home" ? (
-                  <div className="space-y-4">
-                    <div className="bg-[#0b0f19]/90 border border-slate-800 p-4 sm:p-5 rounded-2xl">
-                      <h2 className="text-base sm:text-lg font-black text-white">Expenses Management</h2>
-                      <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Choose a workspace to continue.</p>
+                  <section
+                    className="relative isolate min-h-[68vh] overflow-hidden rounded-[28px] border border-slate-700/60 bg-[#080d18] shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+                    aria-label="Expenses workspaces"
+                  >
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 opacity-90"
+                      style={{
+                        backgroundImage: "radial-gradient(ellipse at 12% 8%, rgba(16,185,129,0.18), transparent 38%), radial-gradient(ellipse at 88% 82%, rgba(59,130,246,0.15), transparent 34%), linear-gradient(rgba(148,163,184,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.045) 1px, transparent 1px)",
+                        backgroundSize: "auto, auto, 36px 36px, 36px 36px"
+                      }}
+                    />
+                    <div aria-hidden="true" className="pointer-events-none absolute -top-28 right-[-5rem] h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+                    <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 left-[-4rem] h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+
+                    <div className="relative z-10 flex min-h-[68vh] flex-col justify-center px-5 py-9 sm:px-8 sm:py-12 lg:px-12 lg:py-14">
+                      <div className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="max-w-2xl">
+                          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]" />
+                            Finance Workspace
+                          </div>
+                          <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-[2.6rem]">Expenses Management</h2>
+                          <p className="mt-3 max-w-xl text-xs leading-6 text-slate-400 sm:text-sm">
+                            Manage business expenses in one place. Choose a workspace below to get started.
+                          </p>
+                        </div>
+                        <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-[10px] font-semibold tracking-wide text-slate-300 shadow-lg shadow-black/10">
+                          <Layers className="h-4 w-4 text-emerald-300" />
+                          3 Dedicated Workspaces
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-5">
+                        {[
+                          { id: "add", label: "Add Expenses", description: "Record a new business expense with date, category and details.", detail: "Create expense", Icon: PlusCircle, accent: "emerald" },
+                          { id: "history", label: "Expenses History", description: "Review saved expenses, filter records and manage entries.", detail: "View records", Icon: History, accent: "sky" },
+                          { id: "categories", label: "Add Category", description: "Organize your spending with custom expense categories.", detail: "Manage categories", Icon: Tag, accent: "violet" }
+                        ].map(item => {
+                          const Icon = item.Icon;
+                          const accentStyles = item.accent === "emerald"
+                            ? { icon: "bg-emerald-400/10 text-emerald-300 ring-emerald-300/15", hover: "group-hover:border-emerald-300/40", glow: "group-hover:bg-emerald-400/10", link: "text-emerald-300" }
+                            : item.accent === "sky"
+                              ? { icon: "bg-sky-400/10 text-sky-300 ring-sky-300/15", hover: "group-hover:border-sky-300/40", glow: "group-hover:bg-sky-400/10", link: "text-sky-300" }
+                              : { icon: "bg-violet-400/10 text-violet-300 ring-violet-300/15", hover: "group-hover:border-violet-300/40", glow: "group-hover:bg-violet-400/10", link: "text-violet-300" };
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setExpenseSection(item.id as any)}
+                              className={`group relative flex min-h-[205px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900/65 p-5 text-left shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:bg-slate-800/80 hover:shadow-[0_20px_48px_rgba(0,0,0,0.3)] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:p-6 ${accentStyles.hover}`}
+                            >
+                              <div aria-hidden="true" className={`pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full blur-3xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${accentStyles.glow}`} />
+                              <div className="relative flex w-full items-start justify-between">
+                                <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ${accentStyles.icon}`}>
+                                  <Icon className="h-5 w-5" />
+                                </span>
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-400 transition-all group-hover:translate-x-1 group-hover:border-white/20 group-hover:text-white">
+                                  <span aria-hidden="true">↗</span>
+                                </span>
+                              </div>
+                              <span className="relative mt-8 block text-base font-extrabold tracking-tight text-white sm:text-lg">{item.label}</span>
+                              <span className="relative mt-2 block max-w-xs text-[11px] leading-5 text-slate-400 sm:text-xs">{item.description}</span>
+                              <span className={`relative mt-auto flex items-center gap-2 pt-5 text-[10px] font-bold tracking-wide ${accentStyles.link}`}>
+                                {item.detail}<span aria-hidden="true">→</span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-7 text-center text-[9px] font-medium tracking-wide text-slate-500">
+                        Select a workspace to continue · Your saved expense data remains unchanged
+                      </p>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                      {[
-                        { id: "add", label: "Add Expenses", description: "Record a new business expense", Icon: PlusCircle },
-                        { id: "history", label: "Expenses History", description: "Review, filter, edit and delete expenses", Icon: History },
-                        { id: "categories", label: "Add Category", description: "Create and manage expense categories", Icon: Tag }
-                      ].map(item => {
-                        const Icon = item.Icon;
-                        return (
-                          <button key={item.id} type="button" onClick={() => setExpenseSection(item.id as any)}
-                            className="min-h-[132px] bg-[#0a101f]/90 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-5 flex flex-col items-start justify-between gap-4 text-left transition-all hover:bg-[#101a2a]">
-                            <span className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center"><Icon className="w-5 h-5" /></span>
-                            <span className="block">
-                              <span className="block text-sm font-extrabold text-white">{item.label}</span>
-                              <span className="block text-[10px] text-slate-400 mt-1">{item.description}</span>
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg space-y-4">
+                  </section>
+                ) : (shadow-lg space-y-4">
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => setExpenseSection("home")} className="shrink-0 px-3 py-2 rounded-xl border border-slate-700 bg-[#121722] text-slate-200 hover:text-emerald-400 text-xs font-bold">← Back</button>
                       <div className="min-w-0">
