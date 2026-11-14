@@ -695,8 +695,18 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   }
 
   // SIGNATURES ROW
+  const showPartners = businessInfo.showPartnerLogos !== false;
+  const partnerLogos = businessInfo.partnerLogos || [];
+  const presetBrands = businessInfo.presetBrands || [];
+  const hasPartnerSection = showPartners && (partnerLogos.length > 0 || presetBrands.length > 0);
+  const isFullyPaidInvoice = excess > 0 || !hasDue;
+
   let sigY = Math.max(summaryY + 54, termsY + 16);
-  if (sigY > 260) {
+  // Reserve enough room below the signatures for the paid watermark and partner heading.
+  // If the item/terms content pushes this area too low, move the complete signature/footer
+  // section to a fresh page instead of letting the watermark collide with partner branding.
+  const signaturePageBreakY = hasPartnerSection ? (isFullyPaidInvoice ? 216 : 232) : 260;
+  if (sigY > signaturePageBreakY) {
     doc.addPage();
     sigY = 32;
   }
@@ -735,12 +745,22 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     doc.text("AUTHORIZED SHOWROOM BRAND SIGN", 167.5, sigLineY + 4.5, { align: "center" });
   }
 
-  // ----------------- PARTNER BRAND LOGOS SECTION -----------------
-  const showPartners = businessInfo.showPartnerLogos !== false;
-  const partnerLogos = businessInfo.partnerLogos || [];
-  const presetBrands = businessInfo.presetBrands || [];
+  // Paid invoice watermark: keep it directly beneath the signature captions.
+  // Its Y position follows the signature row, so it naturally moves down as invoice
+  // content grows, while the page-break reserve above protects the partner section.
+  if (isFullyPaidInvoice) {
+    const watermarkCenterY = sigLineY + 17;
+    doc.setDrawColor(205, 235, 214);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(61, watermarkCenterY - 6.5, 88, 13, 1.8, 1.8, "S");
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(19 * sizeFactor);
+    doc.setTextColor(205, 235, 214);
+    doc.text("FULL PAID", 105, watermarkCenterY, { align: "center", baseline: "middle" });
+  }
 
-  if (showPartners && (partnerLogos.length > 0 || presetBrands.length > 0)) {
+  // ----------------- PARTNER BRAND LOGOS SECTION -----------------
+  if (hasPartnerSection) {
     let partnerY = 259; // Y position above system footer
     
     // Draw subtle brand divider text
@@ -854,17 +874,6 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
         index++;
       });
     }
-  }
-
-  // Paid invoice watermark: use the reserved open strip beneath partner marks, without covering logos.
-  if (excess > 0 || !hasDue) {
-    doc.setDrawColor(205, 235, 214);
-    doc.setLineWidth(0.45);
-    doc.roundedRect(69, 273, 72, 10, 1.5, 1.5, "S");
-    doc.setFont(pdfFontName, "bold");
-    doc.setFontSize(16 * sizeFactor);
-    doc.setTextColor(205, 235, 214);
-    doc.text("FULL PAID", 105, 279.5, { align: "center", baseline: "middle" });
   }
 
   // Centered system footer message
