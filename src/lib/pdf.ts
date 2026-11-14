@@ -889,8 +889,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
   doc.save(`${transaction.invoiceNo}_Showroom_Invoice.pdf`);
 }
 
-export async function generateDeliveryChallanPDF(transaction: Transaction, contact: Contact | undefined, businessInfo: BusinessInfo) {
-  const doc = new jsPDF();
+export async function generateDeliveryChallanPDF(transaction: Transaction, contact: Contact | undefined, businessInfo: BusinessInfo, outputMode: "save" | "preview" = "save"): Promise<string | void> {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const devCurrencySymbol = businessInfo.currencySymbol === "৳" ? "TK" : businessInfo.currencySymbol;
   
   // Font Size Scaling Factor from localStorage
@@ -1118,68 +1118,56 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
     margin: { left: 15, right: 15 },
     head: tableHeaders,
     body: tableBody,
-    theme: 'striped',
+    theme: "grid",
     styles: {
       fontSize: 8.5 * sizeFactor,
       font: pdfFontName,
-      cellPadding: 4,
-      textColor: [51, 65, 85], // slate-700
-      lineColor: [241, 245, 249],
-      lineWidth: 0.1
+      cellPadding: 3.5,
+      textColor: [35, 35, 35],
+      lineColor: [205, 205, 205],
+      lineWidth: 0.15
     },
     headStyles: {
-      fillColor: [15, 23, 42], // Deep charcoal block
-      textColor: [255, 255, 255],
+      fillColor: [255, 255, 255],
+      textColor: [15, 23, 42],
       fontSize: 9 * sizeFactor,
-      fontStyle: 'bold',
-      cellPadding: 4.5
+      fontStyle: "bold",
+      cellPadding: 4,
+      lineWidth: 0.25,
+      lineColor: [15, 23, 42]
     },
     alternateRowStyles: {
-      fillColor: [248, 250, 252] // slate-50 rows
+      fillColor: [250, 250, 250]
     }
   });
 
   const finalY = (doc as any).lastAutoTable.finalY + 10;
 
-  // DUE DECLARATION CARD ZONE
+  // CLEAN MONOCHROME OUTSTANDING BALANCE SUMMARY
   let dueCardY = finalY;
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(15, 23, 42); // bold black border
-  doc.setLineWidth(0.45);
-  doc.roundedRect(15, dueCardY, 180, 22, 1.5, 1.5, 'FD');
-
-  const amountDueVal = transaction.dueBalance || 0;
+  const amountDueVal = Math.max(0, transaction.dueBalance || 0);
   const isDuesOutstanding = amountDueVal > 0;
+  const dueCardHeight = 22;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(15, dueCardY, 180, dueCardHeight, 1.2, 1.2, "FD");
 
-  if (isDuesOutstanding) {
-    // Red indicator bar on the left of due panel
-    doc.setFillColor(239, 68, 68); // Red
-    doc.roundedRect(15.2, dueCardY + 0.2, 3, 21.6, 0.5, 0.5, 'F');
-    
-    doc.setFont(pdfFontName, "bold");
-    doc.setFontSize(8.5 * sizeFactor);
-    doc.setTextColor(153, 27, 27); // Deep red text
-    doc.text("OUTSTANDING ACCOUNT DUE FOR PURCHASED ITEMS", 22, dueCardY + 8);
-    
-    doc.setFont(pdfFontName, "bold");
-    doc.setFontSize(11 * sizeFactor);
-    doc.setTextColor(153, 27, 27);
-    doc.text(`TOTAL AMOUNT DUE:  ${devCurrencySymbol} ${amountDueVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 22, dueCardY + 15);
-  } else {
-    // Green indicator bar on the left of due panel
-    doc.setFillColor(16, 185, 129); // Emerald-500
-    doc.roundedRect(15.2, dueCardY + 0.2, 3, 21.6, 0.5, 0.5, 'F');
-    
-    doc.setFont(pdfFontName, "bold");
-    doc.setFontSize(8.5 * sizeFactor);
-    doc.setTextColor(21, 128, 61); // Deep green text
-    doc.text("OUTSTANDING ACCOUNT DUE FOR PURCHASED ITEMS (FULLY SETTLED)", 22, dueCardY + 8);
-    
-    doc.setFont(pdfFontName, "bold");
-    doc.setFontSize(11 * sizeFactor);
-    doc.setTextColor(21, 128, 61);
-    doc.text(`TOTAL AMOUNT DUE:  ${devCurrencySymbol} 0.00  (NO OUTSTANDING DEBTS)`, 22, dueCardY + 15);
-  }
+  doc.setFont(pdfFontName, "bold");
+  doc.setFontSize(7.5 * sizeFactor);
+  doc.setTextColor(90, 90, 90);
+  doc.text("OUTSTANDING ACCOUNT DUE FOR PURCHASED ITEMS", 20, dueCardY + 7);
+
+  doc.setFont(pdfFontName, "normal");
+  doc.setFontSize(7 * sizeFactor);
+  doc.setTextColor(90, 90, 90);
+  doc.text(isDuesOutstanding ? "Payment balance remaining" : "Account fully settled", 20, dueCardY + 14);
+
+  doc.setFont(pdfFontName, "bold");
+  doc.setFontSize(12 * sizeFactor);
+  doc.setTextColor(15, 23, 42);
+  const dueAmountText = `${devCurrencySymbol} ${amountDueVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  doc.text(dueAmountText, 190, dueCardY + 13, { align: "right" });
 
   // Delivery Notes
   let notesY = dueCardY + 30;
@@ -1256,6 +1244,10 @@ export async function generateDeliveryChallanPDF(transaction: Transaction, conta
   doc.setFontSize(7 * sizeFactor);
   doc.setTextColor(148, 163, 184);
   doc.text(`Official Delivery Challan file. Printed by ${businessInfo?.name || "Barakah E-Mart"}.`, 105, 288, { align: "center" });
+
+  if (outputMode === "preview") {
+    return doc.output("datauristring");
+  }
 
   doc.save(`CHALLAN_${transaction.invoiceNo}_Showroom.pdf`);
 }

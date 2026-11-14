@@ -1327,6 +1327,9 @@ export default function App() {
   const [tempStartingInvoiceNumber, setTempStartingInvoiceNumber] = useState<number>(1001);
   const [invoicePreviewDataUrl, setInvoicePreviewDataUrl] = useState<string>("");
   const [invoicePreviewLoading, setInvoicePreviewLoading] = useState(false);
+  const [challanPreviewDataUrl, setChallanPreviewDataUrl] = useState<string>("");
+  const [challanPreviewLoading, setChallanPreviewLoading] = useState(false);
+  const [activeDocumentPreview, setActiveDocumentPreview] = useState<"invoice" | "challan">("invoice");
   
   // Custom states for global font size scaling & inline ledger cost adjustments
   const [fontSizeScale, setFontSizeScale] = useState<"Regular" | "Medium" | "Large">(
@@ -1433,6 +1436,16 @@ export default function App() {
         if (!cancelled) setInvoicePreviewDataUrl("");
       })
       .finally(() => { if (!cancelled) setInvoicePreviewLoading(false); });
+
+    setChallanPreviewLoading(true);
+    setChallanPreviewDataUrl("");
+    generateDeliveryChallanPDF(previewTransaction, previewContact, previewBusinessInfo, "preview")
+      .then((dataUrl) => { if (!cancelled && typeof dataUrl === "string") setChallanPreviewDataUrl(dataUrl); })
+      .catch((error) => {
+        console.error("Could not generate the live A4 delivery challan preview:", error);
+        if (!cancelled) setChallanPreviewDataUrl("");
+      })
+      .finally(() => { if (!cancelled) setChallanPreviewLoading(false); });
 
     return () => { cancelled = true; };
   }, [
@@ -8547,32 +8560,27 @@ _${businessInfo.name}_`;
                     <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <CheckCircle2 className="w-4 h-4 text-slate-200 shrink-0" />
-                        <span className="text-[10px] font-black uppercase tracking-wider font-mono text-slate-200">Classic Retail Standard — Actual A4 PDF Preview</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                        <button type="button" onClick={() => setActiveDocumentPreview("invoice")} className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all ${activeDocumentPreview === "invoice" ? "bg-white text-black border-white" : "bg-transparent text-slate-300 border-slate-600"}`}>Invoice Preview</button>
+                        <button type="button" onClick={() => setActiveDocumentPreview("challan")} className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all ${activeDocumentPreview === "challan" ? "bg-white text-black border-white" : "bg-transparent text-slate-300 border-slate-600"}`}>Delivery Challan</button>
+                      </div>
                       </div>
                       <span className="text-[8px] font-mono text-slate-400 uppercase shrink-0">A4 · 210 × 297 mm</span>
                     </div>
                     <div className="relative mx-auto flex w-full max-w-[460px] items-start justify-center aspect-[210/297] overflow-hidden bg-white border border-slate-300 shadow-xl">
-                      {invoicePreviewDataUrl ? (
+                      {activeDocumentPreview === "invoice" ? (
+                        invoicePreviewDataUrl ? (
+                          <>
+                            <iframe src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit"} title="A4 invoice PDF preview" className="hidden sm:block w-full h-full border-0 bg-white" />
+                            <iframe src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit"} title="Mobile A4 invoice PDF preview" className="block sm:hidden absolute left-0 top-0 border-0 bg-white" style={{ width: "142.86%", height: "142.86%", transform: "scale(0.7)", transformOrigin: "top left" }} />
+                          </>
+                        ) : <div className="w-full h-full flex items-center justify-center text-center p-6 text-slate-600 text-xs font-bold">{invoicePreviewLoading ? "Generating invoice preview…" : "Invoice preview could not be generated."}</div>
+                      ) : challanPreviewDataUrl ? (
                         <>
-                          <iframe
-                            src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit"}
-                            title="Exact Classic Retail Standard A4 invoice PDF preview"
-                            className="hidden sm:block w-full h-full border-0 bg-white"
-                          />
-                          <iframe
-                            src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit&view=Fit"}
-                            title="Mobile fitted A4 invoice PDF preview"
-                            className="block sm:hidden w-full h-full border-0 bg-white"
-                          />
+                          <iframe src={challanPreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit"} title="A4 delivery challan PDF preview" className="hidden sm:block w-full h-full border-0 bg-white" />
+                          <iframe src={challanPreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit"} title="Mobile A4 delivery challan PDF preview" className="block sm:hidden absolute left-0 top-0 border-0 bg-white" style={{ width: "142.86%", height: "142.86%", transform: "scale(0.7)", transformOrigin: "top left" }} />
                         </>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-center p-6 text-slate-600">
-                          <div className="space-y-2">
-                            <div className="text-xs font-bold">{invoicePreviewLoading ? "Generating actual A4 PDF preview…" : "A4 PDF preview could not be generated."}</div>
-                            <div className="text-[9px]">This preview uses the same PDF renderer as the Print Invoice action.</div>
-                          </div>
-                        </div>
-                      )}
+                      ) : <div className="w-full h-full flex items-center justify-center text-center p-6 text-slate-600 text-xs font-bold">{challanPreviewLoading ? "Generating delivery challan preview…" : "Delivery challan preview could not be generated."}</div>}
                     </div>
                     <p className="text-[9px] text-slate-400 text-center">This is the real A4 PDF output—not a separately recreated sample. Unsaved logo, shop and invoice settings are reflected here.</p>
                   </div>
