@@ -208,6 +208,7 @@ export interface BusinessInfo {
   vatRegNo: string;
   currencySymbol: string;
   email?: string;
+  invoiceDisplayEmail?: string;
   adminPasscode?: string;
   salesPasscode?: string;
   companyLogo?: string;
@@ -1307,6 +1308,7 @@ export default function App() {
   const [tempShopAddress, setTempShopAddress] = useState("");
   const [tempShopPhone, setTempShopPhone] = useState("");
   const [tempShopEmail, setTempShopEmail] = useState("");
+  const [tempInvoiceDisplayEmail, setTempInvoiceDisplayEmail] = useState("");
   const [tempVatRegNo, setTempVatRegNo] = useState("");
   const [tempCurrency, setTempCurrency] = useState("৳");
 
@@ -1352,6 +1354,7 @@ export default function App() {
       setTempShopAddress(businessInfo.address || "");
       setTempShopPhone(businessInfo.phoneNumber || "");
       setTempShopEmail(businessInfo.email || "");
+      setTempInvoiceDisplayEmail(businessInfo.invoiceDisplayEmail || "");
       setTempVatRegNo(businessInfo.vatRegNo || "");
       setTempCurrency(businessInfo.currencySymbol || "৳");
 
@@ -1413,6 +1416,7 @@ export default function App() {
       address: tempShopAddress || businessInfo.address,
       phoneNumber: tempShopPhone || businessInfo.phoneNumber,
       email: tempShopEmail || businessInfo.email,
+      invoiceDisplayEmail: tempInvoiceDisplayEmail.trim(),
       vatRegNo: tempVatRegNo || businessInfo.vatRegNo,
       currencySymbol: tempCurrency || businessInfo.currencySymbol,
       companyLogo: tempLogoBase64, showLogoInInvoice: tempShowLogo,
@@ -1433,13 +1437,13 @@ export default function App() {
     return () => { cancelled = true; };
   }, [
     activeSettingsSection,
-    businessInfo.name, businessInfo.address, businessInfo.phoneNumber, businessInfo.email,
+    businessInfo.name, businessInfo.address, businessInfo.phoneNumber, businessInfo.email, businessInfo.invoiceDisplayEmail,
     businessInfo.vatRegNo, businessInfo.currencySymbol, businessInfo.companyLogo,
     businessInfo.showLogoInInvoice, businessInfo.termsConditions,
     businessInfo.showCustomerSignature, businessInfo.showAuthorizedSignature,
     businessInfo.selectedFont, businessInfo.logoAlignment,
     businessInfo.showPartnerLogos, businessInfo.partnerLogos, businessInfo.presetBrands,
-    tempShopName, tempShopAddress, tempShopPhone, tempShopEmail, tempVatRegNo,
+    tempShopName, tempShopAddress, tempShopPhone, tempShopEmail, tempInvoiceDisplayEmail, tempVatRegNo,
     tempCurrency, tempLogoBase64, tempShowLogo, tempTerms, tempShowCustSig,
     tempShowAuthSig, tempFont, tempLogoAlignment, tempShowPartners, tempPartnerLogos, tempPresetBrands
   ]);
@@ -1929,6 +1933,7 @@ export default function App() {
       ...businessInfo,
       companyLogo: tempLogoBase64,
       showLogoInInvoice: tempShowLogo,
+      invoiceDisplayEmail: tempInvoiceDisplayEmail.trim(),
       termsConditions: tempTerms,
       showCustomerSignature: tempShowCustSig,
       showAuthorizedSignature: tempShowAuthSig,
@@ -8436,7 +8441,7 @@ _${businessInfo.name}_`;
                             aria-pressed={tempFontSizeScale === sz}
                             className={`py-2 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer ${
                               tempFontSizeScale === sz
-                                ? "bg-emerald-400 text-slate-950 border-emerald-300 shadow-lg shadow-emerald-400/20 ring-2 ring-emerald-300/40"
+                                ? "bg-white text-black border-white shadow-lg shadow-white/10 ring-2 ring-white/30"
                                 : "bg-[#252A33] border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46] hover:border-slate-400"
                             }`}
                           >
@@ -8546,9 +8551,9 @@ _${businessInfo.name}_`;
                       </div>
                       <span className="text-[8px] font-mono text-slate-400 uppercase shrink-0">A4 · 210 × 297 mm</span>
                     </div>
-                    <div className="mx-auto w-full max-w-[460px] aspect-[210/297] overflow-hidden bg-white border border-slate-300 shadow-xl">
+                    <div className="relative mx-auto flex w-full max-w-[460px] items-start justify-center aspect-[210/297] overflow-hidden bg-white border border-slate-300 shadow-xl">
                       {invoicePreviewDataUrl ? (
-                        <iframe src={invoicePreviewDataUrl + (typeof window !== "undefined" && window.innerWidth < 640 ? "#toolbar=0&navpanes=0&scrollbar=0&view=Fit&zoom=70" : "#toolbar=0&navpanes=0&scrollbar=0&view=Fit")} title="Exact Classic Retail Standard A4 invoice PDF preview" className="w-full h-full border-0 bg-white" />
+                        <iframe src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0"} title="Exact Classic Retail Standard A4 invoice PDF preview" className="w-full h-full border-0 bg-white max-sm:scale-[0.75] max-sm:origin-top" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-center p-6 text-slate-600">
                           <div className="space-y-2">
@@ -8678,6 +8683,19 @@ _${businessInfo.name}_`;
 
                   </div>
 
+                  {/* Dedicated email shown only on customer invoices; never falls back to account email. */}
+                  <div className="space-y-1.5 pt-4 border-t border-slate-800/60" id="settings-invoice-display-email">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1 block">Invoice Display Email</label>
+                    <input
+                      type="email"
+                      value={tempInvoiceDisplayEmail}
+                      onChange={(e) => setTempInvoiceDisplayEmail(e.target.value)}
+                      placeholder="Enter the email to show on customer invoices"
+                      className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white focus:ring-2 focus:ring-white/20 font-mono transition-all placeholder:text-slate-500"
+                    />
+                    <p className="text-[9px] text-slate-400 italic pl-1 leading-normal">Only this email will appear on customer invoices. Your login/account email and Business Support Email will not be used here. Leave blank to hide the email from invoices.</p>
+                  </div>
+
                   {/* Logo Alignment and Invoice Counter settings */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800/60">
                     
@@ -8692,7 +8710,7 @@ _${businessInfo.name}_`;
                             aria-pressed={tempLogoAlignment === align}
                             className={`py-2 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer uppercase font-mono ${
                               tempLogoAlignment === align
-                                ? "bg-sky-400 text-slate-950 border-sky-300 shadow-lg shadow-sky-400/20 ring-2 ring-sky-300/40"
+                                ? "bg-white text-black border-white shadow-lg shadow-white/10 ring-2 ring-white/30"
                                 : "bg-[#252A33] border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46] hover:border-slate-400"
                             }`}
                           >
