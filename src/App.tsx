@@ -6891,14 +6891,14 @@ _${businessInfo.name}_`;
 
               {/* Date Preset Filter Bar */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-5 p-5 bg-[#1E1E24] border border-[#2D2D35] rounded-2xl shadow-lg relative overflow-hidden mt-4" id="ledger-date-filter-bar">
-                <div className="flex w-full flex-wrap items-center gap-2" id="ledger-date-presets">
-                  <span className="w-full text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none">Date Range:</span>
+                <div className="grid w-full grid-cols-7 items-stretch gap-1 md:flex md:w-auto md:flex-wrap md:items-center md:gap-2" id="ledger-date-presets">
+                  <span className="col-span-7 text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:col-span-1 md:mr-1">Date Range:</span>
                   {(["all", "today", "yesterday", "weekly", "monthly", "yearly", "custom"] as const).map((preset) => (
                     <button
                       key={preset}
                       id={`ledger-date-filter-${preset}`}
                       onClick={() => setLedgerDateFilterType(preset)}
-                      className={`flex-1 basis-0 min-w-0 whitespace-normal break-words px-1 py-2 text-center text-[8px] leading-tight sm:text-[9px] md:flex-none md:basis-auto md:px-3.5 md:text-[11px] rounded-xl font-bold tracking-wider transition-all border cursor-pointer uppercase font-mono ${
+                      className={`w-full min-w-0 whitespace-normal break-words px-0.5 py-2 text-center text-[7px] leading-tight sm:text-[8px] md:w-auto md:px-3.5 md:text-[11px] rounded-xl font-bold tracking-wider transition-all border cursor-pointer uppercase font-mono ${
                         ledgerDateFilterType === preset
                           ? "bg-gradient-to-r from-[#00E676] to-[#00B0FF] text-slate-950 border-emerald-400 shadow-lg scale-102"
                           : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
