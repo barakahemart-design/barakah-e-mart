@@ -29,7 +29,7 @@ import {
 interface DashboardViewProps {
   products: any[];
   transactions: any[];
-  onUpdateProductCategory: (productId: string, category: string) => void;
+  onUpdateProductCategory: (productId: string, category: string) => Promise<void>;
   businessInfo: any;
   isBackingUp: boolean;
   isRestoring: boolean;
