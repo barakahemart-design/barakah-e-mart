@@ -293,7 +293,9 @@ export function ProductSalesBreakdown({
                                       setNewCategoryName("");
                                       setCreatingCategory(false);
                                     } catch (error) {
-                                      setCategorySaveError("Save failed. Please try again.");
+                                      const reason = error instanceof Error ? error.message : String(error || "Unknown error");
+                                      console.error("Dashboard category save failed:", error);
+                                      setCategorySaveError(`Save failed: ${reason}`);
                                     } finally {
                                       setSavingCategory(false);
                                     }
