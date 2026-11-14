@@ -7063,7 +7063,7 @@ _${businessInfo.name}_`;
                                                     handleUpdateTransactionItemUnitCost(t.id, entry.itemIdx, allocationIdx, val);
                                                   }
                                                 }}
-                                                className="rounded-md border border-white/80 bg-white px-3 py-1.5 text-[9px] font-bold text-black transition-colors hover:bg-slate-200"
+                                                className="rounded-full border border-white/55 !bg-white/10 px-4 py-1.5 text-[9px] font-bold !text-white shadow-[0_2px_12px_rgba(255,255,255,0.12)] backdrop-blur-xl transition-all hover:!bg-white/20 hover:border-white/80 active:scale-[0.98]"
                                               >
                                                 Save
                                               </button>
@@ -7122,7 +7122,7 @@ _${businessInfo.name}_`;
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg bg-white px-2 text-[9px] font-bold text-black transition-colors hover:bg-slate-200"
+                              className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-white/90 !bg-white px-3 text-[9px] font-bold !text-red-600 shadow-[0_2px_12px_rgba(255,255,255,0.14)] backdrop-blur-xl transition-all hover:!bg-white/90 hover:!text-red-700 active:scale-[0.98]"
                             >
                               Collect Due
                             </button>
