@@ -8441,7 +8441,7 @@ _${businessInfo.name}_`;
                             aria-pressed={tempFontSizeScale === sz}
                             className={`py-2 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer ${
                               tempFontSizeScale === sz
-                                ? "bg-white text-black border-white shadow-lg shadow-white/10 ring-2 ring-white/30"
+                                ? "bg-[#F4F4F5] text-[#111318] border-white/80 shadow-[0_4px_18px_rgba(255,255,255,0.16)]"
                                 : "bg-[#252A33] border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46] hover:border-slate-400"
                             }`}
                           >
@@ -8553,7 +8553,18 @@ _${businessInfo.name}_`;
                     </div>
                     <div className="relative mx-auto flex w-full max-w-[460px] items-start justify-center aspect-[210/297] overflow-hidden bg-white border border-slate-300 shadow-xl">
                       {invoicePreviewDataUrl ? (
-                        <iframe src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0"} title="Exact Classic Retail Standard A4 invoice PDF preview" className="w-full h-full border-0 bg-white max-sm:scale-[0.75] max-sm:origin-top" />
+                        <>
+                          <iframe
+                            src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit"}
+                            title="Exact Classic Retail Standard A4 invoice PDF preview"
+                            className="hidden sm:block w-full h-full border-0 bg-white"
+                          />
+                          <iframe
+                            src={invoicePreviewDataUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit&view=Fit"}
+                            title="Mobile fitted A4 invoice PDF preview"
+                            className="block sm:hidden w-full h-full border-0 bg-white"
+                          />
+                        </>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-center p-6 text-slate-600">
                           <div className="space-y-2">
@@ -8710,7 +8721,7 @@ _${businessInfo.name}_`;
                             aria-pressed={tempLogoAlignment === align}
                             className={`py-2 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer uppercase font-mono ${
                               tempLogoAlignment === align
-                                ? "bg-white text-black border-white shadow-lg shadow-white/10 ring-2 ring-white/30"
+                                ? "bg-[#F4F4F5] text-[#111318] border-white/80 shadow-[0_4px_18px_rgba(255,255,255,0.16)]"
                                 : "bg-[#252A33] border-slate-600 text-slate-200 hover:text-white hover:bg-[#343B46] hover:border-slate-400"
                             }`}
                           >
