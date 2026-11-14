@@ -231,6 +231,43 @@ export async function saveProduct(userId: string, product: any): Promise<string>
 export async function saveProduct(product: any): Promise<string>;
 export async function saveProduct(arg1: any, arg2?: any): Promise<string> { return handleSave('products', arg1, arg2); }
 
+/**
+ * Update only the category field for an existing product.
+ * Avoids re-serializing optional product fields (which may contain undefined)
+ * and leaves stock, FIFO cost lots, pricing and all other fields untouched.
+ */
+export async function updateProductCategory(userId: string, product: any, category: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser?.uid || currentUser.uid !== userId || !currentUser.email) {
+    throw new Error('Your Firebase session is not ready. Please sign in again.');
+  }
+
+  const cleanCategory = String(category || '').trim();
+  if (!cleanCategory) throw new Error('Category name is required.');
+
+  const targetId = String(product?.firestoreId || product?.id || '').trim();
+  if (!targetId || targetId.includes('/')) {
+    throw new Error('The product record ID is missing or invalid. Refresh the dashboard and try again.');
+  }
+
+  const cleanEmail = currentUser.email.trim().toLowerCase();
+  await setDoc(doc(db, 'products', targetId), {
+    id: String(product?.id || targetId),
+    category: cleanCategory,
+    user_id: currentUser.uid,
+    userId: currentUser.uid,
+    owner_id: currentUser.uid,
+    store_id: cleanEmail,
+    storeId: cleanEmail,
+    email: cleanEmail,
+    linked_email: cleanEmail,
+    linkedEmail: cleanEmail,
+    deleted: false,
+    isDeleted: false,
+    updated_at: new Date().toISOString()
+  }, { merge: true });
+}
+
 export async function saveCustomer(userId: string, customer: any): Promise<string>;
 export async function saveCustomer(customer: any): Promise<string>;
 export async function saveCustomer(arg1: any, arg2?: any): Promise<string> { return handleSave('customers', arg1, arg2); }

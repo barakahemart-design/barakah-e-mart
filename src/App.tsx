@@ -106,6 +106,7 @@ import {
   subscribeExpenses,
   subscribePurchases,
   saveProduct,
+  updateProductCategory,
   saveCustomer,
   saveTransaction,
   saveExpense,
@@ -4509,7 +4510,7 @@ _${businessInfo.name}_`;
                     throw new Error("Firebase authentication is not ready");
                   }
                   try {
-                    await saveProduct(signedInUser.uid, updatedProduct);
+                    await updateProductCategory(signedInUser.uid, currentProduct, cleanCategory);
                   } catch (err) {
                     console.error("Cloud category update failed:", err);
                     triggerNotification("Category could not be saved to the cloud. No local changes were made.", "error");
