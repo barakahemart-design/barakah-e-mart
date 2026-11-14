@@ -5,7 +5,7 @@ import { safeDate } from "../lib/dateUtils";
 interface ProductSalesBreakdownProps {
   products: any[];
   transactions: any[];
-  onUpdateProductCategory: (productId: string, category: string) => void;
+  onUpdateProductCategory: (productId: string, category: string) => Promise<void>;
   dashboardFilter: string;
   customStart: string;
   customEnd: string;
@@ -73,6 +73,10 @@ export function ProductSalesBreakdown({
 }: ProductSalesBreakdownProps) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [categorySaveError, setCategorySaveError] = useState("");
   const availableCategories = useMemo(() => Array.from(new Set(
     (Array.isArray(products) ? products : [])
       .map((product: any) => String(product?.category || "").trim())
@@ -108,9 +112,9 @@ export function ProductSalesBreakdown({
         // If a sale snapshot says Uncategorized, use the product's current category
         // after the user has corrected that product from this dashboard.
         const categoryName = (
-          savedItemCategory && savedItemCategory.toLowerCase() !== "uncategorized"
-            ? savedItemCategory
-            : productCategory
+          productCategory && productCategory.toLowerCase() !== "uncategorized"
+            ? productCategory
+            : savedItemCategory
         ) || "Uncategorized";
         const categoryKey = categoryName.toLowerCase();
         const productKey = itemProductId || String(matchedProduct?.id || itemName.toLowerCase());
@@ -236,40 +240,84 @@ export function ProductSalesBreakdown({
                         <span className="text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)}</span>
                         {category.name.trim().toLowerCase() === "uncategorized" && product.productId && (
                           editingProductId === product.productId ? (
-                            <div className="flex items-center gap-1.5">
-                              <select
-                                aria-label={`Choose category for ${product.name}`}
-                                value={selectedCategory}
-                                onChange={(event) => setSelectedCategory(event.target.value)}
-                                className="max-w-[155px] rounded-lg border border-slate-700 bg-[#080d17] px-2 py-1.5 text-[10px] font-semibold text-white outline-none focus:border-indigo-400"
-                              >
-                                <option value="">Select category</option>
-                                {availableCategories.map(option => (
-                                  <option key={option} value={option}>{option}</option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                disabled={!selectedCategory}
-                                onClick={() => {
-                                  onUpdateProductCategory(product.productId!, selectedCategory);
-                                  setEditingProductId(null);
-                                  setSelectedCategory("");
-                                }}
-                                className="rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-[10px] font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingProductId(null);
-                                  setSelectedCategory("");
-                                }}
-                                className="rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] font-semibold text-slate-400 hover:text-white"
-                              >
-                                Cancel
-                              </button>
+                            <div className="flex min-w-0 flex-col items-stretch gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-2 sm:min-w-[280px]">
+                              <div className="text-[10px] font-bold text-indigo-200">
+                                Assign product: <span className="text-white">{product.name}</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <select
+                                  aria-label={`Choose category for ${product.name}`}
+                                  value={creatingCategory ? "__create_new__" : selectedCategory}
+                                  onChange={(event) => {
+                                    const value = event.target.value;
+                                    setCategorySaveError("");
+                                    if (value === "__create_new__") {
+                                      setCreatingCategory(true);
+                                      setSelectedCategory("");
+                                    } else {
+                                      setCreatingCategory(false);
+                                      setNewCategoryName("");
+                                      setSelectedCategory(value);
+                                    }
+                                  }}
+                                  className="min-w-[145px] flex-1 rounded-lg border border-slate-700 bg-[#080d17] px-2 py-1.5 text-[10px] font-semibold text-white outline-none focus:border-indigo-400"
+                                >
+                                  <option value="">Select existing category</option>
+                                  {availableCategories.map(option => (
+                                    <option key={option} value={option}>{option}</option>
+                                  ))}
+                                  <option value="__create_new__">+ Create new category</option>
+                                </select>
+                                {creatingCategory && (
+                                  <input
+                                    aria-label={`New category name for ${product.name}`}
+                                    value={newCategoryName}
+                                    onChange={(event) => setNewCategoryName(event.target.value)}
+                                    placeholder="Type new category name"
+                                    maxLength={60}
+                                    className="min-w-[145px] flex-1 rounded-lg border border-slate-700 bg-[#080d17] px-2 py-1.5 text-[10px] font-semibold text-white outline-none placeholder:text-slate-500 focus:border-indigo-400"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={savingCategory || (creatingCategory ? !newCategoryName.trim() : !selectedCategory)}
+                                  onClick={async () => {
+                                    const categoryToSave = creatingCategory ? newCategoryName.trim() : selectedCategory.trim();
+                                    if (!categoryToSave) return;
+                                    setSavingCategory(true);
+                                    setCategorySaveError("");
+                                    try {
+                                      await onUpdateProductCategory(product.productId!, categoryToSave);
+                                      setEditingProductId(null);
+                                      setSelectedCategory("");
+                                      setNewCategoryName("");
+                                      setCreatingCategory(false);
+                                    } catch (error) {
+                                      setCategorySaveError("Save failed. Please try again.");
+                                    } finally {
+                                      setSavingCategory(false);
+                                    }
+                                  }}
+                                  className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-[10px] font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  {savingCategory ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingCategory}
+                                  onClick={() => {
+                                    setEditingProductId(null);
+                                    setSelectedCategory("");
+                                    setNewCategoryName("");
+                                    setCreatingCategory(false);
+                                    setCategorySaveError("");
+                                  }}
+                                  className="rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] font-semibold text-slate-400 hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {categorySaveError && <span className="text-[10px] font-semibold text-rose-300">{categorySaveError}</span>}
                             </div>
                           ) : (
                             <button
@@ -277,7 +325,10 @@ export function ProductSalesBreakdown({
                               disabled={availableCategories.length === 0}
                               onClick={() => {
                                 setEditingProductId(product.productId!);
-                                setSelectedCategory(availableCategories[0] || "");
+                                setSelectedCategory("");
+                                setNewCategoryName("");
+                                setCreatingCategory(false);
+                                setCategorySaveError("");
                               }}
                               className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1.5 text-[10px] font-bold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             >
