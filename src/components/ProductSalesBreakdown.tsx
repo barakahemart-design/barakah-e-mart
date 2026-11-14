@@ -78,49 +78,64 @@ export function ProductSalesBreakdown({
     const safeProducts = Array.isArray(products) ? products : [];
     const safeTransactions = Array.isArray(transactions) ? transactions : [];
     const categoryMap = new Map<string, { name: string; units: number; products: Map<string, { name: string; units: number; productId?: string }> }>();
-    let totalUnits = 0;
+    const normalize = (value: any) => String(value ?? "")
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+      .replace(/\\s+/g, " ")
+      .trim();
 
+    // Build product lookups once. Product IDs can be stored in either their
+    // original form or the account-scoped UUID used by checkout/cloud restore.
+    const productById = new Map<string, any>();
+    const productByAlias = new Map<string, any>();
+    safeProducts.forEach((product: any) => {
+      if (!product) return;
+      const ids = [
+        product.id, product.firestoreId, product.productId, product.product_id,
+        product.id ? toUUID(String(product.id), storeEmail) : "",
+        product.firestoreId ? toUUID(String(product.firestoreId), storeEmail) : ""
+      ];
+      ids.map((id: any) => String(id || "").trim()).filter(Boolean)
+        .forEach((id: string) => productById.set(id, product));
+
+      const aliases = [
+        product.name, product.productName, product.product_name,
+        product.sku, product.model, product.modelNo, product.modelNumber,
+        product.barcode, product.code, product.productCode
+      ];
+      aliases.map(normalize).filter(Boolean)
+        .forEach((alias: string) => {
+          if (!productByAlias.has(alias)) productByAlias.set(alias, product);
+        });
+    });
+
+    let totalUnits = 0;
     safeTransactions.forEach((transaction: any) => {
       if (!transaction || !isInsidePeriod(transaction.date, bounds) || !Array.isArray(transaction.items)) return;
-
       transaction.items.forEach((item: any) => {
         const quantity = Number(item?.quantity);
         if (!Number.isFinite(quantity) || quantity <= 0) return;
 
-        const itemName = String(item?.name || item?.product_name || "Unnamed Product").trim() || "Unnamed Product";
+        const itemName = String(item?.name || item?.productName || item?.product_name || "Unnamed Product").trim() || "Unnamed Product";
         const itemProductId = String(item?.productId || item?.product_id || item?.productID || "").trim();
-
-        // Sale records store product IDs through toUUID(id, storeEmail). Match
-        // both the original product ID and that account-scoped ID so historical
-        // sales resolve to the product's CURRENT category reliably.
-        const productById = new Map<string, any>();
-        const productByName = new Map<string, any>();
-        safeProducts.forEach((product: any) => {
-          const productId = String(product?.id || "").trim();
-          const firestoreId = String(product?.firestoreId || "").trim();
-          [productId, firestoreId,
-            productId ? toUUID(productId, storeEmail) : "",
-            firestoreId ? toUUID(firestoreId, storeEmail) : ""
-          ].filter(Boolean).forEach(id => productById.set(id, product));
-          const normalizedName = String(product?.name || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
-          if (normalizedName) productByName.set(normalizedName, product);
-        });
-        const normalizedItemName = itemName.toLocaleLowerCase().replace(/\s+/g, " ");
         const matchedProduct = (itemProductId ? productById.get(itemProductId) : undefined)
-          || productByName.get(normalizedItemName);
+          || (itemProductId ? productById.get(toUUID(itemProductId, storeEmail)) : undefined)
+          || [
+            itemName, item?.productName, item?.product_name, item?.sku,
+            item?.model, item?.modelNo, item?.barcode, item?.code
+          ].map(normalize).filter(Boolean).map((alias: string) => productByAlias.get(alias)).find(Boolean);
 
-        const savedItemCategory = String(item?.category || "").trim();
-        const productCategory = String(matchedProduct?.category || "").trim();
-        // If a sale snapshot says Uncategorized, use the product's current category
-        // after the user has corrected that product from this dashboard.
-        const categoryName = (
-          productCategory && productCategory.toLowerCase() !== "uncategorized"
-            ? productCategory
-            : savedItemCategory
-        ) || "Uncategorized";
-        const categoryKey = categoryName.toLowerCase();
-        const productKey = itemProductId || String(matchedProduct?.id || itemName.toLowerCase());
+        const currentProductCategory = String(matchedProduct?.category || matchedProduct?.productCategory || matchedProduct?.product_category || "").trim();
+        const savedItemCategory = String(item?.category || item?.productCategory || item?.product_category || "").trim();
+        const categoryName = currentProductCategory && normalize(currentProductCategory) !== "uncategorized"
+          ? currentProductCategory
+          : savedItemCategory && normalize(savedItemCategory) !== "uncategorized"
+            ? savedItemCategory
+            : currentProductCategory || savedItemCategory || "Uncategorized";
 
+        const categoryKey = normalize(categoryName) || "uncategorized";
+        const productKey = String(matchedProduct?.id || itemProductId || normalize(itemName));
         let category = categoryMap.get(categoryKey);
         if (!category) {
           category = { name: categoryName, units: 0, products: new Map() };
@@ -132,7 +147,7 @@ export function ProductSalesBreakdown({
           existingProduct.units += quantity;
         } else {
           category.products.set(productKey, {
-            name: itemName,
+            name: String(matchedProduct?.name || itemName),
             units: quantity,
             productId: String(matchedProduct?.id || itemProductId || "") || undefined
           });
@@ -151,7 +166,7 @@ export function ProductSalesBreakdown({
 
     const productCount = categories.reduce((sum, category) => sum + category.products.length, 0);
     return { categories, totalUnits, productCount };
-  }, [products, transactions, dashboardFilter, customStart, customEnd, todayKey]);
+  }, [products, transactions, dashboardFilter, customStart, customEnd, storeEmail, todayKey]);
 
   const periodLabel = dashboardFilter === "today" ? "Today"
     : dashboardFilter === "yesterday" ? "Yesterday"
