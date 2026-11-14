@@ -293,7 +293,6 @@ import {
 } from "./lib/pdf";
 import { 
   generateBusinessInsights, 
-  suggestExpenseCategory, 
   AIInsight 
 } from "./services/aiService";
 
@@ -3010,19 +3009,27 @@ export default function App() {
   const [posTxSearch, setPosTxSearch] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
-  const [isClassifying, setIsClassifying] = useState(false);
-
   // Expense Date Range States
-  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly">(() => {
+  const [expenseDateFilter, _setExpenseDateFilter] = useState<"today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">(() => {
     const saved = localStorage.getItem(getDbKey("barakah_expense_date_filter"));
-    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly") {
+    if (saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "custom") {
       return saved;
     }
     return "monthly";
   });
-  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly") => {
+  const setExpenseDateFilter = (val: "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom") => {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
+  };
+  const [expenseCustomStart, setExpenseCustomStart] = useState(() => localStorage.getItem(getDbKey("barakah_expense_custom_start")) || new Date().toISOString().slice(0, 10));
+  const [expenseCustomEnd, setExpenseCustomEnd] = useState(() => localStorage.getItem(getDbKey("barakah_expense_custom_end")) || new Date().toISOString().slice(0, 10));
+  const updateExpenseCustomStart = (value: string) => {
+    setExpenseCustomStart(value);
+    localStorage.setItem(getDbKey("barakah_expense_custom_start"), value);
+  };
+  const updateExpenseCustomEnd = (value: string) => {
+    setExpenseCustomEnd(value);
+    localStorage.setItem(getDbKey("barakah_expense_custom_end"), value);
   };
 
   // Edit Expense States
@@ -3067,6 +3074,10 @@ export default function App() {
       }
       if (expenseDateFilter === "yearly") {
         return targetDate.getFullYear() === today.getFullYear();
+      }
+      if (expenseDateFilter === "custom") {
+        const expenseDay = String(dateStr).slice(0, 10);
+        return Boolean(expenseCustomStart && expenseCustomEnd && expenseCustomStart <= expenseCustomEnd && expenseDay >= expenseCustomStart && expenseDay <= expenseCustomEnd);
       }
       return false;
     } catch (e) {
@@ -3175,28 +3186,6 @@ export default function App() {
     setCategoryToManage(null);
     setNewCategoryName("");
     triggerNotification(`Category "${category}" deleted. Previous expense records were preserved under Others.`, "success");
-  };
-
-  // Suggest expense category intelligently using AI proxy pipeline
-  const fetchAISuggestedCategory = async () => {
-    if (!expenseDesc.trim()) {
-      triggerNotification("Please enter expense description.", "info");
-      return;
-    }
-    setIsClassifying(true);
-    const result = await suggestExpenseCategory(expenseDesc);
-    setIsClassifying(false);
-    if (result) {
-      if (!allCategories.includes(result)) {
-        setExpenseCategories(prev => [...prev, result]);
-      }
-      setExpenseCategory(result);
-      setIsAddingCustomCategory(false);
-      triggerNotification(`AI categorized expense as: ${result}`);
-    } else {
-      setExpenseCategory("Others");
-      triggerNotification("AI mapping complete");
-    }
   };
 
   const handleAddExpense = (e: React.FormEvent) => {
@@ -7212,7 +7201,8 @@ _${businessInfo.name}_`;
                           { id: "yesterday", label: "Yesterday" },
                           { id: "weekly", label: "7 Days" },
                           { id: "monthly", label: "This Month" },
-                          { id: "yearly", label: "This Year" }
+                          { id: "yearly", label: "This Year" },
+                          { id: "custom", label: "Custom Date / Range" }
                         ].map(preset => (
                           <button key={preset.id} type="button" onClick={() => setExpenseDateFilter(preset.id as any)}
                             className={`px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-bold transition-all ${expenseDateFilter === preset.id ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-400 shadow-sm" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
@@ -7220,6 +7210,20 @@ _${businessInfo.name}_`;
                           </button>
                         ))}
                       </div>
+                      {expenseDateFilter === "custom" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-emerald-500/20 bg-[#121722] p-3" id="expense-custom-date-range">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">From Date</label>
+                            <input type="date" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">To Date</label>
+                            <input type="date" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-emerald-500" />
+                          </div>
+                          <p className="sm:col-span-2 text-[10px] text-slate-500">Select the same start and end date to view expenses for one specific day.</p>
+                          {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-rose-400">From Date cannot be later than To Date.</p>}
+                        </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full">
                       {[
@@ -7269,11 +7273,7 @@ _${businessInfo.name}_`;
                             placeholder="Enter expense amount" className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500 font-mono" />
                         </div>
                         <div className="space-y-1.5">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Details / Reason *</label>
-                            <button type="button" onClick={fetchAISuggestedCategory} disabled={isClassifying}
-                              className="text-[10px] font-bold text-amber-400 hover:text-amber-300 disabled:opacity-50">{isClassifying ? "Suggesting..." : "✨ Suggest Category with AI"}</button>
-                          </div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Details / Reason *</label>
                           <textarea required value={expenseDesc} onChange={e => setExpenseDesc(e.target.value)}
                             placeholder="Write why this expense was made. Example: showroom electricity bill for November."
                             rows={5} className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500 resize-y" />
