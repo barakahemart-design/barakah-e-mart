@@ -108,8 +108,8 @@ function numberToWords(num: number): string {
   return result ? result + " ONLY" : "ZERO TAKA ONLY";
 }
 
-export async function generateInvoicePDF(transaction: Transaction, contact: Contact | undefined, businessInfo: BusinessInfo) {
-  const doc = new jsPDF();
+export async function generateInvoicePDF(transaction: Transaction, contact: Contact | undefined, businessInfo: BusinessInfo, outputMode: "save" | "preview" = "save"): Promise<string | void> {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const devCurrencySymbol = businessInfo.currencySymbol === "৳" ? "TK" : businessInfo.currencySymbol;
   
   // Font Size Scaling Factor from localStorage
@@ -681,8 +681,8 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     
     doc.setFontSize(8.5 * sizeFactor);
     doc.setTextColor(21, 115, 52);
-    // Centered FULL PAID text with stars for a distinct stamp style
-    doc.text("★ FULL PAID ★", rightX + 29, summaryY + 35.8, { align: "center" });
+    // Align to the exact geometric center of the green badge, vertically and horizontally.
+    doc.text("FULL PAID", rightX + 29, summaryY + 34.25, { align: "center", baseline: "middle" });
   } else {
     // Soft red background highlighter block with bold dark red text for OUTSTANDING DUE
     doc.setFillColor(254, 226, 226);
@@ -856,11 +856,26 @@ export async function generateInvoicePDF(transaction: Transaction, contact: Cont
     }
   }
 
+  // Paid invoice watermark: use the reserved open strip beneath partner marks, without covering logos.
+  if (excess > 0 || !hasDue) {
+    doc.setDrawColor(205, 235, 214);
+    doc.setLineWidth(0.45);
+    doc.roundedRect(69, 273, 72, 10, 1.5, 1.5, "S");
+    doc.setFont(pdfFontName, "bold");
+    doc.setFontSize(16 * sizeFactor);
+    doc.setTextColor(205, 235, 214);
+    doc.text("FULL PAID", 105, 279.5, { align: "center", baseline: "middle" });
+  }
+
   // Centered system footer message
   doc.setFont(pdfFontName, "normal");
   doc.setFontSize(7 * sizeFactor);
   doc.setTextColor(148, 163, 184); // slate-400
   doc.text(`Electronic audit record. Generated instantly by ${businessInfo?.name || "Barakah E-Mart"}. All rights reserved.`, 105, 288, { align: "center" });
+
+  if (outputMode === "preview") {
+    return doc.output("datauristring");
+  }
 
   doc.save(`${transaction.invoiceNo}_Showroom_Invoice.pdf`);
 }
