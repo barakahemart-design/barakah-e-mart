@@ -2987,6 +2987,7 @@ export default function App() {
   // -----------------------------------------------------------------
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("Others");
+  const [expenseSection, setExpenseSection] = useState<"add" | "history" | "categories">("add");
   
   
   useEffect(() => {
@@ -3152,16 +3153,8 @@ export default function App() {
       return;
     }
 
-    const currentMonthKey = getExpenseMonthKey(new Date().toISOString().split("T")[0]);
-    const affected = expenses.filter(e =>
-      e.category === oldCategory && getExpenseMonthKey(e.date) === currentMonthKey
-    );
-
-    const updatedExpenses = expenses.map(e =>
-      e.category === oldCategory && getExpenseMonthKey(e.date) === currentMonthKey
-        ? { ...e, category: trimmed }
-        : e
-    );
+    const affected = expenses.filter(e => e.category === oldCategory);
+    const updatedExpenses = expenses.map(e => e.category === oldCategory ? { ...e, category: trimmed } : e);
 
     setExpenseCategories(prev => prev.map(cat => cat === oldCategory ? trimmed : cat));
     if (affected.length > 0) {
@@ -3176,44 +3169,40 @@ export default function App() {
     if (editExpenseCategory === oldCategory) setEditExpenseCategory(trimmed);
     setCategoryToManage(null);
     setNewCategoryName("");
-    triggerNotification(`Category "${oldCategory}" renamed to "${trimmed}" for the current month.`, "success");
+    triggerNotification(`Category "${oldCategory}" renamed to "${trimmed}" across expense history.`, "success");
   };
 
   const handleDeleteExpenseCategory = async (category: string) => {
     if (currentPanel !== "admin") {
-      triggerNotification("Security block: Only administrators are authorized to delete expense categories! 🛑", "error");
+      triggerNotification("Only administrators can delete expense categories.", "error");
       return;
     }
-
-    const currentMonthKey = getExpenseMonthKey(new Date().toISOString().split("T")[0]);
-    const affected = expenses.filter(e =>
-      e.category === category && getExpenseMonthKey(e.date) === currentMonthKey
-    );
-
+    if (category === "Others") {
+      triggerNotification('The "Others" category cannot be deleted.', "error");
+      return;
+    }
+    const affected = expenses.filter(e => e.category === category);
     const confirmed = window.confirm(
       affected.length > 0
-        ? `Delete category "${category}" and its ${affected.length} current-month expense entr${affected.length === 1 ? "y" : "ies"}? Older-month expenses under this category will remain.`
-        : `Delete category "${category}"? There are no current-month expenses under this category, so older-month records will remain.`
+        ? `Delete "${category}"? Its ${affected.length} expense record(s) will be kept and moved to "Others".`
+        : `Delete category "${category}"?`
     );
     if (!confirmed) return;
 
-    if (activeUser && !activeUser.isGuest && affected.length > 0) {
-      await Promise.all(affected.map(e => deleteExpense(e.id).catch(() => {})));
+    if (affected.length > 0) {
+      const updatedExpenses = expenses.map(e => e.category === category ? { ...e, category: "Others" } : e);
+      setExpenses(updatedExpenses);
+      if (activeUser && !activeUser.isGuest) {
+        await Promise.all(affected.map(e => saveExpense(activeUser.uid, { ...e, category: "Others" })));
+      }
     }
-    setExpenses(prev => prev.filter(e =>
-      !(e.category === category && getExpenseMonthKey(e.date) === currentMonthKey)
-    ));
     setExpenseCategories(prev => prev.filter(cat => cat !== category));
     if (expenseFilterCategory === category) setExpenseFilterCategory("All");
     if (expenseCategory === category) setExpenseCategory("Others");
     if (editExpenseCategory === category) setEditExpenseCategory("Others");
     setCategoryToManage(null);
-    triggerNotification(
-      affected.length > 0
-        ? `Category "${category}" deleted. Current-month expenses removed; older records were kept.`
-        : `Category "${category}" deleted. Older-month records were kept.`,
-      "success"
-    );
+    setNewCategoryName("");
+    triggerNotification(`Category "${category}" deleted. Previous expense records were preserved under Others.`, "success");
   };
 
   // Suggest expense category intelligently using AI proxy pipeline
@@ -7213,364 +7202,227 @@ _${businessInfo.name}_`;
           {/* -----------------------------------------------------------------
               VIEW 5: EXPENSES LEDGER WITH AI CATEGORY INFERENCE
               ----------------------------------------------------------------- */}
-          {activeTab === "expenses" && (
-            <div className="space-y-6" id="view-expenses-outer-container">
-              
-              {/* DATE RANGE FILTER FOR EXPENSES LEDGER */}
-              <div className="bg-[#0b0f19]/90 border border-slate-800 p-4 rounded-2xl shadow-lg" id="expense-period-menu-container">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex flex-wrap gap-1.5" id="preset-expense-pills">
-                    {[
-                      { id: "all", label: "All" },
-                      { id: "today", label: "Today" },
-                      { id: "yesterday", label: "Yesterday" },
-                      { id: "weekly", label: "7 Days" },
-                      { id: "monthly", label: "This Month" },
-                      { id: "yearly", label: "This Year" },
-                      { id: "custom", label: "Custom" }
-                    ].map((preset) => (
-                      <button
-                        key={preset.id}
-                        onClick={() => setExpenseDateFilter(preset.id as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer whitespace-nowrap border ${
-                          expenseDateFilter === preset.id
-                            ? "bg-[#181d2f] text-[#00E676] border-[#2b3558] font-bold shadow-md"
-                            : "text-slate-400 hover:text-white hover:bg-slate-800/40 border-transparent bg-transparent"
-                        }`}
-                        id={`expense-preset-key-${preset.id}`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+          {activeTab === "expenses" && (() => {
+            const monthKey = getExpenseMonthKey(new Date().toISOString().slice(0, 10));
+            const monthExpenses = expenses.filter(e => getExpenseMonthKey(e.date) === monthKey);
+            const monthTotal = monthExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            const categoryTotals = allCategories.map(category => ({
+              category,
+              total: monthExpenses.filter(e => e.category === category).reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+              count: monthExpenses.filter(e => e.category === category).length
+            })).filter(item => item.total > 0).sort((a, b) => b.total - a.total);
+            const maxCategoryTotal = Math.max(1, ...categoryTotals.map(item => item.total));
+            const sortedHistory = expenses
+              .filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date))
+              .slice()
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const money = (amount: number) => `${businessInfo.currencySymbol || "৳"} ${(Number(amount) || 0).toLocaleString()}`;
+
+            return (
+              <div className="space-y-5 animate-fade-in" id="view-expenses-outer-container">
+                <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black text-white">Expenses Management</h2>
+                      <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Record, review and manage business expenses.</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full sm:w-auto">
+                      {[
+                        { id: "add", label: "Add Expenses", Icon: PlusCircle },
+                        { id: "history", label: "Expenses History", Icon: History },
+                        { id: "categories", label: "Add Category", Icon: Tag }
+                      ].map(item => {
+                        const Icon = item.Icon;
+                        const active = expenseSection === item.id;
+                        return (
+                          <button key={item.id} type="button" onClick={() => setExpenseSection(item.id as any)}
+                            className={`min-w-0 rounded-xl border px-2 py-3 sm:px-4 sm:py-3 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 text-center transition-all ${active ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400" : "bg-[#121722] border-slate-800 text-slate-400 hover:text-white hover:border-slate-600"}`}>
+                            <Icon className="w-4 h-4 shrink-0" />
+                            <span className="text-[9px] sm:text-xs font-bold leading-tight">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  
-                  {/* Summary of expense for current range */}
-                  {(() => {
-                    const filteredRangeExpenses = expenses.filter(e => checkExpenseDateInFilter(e.date));
-                    const rangeTotal = filteredRangeExpenses.reduce((sum, e) => sum + e.amount, 0);
-                    return (
-                      <div className="bg-[#121214]/60 border border-slate-800 rounded-xl px-4 py-2 font-mono text-center shrink-0">
-                        <span className="text-[9px] text-slate-400 uppercase block tracking-wider font-bold">Selected Range Total</span>
-                        <span className="text-xs font-semibold text-rose-400 font-sans">
-                          {businessInfo.currencySymbol} {rangeTotal.toLocaleString()}
-                        </span>
-                      </div>
-                    );
-                  })()}
                 </div>
 
-                {/* Custom Date Inputs if "custom" range is chosen */}
-                {expenseDateFilter === "custom" && (
-                  <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-800/50 mt-1" id="expense-custom-limits-deck">
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-slate-500 uppercase block font-mono">Start Date</span>
-                      <input
-                        type="date"
-                        value={expenseCustomStart}
-                        onChange={(e) => setExpenseCustomStart(e.target.value)}
-                        className="bg-[#050912] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white uppercase focus:ring-1 focus:ring-rose-500/50 outline-none font-mono"
-                      />
+                <section className="bg-[#0b0f19]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4" id="monthly-expense-breakdown">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-white">This Month Expense Breakdown</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">See which expense categories are costing the most.</p>
                     </div>
-                    <span className="text-slate-600 text-xs font-mono self-end pb-2">to</span>
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-slate-500 uppercase block font-mono">End Date</span>
-                      <input
-                        type="date"
-                        value={expenseCustomEnd}
-                        onChange={(e) => setExpenseCustomEnd(e.target.value)}
-                        className="bg-[#050912] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white uppercase focus:ring-1 focus:ring-rose-500/50 outline-none font-mono"
-                      />
+                    <div className="text-right">
+                      <span className="block text-[9px] text-slate-500 uppercase tracking-wider font-bold">Total This Month</span>
+                      <strong className="text-base sm:text-lg text-rose-400 font-mono">{money(monthTotal)}</strong>
+                    </div>
+                  </div>
+                  {categoryTotals.length ? (
+                    <div className="space-y-3">
+                      {categoryTotals.map(item => (
+                        <div key={item.category} className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-3 text-[11px]">
+                            <span className="text-slate-200 font-semibold truncate">{item.category} <span className="text-slate-500 font-normal">({item.count})</span></span>
+                            <span className="text-rose-300 font-mono font-bold shrink-0">{money(item.total)}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-rose-600 to-amber-400" style={{ width: `${Math.max(2, (item.total / maxCategoryTotal) * 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-800 py-6 text-center text-xs text-slate-500">No expenses recorded for this month yet.</div>
+                  )}
+                </section>
+
+                {expenseSection === "add" && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                    <div className="lg:col-span-7 bg-[#0a101f]/90 border border-slate-800 p-4 sm:p-6 rounded-2xl space-y-5">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Add New Expense</h3>
+                        <p className="text-[10px] text-slate-400 mt-1">Enter the date, category, amount and reason for the expense.</p>
+                      </div>
+                      <form onSubmit={handleAddExpense} className="space-y-4" id="outgoing-add-form">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Date *</label>
+                            <input type="date" required value={expenseDate} onChange={e => setExpenseDate(e.target.value)}
+                              className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Category *</label>
+                            <select required value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}
+                              className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500">
+                              {allCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Amount ({businessInfo.currencySymbol || "৳"}) *</label>
+                          <input type="number" min="0.01" step="0.01" required value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)}
+                            placeholder="Enter expense amount" className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500 font-mono" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Expense Details / Reason *</label>
+                            <button type="button" onClick={fetchAISuggestedCategory} disabled={isClassifying}
+                              className="text-[10px] font-bold text-amber-400 hover:text-amber-300 disabled:opacity-50">{isClassifying ? "Suggesting..." : "✨ Suggest Category with AI"}</button>
+                          </div>
+                          <textarea required value={expenseDesc} onChange={e => setExpenseDesc(e.target.value)}
+                            placeholder="Write why this expense was made. Example: showroom electricity bill for November."
+                            rows={5} className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-white text-sm outline-none focus:border-emerald-500 resize-y" />
+                        </div>
+                        <button type="submit" className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2">
+                          <PlusCircle className="w-4 h-4" /> Save Expense
+                        </button>
+                      </form>
+                    </div>
+                    <div className="lg:col-span-5 bg-[#0a101f]/90 border border-slate-800 p-4 sm:p-5 rounded-2xl space-y-3">
+                      <h3 className="text-sm font-bold text-white">Quick Overview</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">This Month</span><strong className="text-sm text-rose-400 font-mono">{money(monthTotal)}</strong></div>
+                        <div className="bg-[#121722] rounded-xl p-3 border border-slate-800"><span className="text-[9px] text-slate-500 uppercase block">Entries</span><strong className="text-sm text-white font-mono">{monthExpenses.length}</strong></div>
+                      </div>
+                      <h4 className="text-[10px] uppercase tracking-wider text-slate-400 font-bold pt-2">Highest Expense Categories</h4>
+                      {categoryTotals.slice(0, 5).length ? categoryTotals.slice(0, 5).map(item => (
+                        <div key={item.category} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 text-xs">
+                          <span className="text-slate-300 truncate">{item.category}</span><strong className="text-rose-300 font-mono shrink-0">{money(item.total)}</strong>
+                        </div>
+                      )) : <p className="text-xs text-slate-500">No category totals yet.</p>}
+                      <button type="button" onClick={() => setExpenseSection("history")} className="w-full mt-2 py-2.5 border border-slate-700 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-slate-300 hover:text-emerald-400">View Expenses History</button>
+                    </div>
+                  </div>
+                )}
+
+                {expenseSection === "history" && (
+                  <div className="bg-[#0a101f]/90 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
+                    <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div><h3 className="text-sm font-bold text-white">Expenses History</h3><p className="text-[10px] text-slate-400 mt-1">Review every saved expense and its reason.</p></div>
+                      <div className="sm:text-right"><span className="block text-[9px] text-slate-500 uppercase">Filtered Total</span><strong className="text-sm text-rose-400 font-mono">{money(sortedHistory.reduce((sum,e)=>sum+(Number(e.amount)||0),0))}</strong></div>
+                    </div>
+                    <div className="p-3 sm:p-4 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                      <select value={expenseFilterCategory} onChange={e => setExpenseFilterCategory(e.target.value)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white">
+                        {["All", ...allCategories].map(cat => <option key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</option>)}
+                      </select>
+                      <select value={expenseDateFilter} onChange={e => setExpenseDateFilter(e.target.value as any)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white">
+                        {[["all","All Dates"],["today","Today"],["yesterday","Yesterday"],["weekly","Last 7 Days"],["monthly","This Month"],["yearly","This Year"],["custom","Custom Range"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                      {expenseDateFilter === "custom" && <>
+                        <input type="date" value={expenseCustomStart} onChange={e => setExpenseCustomStart(e.target.value)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white" />
+                        <input type="date" value={expenseCustomEnd} onChange={e => setExpenseCustomEnd(e.target.value)} className="px-3 py-2.5 bg-[#050912] border border-slate-800 rounded-xl text-xs text-white" />
+                      </>}
+                    </div>
+                    <div className="p-3 sm:p-4 space-y-3 max-h-[720px] overflow-y-auto">
+                      {sortedHistory.length ? sortedHistory.map(e => (
+                        <article key={e.id} className="bg-[#151b28] border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2"><span className="px-2 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[10px] font-bold">{e.category}</span><span className="text-[10px] text-slate-500">{e.date}</span></div>
+                            <p className="text-xs text-slate-200 whitespace-pre-line break-words">{e.description}</p>
+                          </div>
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 sm:shrink-0">
+                            <strong className="text-sm text-rose-300 font-mono">{money(e.amount)}</strong>
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => { setEditingExpense(e); setEditExpenseDesc(e.description); setEditExpenseCategory(e.category); setEditExpenseAmount(String(e.amount)); setEditExpenseDate(e.date); }}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
+                              <button type="button" onClick={() => setDeleteExpenseId(e.id)} className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 text-[10px] font-bold flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
+                            </div>
+                          </div>
+                        </article>
+                      )) : <div className="py-14 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">No expense records found for this filter.</div>}
+                    </div>
+                  </div>
+                )}
+
+                {expenseSection === "categories" && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                    <div className="lg:col-span-5 bg-[#0a101f]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                      <div><h3 className="text-sm font-bold text-white">Add Expense Category</h3><p className="text-[10px] text-slate-400 mt-1">Create a category to organize future expenses.</p></div>
+                      <form onSubmit={e => {
+                        e.preventDefault();
+                        const name = newCategoryName.trim();
+                        if (!name) return;
+                        if (allCategories.some(cat => cat.toLowerCase() === name.toLowerCase())) { triggerNotification("This category already exists.", "error"); return; }
+                        setExpenseCategories(prev => [...prev, name]);
+                        setExpenseCategory(name);
+                        setNewCategoryName("");
+                        triggerNotification("Expense category added successfully.", "success");
+                      }} className="space-y-3">
+                        <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} placeholder="e.g. Internet Bill, Transport, Repair" required
+                          className="w-full px-3 py-3 bg-[#050912] border border-slate-800 rounded-xl text-sm text-white outline-none focus:border-emerald-500" />
+                        <button type="submit" className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Add Category</button>
+                      </form>
+                    </div>
+                    <div className="lg:col-span-7 bg-[#0a101f]/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+                      <div><h3 className="text-sm font-bold text-white">Manage Expense Categories</h3><p className="text-[10px] text-slate-400 mt-1">Edit or delete a category. Existing expense records will be preserved.</p></div>
+                      {allCategories.map(cat => (
+                        <div key={cat} className="bg-[#151b28] border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                          {categoryToManage === cat ? (
+                            <>
+                              <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} className="flex-1 min-w-0 px-3 py-2 bg-[#050912] border border-slate-700 rounded-lg text-xs text-white" autoFocus />
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => handleEditExpenseCategory(cat,newCategoryName)} className="px-3 py-2 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-bold">Save</button>
+                                <button type="button" onClick={() => {setCategoryToManage(null);setNewCategoryName("");}} className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-bold">Cancel</button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs font-semibold text-slate-200">{cat}</span>
+                              <span className="text-[10px] text-slate-500">{expenses.filter(e=>e.category===cat).length} records · {money(expenses.filter(e=>e.category===cat).reduce((sum,e)=>sum+(Number(e.amount)||0),0))} total</span>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => {setCategoryToManage(cat);setNewCategoryName(cat);}} className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
+                                <button type="button" disabled={cat === "Others"} onClick={() => handleDeleteExpenseCategory(cat)} className="px-3 py-2 rounded-lg bg-rose-500/10 text-rose-300 text-[10px] font-bold flex items-center gap-1 disabled:opacity-30"><Trash2 className="w-3 h-3" /> Delete</button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
-
-              {/* Grid content */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" id="view-expenses-container">
-                
-                {/* Form panel to entry outgoings (4 Cols) */}
-                <div className="lg:col-span-4 bg-[#0a101f]/80 border border-slate-800 p-5 rounded-2xl space-y-4" id="add-expense-panel">
-                  <h3 className="text-sm font-semibold text-white tracking-wide border-b border-slate-900 pb-2.5">Log Administrative Showroom Outgoings</h3>
-                  
-                  <form onSubmit={handleAddExpense} className="space-y-4" id="outgoing-add-form">
-                    
-                    <div className="space-y-1.5" id="expense-desc-wrap">
-                      <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Description / Pay Reason *</label>
-                      <textarea
-                        required
-                        placeholder="e.g. Warehouse monthly lease, electric bills, courier postage (supports 1000+ words)"
-                        value={expenseDesc}
-                        onChange={(e) => {
-                          setExpenseDesc(e.target.value);
-                          e.target.style.height = "auto";
-                          e.target.style.height = `${e.target.scrollHeight}px`;
-                        }}
-                        onFocus={(e) => {
-                          e.target.style.height = "auto";
-                          e.target.style.height = `${e.target.scrollHeight}px`;
-                        }}
-                        className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-sans min-h-[80px] overflow-hidden resize-none leading-normal"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-2" id="ai-classify-outgoing">
-                      <button
-                        type="button"
-                        id="ai-suggest-category-btn"
-                        onClick={fetchAISuggestedCategory}
-                        disabled={isClassifying}
-                        className="text-[11px] font-bold text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        {isClassifying ? "AI Categorizing..." : "✨ Predict Category with AI"}
-                      </button>
-                      <span className="text-[9px] text-slate-500 font-mono">Gemini automatically scans outgo’s category</span>
-                    </div>
-
-                    <div className="space-y-3 p-3.5 bg-[#050912]/85 border border-slate-800/80 rounded-xl" id="outgoing-category-selection-container">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Expense Category Type *</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCategoryModalTarget("add");
-                              setCategoryModalOpen(true);
-                            }}
-                            className="text-[10px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors cursor-pointer select-none flex items-center gap-1"
-                          >
-                            <Plus className="w-3 h-3 text-emerald-400 shrink-0" /> + Add Category
-                          </button>
-                        </div>
-
-                        <select
-                          required
-                          value={expenseCategory}
-                          onChange={(e) => setExpenseCategory(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono cursor-pointer"
-                        >
-                          {allCategories.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-
-                        <div className="mt-2 space-y-1.5">
-                          <span className="text-[9px] uppercase font-mono tracking-wide text-slate-500 font-bold block">Manage Categories</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {allCategories.map(cat => (
-                              <div key={cat} className="flex items-center gap-1 px-2 py-1 bg-[#0b101b] border border-slate-800 rounded-lg">
-                                <span className="text-[9px] text-slate-300 font-mono">{cat}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => { setNewCategoryName(cat); setCategoryToManage(cat); }}
-                                  className="p-0.5 text-slate-400 hover:text-emerald-400 cursor-pointer"
-                                  title={`Edit ${cat}`}
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteExpenseCategory(cat)}
-                                  className="p-0.5 text-slate-400 hover:text-rose-400 cursor-pointer"
-                                  title={`Delete ${cat}`}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Voucher Amount (৳) *</label>
-                          <input
-                            type="number"
-                            required
-                            placeholder="0"
-                            value={expenseAmount}
-                            onChange={(e) => setExpenseAmount(e.target.value)}
-                            className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider font-mono text-slate-400 pl-1">Created Date</label>
-                          <input
-                            type="date"
-                            value={expenseDate}
-                            onChange={(e) => setExpenseDate(e.target.value)}
-                            className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-emerald-500 font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      id="save-expense-btn"
-                      className="w-full py-3 bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
-                    >
-                      <PlusCircle className="w-4 h-4 shrink-0" />
-                      Log Expense Voucher
-                    </button>
-
-                  </form>
-
-                </div>
-
-                {/* Expense entries list table (8 Cols) */}
-                <div className="lg:col-span-8 bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden" id="expenses-list-panel">
-                  <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3" id="expenses-header">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-semibold text-white block">Expenses History & Vouchers</span>
-                      <span className="text-[10px] text-slate-400">Track and filter logged cash flows</span>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      <span className="text-[10px] font-mono font-bold text-rose-400">
-                        Total Cumulative: {businessInfo.currencySymbol} {(expenses.reduce((sum, e) => sum + e.amount, 0)).toLocaleString()}
-                      </span>
-                      <span className="text-[10px] font-mono font-bold text-amber-400">
-                        Filtered Period Total: {businessInfo.currencySymbol} {expenses.filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date)).reduce((sum, e) => sum + e.amount, 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Filter chip tab bar */}
-                  <div className="px-4 py-3 bg-slate-950/25 border-b border-slate-800/60 flex items-center gap-1.5 overflow-x-auto" id="expenses-category-filters">
-                    <span className="text-[10px] uppercase font-mono font-bold text-slate-500 mr-1 select-none">Filter:</span>
-                    {["All", ...allCategories].map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setExpenseFilterCategory(cat)}
-                        className={`px-2.5 py-1 rounded-lg text-[9px] font-bold tracking-wider font-mono cursor-pointer transition-all border shrink-0 ${
-                          expenseFilterCategory === cat
-                            ? "bg-rose-500/10 border-rose-500 text-rose-400 font-bold"
-                            : "bg-[#050912] border-slate-800 text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        {cat.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="p-4 space-y-4 max-h-[700px] overflow-y-auto" id="expenses-cards-scroll">
-                    {(() => {
-                      const filteredExpenses = expenses.filter(e => 
-                        (expenseFilterCategory === "All" || e.category === expenseFilterCategory) &&
-                        checkExpenseDateInFilter(e.date)
-                      );
-
-                      if (filteredExpenses.length === 0) {
-                        return (
-                          <div className="py-16 text-center text-slate-400 italic bg-[#1E1E24]/30 border border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-3">
-                            <span className="text-4xl text-slate-650">🗄️</span>
-                            <p className="text-xs font-mono leading-normal">
-                              {expenseFilterCategory === "All"
-                                ? "No administrative overhead outlays logged yet for selected dates."
-                                : `No outlays logged under "${expenseFilterCategory}" category for selected dates.`}
-                            </p>
-                          </div>
-                        );
-                      }
-
-                      return filteredExpenses.map((e) => {
-                        const isExpanded = !!expandedExpenseIds[e.id];
-                        const needsTruncation = e.description.length > 120;
-                        const displayText = needsTruncation && !isExpanded 
-                          ? e.description.slice(0, 120) + "..." 
-                          : e.description;
-
-                        // Display formatted date beautifully
-                        let formattedDate = e.date;
-                        try {
-                          const d = new Date(e.date);
-                          if (!isNaN(d.getTime())) {
-                            formattedDate = `${d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })} • 12:00 PM`;
-                          }
-                        } catch (err) {}
-
-                        return (
-                          <div 
-                            key={e.id} 
-                            id={`expense-card-${e.id}`}
-                            className="bg-[#1E1E24]/90 hover:bg-[#1E1E24] border border-slate-800/70 hover:border-slate-800 rounded-2xl p-5 shadow-lg transition-all flex flex-col md:flex-row justify-between gap-4 relative overflow-hidden border-l-4 border-l-rose-500"
-                          >
-                            {/* Left Column: Category, Date, Description */}
-                            <div className="space-y-3 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400 font-mono inline-block">
-                                  {e.category}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
-                                  {formattedDate}
-                                </span>
-                              </div>
-
-                              <div className="text-slate-100 text-xs leading-relaxed break-words whitespace-pre-line font-sans">
-                                {displayText}
-                                {needsTruncation && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setExpandedExpenseIds(prev => ({ ...prev, [e.id]: !isExpanded }))}
-                                    className="text-[11px] font-bold text-emerald-400 hover:text-[#00E676] transition-colors ml-1.5 focus:outline-none inline-block cursor-pointer"
-                                  >
-                                    {isExpanded ? "Show Less" : "Show More"}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Right Column: Amount and actions */}
-                            <div className="flex md:flex-col justify-between items-end gap-3 shrink-0">
-                              <div className="text-right">
-                                <span className="text-[9px] text-slate-500 uppercase block tracking-wider font-mono font-bold">Paid Amount</span>
-                                <span className="text-base font-extrabold text-rose-400 font-mono">
-                                  {businessInfo.currencySymbol} {(e.amount ?? 0).toLocaleString()}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <button
-                                  id={`edit-expense-btn-${e.id}`}
-                                  onClick={() => {
-                                    setEditingExpense(e);
-                                    setEditExpenseDesc(e.description);
-                                    setEditExpenseCategory(e.category);
-                                    setEditExpenseAmount(String(e.amount));
-                                    setEditExpenseDate(e.date);
-                                  }}
-                                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-750 text-slate-300 hover:text-emerald-400 font-semibold text-[10px] tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 font-mono uppercase"
-                                  title="Edit expense"
-                                >
-                                  <Edit3 className="w-3 h-3 text-slate-400" />
-                                  Edit
-                                </button>
-                                <button
-                                  id={`delete-expense-${e.id}`}
-                                  onClick={() => setDeleteExpenseId(e.id)}
-                                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-750 text-slate-300 hover:text-rose-400 font-semibold text-[10px] tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 font-mono uppercase"
-                                  title="Delete expense"
-                                >
-                                  <Trash2 className="w-3 h-3 text-slate-400" />
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-
-                </div>
-
-              </div>
-            </div>
-          )}
-
+            );
+          })()}
           {/* -----------------------------------------------------------------
               VIEW 6: CONTACTS CRM WORKSPACE (CREDIT CUSTOMERS & DEALERS)
               ----------------------------------------------------------------- */}
