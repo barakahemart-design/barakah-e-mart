@@ -7293,7 +7293,8 @@ _${businessInfo.name}_`;
                       </p>
                     </div>
                   </section>
-                ) : (shadow-lg space-y-4">
+                ) : (
+                  <div className="bg-[#0b0f19]/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg space-y-4">
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => setExpenseSection("home")} className="shrink-0 px-3 py-2 rounded-xl border border-slate-700 bg-[#121722] text-slate-200 hover:text-emerald-400 text-xs font-bold">← Back</button>
                       <div className="min-w-0">
