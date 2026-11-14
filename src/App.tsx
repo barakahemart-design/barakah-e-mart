@@ -7288,6 +7288,105 @@ _${businessInfo.name}_`;
                           );
                         })}
                       </div>
+                      <section
+                        className="relative mt-8 overflow-hidden rounded-[26px] border border-white/[0.10] bg-white/[0.035] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:mt-10 sm:p-6 lg:p-7"
+                        aria-label="This month expenses breakdown"
+                      >
+                        <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/[0.035] blur-3xl" />
+                        <div className="relative z-10">
+                          <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.12] bg-white/[0.06] text-white/90 shadow-inner shadow-white/[0.04]">
+                                <BarChart3 className="h-5 w-5" />
+                              </span>
+                              <div>
+                                <h3 className="text-base font-black tracking-tight text-white sm:text-lg">Expenses Breakdown</h3>
+                                <p className="mt-0.5 text-[10px] text-slate-400 sm:text-xs">A clear view of where your money went this month</p>
+                              </div>
+                            </div>
+                            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/[0.10] bg-white/[0.045] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white/70">
+                              <span className="h-1.5 w-1.5 rounded-full bg-white/70" />
+                              {format(new Date(), "MMMM yyyy")}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                            <div className="rounded-2xl border border-white/[0.09] bg-black/25 p-4">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">Total Expenses</p>
+                              <p className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl">{money(monthTotal)}</p>
+                              <p className="mt-1 text-[10px] text-slate-500">Spent this month</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/[0.09] bg-black/25 p-4">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">Expense Entries</p>
+                              <p className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl">{monthExpenses.length.toLocaleString()}</p>
+                              <p className="mt-1 text-[10px] text-slate-500">Recorded this month</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/[0.09] bg-black/25 p-4">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">Top Spending Category</p>
+                              <p className="mt-2 truncate text-lg font-black tracking-tight text-white sm:text-xl">{categoryTotals[0]?.category || "—"}</p>
+                              <p className="mt-1 text-[10px] text-slate-500">{categoryTotals[0] ? money(categoryTotals[0].total) : "No expenses yet"}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[0.85fr_1.5fr] lg:gap-5">
+                            <div className="relative overflow-hidden rounded-2xl border border-white/[0.10] bg-gradient-to-br from-white/[0.075] to-white/[0.015] p-5">
+                              <div aria-hidden="true" className="pointer-events-none absolute -bottom-12 -right-8 h-36 w-36 rounded-full bg-white/[0.045] blur-2xl" />
+                              <div className="relative">
+                                <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Highest Monthly Spend</p>
+                                {categoryTotals.length > 0 ? (
+                                  <>
+                                    <h4 className="mt-3 text-xl font-black tracking-tight text-white sm:text-2xl">{categoryTotals[0].category}</h4>
+                                    <p className="mt-2 text-2xl font-black tracking-tight text-white">{money(categoryTotals[0].total)}</p>
+                                    <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                                      <div className="h-full rounded-full bg-gradient-to-r from-white/45 to-white/90" style={{ width: `${Math.min(100, (categoryTotals[0].total / Math.max(1, monthTotal)) * 100)}%` }} />
+                                    </div>
+                                    <p className="mt-2 text-[10px] text-slate-400">{Math.round((categoryTotals[0].total / Math.max(1, monthTotal)) * 100)}% of this month's expenses</p>
+                                  </>
+                                ) : (
+                                  <div className="mt-5">
+                                    <p className="text-lg font-bold text-white">No spending recorded</p>
+                                    <p className="mt-2 text-xs leading-5 text-slate-400">Your category breakdown will appear here when expenses are added.</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/[0.09] bg-black/20 p-4 sm:p-5">
+                              <div className="mb-4 flex items-center justify-between gap-3">
+                                <div>
+                                  <h4 className="text-xs font-extrabold text-white sm:text-sm">Category-wise Spending</h4>
+                                  <p className="mt-1 text-[9px] text-slate-500 sm:text-[10px]">Monthly expense distribution</p>
+                                </div>
+                                <span className="text-[9px] font-semibold text-slate-500">{categoryTotals.length} {categoryTotals.length === 1 ? "category" : "categories"}</span>
+                              </div>
+                              {categoryTotals.length > 0 ? (
+                                <div className="space-y-4">
+                                  {categoryTotals.map((item, index) => {
+                                    const share = Math.round((item.total / Math.max(1, monthTotal)) * 100);
+                                    return (
+                                      <div key={item.category} className="space-y-1.5">
+                                        <div className="flex items-center justify-between gap-3 text-[10px] sm:text-xs">
+                                          <span className="min-w-0 truncate font-semibold text-slate-200">{item.category}</span>
+                                          <span className="shrink-0 font-bold tabular-nums text-white">{money(item.total)} <span className="ml-1 text-slate-500">{share}%</span></span>
+                                        </div>
+                                        <div className="h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                                          <div className="h-full rounded-full bg-gradient-to-r from-white/35 via-white/65 to-white/90 transition-all duration-500" style={{ width: `${Math.max(2, (item.total / Math.max(1, maxCategoryTotal)) * 100)}%`, opacity: Math.max(0.48, 1 - index * 0.09) }} />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="flex min-h-36 flex-col items-center justify-center text-center">
+                                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.04] text-white/55"><BarChart3 className="h-4 w-4" /></span>
+                                  <p className="mt-3 text-xs font-semibold text-slate-300">No category data yet</p>
+                                  <p className="mt-1 text-[10px] text-slate-500">Add an expense to see the monthly breakdown.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </section>
                       <p className="mt-7 text-center text-[9px] font-medium tracking-wide text-slate-500">
                         Select a workspace to continue · Your saved expense data remains unchanged
                       </p>
