@@ -381,3 +381,26 @@ html.light #root textarea {
 #cloud-sync-status-indicator span[class*="rounded-full"] {
   flex: 0 0 auto;
 }
+
+
+/* Preserve the distinct cloud-sync state dot colors over the monochrome app theme. */
+#cloud-sync-status-indicator span.bg-emerald-400 {
+  background-color: #34d399 !important;
+  box-shadow: 0 0 11px rgba(52,211,153,.95) !important;
+}
+#cloud-sync-status-indicator span.bg-amber-400 {
+  background-color: #fbbf24 !important;
+  box-shadow: 0 0 11px rgba(251,191,36,.95) !important;
+}
+#cloud-sync-status-indicator span.bg-sky-400 {
+  background-color: #38bdf8 !important;
+  box-shadow: 0 0 11px rgba(56,189,248,.95) !important;
+}
+#cloud-sync-status-indicator span.bg-rose-400 {
+  background-color: #fb7185 !important;
+  box-shadow: 0 0 11px rgba(251,113,133,.95) !important;
+}
+#cloud-sync-status-indicator span.bg-slate-400 {
+  background-color: #94a3b8 !important;
+  box-shadow: 0 0 8px rgba(148,163,184,.55) !important;
+}
