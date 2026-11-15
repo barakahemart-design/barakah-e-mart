@@ -4182,11 +4182,13 @@ _${businessInfo.name}_`;
         <div className="pointer-events-none absolute -left-32 top-[-8rem] h-80 w-80 rounded-full bg-emerald-500/[0.08] blur-[110px]" />
         <div className="pointer-events-none absolute -right-28 bottom-[-8rem] h-96 w-96 rounded-full bg-amber-400/[0.07] blur-[120px]" />
         <div className="relative z-10 mx-auto flex min-h-[min(760px,88vh)] w-full max-w-5xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-gradient-to-b from-[#151515] via-[#0c0c0c] to-[#080808] px-6 py-12 text-center shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:px-12 md:min-h-[680px] md:rounded-[2.5rem]">
-          <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-300 shadow-[0_0_35px_rgba(16,185,129,0.12)]">
-            <Sparkles className="h-6 w-6" />
-          </div>
-          <p className="mb-5 text-[10px] font-semibold uppercase tracking-[0.32em] text-amber-300/80 sm:text-xs">
-            Bismillahir Rahmanir Rahim
+          <p
+            dir="rtl"
+            lang="ar"
+            className="mb-8 text-2xl font-semibold leading-relaxed tracking-normal text-amber-200 sm:text-3xl md:text-4xl"
+            style={{ fontFamily: "'Noto Naskh Arabic', 'Amiri', 'Traditional Arabic', serif" }}
+          >
+            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
           </p>
           <p className="mb-2 text-sm font-medium tracking-[0.22em] text-slate-400 sm:text-base">
             {welcomeGreeting}
@@ -4209,9 +4211,9 @@ _${businessInfo.name}_`;
           <button
             type="button"
             onClick={() => setShowWelcomeScreen(false)}
-            className="mt-12 inline-flex min-w-48 items-center justify-center gap-3 rounded-xl border border-emerald-300/30 bg-emerald-400 px-8 py-4 text-xs font-black tracking-[0.22em] text-[#06110b] shadow-[0_10px_35px_rgba(16,185,129,0.18)] transition-all hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0"
+            className="mt-12 inline-flex min-w-48 items-center justify-center gap-3 rounded-xl border border-white bg-[#f8fafc] px-8 py-4 text-xs font-black tracking-[0.22em] !text-[#050505] shadow-[0_10px_35px_rgba(255,255,255,0.14)] transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_40px_rgba(255,255,255,0.22)] active:translate-y-0"
           >
-            LOGIN <ArrowLeft className="h-4 w-4 rotate-180" />
+            <span className="!text-[#050505]">LOGIN</span> <ArrowLeft className="h-4 w-4 rotate-180 !text-[#050505]" />
           </button>
           <p className="mt-8 text-[9px] font-medium tracking-[0.28em] text-slate-700">WELCOME TO YOUR NEXT SUCCESSFUL DAY</p>
         </div>
