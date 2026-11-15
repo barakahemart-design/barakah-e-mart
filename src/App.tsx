@@ -55,7 +55,8 @@ import {
   Share2,
   Undo2,
   Languages,
-  Sparkles
+  Sparkles,
+  ArrowLeft
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
@@ -5996,35 +5997,61 @@ _${businessInfo.name}_`;
           {activeTab === "duelist" && (
             <div className="space-y-6 animate-fadeIn" id="view-duelist-container">
               {/* 1. HEADER BANNER */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/40" id="duelist-header-block">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-amber-400 rounded-full animate-ping shrink-0" />
-                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2">
-                      Due Management
-                    </h1>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10" id="duelist-header-block">
+                <div className="flex items-center gap-3">
+                  {dueSection !== "home" && (
+                    <button type="button" onClick={() => setDueSection("home")}
+                      className="group inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.07] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 backdrop-blur-xl transition-all hover:border-white/30 hover:bg-white/[0.13] active:scale-95">
+                      <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                      <span>Back</span>
+                    </button>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] shrink-0" />
+                      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-sans">Due Management</h1>
+                    </div>
+                    <p className="mt-1 text-xs sm:text-sm text-slate-400 font-medium font-sans">
+                      Manage creditor balances separately from product procurement dues.
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1 font-medium font-sans">
-                    Manage creditor balances separately from product procurement dues.
-                  </p>
                 </div>
+                {dueSection !== "home" && <span className="self-start sm:self-center rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 backdrop-blur-xl">Due Workspace</span>}
               </div>
 
               {dueSection === "home" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" id="due-management-sections">
+                <div className="relative isolate grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 sm:gap-5" id="due-management-sections">
                   {([
-                    { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a due or payment", icon: PlusCircle },
-                    { id: "creditors", title: "Creditor Management", subtitle: "Add or remove creditors", icon: Users },
-                    { id: "creditor-report", title: "Due Report", subtitle: "Balances and transactions", icon: BarChart3 },
-                    { id: "product-due", title: "Product Due", subtitle: "Previous purchase due tracker", icon: Package }
-                  ] as const).map(item => {
+                    { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a new due, payment, or both", detail: "TRANSACTION ENTRY", icon: PlusCircle, glow: "from-emerald-400/20 via-teal-300/5 to-transparent", accent: "text-emerald-300", iconBg: "bg-emerald-300/10 border-emerald-200/20" },
+                    { id: "creditors", title: "Creditor Management", subtitle: "Manage people and business accounts", detail: "ACCOUNT DIRECTORY", icon: Users, glow: "from-sky-400/20 via-blue-300/5 to-transparent", accent: "text-sky-300", iconBg: "bg-sky-300/10 border-sky-200/20" },
+                    { id: "creditor-report", title: "Due Report", subtitle: "Review balances and payment history", detail: "REPORTS & INSIGHTS", icon: BarChart3, glow: "from-violet-400/20 via-fuchsia-300/5 to-transparent", accent: "text-violet-300", iconBg: "bg-violet-300/10 border-violet-200/20" },
+                    { id: "product-due", title: "Product Due", subtitle: "Open the existing supplier due tracker", detail: "PROCUREMENT LEDGER", icon: Package, glow: "from-amber-400/20 via-orange-300/5 to-transparent", accent: "text-amber-300", iconBg: "bg-amber-300/10 border-amber-200/20" }
+                  ] as const).map((item, index) => {
                     const Icon = item.icon;
-                    const active = dueSection === item.id;
-                    return <button key={item.id} onClick={() => setDueSection(item.id)}
-                      className={`text-left p-4 rounded-2xl border transition-all ${active ? "bg-white text-black border-white shadow-lg" : "bg-[#0b0f19] text-slate-300 border-slate-800 hover:border-slate-600"}`}>
-                      <div className="flex items-center justify-between gap-2"><span className="text-sm font-bold">{item.title}</span><Icon className="w-4 h-4 shrink-0" /></div>
-                      <p className={`text-[10px] mt-1 ${active ? "text-slate-600" : "text-slate-500"}`}>{item.subtitle}</p>
-                    </button>;
+                    return (
+                      <button key={item.id} type="button" onClick={() => setDueSection(item.id)}
+                        className="group relative min-h-[190px] sm:min-h-[220px] overflow-hidden rounded-[26px] border border-white/[0.13] bg-slate-900/55 p-5 sm:p-6 text-left shadow-[0_18px_55px_rgba(0,0,0,0.28)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/25 hover:bg-slate-800/65 hover:shadow-[0_24px_65px_rgba(0,0,0,0.38)] active:scale-[0.985]">
+                        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.glow} opacity-80 transition-opacity duration-300 group-hover:opacity-100`} />
+                        <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full bg-white/[0.035] blur-3xl transition-all duration-500 group-hover:scale-125 group-hover:bg-white/[0.07]" />
+                        <div className="relative flex h-full min-h-[145px] flex-col justify-between gap-7">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className={`inline-flex h-14 w-14 items-center justify-center rounded-2xl border shadow-inner backdrop-blur-xl ${item.iconBg}`}>
+                              <Icon className={`h-6 w-6 ${item.accent}`} strokeWidth={1.8} />
+                            </span>
+                            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[9px] font-bold tracking-[0.16em] text-slate-400 backdrop-blur-xl">0{index + 1}</span>
+                          </div>
+                          <div>
+                            <p className={`mb-2 text-[9px] font-bold tracking-[0.2em] ${item.accent}`}>{item.detail}</p>
+                            <div className="flex items-center justify-between gap-3">
+                              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{item.title}</h2>
+                              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/70 transition-all group-hover:translate-x-1 group-hover:border-white/30 group-hover:bg-white/15 group-hover:text-white">→</span>
+                            </div>
+                            <p className="mt-2 max-w-[28rem] text-xs leading-relaxed text-slate-400">{item.subtitle}</p>
+                          </div>
+                        </div>
+                        <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                      </button>
+                    );
                   })}
                 </div>
               )}
