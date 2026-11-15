@@ -411,6 +411,90 @@ export default function App() {
   const [contactSearchQuery, setContactSearchQuery] = useState("");
   const [contactTypeFilter, setContactTypeFilter] = useState<"all" | "customer" | "supplier">("all");
 
+  // Build the CRM directory indexes only when the Customer workspace is opened.
+  // This replaces repeated full transaction/contact/product scans inside every card.
+  const customerDirectoryData = useMemo(() => {
+    if (activeTab !== "contacts") {
+      return {
+        filteredContacts: [] as Contact[],
+        transactionsByContact: new Map<string, Transaction[]>(),
+        productsById: new Map<string, Product>(),
+        productsByName: new Map<string, Product>(),
+        hasMissingPartnerProfiles: false
+      };
+    }
+
+    const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
+    const contactsById = new Map<string, Contact>();
+    const contactsByNormalizedId = new Map<string, Contact[]>();
+    const contactsByPhone = new Map<string, Contact[]>();
+    const contactIds = new Set<string>();
+
+    contacts.forEach(contact => {
+      contactIds.add(contact.id);
+      contactsById.set(contact.id, contact);
+      const normalizedId = toUUID(contact.id || "", cleanEmail);
+      const normalizedMatches = contactsByNormalizedId.get(normalizedId) || [];
+      normalizedMatches.push(contact);
+      contactsByNormalizedId.set(normalizedId, normalizedMatches);
+      const phone = (contact.phone || "").trim();
+      if (phone) {
+        const phoneMatches = contactsByPhone.get(phone) || [];
+        phoneMatches.push(contact);
+        contactsByPhone.set(phone, phoneMatches);
+      }
+    });
+
+    const transactionsByContact = new Map<string, Transaction[]>();
+    transactions.forEach(transaction => {
+      if (!transaction?.contactId) return;
+      const rawId = transaction.contactId;
+      const normalizedId = toUUID(rawId, cleanEmail);
+      const matchedContacts = new Set<Contact>();
+      const exactContact = contactsById.get(rawId);
+      if (exactContact) matchedContacts.add(exactContact);
+      (contactsByNormalizedId.get(normalizedId) || []).forEach(contact => matchedContacts.add(contact));
+
+      const transactionContact = exactContact || (contactsByNormalizedId.get(normalizedId) || [])[0];
+      if (transactionContact?.phone) {
+        (contactsByPhone.get(transactionContact.phone.trim()) || []).forEach(contact => matchedContacts.add(contact));
+      }
+
+      matchedContacts.forEach(contact => {
+        const rows = transactionsByContact.get(contact.id) || [];
+        rows.push(transaction);
+        transactionsByContact.set(contact.id, rows);
+      });
+    });
+
+    const productsById = new Map<string, Product>();
+    const productsByName = new Map<string, Product>();
+    products.forEach(product => {
+      productsById.set(product.id, product);
+      productsByName.set(product.name, product);
+    });
+
+    const search = contactSearchQuery.trim().toLowerCase();
+    const filteredContacts = contacts.filter(contact => {
+      const matchesSearch = !search ||
+        (contact.name || "").toLowerCase().includes(search) ||
+        (contact.phone || "").includes(contactSearchQuery) ||
+        (contact.address || "").toLowerCase().includes(search);
+      const matchesType = contactTypeFilter === "all" || contact.type === contactTypeFilter;
+      return matchesSearch && matchesType;
+    }).sort((a, b) => {
+      const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    const hasMissingPartnerProfiles =
+      transactions.some(transaction => !!transaction.contactId && !contactIds.has(transaction.contactId)) ||
+      purchases.some(purchase => !!purchase.supplierId && !contactIds.has(purchase.supplierId));
+
+    return { filteredContacts, transactionsByContact, productsById, productsByName, hasMissingPartnerProfiles };
+  }, [activeTab, contacts, transactions, purchases, products, activeUser?.email, contactSearchQuery, contactTypeFilter]);
+
   // --- DUE LIST STATE DEFINITIONS ---
   const [duelistFilter, setDuelistFilter] = useState<"all" | "today" | "weekly" | "monthly" | "yearly">("all");
   const [duelistSearch, setDuelistSearch] = useState("");
@@ -3037,7 +3121,7 @@ export default function App() {
     if (txDocId) {
       let costOfGoodsSold = 0;
       items.forEach(item => {
-        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
+        const dbProduct = customerDirectoryData.productsById.get(item.productId || "") || customerDirectoryData.productsById.get(item.id || "") || customerDirectoryData.productsByName.get(item.name || "");
         let buyCost = 0;
         if (item.buyPrice && item.buyPrice > 0) {
           buyCost = item.buyPrice;
@@ -4366,35 +4450,35 @@ _${businessInfo.name}_`;
               >
                 {syncStatus === "connected" && (
                   <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse" />
                     <span className="hidden sm:inline">CLOUD: SYNCED</span>
                     <span className="sm:hidden">CLOUD: OK</span>
                   </>
                 )}
                 {syncStatus === "reconciling" && (
                   <>
-                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-amber-500" />
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.85)] animate-pulse" />
                     <span className="hidden sm:inline">CLOUD: RECONCILING</span>
                     <span className="sm:hidden">CLOUD: SYNC</span>
                   </>
                 )}
                 {syncStatus === "connecting" && (
                   <>
-                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-yellow-400" />
+                    <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)] animate-pulse" />
                     <span className="hidden sm:inline">CLOUD: CONNECTING</span>
                     <span className="sm:hidden">CLOUD: CONN</span>
                   </>
                 )}
                 {syncStatus === "error" && (
                   <>
-                    <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                    <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.9)]" />
                     <span className="hidden sm:inline">CLOUD: ERR</span>
                     <span className="sm:hidden">CLOUD: ERR</span>
                   </>
                 )}
                 {syncStatus === "offline" && (
                   <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                    <span className="w-2 h-2 rounded-full bg-slate-400 shadow-[0_0_8px_rgba(148,163,184,0.45)]" />
                     <span>CLOUD: OFFLINE</span>
                   </>
                 )}
@@ -7615,7 +7699,7 @@ _${businessInfo.name}_`;
                 return { label: "Dealer / Supplier Lots", color: "bg-[#00B0FF]/10 text-[#00B0FF] border border-[#00B0FF]/25 font-semibold text-[10px]" };
               }
               
-              const clientTxs = transactions.filter(t => t.contactId === c.id);
+              const clientTxs = customerDirectoryData.transactionsByContact.get(c.id) || [];
               const totalOutstandingDue = clientTxs.reduce((sum, t) => {
                 const due = t.dueBalance || 0;
                 return sum + due;
@@ -7632,17 +7716,7 @@ _${businessInfo.name}_`;
               return { label: "Regular Client", color: "bg-[#A0A0A5]/10 text-[#A0A0A5] border border-slate-700/50 text-[10px]" };
             };
 
-            const filteredContacts = contacts.filter(c => {
-              const matchesSearch = c.name.toLowerCase().includes(contactSearchQuery.toLowerCase()) || 
-                                    c.phone.includes(contactSearchQuery) || 
-                                    (c.address && c.address.toLowerCase().includes(contactSearchQuery.toLowerCase()));
-              const matchesType = contactTypeFilter === "all" ? true : c.type === contactTypeFilter;
-              return matchesSearch && matchesType;
-            }).sort((a, b) => {
-              const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
-              const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
-              return dateB - dateA;
-            });
+            const filteredContacts = customerDirectoryData.filteredContacts;
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in" id="view-contacts-container">
@@ -7692,9 +7766,13 @@ _${businessInfo.name}_`;
                   </div>
 
                   {/* Highly polished active Self-Healing & Data Recovery banner */}
-                  {(transactions.some(t => t.contactId && !contacts.some(c => c.id === t.contactId)) ||
-                    purchases.some(p => p.supplierId && !contacts.some(c => c.id === p.supplierId))) && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4.5 space-y-3.5 animate-fade-in" id="crm-recovery-banner">
+                  {customerDirectoryData.hasMissingPartnerProfiles && (
+                    <details className="rounded-2xl border border-white/12 bg-black/45 shadow-lg backdrop-blur-2xl" id="crm-recovery-banner">
+                    <summary className="cursor-pointer list-none px-4 py-3 text-xs font-bold text-white/80 flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2"><Undo2 className="w-4 h-4 text-sky-400" /> Restore Lost Partner Profiles</span>
+                      <span className="text-[10px] text-white/45">Optional recovery tool · Tap to expand</span>
+                    </summary>
+                    <div className="p-4 space-y-3">
                       <div className="flex items-start gap-3">
                         <div className="p-2 bg-emerald-500/20 text-[#00E676] rounded-xl border border-emerald-500/30 shrink-0 mt-0.5">
                           <Sparkles className="w-4 h-4" />
@@ -7719,6 +7797,7 @@ _${businessInfo.name}_`;
                         </button>
                       </div>
                     </div>
+                  </details>
                   )}
 
                   {/* Responsive grid of Customer Cards */}
@@ -7738,25 +7817,7 @@ _${businessInfo.name}_`;
                         const initials = getInitials(c.name);
                         
                         // Resolve client transactions with extremely robust fallback and normalization checks
-                        const clientTxs = transactions.filter(t => {
-                          if (!t) return false;
-                          if (t.contactId === c.id) return true;
-                          
-                          const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
-                          const tIdNorm = toUUID(t.contactId || "", cleanEmail);
-                          const cIdNorm = toUUID(c.id || "", cleanEmail);
-                          if (tIdNorm === cIdNorm) return true;
-                          if (t.contactId === cIdNorm) return true;
-                          if (tIdNorm === c.id) return true;
-
-                          if (c.phone && t.contactId) {
-                            const txContact = contacts.find(co => co.id === t.contactId || toUUID(co.id, cleanEmail) === tIdNorm);
-                            if (txContact && txContact.phone && txContact.phone.trim() === c.phone.trim()) {
-                              return true;
-                            }
-                          }
-                          return false;
-                        });
+                        const clientTxs = customerDirectoryData.transactionsByContact.get(c.id) || [];
                         
                         // Aggregate products bought by customer
                         const purchasedProductsMap: { [productName: string]: { quantity: number; total: number; price: number } } = {};
