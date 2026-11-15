@@ -5528,7 +5528,24 @@ _${businessInfo.name}_`;
                 <div className="space-y-4" id="all-stock-home">
                   <div className="border-b border-white/10 pb-4">
                     <h2 className="text-xl font-black text-white">All Stock</h2>
-                    <p className="mt-1 text-xs text-slate-400">Choose a stock section to view the live inventory.</p>
+                    <p className="mt-1 text-xs text-slate-400">Live stock overview and inventory sections.</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" id="all-stock-overview">
+                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stock Value</p>
+                      <p className="mt-2 text-xl font-black font-mono text-white">{businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</p>
+                      <p className="mt-1 text-xs text-slate-400">{currentStockProducts.length.toLocaleString()} Available Products</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sales Value</p>
+                      <p className="mt-2 text-xl font-black font-mono text-white">{businessInfo.currencySymbol} {salesValueTotal.toLocaleString()}</p>
+                      <p className="mt-1 text-xs text-slate-400">{currentStockProducts.length.toLocaleString()} Available Products</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Out of Stock</p>
+                      <p className="mt-2 text-xl font-black font-mono text-white">{outOfStockProducts.length.toLocaleString()} Products</p>
+                      <p className="mt-1 text-xs text-slate-400">Shortage Value: {businessInfo.currencySymbol} {outOfStockValueTotal.toLocaleString()}</p>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <button
@@ -5544,10 +5561,9 @@ _${businessInfo.name}_`;
                         <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
                       </div>
                       <h3 className="mt-5 text-lg font-black text-white">Stock Value</h3>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See total available quantity, current stock purchase value, and every product currently in stock.</p>
-                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
-                        <span>{currentStockProducts.length.toLocaleString()} products in stock</span>
-                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See available stock quantity and current purchase value.</p>
+                      <div className="mt-5 border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{currentStockProducts.length.toLocaleString()} Available Products · {businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</span>
                       </div>
                     </button>
                     <button
@@ -5563,10 +5579,27 @@ _${businessInfo.name}_`;
                         <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
                       </div>
                       <h3 className="mt-5 text-lg font-black text-white">Sales Value</h3>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See the potential selling value of all products currently available in stock.</p>
-                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
-                        <span>{businessInfo.currencySymbol} {salesValueTotal.toLocaleString()} total sales value</span>
-                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See potential selling value of available products.</p>
+                      <div className="mt-5 border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{currentStockProducts.length.toLocaleString()} Available Products · {businessInfo.currencySymbol} {salesValueTotal.toLocaleString()}</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setInventorySearch(""); setStockSubTab("out-of-stock"); }}
+                      className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
+                      id="open-out-of-stock-page"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white">
+                          <AlertCircle className="h-6 w-6" />
+                        </div>
+                        <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
+                      </div>
+                      <h3 className="mt-5 text-lg font-black text-white">Out of Stock</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See out-of-stock product count and shortage value.</p>
+                      <div className="mt-5 border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{outOfStockProducts.length.toLocaleString()} Products · {businessInfo.currencySymbol} {outOfStockValueTotal.toLocaleString()} Shortage Value</span>
                       </div>
                     </button>
                     <button
@@ -5583,28 +5616,8 @@ _${businessInfo.name}_`;
                       </div>
                       <h3 className="mt-5 text-lg font-black text-white">Edit Stock</h3>
                       <p className="mt-1 text-xs leading-relaxed text-slate-400">Clear negative stock shortages by setting selected products back to zero.</p>
-                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
-                        <span>{totalNegativeStockUnits.toLocaleString()} pcs shortage · {negativeStockProducts.length.toLocaleString()} products</span>
-                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setInventorySearch(""); setStockSubTab("out-of-stock"); }}
-                      className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
-                      id="open-out-of-stock-page"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white">
-                          <AlertCircle className="h-6 w-6" />
-                        </div>
-                        <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
-                      </div>
-                      <h3 className="mt-5 text-lg font-black text-white">Out of Stock</h3>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See products with zero or negative stock, shortage quantity, and shortage value.</p>
-                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
-                        <span>{outOfStockProducts.length.toLocaleString()} products out of stock</span>
-                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
+                      <div className="mt-5 border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{totalNegativeStockUnits.toLocaleString()} pcs Shortage · {negativeStockProducts.length.toLocaleString()} Products</span>
                       </div>
                     </button>
                   </div>
@@ -5717,9 +5730,6 @@ _${businessInfo.name}_`;
                           <p className="mt-2 text-2xl font-black font-mono text-white">{negativeStockProducts.length.toLocaleString()}</p>
                         </div>
                       </div>
-                      <p className="rounded-xl border border-white/10 bg-[#111116] px-4 py-3 text-[11px] leading-relaxed text-slate-400">
-                        এখানে শুধু নেগেটিভ স্টকের পণ্য দেখাবে। কোনো পণ্যের “Set Stock to 0” চাপলে তার বর্তমান নেগেটিভ স্টক সরাসরি 0 হবে। বিক্রির ইনভয়েস বা হিস্টোরি পরিবর্তন হবে না।
-                      </p>
                       <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#111116] px-3 py-3">
                         <Search className="h-4 w-4 text-slate-500" />
                         <input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" />
@@ -5740,7 +5750,7 @@ _${businessInfo.name}_`;
                                 <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
                                 <td className="px-4 py-3 text-right font-mono font-bold text-white">{Number(product.stock || 0).toLocaleString()} {product.unit}</td>
                                 <td className="px-4 py-3 text-right">
-                                  <button type="button" onClick={() => handleClearProductShortage(product.id)} className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white px-3 py-2 text-[10px] font-bold text-black transition-colors hover:bg-slate-200" id={`clear-shortage-${product.id}`}>
+                                  <button type="button" onClick={() => handleClearProductShortage(product.id)} className="inline-flex items-center justify-center rounded-lg border border-slate-200 !bg-white px-3 py-2 text-[10px] font-extrabold !text-black shadow-sm transition-colors hover:!bg-slate-200 focus:outline-none focus:ring-2 focus:ring-white/60" id={`clear-shortage-${product.id}`}>
                                     Set Stock to 0
                                   </button>
                                 </td>
