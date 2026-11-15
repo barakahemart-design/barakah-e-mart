@@ -1972,7 +1972,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "out-of-stock">("home");
+  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "sales-value" | "out-of-stock">("home");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4048,6 +4048,7 @@ _${businessInfo.name}_`;
   const outOfStockProducts = useMemo(() => filteredProducts.filter(p => Number(p.stock) <= 0), [filteredProducts]);
   const currentStockUnits = useMemo(() => currentStockProducts.reduce((total, product) => total + Number(product.stock || 0), 0), [currentStockProducts]);
   const stockValueTotal = useMemo(() => currentStockProducts.reduce((total, product) => total + Number(product.stock) * Number(product.buyPrice || 0), 0), [currentStockProducts]);
+  const salesValueTotal = useMemo(() => currentStockProducts.reduce((total, product) => total + Number(product.stock || 0) * Number(product.sellPrice || 0), 0), [currentStockProducts]);
   const outOfStockValueTotal = useMemo(() => outOfStockProducts.reduce((total, product) => total + Math.max(0, -Number(product.stock || 0)) * Number(product.buyPrice || 0), 0), [outOfStockProducts]);
   const outOfStockMissingUnits = useMemo(() => outOfStockProducts.reduce((total, product) => total + Math.max(0, -Number(product.stock || 0)), 0), [outOfStockProducts]);
 
@@ -5528,6 +5529,25 @@ _${businessInfo.name}_`;
                     </button>
                     <button
                       type="button"
+                      onClick={() => { setInventorySearch(""); setStockSubTab("sales-value"); }}
+                      className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
+                      id="open-sales-value-page"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white">
+                          <TrendingUp className="h-6 w-6" />
+                        </div>
+                        <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
+                      </div>
+                      <h3 className="mt-5 text-lg font-black text-white">Sales Value</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See the potential selling value of all products currently available in stock.</p>
+                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{businessInfo.currencySymbol} {salesValueTotal.toLocaleString()} total sales value</span>
+                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => { setInventorySearch(""); setStockSubTab("out-of-stock"); }}
                       className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
                       id="open-out-of-stock-page"
@@ -5548,7 +5568,7 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4" id={stockSubTab === "stock-value" ? "stock-value-page" : "out-of-stock-page"}>
+                <div className="space-y-4" id={stockSubTab === "stock-value" ? "stock-value-page" : stockSubTab === "sales-value" ? "sales-value-page" : "out-of-stock-page"}>
                   <div className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-4">
                     <button
                       type="button"
@@ -5559,8 +5579,8 @@ _${businessInfo.name}_`;
                       <ArrowLeft className="h-4 w-4" /> All Stock
                     </button>
                     <div>
-                      <h2 className="text-lg font-black text-white">{stockSubTab === "stock-value" ? "Stock Value" : "Out of Stock"}</h2>
-                      <p className="text-[10px] text-slate-400">Live figures based on the current Product stock and buy price.</p>
+                      <h2 className="text-lg font-black text-white">{stockSubTab === "stock-value" ? "Stock Value" : stockSubTab === "sales-value" ? "Sales Value" : "Out of Stock"}</h2>
+                      <p className="text-[10px] text-slate-400">Live figures based on current Product stock, buy price, and sell price.</p>
                     </div>
                   </div>
 
@@ -5603,6 +5623,46 @@ _${businessInfo.name}_`;
                         </table>
                       </div>
                     </>
+                  ) : stockSubTab === "sales-value" ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" id="sales-value-summary">
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Available Quantity</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{currentStockUnits.toLocaleString()} <span className="text-xs font-semibold text-slate-400">pcs / units</span></p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Sales Value</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {salesValueTotal.toLocaleString()}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">Current quantity × Product sell price</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Products Available</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{currentStockProducts.length.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#111116] px-3 py-3">
+                        <Search className="h-4 w-4 text-slate-500" />
+                        <input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" />
+                      </div>
+                      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111116]">
+                        <div className="border-b border-white/10 px-4 py-3 text-xs font-bold text-white">Products Currently Available for Sale</div>
+                        <table className="w-full text-xs text-slate-300">
+                          <thead className="bg-white/[0.04] text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Available Stock</th><th className="px-4 py-3 text-right">Sell Price</th><th className="px-4 py-3 text-right">Sales Value</th></tr></thead>
+                          <tbody className="divide-y divide-white/[0.06]">
+                            {currentStockProducts.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-500">No products currently in stock.</td></tr> : currentStockProducts.map(product => (
+                              <tr key={product.id} className="hover:bg-white/[0.025]">
+                                <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
+                                <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
+                                <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-white">{Number(product.stock || 0).toLocaleString()} {product.unit}</td>
+                                <td className="px-4 py-3 text-right font-mono text-slate-300">{businessInfo.currencySymbol} {Number(product.sellPrice || 0).toLocaleString()}</td>
+                                <td className="px-4 py-3 text-right font-mono text-white">{businessInfo.currencySymbol} {(Number(product.stock || 0) * Number(product.sellPrice || 0)).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   ) : (
                     <>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" id="out-of-stock-summary">
@@ -5615,9 +5675,9 @@ _${businessInfo.name}_`;
                           <p className="mt-2 text-2xl font-black font-mono text-white">{outOfStockMissingUnits.toLocaleString()} <span className="text-xs font-semibold text-slate-400">pcs / units</span></p>
                         </div>
                         <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Shortage Value</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Shortage Value (Buy Price)</p>
                           <p className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {outOfStockValueTotal.toLocaleString()}</p>
-                          <p className="mt-1 text-[10px] text-slate-500">Negative quantity × current buy price</p>
+                          <p className="mt-1 text-[10px] text-slate-500">Negative stock quantity × current Product buy price; zero stock = ৳0</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#111116] px-3 py-3">
