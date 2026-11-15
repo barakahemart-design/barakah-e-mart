@@ -138,7 +138,7 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
                     const totalDue = linkedEntries.reduce((sum, entry) => sum + (Number(entry.dueAmount) || 0), 0);
                     const totalPaid = linkedEntries.reduce((sum, entry) => sum + (Number(entry.paidAmount) || 0), 0);
                     const confirmed = window.confirm(
-                      `Permanently delete ${c.name} and ALL of their ${linkedEntries.length} transaction(s)?\\n\\nTotal due: ${businessInfo.currencySymbol} ${totalDue.toLocaleString()}\\nTotal paid: ${businessInfo.currencySymbol} ${totalPaid.toLocaleString()}\\n\\nThis removes the creditor profile and its complete transaction history from the Creditor Management ledger. This cannot be undone.`
+                      `Permanently delete ${c.name} and ALL of their ${linkedEntries.length} transaction(s)?\n\nTotal due: ${businessInfo.currencySymbol} ${totalDue.toLocaleString()}\nTotal paid: ${businessInfo.currencySymbol} ${totalPaid.toLocaleString()}\n\nThis removes the creditor profile and its complete transaction history from the Creditor Management ledger. This cannot be undone.`
                     );
                     if (!confirmed) return;
                     updateLedger({
