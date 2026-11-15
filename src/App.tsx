@@ -10209,7 +10209,7 @@ _${businessInfo.name}_`;
             </div>
             <iframe
               ref={ledgerPreviewFrameRef}
-              src={ledgerDocumentPreview.dataUrl}
+              src={`${ledgerDocumentPreview.dataUrl}#view=Fit&zoom=page-fit`}
               title={ledgerDocumentPreview.title}
               className="min-h-0 w-full flex-1 bg-white"
             />
