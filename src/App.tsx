@@ -331,9 +331,12 @@ export default function App() {
       return hasSavedUser && (savedPanel === "admin" || savedPanel === "sales") ? savedPanel : "none";
     } catch (_) { return "none"; }
   });
-  // Show the time-based welcome greeting on every fresh app load/reload.
-  // A saved login session can continue straight into the existing workspace.
-  const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
+  // Show Welcome only for a new session; an existing signed-in session
+  // returns directly to its previously selected workspace after any reload.
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => {
+    try { return !localStorage.getItem("barakah_local_active_user"); }
+    catch (_) { return true; }
+  });
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
@@ -1241,6 +1244,20 @@ export default function App() {
     }
     setTimeout(() => setNotification(null), 4000);
   };
+
+  // Show a compact confirmation after browser reload (mobile pull-down,
+  // laptop refresh button, Ctrl+R, or context-menu Reload).
+  useEffect(() => {
+    try {
+      const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      const wasReloaded = navigation?.type === "reload";
+      const hasSavedSession = !!localStorage.getItem("barakah_local_active_user");
+      if (!wasReloaded || !hasSavedSession) return;
+      setNotification({ message: "Successfully refreshed", type: "success" });
+      const timeout = window.setTimeout(() => setNotification(null), 2200);
+      return () => window.clearTimeout(timeout);
+    } catch (_) {}
+  }, []);
 
   // Handler for guest login
   const handleGuestLogin = () => {
@@ -4701,7 +4718,7 @@ _${businessInfo.name}_`;
           {/* DYNAMIC GENERAL TEMPORAL NOTIFICATION */}
           {notification && (
             <div 
-              className={`p-4 rounded-xl shadow-lg border animate-slideIn flex items-center justify-between text-xs font-medium relative overflow-hidden ${
+              className={`mx-auto w-fit max-w-[calc(100vw-2rem)] px-3 py-2 rounded-lg shadow-lg border animate-slideIn flex items-center justify-between text-[11px] font-medium relative overflow-hidden ${
                 notification.type === "success" 
                   ? "bg-emerald-950/40 border-emerald-500/20 text-emerald-400" 
                   : notification.type === "error" 
@@ -4710,7 +4727,7 @@ _${businessInfo.name}_`;
               }`}
               id="dynamic-toast-message"
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 {notification.type === "success" ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
                 <span>{notification.message}</span>
               </div>
