@@ -9750,7 +9750,7 @@ _${businessInfo.name}_`;
                       );
                     })}
                   </div>
-                )
+                ) : (
                   <div className="grid grid-cols-1 gap-2.5">
                     {[
                       { id: "pos", label: "Sales", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
