@@ -421,7 +421,7 @@ export default function App() {
   const [dueDateStr, setDueDateStr] = useState(() => new Date().toISOString().split("T")[0]);
   const [dueInvoiceNo, setDueInvoiceNo] = useState("");
   const [selectedSupplierReceipt, setSelectedSupplierReceipt] = useState<Purchase | null>(null);
-  const [dueSection, setDueSection] = useState<"creditor-entry" | "creditors" | "creditor-report" | "product-due">("creditor-entry");
+  const [dueSection, setDueSection] = useState<"home" | "creditor-entry" | "creditors" | "creditor-report" | "product-due">("home");
 
   const hasSyncedOnMountRef = useRef(false);
   const hasHealedRef = useRef(false);
@@ -6010,22 +6010,24 @@ _${businessInfo.name}_`;
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" id="due-management-sections">
-                {([
-                  { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a due or payment", icon: PlusCircle },
-                  { id: "creditors", title: "Creditor Management", subtitle: "Add or remove creditors", icon: Users },
-                  { id: "creditor-report", title: "Due Report", subtitle: "Balances and transactions", icon: BarChart3 },
-                  { id: "product-due", title: "Product Due", subtitle: "Previous purchase due tracker", icon: Package }
-                ] as const).map(item => {
-                  const Icon = item.icon;
-                  const active = dueSection === item.id;
-                  return <button key={item.id} onClick={() => setDueSection(item.id)}
-                    className={`text-left p-4 rounded-2xl border transition-all ${active ? "bg-white text-black border-white shadow-lg" : "bg-[#0b0f19] text-slate-300 border-slate-800 hover:border-slate-600"}`}>
-                    <div className="flex items-center justify-between gap-2"><span className="text-sm font-bold">{item.title}</span><Icon className="w-4 h-4 shrink-0" /></div>
-                    <p className={`text-[10px] mt-1 ${active ? "text-slate-600" : "text-slate-500"}`}>{item.subtitle}</p>
-                  </button>;
-                })}
-              </div>
+              {dueSection === "home" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" id="due-management-sections">
+                  {([
+                    { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a due or payment", icon: PlusCircle },
+                    { id: "creditors", title: "Creditor Management", subtitle: "Add or remove creditors", icon: Users },
+                    { id: "creditor-report", title: "Due Report", subtitle: "Balances and transactions", icon: BarChart3 },
+                    { id: "product-due", title: "Product Due", subtitle: "Previous purchase due tracker", icon: Package }
+                  ] as const).map(item => {
+                    const Icon = item.icon;
+                    const active = dueSection === item.id;
+                    return <button key={item.id} onClick={() => setDueSection(item.id)}
+                      className={`text-left p-4 rounded-2xl border transition-all ${active ? "bg-white text-black border-white shadow-lg" : "bg-[#0b0f19] text-slate-300 border-slate-800 hover:border-slate-600"}`}>
+                      <div className="flex items-center justify-between gap-2"><span className="text-sm font-bold">{item.title}</span><Icon className="w-4 h-4 shrink-0" /></div>
+                      <p className={`text-[10px] mt-1 ${active ? "text-slate-600" : "text-slate-500"}`}>{item.subtitle}</p>
+                    </button>;
+                  })}
+                </div>
+              )}
 
               {dueSection === "product-due" ? (
                 <>
@@ -6774,8 +6776,9 @@ _${businessInfo.name}_`;
                 );
               })()}
                 </>
-              ) : (
+              ) : dueSection === "home" ? null : (
                 <CreditorDueView
+                  activeSection={dueSection}
                   businessInfo={businessInfo}
                   setBusinessInfo={setBusinessInfo}
                   triggerNotification={triggerNotification}
