@@ -85,6 +85,7 @@ import {
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
+import { LedgerPdfViewer } from "./components/LedgerPdfViewer";
 import { DashboardView } from "./components/DashboardView";
 import { ReportsView } from "./components/ReportsView";
 import { ProductsView } from "./components/ProductsView";
@@ -377,7 +378,7 @@ export default function App() {
   useEffect(() => {
     if (!ledgerDocumentPreview) return;
     const updatePreviewZoom = () => {
-      setLedgerPreviewZoom(window.matchMedia("(max-width: 767px)").matches ? 50 : 57);
+      setLedgerPreviewZoom(window.matchMedia("(max-width: 767px)").matches ? 1 : 0.57);
     };
     updatePreviewZoom();
     window.addEventListener("resize", updatePreviewZoom);
@@ -10220,9 +10221,15 @@ _${businessInfo.name}_`;
             </div>
             <iframe
               ref={ledgerPreviewFrameRef}
-              src={`${ledgerDocumentPreview.dataUrl}#zoom=${ledgerPreviewZoom}`}
+              src={ledgerDocumentPreview.dataUrl}
               title={ledgerDocumentPreview.title}
-              className="min-h-0 w-full flex-1 bg-white"
+              className="hidden"
+              aria-hidden="true"
+            />
+            <LedgerPdfViewer
+              dataUrl={ledgerDocumentPreview.dataUrl}
+              title={ledgerDocumentPreview.title}
+              initialZoom={ledgerPreviewZoom}
             />
           </div>
         </div>
