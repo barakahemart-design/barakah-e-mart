@@ -3395,10 +3395,10 @@ export default function App() {
     return /[\u0980-\u09FF]/.test(str);
   };
 
-  const translateContactFields = async (customName?: string, customPhone?: string, customAddress?: string): Promise<{ name: string; phone: string; address: string } | null> => {
-    const targetName = customName ?? cName;
-    const targetPhone = banglaToEnglishDigits(customPhone ?? cPhone).replace(/[^0-9]/g, "");
-    const targetAddress = customAddress ?? cAddress;
+  const translateContactFields = async (customName: string, customPhone: string, customAddress: string): Promise<{ name: string; phone: string; address: string } | null> => {
+    const targetName = customName;
+    const targetPhone = banglaToEnglishDigits(customPhone).replace(/[^0-9]/g, "");
+    const targetAddress = customAddress;
 
     if (!targetName.trim() && !targetPhone.trim() && !targetAddress.trim()) {
       return null;
