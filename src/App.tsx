@@ -4111,7 +4111,7 @@ _${businessInfo.name}_`;
             
             {currentPanel === "admin" ? (
               <>
-                {[
+                {([
                   { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
                   { id: "pos", label: "Sales POS", Icon: ShoppingCart },
                   { id: "contacts", label: "Customers", Icon: Users },
