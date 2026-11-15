@@ -221,6 +221,7 @@ export function ProductSalesBreakdown({
         <p className="mt-1 text-[10px] sm:text-xs text-slate-400">All categories and their sold product quantities · {periodLabel}</p>
       </div>
 
+      <div className="space-y-3">
         {report.categories.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-700 bg-[#0e1422]/60 px-4 py-10 text-center">
             <Package className="mx-auto h-7 w-7 text-slate-500" />
