@@ -46,6 +46,7 @@ import {
   Check,
   Copy,
   Menu,
+  MoreHorizontal,
   LayoutDashboard,
   Sun,
   Moon,
@@ -9588,74 +9589,71 @@ _${businessInfo.name}_`;
       )}
 
       {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/90 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe flex items-center justify-around h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
-        {/* POS Button */}
+      {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/95 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe grid grid-cols-4 h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
+        {/* More menu - first shortcut on the far left */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+            isMobileMenuOpen ? "text-white font-bold" : "text-[#94a3b8] hover:text-white"
+          }`}
+          aria-label="Open all menu options"
+        >
+          <MoreHorizontal className="w-5 h-5 mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">More</span>
+          {isMobileMenuOpen && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
+        </button>
+
+        {/* Sales shortcut */}
         <button
           onClick={() => {
             setActiveTab("pos");
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
-            activeTab === "pos" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+            activeTab === "pos" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
+          aria-label="Sales POS"
         >
           <ShoppingCart className="w-[18px] h-[18px] mb-1" />
-          <span className="text-[9px] font-semibold tracking-wide">POS</span>
-          {activeTab === "pos" && (
-            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
-          )}
+          <span className="text-[9px] font-semibold tracking-wide">Sales</span>
+          {activeTab === "pos" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
 
-        {/* Dashboard Button */}
-        <button
-          onClick={() => {
-            if (currentPanel === "admin") {
-              setActiveTab("dashboard");
-            } else {
-              triggerNotification("Please log in as Admin to see dashboard", "info");
-            }
-            setIsMobileMenuOpen(false);
-          }}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
-            activeTab === "dashboard" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
-          }`}
-        >
-          <LayoutDashboard className="w-[18px] h-[18px] mb-1" />
-          {/* Label word Dashboard removed for clean mobile design */}
-          {activeTab === "dashboard" && (
-            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
-          )}
-        </button>
-
-        {/* Ledger */}
+        {/* Ledger shortcut */}
         <button
           onClick={() => {
             setActiveTab("ledger");
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
-            activeTab === "ledger" ? "text-[#00E676] scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+            activeTab === "ledger" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
+          aria-label="Ledger Box"
         >
           <FileText className="w-[18px] h-[18px] mb-1" />
           <span className="text-[9px] font-semibold tracking-wide font-sans">Ledger</span>
-          {activeTab === "ledger" && (
-            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676] animate-pulse" />
-          )}
+          {activeTab === "ledger" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
 
-        {/* Menu/More Button */}
+        {/* Expenses shortcut */}
         <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 relative ${
-            isMobileMenuOpen ? "text-[#00E676] scale-105" : "text-[#94a3b8] hover:text-white"
+          onClick={() => {
+            if (currentPanel === "admin") {
+              setActiveTab("expenses");
+              setIsMobileMenuOpen(false);
+            } else {
+              triggerNotification("Please log in as Admin to access Expenses", "info");
+            }
+          }}
+          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+            activeTab === "expenses" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
+          aria-label="Expenses"
         >
-          <Menu className="w-[18px] h-[18px] mb-1" />
-          <span className="text-[9px] font-semibold tracking-wide font-sans">More</span>
-          {isMobileMenuOpen && (
-            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#00E676]" />
-          )}
+          <PiggyBank className="w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">Expenses</span>
+          {activeTab === "expenses" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
       </nav>
 
@@ -9671,7 +9669,7 @@ _${businessInfo.name}_`;
 
           {/* Side Drawer Body */}
           <div 
-            className="relative ml-auto w-72 max-w-[85vw] h-full bg-[#1E1E24] shadow-2xl flex flex-col justify-between border-l border-[#2A2A32] z-50 transition-all duration-300"
+            className="relative mr-auto w-72 max-w-[85vw] h-full bg-[#1E1E24] shadow-2xl flex flex-col justify-between border-r border-[#2A2A32] z-50 transition-all duration-300"
             id="mobile-drawer-panel"
           >
             
@@ -9706,140 +9704,53 @@ _${businessInfo.name}_`;
 
               <div className="space-y-4">
                 {currentPanel === "admin" ? (
-                  <>
-                    {/* Category 1: Core Operations */}
-                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
-                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Core Operations</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: "pos", label: "Sales", desc: "Checkout desk", Icon: ShoppingCart },
-                          { id: "dashboard", label: "Dashboard", desc: "Live report stats", Icon: LayoutDashboard },
-                        ].map((item) => {
-                          const Icon = item.Icon;
-                          const isActive = activeTab === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => {
-                                setActiveTab(item.id);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                isActive 
-                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
-                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
-                              }`}
-                            >
-                              <Icon className="w-4 h-4 mb-1 text-[#00E676]" />
-                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
-                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Category 2: Stocks & Catalog */}
-                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
-                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Stocks & Catalog</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: "products", label: "Products", desc: "Current stock", Icon: Package },
-                          { id: "purchases", label: "Purchases", desc: "Supplier lot", Icon: PlusCircle },
-                          { id: "inventory", label: "Inventory", desc: "Below threshold", Icon: Bookmark },
-                          { id: "negative-sales", label: "Stock Alert", desc: "Overdraft list", Icon: TrendingDown, color: "text-rose-450", activeBg: "bg-rose-500/10 text-rose-405 border-rose-500/30" },
-                        ].map((item) => {
-                          const Icon = item.Icon;
-                          const isActive = activeTab === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => {
-                                setActiveTab(item.id);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                isActive 
-                                  ? item.activeBg ? item.activeBg : 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
-                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
-                              }`}
-                            >
-                              <Icon className={`w-4 h-4 mb-1 ${item.color || 'text-slate-300'}`} />
-                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
-                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Category 3: Financial Ledger */}
-                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35] mb-2.5">
-                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Ledgers & Accounts</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: "ledger", label: "Ledger", desc: "All cashflows", Icon: FileText },
-                          { id: "expenses", label: "Expenses", desc: "Bills & costs", Icon: PiggyBank },
-                          { id: "contacts", label: "Customers", desc: "CRM profiles", Icon: Users },
-                          { id: "reports", label: "Reports", desc: "Daily statement", Icon: BarChart3 },
-                        ].map((item) => {
-                          const Icon = item.Icon;
-                          const isActive = activeTab === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => {
-                                setActiveTab(item.id);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                isActive 
-                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
-                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
-                              }`}
-                            >
-                              <Icon className="w-4 h-4 mb-1 text-[#00E676]" />
-                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
-                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Category 4: Management & System */}
-                    <div className="space-y-1 bg-[#212127] p-2.5 rounded-xl border border-[#2b2b35]">
-                      <span className="text-[9px] uppercase tracking-widest text-[#00E676] font-extrabold block pl-0.5 mb-2 font-mono">Management & System</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: "staff", label: "Staff", desc: "Salary sheets", Icon: UserCheck },
-                          { id: "settings", label: "Settings", desc: "Cloud backup", Icon: Settings },
-                        ].map((item) => {
-                          const Icon = item.Icon;
-                          const isActive = activeTab === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => {
-                                setActiveTab(item.id);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                isActive 
-                                  ? 'bg-[#00E676]/10 text-[#00E676] border-[#00E676]/30 font-bold' 
-                                  : 'bg-[#131117] text-slate-300 border-[#22222a] hover:bg-slate-800'
-                              }`}
-                            >
-                              <Icon className={`w-4 h-4 mb-1 text-[#00E676]`} />
-                              <span className="text-[11px] font-black leading-tight">{item.label}</span>
-                              <span className="text-[8px] text-slate-400 font-normal mt-0.5">{item.desc}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                ) : (
+                  <div className="space-y-1.5">
+                    {([
+                      { id: "dashboard", label: "Dashboard", desc: "Overview and business summary", Icon: LayoutDashboard },
+                      { id: "pos", label: "Sales POS", desc: "Create sales and checkout", Icon: ShoppingCart },
+                      { id: "contacts", label: "Customers", desc: "Customer and supplier directory", Icon: Users },
+                      { id: "ledger", label: "Ledger Box", desc: "Cashflow and account history", Icon: FileText },
+                      { id: "products", label: "Products", desc: "Product catalogue and stock", Icon: Package },
+                      { id: "expenses", label: "Expenses", desc: "Business costs and payments", Icon: PiggyBank },
+                      { id: "negative-sales", label: "Stock Alert", desc: "Low and negative stock alerts", Icon: TrendingDown },
+                      { id: "purchases", label: "Purchases", desc: "Purchase and supplier records", Icon: PlusCircle },
+                      { id: "inventory", label: "All Stock", desc: "Complete inventory overview", Icon: Bookmark },
+                      { id: "duelist", label: "All Due List", desc: "Due, creditor and product due records", Icon: History },
+                      { id: "reports", label: "Reports", desc: "Business reports and statements", Icon: BarChart3 },
+                      { id: "staff", label: "Staff Hub", desc: "Staff and salary management", Icon: UserCheck },
+                      { id: "settings", label: "Settings", desc: "Business and app settings", Icon: Settings },
+                    ] as const).map((item) => {
+                      const Icon = item.Icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          id={`mobile-tab-${item.id}-btn`}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border text-left transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-white/[0.10] text-white border-white/25 shadow-inner font-bold'
+                              : 'bg-[#131317] text-slate-300 border-[#2b2b35] hover:bg-white/[0.06] hover:border-white/15'
+                          }`}
+                        >
+                          <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-white/10 text-white' : 'bg-[#24242b] text-slate-300'
+                          }`}>
+                            <Icon className="w-4 h-4" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-bold leading-tight">{item.label}</span>
+                            <span className="block text-[9px] text-slate-400 mt-1">{item.desc}</span>
+                          </span>
+                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
                   <div className="grid grid-cols-1 gap-2.5">
                     {[
                       { id: "pos", label: "Sales", desc: "Build shopping baskets & print bills", Icon: ShoppingCart },
