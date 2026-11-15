@@ -370,6 +370,8 @@ export default function App() {
     onConfirm: () => void;
   } | null>(null);
 
+  const [ledgerDocumentPreview, setLedgerDocumentPreview] = useState<{ title: string; dataUrl: string } | null>(null);
+  const ledgerPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deleteTxId, setDeleteTxId] = useState<string | null>(null);
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
@@ -7099,22 +7101,38 @@ _${businessInfo.name}_`;
                         </div>
 
                         {/* All transaction actions stay on one horizontal row */}
-                        <div className="mt-3 flex flex-nowrap items-center justify-center gap-1.5 overflow-x-auto border-t border-slate-800/80 pt-3">
+                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 border-t border-slate-800/80 pt-3">
                           <button
                             id={`download-pdf-${t.invoiceNo}`}
-                            onClick={() => generateInvoicePDF(t, associatedContact, businessInfo)}
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-700 bg-black/25 px-2 text-[9px] font-semibold text-slate-200 transition-colors hover:border-white/50 hover:text-white"
-                            title="Reprint Customer Cash Memo"
+                            onClick={async () => {
+                              try {
+                                const dataUrl = await generateInvoicePDF(t, associatedContact, businessInfo, "preview");
+                                if (typeof dataUrl === "string") setLedgerDocumentPreview({ title: `Invoice ${t.invoiceNo}`, dataUrl });
+                              } catch (error) {
+                                console.error("Could not prepare invoice preview:", error);
+                                triggerNotification("Invoice preview could not be opened. Please try again.", "error");
+                              }
+                            }}
+                            className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-4 text-[11px] font-bold text-white shadow-sm transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98]"
+                            title="Preview customer invoice"
                           >
-                            <Download className="h-3 w-3" /> PDF
+                            <FileText className="h-4 w-4" /> Invoice
                           </button>
                           <button
                             id={`download-challan-${t.invoiceNo}`}
-                            onClick={() => generateDeliveryChallanPDF(t, associatedContact, businessInfo)}
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-700 bg-black/25 px-2 text-[9px] font-semibold text-slate-200 transition-colors hover:border-white/50 hover:text-white"
-                            title="Download Delivery Challan"
+                            onClick={async () => {
+                              try {
+                                const dataUrl = await generateDeliveryChallanPDF(t, associatedContact, businessInfo, "preview");
+                                if (typeof dataUrl === "string") setLedgerDocumentPreview({ title: `Delivery Challan ${t.invoiceNo}`, dataUrl });
+                              } catch (error) {
+                                console.error("Could not prepare delivery challan preview:", error);
+                                triggerNotification("Delivery challan preview could not be opened. Please try again.", "error");
+                              }
+                            }}
+                            className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-4 text-[11px] font-bold text-white shadow-sm transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98]"
+                            title="Preview delivery challan"
                           >
-                            <FileText className="h-3 w-3" /> Challan
+                            <Printer className="h-4 w-4" /> Challan
                           </button>
                           {t.dueBalance > 0 && (
                             <button
@@ -7122,17 +7140,17 @@ _${businessInfo.name}_`;
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-white/90 !bg-white px-3 text-[9px] font-bold !text-red-600 shadow-[0_2px_12px_rgba(255,255,255,0.14)] backdrop-blur-xl transition-all hover:!bg-white/90 hover:!text-red-700 active:scale-[0.98]"
+                              className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center rounded-xl border border-white/90 !bg-white px-4 text-[11px] font-bold !text-red-600 shadow-[0_2px_12px_rgba(255,255,255,0.14)] backdrop-blur-xl transition-all hover:!bg-white/90 hover:!text-red-700 active:scale-[0.98]"
                             >
                               Collect Due
                             </button>
                           )}
                           <button
                             onClick={() => setEditingTx(t)}
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-black/25 text-slate-300 transition-colors hover:border-white/50 hover:text-white"
+                            className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-4 text-[11px] font-bold text-white transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98]"
                             title="Edit Sale Details & Selling Price"
                           >
-                            <Edit3 className="h-3.5 w-3.5" />
+                            <Edit3 className="h-4 w-4" /> Edit
                           </button>
                           {currentPanel === "admin" && (
                             deleteTxId === t.id ? (
@@ -7157,10 +7175,10 @@ _${businessInfo.name}_`;
                             ) : (
                               <button
                                 onClick={() => setDeleteTxId(t.id)}
-                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-black/25 text-slate-300 transition-colors hover:border-rose-500 hover:text-rose-400"
+                                className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 text-[11px] font-bold text-rose-300 transition-all hover:border-rose-400 hover:bg-rose-500/20 active:scale-[0.98]"
                                 title="Delete transaction memo"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-4 w-4" /> Delete
                               </button>
                             )
                           )}
@@ -10116,6 +10134,59 @@ _${businessInfo.name}_`;
         </div>
       )}
 
+      {ledgerDocumentPreview && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-2 backdrop-blur-sm sm:p-5" role="dialog" aria-modal="true" aria-label={ledgerDocumentPreview.title}>
+          <div className="flex h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17171D] shadow-2xl">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#202027] px-4 py-3 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-bold text-white">{ledgerDocumentPreview.title}</h3>
+                  <p className="text-[10px] text-slate-400">Document preview</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const frame = ledgerPreviewFrameRef.current;
+                    if (frame?.contentWindow) {
+                      frame.contentWindow.focus();
+                      frame.contentWindow.print();
+                    }
+                  }}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white px-4 text-[11px] font-bold text-black transition-all hover:bg-slate-200 active:scale-[0.98]"
+                >
+                  <Printer className="h-4 w-4" /> Print
+                </button>
+                <a
+                  href={ledgerDocumentPreview.dataUrl}
+                  download={`${ledgerDocumentPreview.title.replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\\s+/g, "_")}.pdf`}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[0.08] px-4 text-[11px] font-bold text-white transition-all hover:bg-white/[0.15]"
+                >
+                  <Download className="h-4 w-4" /> Download
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLedgerDocumentPreview(null)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-slate-300 transition-all hover:bg-white/15 hover:text-white"
+                  aria-label="Close preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <iframe
+              ref={ledgerPreviewFrameRef}
+              src={ledgerDocumentPreview.dataUrl}
+              title={ledgerDocumentPreview.title}
+              className="min-h-0 w-full flex-1 bg-white"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
