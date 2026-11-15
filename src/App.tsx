@@ -4207,7 +4207,7 @@ _${businessInfo.name}_`;
                   { id: "ledger", label: "Ledger Box", Icon: FileText },
                   { id: "products", label: "Products", Icon: Package },
                   { id: "expenses", label: "Expenses", Icon: ReceiptText },
-                  { id: "negative-sales", label: "Stock Alert", Icon: TrendingDown, alert: true },
+
                   { id: "purchases", label: "Purchases", Icon: PlusCircle },
                   { id: "inventory", label: "All Stock", Icon: Bookmark },
                   { id: "duelist", label: "All Due List", Icon: History },
@@ -9773,7 +9773,7 @@ _${businessInfo.name}_`;
                       { id: "ledger", label: "Ledger Box", desc: "Cashflow and account history", Icon: FileText },
                       { id: "products", label: "Products", desc: "Product catalogue and stock", Icon: Package },
                       { id: "expenses", label: "Expenses", desc: "Business costs and payments", Icon: ReceiptText },
-                      { id: "negative-sales", label: "Stock Alert", desc: "Low and negative stock alerts", Icon: TrendingDown },
+
                       { id: "purchases", label: "Purchases", desc: "Purchase and supplier records", Icon: PlusCircle },
                       { id: "inventory", label: "All Stock", desc: "Complete inventory overview", Icon: Bookmark },
                       { id: "duelist", label: "All Due List", desc: "Due, creditor and product due records", Icon: History },
