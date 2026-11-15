@@ -1972,7 +1972,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"current-stock" | "out-of-stock" | "stock-value" | "supplier-bills" | "due-list">("current-stock");
+  const [stockSubTab, setStockSubTab] = useState<"stock-value" | "out-of-stock" | "supplier-bills" | "due-list">("stock-value");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4046,10 +4046,10 @@ _${businessInfo.name}_`;
   // All Stock views are derived from the live Product catalogue; no separate stock store.
   const currentStockProducts = useMemo(() => filteredProducts.filter(p => Number(p.stock) > 0), [filteredProducts]);
   const outOfStockProducts = useMemo(() => filteredProducts.filter(p => Number(p.stock) <= 0), [filteredProducts]);
-  const stockValueTotal = useMemo(
-    () => currentStockProducts.reduce((total, product) => total + (Number(product.stock) * Number(product.buyPrice || 0)), 0),
-    [currentStockProducts]
-  );
+  const currentStockUnits = useMemo(() => currentStockProducts.reduce((total, product) => total + Number(product.stock || 0), 0), [currentStockProducts]);
+  const stockValueTotal = useMemo(() => currentStockProducts.reduce((total, product) => total + Number(product.stock) * Number(product.buyPrice || 0), 0), [currentStockProducts]);
+  const outOfStockValueTotal = useMemo(() => outOfStockProducts.reduce((total, product) => total + Math.max(0, -Number(product.stock || 0)) * Number(product.buyPrice || 0), 0), [outOfStockProducts]);
+  const outOfStockMissingUnits = useMemo(() => outOfStockProducts.reduce((total, product) => total + Math.max(0, -Number(product.stock || 0)), 0), [outOfStockProducts]);
 
   const filteredTransactions = useMemo(() => transactions.filter(t => {
     // 1. Date filter check
@@ -5614,236 +5614,43 @@ _${businessInfo.name}_`;
                 );
               })()}
 
-              {/* STOCK VIEWS + EXISTING SUPPLIER LEDGERS */}
+              {/* STOCK VALUE + OUT OF STOCK, followed by existing supplier ledgers */}
               <div className="flex flex-wrap gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
-                <button
-                  onClick={() => setStockSubTab("current-stock")}
-                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'current-stock' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Current Stock ({currentStockProducts.length})</span>
-                </button>
-                <button
-                  onClick={() => setStockSubTab("out-of-stock")}
-                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'out-of-stock' ? 'bg-rose-500/10 text-rose-400 border-t-2 border-l border-r border-rose-500/30 border-t-rose-500' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
-                >
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Out of Stock ({outOfStockProducts.length})</span>
-                </button>
-                <button
-                  onClick={() => setStockSubTab("stock-value")}
-                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'stock-value' ? 'bg-cyan-500/10 text-cyan-300 border-t-2 border-l border-r border-cyan-500/30 border-t-cyan-400' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
-                >
-                  <Coins className="w-3.5 h-3.5" />
-                  <span>Stock Value</span>
-                </button>
-                <button 
-                  onClick={() => setStockSubTab("supplier-bills")}
-                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'supplier-bills' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
-                >
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>Supplier Cash & Credit Ledger</span>
-                </button>
-                <button 
-                  onClick={() => setStockSubTab("due-list")}
-                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'due-list' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-[#00E676]/20 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
-                >
-                  <FileText className="w-3.5 h-3.5 text-rose-450 animate-pulse" />
-                  <span>Supplier Items Due List</span>
-                </button>
+                <button onClick={() => setStockSubTab("stock-value")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'stock-value' ? 'bg-cyan-500/10 text-cyan-300 border-t-2 border-l border-r border-cyan-500/30 border-t-cyan-400' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><Coins className="w-3.5 h-3.5" /><span>Stock Value</span></button>
+                <button onClick={() => setStockSubTab("out-of-stock")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'out-of-stock' ? 'bg-rose-500/10 text-rose-400 border-t-2 border-l border-r border-rose-500/30 border-t-rose-500' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><AlertCircle className="w-3.5 h-3.5" /><span>Out of Stock</span></button>
+                <button onClick={() => setStockSubTab("supplier-bills")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'supplier-bills' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><ShoppingBag className="w-3.5 h-3.5" /><span>Supplier Cash & Credit Ledger</span></button>
+                <button onClick={() => setStockSubTab("due-list")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'due-list' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-[#00E676]/20 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><FileText className="w-3.5 h-3.5 text-rose-450 animate-pulse" /><span>Supplier Items Due List</span></button>
               </div>
-
-              {stockSubTab === "current-stock" && (
-                <div className="space-y-6 animate-slideDown" id="stock-catalog-rendered-view">
-                  {/* Top inventory control search bar */}
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-[#0a101f]/80 border border-slate-800 rounded-2xl" id="inventory-toolbar">
-                    <div className="relative w-full md:w-80" id="inventory-search-wrap">
-                      <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                      <input
-                        type="text"
-                        id="inventory-search-input"
-                        placeholder="Filter stock by product name or SKU..."
-                        value={inventorySearch}
-                        onChange={(e) => setInventorySearch(e.target.value)}
-                        className="w-full px-3 py-2 pl-9 bg-[#050912] border border-slate-800 rounded-xl text-slate-200 text-xs outline-none focus:border-emerald-500 font-mono"
-                      />
-                    </div>
-                    <div className="text-xs text-slate-400 font-mono" id="inventory-stats-sub">
-                      Current Stock Products: <span className="text-white font-bold">{currentStockProducts.length}</span> items
-                    </div>
-                  </div>
-
-                  {/* Catalog Tables layout (Now Full Width - w-full, no registration forms) */}
-                  <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-md font-sans" id="inventory-list-panel">
-                    <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex items-center justify-between" id="catalog-list-header">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                        <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                        Current Stock Inventory & Real-Time Rates
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-mono">In-Stock Products: {currentStockProducts.length}</span>
-                    </div>
-
-                    <div className="overflow-x-auto" id="inventory-table-scroll">
-                      <table className="w-full text-[#A0A0A5] text-xs">
-                        <thead>
-                          <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
-                            <th className="py-2.5 px-4 text-left">SKU</th>
-                            <th className="py-2.5 px-4 text-left">Product Name</th>
-                            <th className="py-2.5 px-4 text-left">Category</th>
-                            <th className="py-2.5 px-4 text-right">Cost Rate (Buy)</th>
-                            <th className="py-2.5 px-4 text-right">Selling Price (Sell)</th>
-                            <th className="py-2.5 px-4 text-center">Stock Status</th>
-                            <th className="py-2.5 px-4 text-center">In-Stock Quantity</th>
-                            <th className="py-2.5 px-4 text-right border-l border-slate-850">Stock Valuation</th>
-                            <th className="py-2.5 px-4 text-center">Restock (+10)</th>
-                            <th className="py-2.5 px-4 text-center">Delete</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-                          {currentStockProducts.length === 0 ? (
-                            <tr>
-                              <td colSpan={10} className="py-12 text-center text-slate-500 font-sans">
-                                No catalog stock items registered. Log new purchases or register items in the "Products" control screen.
-                              </td>
-                            </tr>
-                          ) : (
-                            currentStockProducts.map((p) => {
-                              const stockWorth = p.stock > 0 ? (p.stock * p.buyPrice) : 0;
-                              return (
-                                <tr key={p.id} className="hover:bg-slate-900/10 text-slate-300">
-                                  <td className="py-3 px-4 font-mono font-bold text-slate-500 text-[10px]">{p.sku}</td>
-                                  <td className="py-3 px-4 font-semibold text-white font-sans truncate max-w-[150px]" title={p.name}>{p.name}</td>
-                                  <td className="py-3 px-4 font-sans"><span className="text-[9px] font-medium bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full text-slate-400">{p.category}</span></td>
-                                  <td className="py-3 px-4 text-right">{businessInfo.currencySymbol} {p.buyPrice}</td>
-                                  <td className="py-3 px-4 text-right text-emerald-400 font-medium">{businessInfo.currencySymbol} {p.sellPrice}</td>
-                                  <td className="py-3 px-4 text-center">
-                                    {p.stock <= 0 ? (
-                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">Out of Stock</span>
-                                    ) : p.stock <= 5 ? (
-                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">Low Stock</span>
-                                    ) : (
-                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Healthy</span>
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.stock <= 0 ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : p.stock <= 5 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"}`}>
-                                      {p.stock} {p.unit}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-4 text-right text-white font-bold bg-slate-950/10 border-l border-slate-850">
-                                    {businessInfo.currencySymbol} {stockWorth.toLocaleString()}
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <button
-                                      id={`quick-restock-${p.id}`}
-                                      onClick={() => incrementProductStock(p.id)}
-                                      className="px-2 py-1 text-[10px] font-bold text-slate-300 hover:text-emerald-450 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded hover:border-emerald-500 transition-colors cursor-pointer"
-                                    >
-                                      +10
-                                    </button>
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <button
-                                      id={`delete-product-${p.id}`}
-                                      onClick={() => handleDeleteProduct(p.id, p.name)}
-                                      className="p-1 hover:bg-slate-900 rounded text-rose-400 hover:text-white transition-colors"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                  </div>
-                </div>
-              )}
-
-              
-              {stockSubTab === "out-of-stock" && (
-                <div className="space-y-4 animate-slideDown" id="out-of-stock-view">
-                  <div className="rounded-2xl border border-rose-500/20 bg-[#0a101f]/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-white">Out of Stock Products</h3>
-                      <p className="text-[10px] text-slate-400 mt-1">Products from the Product catalogue with zero or negative available stock.</p>
-                    </div>
-                    <span className="text-xs font-bold text-rose-400">{outOfStockProducts.length} products</span>
-                  </div>
-                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80">
-                    <table className="w-full text-xs text-slate-300">
-                      <thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3 text-left">SKU</th>
-                          <th className="px-4 py-3 text-left">Product</th>
-                          <th className="px-4 py-3 text-left">Category</th>
-                          <th className="px-4 py-3 text-right">Current Stock</th>
-                          <th className="px-4 py-3 text-right">Cost Price</th>
-                          <th className="px-4 py-3 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/70">
-                        {outOfStockProducts.length === 0 ? (
-                          <tr><td colSpan={6} className="py-10 text-center text-slate-500">No out-of-stock products found.</td></tr>
-                        ) : outOfStockProducts.map(product => (
-                          <tr key={product.id} className="hover:bg-white/[0.02]">
-                            <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
-                            <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
-                            <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
-                            <td className="px-4 py-3 text-right font-mono text-rose-400">{product.stock} {product.unit}</td>
-                            <td className="px-4 py-3 text-right font-mono">{businessInfo.currencySymbol} {Number(product.buyPrice || 0).toLocaleString()}</td>
-                            <td className="px-4 py-3 text-center">
-                              <button type="button" onClick={() => incrementProductStock(product.id)} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold text-emerald-400 hover:bg-emerald-500/20">Restock +10</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
 
               {stockSubTab === "stock-value" && (
                 <div className="space-y-4 animate-slideDown" id="stock-value-view">
-                  <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-[#0c142c] to-[#0a101f] p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Total Current Stock Value</p>
-                    <div className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</div>
-                    <p className="mt-1 text-[10px] text-slate-400">Calculated from available stock quantity × current product buy price. Out-of-stock and negative-stock quantities are excluded.</p>
-                    <p className="mt-2 text-[10px] text-slate-500">{currentStockProducts.length} products with available stock</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-emerald-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Total Available Stock</p><div className="mt-2 text-2xl font-black font-mono text-white">{currentStockUnits.toLocaleString()} <span className="text-sm font-semibold text-slate-400">pcs / units</span></div><p className="mt-1 text-[10px] text-slate-400">{currentStockProducts.length} products currently have stock</p></div>
+                    <div className="rounded-2xl border border-cyan-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Total Current Stock Value</p><div className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</div><p className="mt-1 text-[10px] text-slate-400">Available quantity × Product page Buy Price</p></div>
                   </div>
-                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80">
-                    <table className="w-full text-xs text-slate-300">
-                      <thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3 text-left">SKU</th>
-                          <th className="px-4 py-3 text-left">Product</th>
-                          <th className="px-4 py-3 text-right">Available Stock</th>
-                          <th className="px-4 py-3 text-right">Unit Cost</th>
-                          <th className="px-4 py-3 text-right">Stock Value</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/70">
-                        {currentStockProducts.length === 0 ? (
-                          <tr><td colSpan={5} className="py-10 text-center text-slate-500">No available stock to value.</td></tr>
-                        ) : currentStockProducts.map(product => (
-                          <tr key={product.id} className="hover:bg-white/[0.02]">
-                            <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
-                            <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
-                            <td className="px-4 py-3 text-right font-mono">{product.stock} {product.unit}</td>
-                            <td className="px-4 py-3 text-right font-mono">{businessInfo.currencySymbol} {Number(product.buyPrice || 0).toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right font-mono font-bold text-cyan-300">{businessInfo.currencySymbol} {(Number(product.stock) * Number(product.buyPrice || 0)).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-[#0a101f]/70 px-3 py-2"><Search className="w-4 h-4 text-slate-500" /><input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" /></div>
+                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80"><div className="border-b border-slate-800 px-4 py-3 text-xs font-bold uppercase tracking-wider text-white">Products Currently in Stock</div>
+                    <table className="w-full text-xs text-slate-300"><thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Available Stock</th></tr></thead>
+                    <tbody className="divide-y divide-slate-800/70">{currentStockProducts.length===0?<tr><td colSpan={4} className="py-10 text-center text-slate-500">No products currently in stock.</td></tr>:currentStockProducts.map(product=><tr key={product.id} className="hover:bg-white/[0.02]"><td className="px-4 py-3 font-mono text-slate-500">{product.sku||"—"}</td><td className="px-4 py-3 font-semibold text-white">{product.name}</td><td className="px-4 py-3 text-slate-400">{product.category||"—"}</td><td className="px-4 py-3 text-right font-mono font-bold text-emerald-300">{product.stock} {product.unit}</td></tr>)}</tbody></table>
                   </div>
                 </div>
               )}
 
-{stockSubTab === "supplier-bills" && (
+              {stockSubTab === "out-of-stock" && (
+                <div className="space-y-4 animate-slideDown" id="out-of-stock-view">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-rose-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">Out of Stock Products</p><div className="mt-2 text-2xl font-black font-mono text-white">{outOfStockProducts.length}</div><p className="mt-1 text-[10px] text-slate-400">Products with zero or negative stock</p></div>
+                    <div className="rounded-2xl border border-rose-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">Shortage Stock Value</p><div className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {outOfStockValueTotal.toLocaleString()}</div><p className="mt-1 text-[10px] text-slate-400">{outOfStockMissingUnits.toLocaleString()} units below zero × Buy Price</p></div>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-[#0a101f]/70 px-3 py-2"><Search className="w-4 h-4 text-slate-500" /><input type="text" value={inventorySearch} onChange={e=>setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" /></div>
+                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80"><div className="border-b border-slate-800 px-4 py-3 text-xs font-bold uppercase tracking-wider text-white">Out of Stock Products</div>
+                    <table className="w-full text-xs text-slate-300"><thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Current Stock</th><th className="px-4 py-3 text-right">Shortage Value</th></tr></thead>
+                    <tbody className="divide-y divide-slate-800/70">{outOfStockProducts.length===0?<tr><td colSpan={5} className="py-10 text-center text-slate-500">No out-of-stock products found.</td></tr>:outOfStockProducts.map(product=><tr key={product.id} className="hover:bg-white/[0.02]"><td className="px-4 py-3 font-mono text-slate-500">{product.sku||"—"}</td><td className="px-4 py-3 font-semibold text-white">{product.name}</td><td className="px-4 py-3 text-slate-400">{product.category||"—"}</td><td className="px-4 py-3 text-right font-mono text-rose-400">{product.stock} {product.unit}</td><td className="px-4 py-3 text-right font-mono font-semibold text-rose-300">{businessInfo.currencySymbol} {(Math.max(0,-Number(product.stock||0))*Number(product.buyPrice||0)).toLocaleString()}</td></tr>)}</tbody></table>
+                  </div>
+                </div>
+              )}
+
+              {stockSubTab === "supplier-bills" && (
                 /* SUPPLIER PURCHASES LEDGER WITH CASH CODE & DUE BILL TRACKING */
                 <div className="bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg animate-slideDown" id="supplier-purchases-subtab-rendered">
                   <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2" id="supplier-bills-ledger-top flex">
