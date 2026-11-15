@@ -6754,7 +6754,17 @@ _${businessInfo.name}_`;
                         </div>
 
                         {/* Compact centered customer details */}
-                        <div className="mx-auto mt-2 max-w-3xl text-center">
+                        <div className="mx-auto mt-2 grid w-full max-w-4xl grid-cols-1 items-center gap-2 text-center lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-5">
+                          <div className="hidden items-center justify-center gap-2.5 lg:flex">
+                            <span className="h-px w-10 bg-gradient-to-r from-transparent to-slate-500/50" />
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.045] text-[11px] text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">✦</span>
+                            <span className="flex flex-col items-start gap-0.5 text-left">
+                              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-400">Customer</span>
+                              <span className="text-[7px] font-mono tracking-[0.16em] text-slate-600">PROFILE</span>
+                            </span>
+                          </div>
+                          <div className="min-w-0 text-center">
+                          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
                           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
                             <strong className="text-[12px] font-semibold text-white">{customerLabel}</strong>
                             {customerPhone && (
@@ -6766,6 +6776,15 @@ _${businessInfo.name}_`;
                               {associatedContact.address}
                             </p>
                           )}
+                          </div>
+                          <div className="hidden items-center justify-center gap-2.5 lg:flex">
+                            <span className="flex flex-col items-end gap-0.5 text-right">
+                              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-400">Barakah</span>
+                              <span className="text-[7px] font-mono tracking-[0.16em] text-slate-600">E-MART</span>
+                            </span>
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.045] text-[10px] font-black tracking-tighter text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">B</span>
+                            <span className="h-px w-10 bg-gradient-to-l from-transparent to-slate-500/50" />
+                          </div>
                         </div>
 
                         <div className="my-3 border-t border-slate-700/80" />
@@ -6807,7 +6826,7 @@ _${businessInfo.name}_`;
                                           e.stopPropagation();
                                           setShowCostEditId(showEdit ? null : editorKey);
                                         }}
-                                        className="min-w-[150px] rounded-full border border-white/80 bg-white/95 px-5 py-1 text-[9px] font-semibold tracking-wide text-black shadow-[0_2px_12px_rgba(255,255,255,0.10)] backdrop-blur-xl transition-all hover:bg-white hover:shadow-[0_3px_16px_rgba(255,255,255,0.18)] active:scale-[0.98]"
+                                        className="min-w-[150px] rounded-full border border-slate-300/40 bg-gradient-to-b from-slate-300/20 via-slate-400/10 to-slate-500/15 px-5 py-1 text-[9px] font-semibold tracking-wide text-white shadow-[0_3px_14px_rgba(148,163,184,0.12),inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-2xl transition-all hover:border-slate-200/60 hover:from-slate-300/25 hover:to-slate-500/20 active:scale-[0.98]"
                                         title="Edit the cost of each purchased unit independently"
                                       >
                                         {showEdit ? "Close Unit Cost" : "Edit Unit Cost"}
@@ -6878,7 +6897,7 @@ _${businessInfo.name}_`;
                         </div>
 
                         {/* All transaction actions stay on one horizontal row */}
-                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 border-t border-slate-800/80 pt-3">
+                        <div id={`ledger-actions-${t.invoiceNo}`} className="mt-3 grid grid-cols-2 items-stretch justify-center gap-2 border-t border-slate-800/80 pt-3 sm:flex sm:flex-wrap sm:items-center">
                           <button
                             id={`download-pdf-${t.invoiceNo}`}
                             onClick={async () => {
@@ -6890,7 +6909,7 @@ _${businessInfo.name}_`;
                                 triggerNotification("Invoice preview could not be opened. Please try again.", "error");
                               }
                             }}
-                            className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-4 text-[11px] font-bold text-white shadow-sm transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98]"
+                            className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-3 text-[11px] font-bold text-white shadow-sm transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
                             title="Preview customer invoice"
                           >
                             <FileText className="h-4 w-4" /> Invoice
@@ -6906,7 +6925,7 @@ _${businessInfo.name}_`;
                                 triggerNotification("Delivery challan preview could not be opened. Please try again.", "error");
                               }
                             }}
-                            className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-4 text-[11px] font-bold text-white shadow-sm transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98]"
+                            className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-3 text-[11px] font-bold text-white shadow-sm transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
                             title="Preview delivery challan"
                           >
                             <Printer className="h-4 w-4" /> Challan
@@ -6917,14 +6936,14 @@ _${businessInfo.name}_`;
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center rounded-xl border border-white/90 !bg-white px-4 text-[11px] font-bold !text-red-600 shadow-[0_2px_12px_rgba(255,255,255,0.14)] backdrop-blur-xl transition-all hover:!bg-white/90 hover:!text-red-700 active:scale-[0.98]"
+                              className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center rounded-xl border border-white/90 !bg-white px-3 text-[11px] font-bold !text-red-600 shadow-[0_2px_12px_rgba(255,255,255,0.14)] backdrop-blur-xl transition-all hover:!bg-white/90 hover:!text-red-700 active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
                             >
                               Collect Due
                             </button>
                           )}
                           <button
                             onClick={() => setEditingTx(t)}
-                            className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/[0.08] px-4 text-[11px] font-bold text-white transition-all hover:border-white/60 hover:bg-white/[0.14] active:scale-[0.98]"
+                            className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center gap-2 rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 text-[11px] font-bold text-emerald-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-400/15 active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
                             title="Edit Sale Details & Selling Price"
                           >
                             <Edit3 className="h-4 w-4" /> Edit
@@ -6952,7 +6971,7 @@ _${businessInfo.name}_`;
                             ) : (
                               <button
                                 onClick={() => setDeleteTxId(t.id)}
-                                className="inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 text-[11px] font-bold text-rose-300 transition-all hover:border-rose-400 hover:bg-rose-500/20 active:scale-[0.98]"
+                                className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 text-[11px] font-bold text-rose-300 transition-all hover:border-rose-400 hover:bg-rose-500/20 active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
                                 title="Delete transaction memo"
                               >
                                 <Trash2 className="h-4 w-4" /> Delete
