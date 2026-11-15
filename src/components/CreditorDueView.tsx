@@ -15,13 +15,14 @@ type Props = {
   triggerNotification: (message: string, type: "success" | "error" | "info") => void;
   toUUID: (value: string, email?: string) => string;
   activeUser: any;
+  activeSection: "creditor-entry" | "creditors" | "creditor-report";
 };
 
 const inputClass = "w-full bg-[#050912] border border-slate-700 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-white";
 const panelClass = "bg-[#0b0f19] border border-slate-800 rounded-2xl p-5";
 
-export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotification, toUUID, activeUser }: Props) {
-  const [section, setSection] = useState<"entry" | "creditors" | "report">("entry");
+export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotification, toUUID, activeUser, activeSection }: Props) {
+  const section = activeSection === "creditor-entry" ? "entry" : activeSection === "creditors" ? "creditors" : "report";
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [creditorId, setCreditorId] = useState("");
@@ -54,25 +55,11 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
   const grandDue = summaries.reduce((sum, c) => sum + c.totalDue, 0);
   const grandPaid = summaries.reduce((sum, c) => sum + c.totalPaid, 0);
 
-  const tabs = [
-    { id: "entry" as const, title: "Add Due & Paid", detail: "Record a due or payment", Icon: PlusCircle },
-    { id: "creditors" as const, title: "Creditor Management", detail: "Add or remove creditors", Icon: Users },
-    { id: "report" as const, title: "Due Report", detail: "Balances and transactions", Icon: BarChart3 }
-  ];
+
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {tabs.map(tab => {
-          const Icon = tab.Icon;
-          const active = section === tab.id;
-          return <button key={tab.id} onClick={() => setSection(tab.id)}
-            className={`text-left p-4 rounded-2xl border transition-all ${active ? "bg-white text-black border-white shadow-lg" : "bg-[#0b0f19] text-slate-300 border-slate-800 hover:border-slate-600"}`}>
-            <div className="flex items-center justify-between gap-2"><span className="text-sm font-bold">{tab.title}</span><Icon className="w-4 h-4 shrink-0" /></div>
-            <p className={`text-[10px] mt-1 ${active ? "text-slate-600" : "text-slate-500"}`}>{tab.detail}</p>
-          </button>;
-        })}
-      </div>
+
 
       {section === "entry" && <div className={`${panelClass} space-y-5`}>
         <div><h2 className="text-base font-bold text-white">Add Due & Paid</h2><p className="text-xs text-slate-400 mt-1">Record a new amount owed, a payment made, or both together.</p></div>
