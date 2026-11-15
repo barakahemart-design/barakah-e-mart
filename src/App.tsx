@@ -9612,7 +9612,7 @@ _${businessInfo.name}_`;
             setIsMobileMenuOpen(false);
           }}
           className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
-            activeTab === "pos" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+            activeTab === "pos" ? "text-white font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Sales POS"
         >
@@ -9628,7 +9628,7 @@ _${businessInfo.name}_`;
             setIsMobileMenuOpen(false);
           }}
           className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
-            activeTab === "ledger" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+            activeTab === "ledger" ? "text-white font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Ledger Box"
         >
@@ -9648,7 +9648,7 @@ _${businessInfo.name}_`;
             }
           }}
           className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
-            activeTab === "expenses" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
+            activeTab === "expenses" ? "text-white font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Expenses"
         >
