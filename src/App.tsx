@@ -336,10 +336,11 @@ export default function App() {
       return hasSavedUser && (savedPanel === "admin" || savedPanel === "sales") ? savedPanel : "none";
     } catch (_) { return "none"; }
   });
-  // Show Welcome only for a new session; an existing signed-in session
-  // returns directly to its previously selected workspace after any reload.
+  // Show Welcome once per app/browser session. sessionStorage survives a
+  // normal refresh, but is cleared when the app tab/window is fully closed.
+  // Keep the persistent login in localStorage untouched.
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => {
-    try { return !localStorage.getItem("barakah_local_active_user"); }
+    try { return !sessionStorage.getItem("barakah_app_session_started"); }
     catch (_) { return true; }
   });
 
@@ -4318,7 +4319,10 @@ _${businessInfo.name}_`;
           </p>
           <button
             type="button"
-            onClick={() => setShowWelcomeScreen(false)}
+            onClick={() => {
+              try { sessionStorage.setItem("barakah_app_session_started", "true"); } catch (_) {}
+              setShowWelcomeScreen(false);
+            }}
             className="mt-6 inline-flex min-h-11 min-w-44 shrink-0 items-center justify-center gap-3 rounded-xl border border-white bg-[#f8fafc] px-7 py-3 text-xs font-black tracking-[0.22em] !text-[#050505] shadow-[0_10px_35px_rgba(255,255,255,0.14)] transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_40px_rgba(255,255,255,0.22)] active:translate-y-0 sm:mt-10 sm:min-h-14 sm:px-8 sm:py-4"
           >
             <span className="!text-[#050505]">{(() => {
