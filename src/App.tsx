@@ -1972,7 +1972,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"catalog" | "supplier-bills" | "due-list">("catalog");
+  const [stockSubTab, setStockSubTab] = useState<"current-stock" | "out-of-stock" | "stock-value" | "supplier-bills" | "due-list">("current-stock");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4035,15 +4035,21 @@ _${businessInfo.name}_`;
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      if (!purchasedProductIds.has(p.id)) return false;
-
       const query = inventorySearch.toLowerCase().trim();
       if (!query) return true;
       const searchTerms = query.split(/\s+/);
       const targetString = (p.name + " " + p.sku + " " + p.category).toLowerCase();
       return searchTerms.every(term => targetString.includes(term));
     });
-  }, [products, purchases, inventorySearch]);
+  }, [products, inventorySearch]);
+
+  // All Stock views are derived from the live Product catalogue; no separate stock store.
+  const currentStockProducts = useMemo(() => filteredProducts.filter(p => Number(p.stock) > 0), [filteredProducts]);
+  const outOfStockProducts = useMemo(() => filteredProducts.filter(p => Number(p.stock) <= 0), [filteredProducts]);
+  const stockValueTotal = useMemo(
+    () => currentStockProducts.reduce((total, product) => total + (Number(product.stock) * Number(product.buyPrice || 0)), 0),
+    [currentStockProducts]
+  );
 
   const filteredTransactions = useMemo(() => transactions.filter(t => {
     // 1. Date filter check
@@ -5507,7 +5513,7 @@ _${businessInfo.name}_`;
                   </div>
                   <div>
                     <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                      {businessInfo.currencySymbol} {products.filter(p => purchasedProductIds.has(p.id)).reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
+                      {businessInfo.currencySymbol} {products.reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
                       Total cost basis of remaining physical inventory stocks. Selling items dynamically reduces both physical count and asset value automatically on the database server.
@@ -5524,11 +5530,11 @@ _${businessInfo.name}_`;
                   </div>
                   <div>
                     <h3 className="text-2xl font-black font-mono text-white tracking-tight flex items-baseline gap-2">
-                      <span>{products.filter(p => purchasedProductIds.has(p.id) && p.stock > 0).length}</span>
+                      <span>{products.filter(p => p.stock > 0).length}</span>
                       <span className="text-xs text-slate-500 font-medium font-sans">In-Stock Products</span>
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1.5 font-sans leading-relaxed">
-                      Total quantity: <span className="font-bold text-white font-mono">{products.filter(p => purchasedProductIds.has(p.id)).reduce((acc, p) => acc + (p.stock > 0 ? p.stock : 0), 0)}</span> units currently across stock items.
+                      Total quantity: <span className="font-bold text-white font-mono">{products.reduce((acc, p) => acc + (p.stock > 0 ? p.stock : 0), 0)}</span> units currently across stock items.
                     </p>
                   </div>
                 </div>
@@ -5560,7 +5566,7 @@ _${businessInfo.name}_`;
                     <TrendingUp className="w-4 h-4 text-cyan-400" />
                   </div>
                   <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                    {businessInfo.currencySymbol} {products.filter(p => purchasedProductIds.has(p.id) && p.stock > 0).reduce((acc, p) => acc + (p.stock * p.sellPrice), 0).toLocaleString()}
+                    {businessInfo.currencySymbol} {products.filter(p => p.stock > 0).reduce((acc, p) => acc + (p.stock * p.sellPrice), 0).toLocaleString()}
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-1 font-sans">Estimated sales value if the currently available stock is sold at today&apos;s selling price.</p>
                 </div>
@@ -5571,7 +5577,7 @@ _${businessInfo.name}_`;
                     <TrendingUp className="w-4 h-4 text-emerald-400" />
                   </div>
                   <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                    {businessInfo.currencySymbol} {products.filter(p => purchasedProductIds.has(p.id) && p.stock > 0).reduce((acc, p) => acc + (p.stock * Math.max(0, p.sellPrice - p.buyPrice)), 0).toLocaleString()}
+                    {businessInfo.currencySymbol} {products.filter(p => p.stock > 0).reduce((acc, p) => acc + (p.stock * Math.max(0, p.sellPrice - p.buyPrice)), 0).toLocaleString()}
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-1 font-sans">Potential gross profit from the remaining stock before expenses and other adjustments.</p>
                 </div>
@@ -5579,7 +5585,7 @@ _${businessInfo.name}_`;
 
               {/* PHASE 1: LOW / OUT-OF-STOCK ALERT */}
               {(() => {
-                const inventoryProducts = products.filter(p => purchasedProductIds.has(p.id));
+                const inventoryProducts = products;
                 const outOfStock = inventoryProducts.filter(p => p.stock <= 0);
                 const lowStock = inventoryProducts.filter(p => p.stock > 0 && p.stock <= 5);
                 if (outOfStock.length === 0 && lowStock.length === 0) return null;
@@ -5608,14 +5614,28 @@ _${businessInfo.name}_`;
                 );
               })()}
 
-              {/* TRI-MODULE TAB SELECTOR BAR */}
-              <div className="flex gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
-                <button 
-                  onClick={() => setStockSubTab("catalog")}
-                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'catalog' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
+              {/* STOCK VIEWS + EXISTING SUPPLIER LEDGERS */}
+              <div className="flex flex-wrap gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
+                <button
+                  onClick={() => setStockSubTab("current-stock")}
+                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'current-stock' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>Stock Inventory Catalog & Valuations</span>
+                  <span>Current Stock ({currentStockProducts.length})</span>
+                </button>
+                <button
+                  onClick={() => setStockSubTab("out-of-stock")}
+                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'out-of-stock' ? 'bg-rose-500/10 text-rose-400 border-t-2 border-l border-r border-rose-500/30 border-t-rose-500' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Out of Stock ({outOfStockProducts.length})</span>
+                </button>
+                <button
+                  onClick={() => setStockSubTab("stock-value")}
+                  className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'stock-value' ? 'bg-cyan-500/10 text-cyan-300 border-t-2 border-l border-r border-cyan-500/30 border-t-cyan-400' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}
+                >
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>Stock Value</span>
                 </button>
                 <button 
                   onClick={() => setStockSubTab("supplier-bills")}
@@ -5633,7 +5653,7 @@ _${businessInfo.name}_`;
                 </button>
               </div>
 
-              {stockSubTab === "catalog" && (
+              {stockSubTab === "current-stock" && (
                 <div className="space-y-6 animate-slideDown" id="stock-catalog-rendered-view">
                   {/* Top inventory control search bar */}
                   <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-[#0a101f]/80 border border-slate-800 rounded-2xl" id="inventory-toolbar">
@@ -5649,7 +5669,7 @@ _${businessInfo.name}_`;
                       />
                     </div>
                     <div className="text-xs text-slate-400 font-mono" id="inventory-stats-sub">
-                      Total Catalog Stock Items: <span className="text-white font-bold">{filteredProducts.length}</span> items
+                      Current Stock Products: <span className="text-white font-bold">{currentStockProducts.length}</span> items
                     </div>
                   </div>
 
@@ -5658,9 +5678,9 @@ _${businessInfo.name}_`;
                     <div className="p-4 bg-slate-950/50 border-b border-slate-800/80 flex items-center justify-between" id="catalog-list-header">
                       <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                         <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                        Physical Stock Inventory Catalog & Real-Time Rates
+                        Current Stock Inventory & Real-Time Rates
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono">Total Recorded Products: {filteredProducts.length}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">In-Stock Products: {currentStockProducts.length}</span>
                     </div>
 
                     <div className="overflow-x-auto" id="inventory-table-scroll">
@@ -5680,14 +5700,14 @@ _${businessInfo.name}_`;
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-                          {filteredProducts.length === 0 ? (
+                          {currentStockProducts.length === 0 ? (
                             <tr>
                               <td colSpan={10} className="py-12 text-center text-slate-500 font-sans">
                                 No catalog stock items registered. Log new purchases or register items in the "Products" control screen.
                               </td>
                             </tr>
                           ) : (
-                            filteredProducts.map((p) => {
+                            currentStockProducts.map((p) => {
                               const stockWorth = p.stock > 0 ? (p.stock * p.buyPrice) : 0;
                               return (
                                 <tr key={p.id} className="hover:bg-slate-900/10 text-slate-300">
@@ -5743,7 +5763,87 @@ _${businessInfo.name}_`;
                 </div>
               )}
 
-              {stockSubTab === "supplier-bills" && (
+              
+              {stockSubTab === "out-of-stock" && (
+                <div className="space-y-4 animate-slideDown" id="out-of-stock-view">
+                  <div className="rounded-2xl border border-rose-500/20 bg-[#0a101f]/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Out of Stock Products</h3>
+                      <p className="text-[10px] text-slate-400 mt-1">Products from the Product catalogue with zero or negative available stock.</p>
+                    </div>
+                    <span className="text-xs font-bold text-rose-400">{outOfStockProducts.length} products</span>
+                  </div>
+                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80">
+                    <table className="w-full text-xs text-slate-300">
+                      <thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3 text-left">SKU</th>
+                          <th className="px-4 py-3 text-left">Product</th>
+                          <th className="px-4 py-3 text-left">Category</th>
+                          <th className="px-4 py-3 text-right">Current Stock</th>
+                          <th className="px-4 py-3 text-right">Cost Price</th>
+                          <th className="px-4 py-3 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/70">
+                        {outOfStockProducts.length === 0 ? (
+                          <tr><td colSpan={6} className="py-10 text-center text-slate-500">No out-of-stock products found.</td></tr>
+                        ) : outOfStockProducts.map(product => (
+                          <tr key={product.id} className="hover:bg-white/[0.02]">
+                            <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
+                            <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
+                            <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
+                            <td className="px-4 py-3 text-right font-mono text-rose-400">{product.stock} {product.unit}</td>
+                            <td className="px-4 py-3 text-right font-mono">{businessInfo.currencySymbol} {Number(product.buyPrice || 0).toLocaleString()}</td>
+                            <td className="px-4 py-3 text-center">
+                              <button type="button" onClick={() => incrementProductStock(product.id)} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold text-emerald-400 hover:bg-emerald-500/20">Restock +10</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {stockSubTab === "stock-value" && (
+                <div className="space-y-4 animate-slideDown" id="stock-value-view">
+                  <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-[#0c142c] to-[#0a101f] p-5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Total Current Stock Value</p>
+                    <div className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</div>
+                    <p className="mt-1 text-[10px] text-slate-400">Calculated from available stock quantity × current product buy price. Out-of-stock and negative-stock quantities are excluded.</p>
+                    <p className="mt-2 text-[10px] text-slate-500">{currentStockProducts.length} products with available stock</p>
+                  </div>
+                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80">
+                    <table className="w-full text-xs text-slate-300">
+                      <thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3 text-left">SKU</th>
+                          <th className="px-4 py-3 text-left">Product</th>
+                          <th className="px-4 py-3 text-right">Available Stock</th>
+                          <th className="px-4 py-3 text-right">Unit Cost</th>
+                          <th className="px-4 py-3 text-right">Stock Value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/70">
+                        {currentStockProducts.length === 0 ? (
+                          <tr><td colSpan={5} className="py-10 text-center text-slate-500">No available stock to value.</td></tr>
+                        ) : currentStockProducts.map(product => (
+                          <tr key={product.id} className="hover:bg-white/[0.02]">
+                            <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
+                            <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
+                            <td className="px-4 py-3 text-right font-mono">{product.stock} {product.unit}</td>
+                            <td className="px-4 py-3 text-right font-mono">{businessInfo.currencySymbol} {Number(product.buyPrice || 0).toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right font-mono font-bold text-cyan-300">{businessInfo.currencySymbol} {(Number(product.stock) * Number(product.buyPrice || 0)).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+{stockSubTab === "supplier-bills" && (
                 /* SUPPLIER PURCHASES LEDGER WITH CASH CODE & DUE BILL TRACKING */
                 <div className="bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg animate-slideDown" id="supplier-purchases-subtab-rendered">
                   <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2" id="supplier-bills-ledger-top flex">
