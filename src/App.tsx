@@ -6902,7 +6902,7 @@ _${businessInfo.name}_`;
                         ledgerDateFilterType === preset
                           ? "bg-white text-[#111111] border-white shadow-md shadow-white/10 md:bg-gradient-to-r md:from-[#00E676] md:to-[#00B0FF] md:text-slate-950 md:border-emerald-400 md:shadow-lg md:scale-102"
                           : "bg-white/[0.035] text-slate-400 border-white/[0.10] hover:text-white hover:bg-white/[0.08] md:bg-[#121214] md:border-[#2D2D35] md:hover:bg-slate-900"
-                      }`
+                      }`}
                     >
                       {preset === "all" && "All"}
                       {preset === "today" && "Today"}
