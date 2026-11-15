@@ -137,7 +137,7 @@ export function PanelGateLock({
                 triggerVerification(val);
               }
             }}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-text pointer-events-auto z-20"
+            className="absolute inset-0 w-full h-full opacity-0 cursor-text pointer-events-auto z-20" aria-label="Enter security PIN"
             autoFocus
           />
 
