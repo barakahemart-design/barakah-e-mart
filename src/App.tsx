@@ -1972,7 +1972,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "sales-value" | "out-of-stock">("home");
+  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "sales-value" | "out-of-stock" | "edit-stock">("home");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2345,6 +2345,27 @@ export default function App() {
     });
     setProducts(updatedProds);
     triggerNotification("Product stock and price configurations successfully updated.");
+  };
+
+  const handleClearProductShortage = (id: string) => {
+    const productToAdjust = products.find(product => product.id === id);
+    if (!productToAdjust || Number(productToAdjust.stock || 0) >= 0) return;
+
+    const updatedProducts = products.map(product => {
+      if (product.id !== id) return product;
+      const nextProduct = { ...product, stock: 0 };
+      if (activeUser && !activeUser.isGuest) {
+        const targetUid = firebaseAuth.currentUser?.uid || activeUser.uid;
+        saveProduct(targetUid, nextProduct).catch(err => {
+          console.error("Failed to clear product stock shortage:", err);
+          triggerNotification("Stock update could not be synced. Please refresh and check again.", "error");
+        });
+      }
+      return nextProduct;
+    });
+
+    setProducts(updatedProducts);
+    triggerNotification(`${productToAdjust.name}: shortage cleared and stock set to 0.`, "success");
   };
 
   const handleMarkNegativeSaleUpdated = (id: string, updated: boolean) => {
@@ -4051,6 +4072,8 @@ _${businessInfo.name}_`;
   const salesValueTotal = useMemo(() => currentStockProducts.reduce((total, product) => total + Number(product.stock || 0) * Number(product.sellPrice || 0), 0), [currentStockProducts]);
   const outOfStockValueTotal = useMemo(() => outOfStockProducts.reduce((total, product) => total + Math.max(0, -Number(product.stock || 0)) * Number(product.buyPrice || 0), 0), [outOfStockProducts]);
   const outOfStockMissingUnits = useMemo(() => outOfStockProducts.reduce((total, product) => total + Math.max(0, -Number(product.stock || 0)), 0), [outOfStockProducts]);
+  const negativeStockProducts = useMemo(() => products.filter(product => Number(product.stock || 0) < 0), [products]);
+  const totalNegativeStockUnits = useMemo(() => negativeStockProducts.reduce((total, product) => total + Math.abs(Number(product.stock || 0)), 0), [negativeStockProducts]);
 
   const filteredTransactions = useMemo(() => transactions.filter(t => {
     // 1. Date filter check
@@ -5548,6 +5571,25 @@ _${businessInfo.name}_`;
                     </button>
                     <button
                       type="button"
+                      onClick={() => { setInventorySearch(""); setStockSubTab("edit-stock"); }}
+                      className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
+                      id="open-edit-stock-page"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white">
+                          <SlidersHorizontal className="h-6 w-6" />
+                        </div>
+                        <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">Edit page</span>
+                      </div>
+                      <h3 className="mt-5 text-lg font-black text-white">Edit Stock</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">Clear negative stock shortages by setting selected products back to zero.</p>
+                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{totalNegativeStockUnits.toLocaleString()} pcs shortage · {negativeStockProducts.length.toLocaleString()} products</span>
+                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => { setInventorySearch(""); setStockSubTab("out-of-stock"); }}
                       className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
                       id="open-out-of-stock-page"
@@ -5568,7 +5610,7 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4" id={stockSubTab === "stock-value" ? "stock-value-page" : stockSubTab === "sales-value" ? "sales-value-page" : "out-of-stock-page"}>
+                <div className="space-y-4" id={stockSubTab === "stock-value" ? "stock-value-page" : stockSubTab === "sales-value" ? "sales-value-page" : stockSubTab === "edit-stock" ? "edit-stock-page" : "out-of-stock-page"}>
                   <div className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-4">
                     <button
                       type="button"
@@ -5579,7 +5621,7 @@ _${businessInfo.name}_`;
                       <ArrowLeft className="h-4 w-4" /> All Stock
                     </button>
                     <div>
-                      <h2 className="text-lg font-black text-white">{stockSubTab === "stock-value" ? "Stock Value" : stockSubTab === "sales-value" ? "Sales Value" : "Out of Stock"}</h2>
+                      <h2 className="text-lg font-black text-white">{stockSubTab === "stock-value" ? "Stock Value" : stockSubTab === "sales-value" ? "Sales Value" : stockSubTab === "edit-stock" ? "Edit Stock" : "Out of Stock"}</h2>
                       <p className="text-[10px] text-slate-400">Live figures based on current Product stock, buy price, and sell price.</p>
                     </div>
                   </div>
@@ -5657,6 +5699,51 @@ _${businessInfo.name}_`;
                                 <td className="px-4 py-3 text-right font-mono font-bold text-white">{Number(product.stock || 0).toLocaleString()} {product.unit}</td>
                                 <td className="px-4 py-3 text-right font-mono text-slate-300">{businessInfo.currencySymbol} {Number(product.sellPrice || 0).toLocaleString()}</td>
                                 <td className="px-4 py-3 text-right font-mono text-white">{businessInfo.currencySymbol} {(Number(product.stock || 0) * Number(product.sellPrice || 0)).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : stockSubTab === "edit-stock" ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" id="edit-stock-summary">
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Shortage Quantity</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{totalNegativeStockUnits.toLocaleString()} <span className="text-xs font-semibold text-slate-400">pcs / units</span></p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Products in Shortage</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{negativeStockProducts.length.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <p className="rounded-xl border border-white/10 bg-[#111116] px-4 py-3 text-[11px] leading-relaxed text-slate-400">
+                        এখানে শুধু নেগেটিভ স্টকের পণ্য দেখাবে। কোনো পণ্যের “Set Stock to 0” চাপলে তার বর্তমান নেগেটিভ স্টক সরাসরি 0 হবে। বিক্রির ইনভয়েস বা হিস্টোরি পরিবর্তন হবে না।
+                      </p>
+                      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#111116] px-3 py-3">
+                        <Search className="h-4 w-4 text-slate-500" />
+                        <input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" />
+                      </div>
+                      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111116]">
+                        <div className="border-b border-white/10 px-4 py-3 text-xs font-bold text-white">Products with Negative Stock</div>
+                        <table className="w-full text-xs text-slate-300">
+                          <thead className="bg-white/[0.04] text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Shortage</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
+                          <tbody className="divide-y divide-white/[0.06]">
+                            {negativeStockProducts.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-500">No negative stock shortages. All product stock levels are zero or above.</td></tr> : negativeStockProducts.filter(product => {
+                              const terms = inventorySearch.toLowerCase().trim().split(/\\s+/).filter(Boolean);
+                              const target = `${product.name || ""} ${product.sku || ""} ${product.category || ""}`.toLowerCase();
+                              return terms.every(term => target.includes(term));
+                            }).map(product => (
+                              <tr key={product.id} className="hover:bg-white/[0.025]">
+                                <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
+                                <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
+                                <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-white">{Number(product.stock || 0).toLocaleString()} {product.unit}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <button type="button" onClick={() => handleClearProductShortage(product.id)} className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white px-3 py-2 text-[10px] font-bold text-black transition-colors hover:bg-slate-200" id={`clear-shortage-${product.id}`}>
+                                    Set Stock to 0
+                                  </button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
