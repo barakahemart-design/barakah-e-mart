@@ -371,7 +371,18 @@ export default function App() {
   } | null>(null);
 
   const [ledgerDocumentPreview, setLedgerDocumentPreview] = useState<{ title: string; dataUrl: string } | null>(null);
+  const [ledgerPreviewZoom, setLedgerPreviewZoom] = useState(57);
   const ledgerPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    if (!ledgerDocumentPreview) return;
+    const updatePreviewZoom = () => {
+      setLedgerPreviewZoom(window.matchMedia("(max-width: 767px)").matches ? 50 : 57);
+    };
+    updatePreviewZoom();
+    window.addEventListener("resize", updatePreviewZoom);
+    return () => window.removeEventListener("resize", updatePreviewZoom);
+  }, [ledgerDocumentPreview]);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deleteTxId, setDeleteTxId] = useState<string | null>(null);
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
@@ -10209,7 +10220,7 @@ _${businessInfo.name}_`;
             </div>
             <iframe
               ref={ledgerPreviewFrameRef}
-              src={`${ledgerDocumentPreview.dataUrl}#view=Fit&zoom=page-fit`}
+              src={`${ledgerDocumentPreview.dataUrl}#zoom=${ledgerPreviewZoom}`}
               title={ledgerDocumentPreview.title}
               className="min-h-0 w-full flex-1 bg-white"
             />
