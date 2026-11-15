@@ -91,6 +91,7 @@ import { ReportsView } from "./components/ReportsView";
 import { ProductsView } from "./components/ProductsView";
 import { NegativeSalesView } from "./components/NegativeSalesView";
 import { PurchasesView } from "./components/PurchasesView";
+import { ContactRegistrationForm } from "./components/ContactRegistrationForm";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { 
   INITIAL_PRODUCTS,
@@ -3380,10 +3381,6 @@ export default function App() {
   // -----------------------------------------------------------------
   // 5. CONTACTS CRM WORKSPACE
   // -----------------------------------------------------------------
-  const [cName, setCName] = useState("");
-  const [cPhone, setCPhone] = useState("");
-  const [cAddress, setCAddress] = useState("");
-  const [cType, setCType] = useState<"customer" | "supplier">("customer");
   const [isTranslatingContact, setIsTranslatingContact] = useState(false);
 
   const banglaToEnglishDigits = (str: string): string => {
@@ -3432,17 +3429,6 @@ export default function App() {
     return null;
   };
 
-  const runTranslationForUI = async () => {
-    const result = await translateContactFields();
-    if (result) {
-      setCName(result.name);
-      setCPhone(result.phone);
-      setCAddress(result.address);
-      triggerNotification("✨ Customer details translated to English successfully!", "success");
-    } else {
-      triggerNotification("Translation failed. Please check and translate manually.", "error");
-    }
-  };
 
   // Copy saved customer details for quick reuse in Expenses or other forms.
   const handleCopyContactDetails = async (contact: Contact) => {
@@ -3478,24 +3464,20 @@ Address: ${contact.address || ""}`;
     triggerNotification(`Copied details for ${contact.name}.`, "success");
   };
 
-  const handleAddContact = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cName || !cPhone) return;
-    
-    // Convert any Bangla digits in the phone input
-    let cleanPhone = banglaToEnglishDigits(cPhone).replace(/[^0-9]/g, "");
-    
-    // Enforce Bangladeshi mobile phone number: must be exactly 11 digits
+  const handleAddContact = async (values: { name: string; phone: string; address: string; type: "customer" | "supplier" }) => {
+    if (!values.name.trim() || !values.phone.trim()) return;
+
+    const cleanPhone = banglaToEnglishDigits(values.phone).replace(/[^0-9]/g, "");
     if (cleanPhone.length !== 11) {
       triggerNotification("⚠️ Bangladeshi mobile phone numbers must be exactly 11 digits! Yours is " + cleanPhone.length + " digits.", "error");
       return;
     }
 
-    let finalName = cName.trim();
+    let finalName = values.name.trim();
     let finalPhone = cleanPhone;
-    let finalAddress = cAddress.trim();
+    let finalAddress = values.address.trim();
+    const contactType = values.type;
 
-    // If there is any Bengali character input in Name or Address, automatically translate it perfectly using Gemini!
     if (hasBengaliCharacters(finalName) || hasBengaliCharacters(finalAddress)) {
       triggerNotification("🔄 Bengali input detected! Automatically transliterating to English...", "info");
       const translated = await translateContactFields(finalName, finalPhone, finalAddress);
@@ -3509,21 +3491,15 @@ Address: ${contact.address || ""}`;
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
 
     if (editingContact) {
-      // Inline update of current client profile
       const updatedContact = {
         id: editingContact.id,
         name: finalName,
         phone: finalPhone,
         address: finalAddress || "Dhaka, Bangladesh",
-        type: cType,
+        type: contactType,
         created_at: editingContact.created_at || new Date().toISOString()
       };
-      const updated = contacts.map(c => {
-        if (c.id === editingContact.id) {
-          return updatedContact;
-        }
-        return c;
-      });
+      const updated = contacts.map(c => c.id === editingContact.id ? updatedContact : c);
       setContacts(updated);
 
       if (activeUser && !activeUser.isGuest) {
@@ -3535,24 +3511,20 @@ Address: ${contact.address || ""}`;
       }
 
       setEditingContact(null);
-      setCName("");
-      setCPhone("");
-      setCAddress("");
       triggerNotification(`Contact [${finalName}] updated successfully in proper English!`, "success");
     } else {
-      // Create new profile record
       const newContact: Contact = {
         id: toUUID(`c_${Date.now()}`, cleanEmail),
         name: finalName,
         phone: finalPhone,
         address: finalAddress || "Dhaka, Bangladesh",
-        type: cType,
+        type: contactType,
         created_at: new Date().toISOString()
       };
 
-      setContacts([newContact, ...contacts]);
+      setContacts(prev => [newContact, ...prev]);
 
-      if (cType === "customer") {
+      if (contactType === "customer") {
         resetPosWorkspace(newContact.id);
       }
 
@@ -3564,9 +3536,6 @@ Address: ${contact.address || ""}`;
         }
       }
 
-      setCName("");
-      setCPhone("");
-      setCAddress("");
       triggerNotification(`Contact [${finalName}] successfully registered in standard English!`, "success");
     }
   };
@@ -7703,165 +7672,12 @@ _${businessInfo.name}_`;
             return (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in" id="view-contacts-container">
                 
-                {/* Add contact form (4 Cols) */}
-                <div className="lg:col-span-4 bg-[#1E1E24] border border-[#2D2D35] p-6 rounded-2xl space-y-4 shadow-lg" id="add-contact-panel">
-                  <div className="border-b border-[#2D2D35] pb-3">
-                    <h3 className="text-sm font-bold text-white tracking-wide uppercase">
-                      {editingContact ? "Edit Active Partner" : "Register Partner"}
-                    </h3>
-                    <p className="text-[10px] text-[#A0A0A5]">
-                      {editingContact ? "Modify contact information for this client account" : "Register a customer client or wholesaler to tracking payments"}
-                    </p>
-                  </div>
-                  
-                  <form onSubmit={handleAddContact} className="space-y-4" id="contacts-form">
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Legal Full Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. John Doe, Mohammad Habib"
-                        value={cName}
-                        onChange={(e) => setCName(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] font-sans focus:ring-1 focus:ring-[#00E676]/30 transition-all"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center pr-1">
-                        <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Primary Mobile Number *</label>
-                        {cPhone.length > 0 && (
-                          <span className={`text-[10px] font-mono font-bold ${cPhone.length === 11 ? "text-emerald-400" : "text-rose-500 animate-pulse"}`}>
-                            {cPhone.length}/11 Digits
-                          </span>
-                        )}
-                      </div>
-                      <input
-                        type="tel"
-                        required
-                        maxLength={11}
-                        placeholder="017xxxxxxxx"
-                        value={cPhone}
-                        onChange={(e) => {
-                          const converted = banglaToEnglishDigits(e.target.value);
-                          const numericOnly = converted.replace(/[^0-9]/g, "");
-                          setCPhone(numericOnly);
-                        }}
-                        className={`w-full px-3 py-2.5 bg-[#121214] border rounded-xl text-white text-xs outline-none focus:ring-1 transition-all font-mono ${
-                          cPhone.length > 0 && cPhone.length !== 11
-                            ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/30 text-rose-300"
-                            : "border-[#2D2D35] focus:border-[#00E676] focus:ring-[#00E676]/30"
-                        }`}
-                      />
-                      {cPhone.length > 0 && cPhone.length !== 11 && (
-                        <p className="text-[10px] text-rose-500 font-bold pl-1 mt-0.5 min-h-[14px]">
-                          ⚠️ Bangladeshi mobile numbers must be exactly 11 digits! (Current: {cPhone.length} digits)
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Address Details (Optional)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Block C, Gulshan-2, Dhaka"
-                        value={cAddress}
-                        onChange={(e) => setCAddress(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-[#121214] border border-[#2D2D35] rounded-xl text-white text-xs outline-none focus:border-[#00E676] font-sans focus:ring-1 focus:ring-[#00E676]/30 transition-all"
-                      />
-                    </div>
-
-                    {/* Highly polished AI translation alert container for Bangla Inputs */}
-                    {(hasBengaliCharacters(cName) || hasBengaliCharacters(cAddress)) && (
-                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 space-y-2 text-xs text-amber-200 animate-fade-in">
-                        <div className="flex items-start gap-2">
-                          <Languages className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-                          <div>
-                            <p className="font-extrabold text-amber-400 tracking-wide">Bengali Input Detected!</p>
-                            <p className="text-[10px] text-amber-300/90 leading-relaxed font-sans">
-                              Name or Address is written in Bengali. To maintain clean accounting, click the button below to translate them auto-magically to English using Gemini AI.
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={runTranslationForUI}
-                          disabled={isTranslatingContact}
-                          className="w-full flex items-center justify-center gap-1.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider rounded-lg cursor-pointer transition-all duration-150 active:scale-95 disabled:opacity-50"
-                        >
-                          {isTranslatingContact ? (
-                            <>
-                              <span className="w-3 h-3 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                              <span>Translating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-3 h-3 text-slate-950" />
-                              <span>Translate to English</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1 block">Profile Relationship Type</label>
-                      <div className="flex gap-4 pt-1" id="type-radio-group">
-                        <label className="flex items-center gap-2 text-xs text-slate-300 font-sans cursor-pointer select-none">
-                          <input
-                            type="radio"
-                            name="contactType"
-                            checked={cType === "customer"}
-                            onChange={() => setCType("customer")}
-                            className="accent-[#00E676] scale-110 cursor-pointer"
-                          />
-                          Customer Line
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-slate-300 font-sans cursor-pointer select-none">
-                          <input
-                            type="radio"
-                            name="contactType"
-                            checked={cType === "supplier"}
-                            onChange={() => setCType("supplier")}
-                            className="accent-[#00E676] scale-110 cursor-pointer"
-                          />
-                          Supplier Dealer
-                        </label>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      id="save-contact-btn"
-                      disabled={cPhone.length !== 11 || !cName.trim() || isTranslatingContact}
-                      className={`w-full py-3.5 text-[#121214] font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg ${
-                        cPhone.length !== 11 || !cName.trim() || isTranslatingContact
-                          ? "bg-slate-700/50 text-slate-400 cursor-not-allowed border border-slate-700/30 shadow-none hover:scale-100"
-                          : "bg-[#00E676] hover:bg-[#00D065] hover:scale-[1.02] active:scale-[0.98] shadow-[#00E676]/10"
-                      }`}
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      {editingContact ? "Save Profile Changes" : "Register Profile"}
-                    </button>
-
-                    {editingContact && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingContact(null);
-                          setCName("");
-                          setCPhone("");
-                          setCAddress("");
-                        }}
-                        className="w-full py-2 bg-[#2D2D35]/50 hover:bg-[#2D2D35] text-[#A0A0A5] hover:text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-[#2D2D35]"
-                      >
-                        Cancel Editing
-                      </button>
-                    )}
-
-                  </form>
-                </div>
+                {/* Isolated registration form: typing stays local and does not re-render the full POS workspace. */}
+                <ContactRegistrationForm
+                  editingContact={editingContact}
+                  onSubmit={handleAddContact}
+                  onCancel={() => setEditingContact(null)}
+                />
 
                 {/* Contacts directory table representation (8 Cols) */}
                 <div className="lg:col-span-8 space-y-4" id="contacts-list-panel">
@@ -8148,10 +7964,6 @@ _${businessInfo.name}_`;
                                   type="button"
                                   onClick={() => {
                                     setEditingContact(c);
-                                    setCName(c.name);
-                                    setCPhone(c.phone);
-                                    setCAddress(c.address || "");
-                                    setCType(c.type || "customer");
                                     triggerNotification(`Editing profile for: ${c.name}`, "info");
                                   }}
                                   className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
