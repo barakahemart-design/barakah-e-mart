@@ -403,7 +403,7 @@ export default function App() {
   }, [activeTab]);
 
   // Mobile pull-down refresh: block the browser's native short pull-to-refresh
-  // and reload only after a deliberate 240px downward gesture at the top.
+  // and reload only after a deliberate 200px (about 2-inch) downward gesture at the top.
   // Firebase's persisted auth session and the saved workspace restore after reload.
   useEffect(() => {
     let startX = 0;
@@ -460,7 +460,7 @@ export default function App() {
       const deltaY = Math.max(currentY, touch.clientY) - startY;
       const deltaX = Math.abs(touch.clientX - startX);
       validStart = false;
-      if (deltaY >= 240 && deltaX <= 75) {
+      if (deltaY >= 200 && deltaX <= 75) {
         window.location.reload();
       }
     };
