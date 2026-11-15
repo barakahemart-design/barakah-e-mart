@@ -422,3 +422,23 @@ html.light #root textarea {
     overscroll-behavior-y: contain;
   }
 }
+
+
+/* Mobile bottom navigation sits flush with the physical screen edge.
+   Include the iPhone home-indicator safe area inside the bar, not below it. */
+@media (max-width: 640px) {
+  #mobile-bottom-navbar {
+    bottom: 0 !important;
+    height: calc(62px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  #mobile-bottom-navbar > button {
+    min-height: 62px !important;
+  }
+
+  #viewport-workspace {
+    padding-bottom: calc(62px + env(safe-area-inset-bottom)) !important;
+  }
+}
