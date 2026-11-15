@@ -92,6 +92,7 @@ import { ProductsView } from "./components/ProductsView";
 import { NegativeSalesView } from "./components/NegativeSalesView";
 import { PurchasesView } from "./components/PurchasesView";
 import { ContactRegistrationForm } from "./components/ContactRegistrationForm";
+import { CreditorDueView } from "./components/CreditorDueView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { 
   INITIAL_PRODUCTS,
@@ -420,6 +421,7 @@ export default function App() {
   const [dueDateStr, setDueDateStr] = useState(() => new Date().toISOString().split("T")[0]);
   const [dueInvoiceNo, setDueInvoiceNo] = useState("");
   const [selectedSupplierReceipt, setSelectedSupplierReceipt] = useState<Purchase | null>(null);
+  const [dueSection, setDueSection] = useState<"creditor-entry" | "creditors" | "creditor-report" | "product-due">("creditor-entry");
 
   const hasSyncedOnMountRef = useRef(false);
   const hasHealedRef = useRef(false);
@@ -5999,15 +6001,34 @@ _${businessInfo.name}_`;
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 bg-amber-400 rounded-full animate-ping shrink-0" />
                     <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2">
-                      Supplier Due List Tracker
+                      Due Management
                     </h1>
                   </div>
                   <p className="text-xs text-slate-400 mt-1 font-medium font-sans">
-                    Real-time ledger tracking of credit procurement from suppliers. Monitor credit balance incoming (In), cash payment settlements outgoing (Out), and outstanding liabilities (Remaining).
+                    Manage creditor balances separately from product procurement dues.
                   </p>
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" id="due-management-sections">
+                {([
+                  { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a due or payment", icon: PlusCircle },
+                  { id: "creditors", title: "Creditor Management", subtitle: "Add or remove creditors", icon: Users },
+                  { id: "creditor-report", title: "Due Report", subtitle: "Balances and transactions", icon: BarChart3 },
+                  { id: "product-due", title: "Product Due", subtitle: "Previous purchase due tracker", icon: Package }
+                ] as const).map(item => {
+                  const Icon = item.icon;
+                  const active = dueSection === item.id;
+                  return <button key={item.id} onClick={() => setDueSection(item.id)}
+                    className={`text-left p-4 rounded-2xl border transition-all ${active ? "bg-white text-black border-white shadow-lg" : "bg-[#0b0f19] text-slate-300 border-slate-800 hover:border-slate-600"}`}>
+                    <div className="flex items-center justify-between gap-2"><span className="text-sm font-bold">{item.title}</span><Icon className="w-4 h-4 shrink-0" /></div>
+                    <p className={`text-[10px] mt-1 ${active ? "text-slate-600" : "text-slate-500"}`}>{item.subtitle}</p>
+                  </button>;
+                })}
+              </div>
+
+              {dueSection === "product-due" ? (
+                <>
               {/* 2. DATE HORIZON FILTERS */}
               <div className="bg-[#0b0f19] border border-slate-800/80 p-3 rounded-2xl flex flex-col md:flex-row items-center gap-4 justify-between" id="duelist-period-menu-container">
                 <div className="flex flex-col gap-1 w-full md:w-auto">
@@ -6752,6 +6773,16 @@ _${businessInfo.name}_`;
                   </div>
                 );
               })()}
+                </>
+              ) : (
+                <CreditorDueView
+                  businessInfo={businessInfo}
+                  setBusinessInfo={setBusinessInfo}
+                  triggerNotification={triggerNotification}
+                  toUUID={toUUID}
+                  activeUser={activeUser}
+                />
+              )}
             </div>
           )}
 
