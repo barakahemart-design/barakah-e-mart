@@ -341,8 +341,8 @@ html.light #root textarea {
   backdrop-filter: blur(32px) saturate(125%) !important;
 }
 #view-expenses-outer-container #expenses-list-panel,
-#view-expenses-outer-container .lg\\:col-span-5,
-#view-expenses-outer-container .lg\\:col-span-7 {
+#view-expenses-outer-container [class~="lg:col-span-5"],
+#view-expenses-outer-container [class~="lg:col-span-7"] {
   background-color: rgba(255,255,255,.045) !important;
   border-color: rgba(255,255,255,.14) !important;
   box-shadow: 0 16px 40px rgba(0,0,0,.28) !important;
