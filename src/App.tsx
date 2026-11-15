@@ -6041,12 +6041,12 @@ _${businessInfo.name}_`;
                             <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[9px] font-bold tracking-[0.16em] text-slate-400 backdrop-blur-xl">0{index + 1}</span>
                           </div>
                           <div>
-                            <p className={`mb-2 text-[9px] font-bold tracking-[0.2em] ${item.accent}`}>{item.detail}</p>
+                            <p className="mb-2 text-[9px] font-bold tracking-[0.2em] text-white/70">{item.detail}</p>
                             <div className="flex items-center justify-between gap-3">
                               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{item.title}</h2>
                               <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/70 transition-all group-hover:translate-x-1 group-hover:border-white/30 group-hover:bg-white/15 group-hover:text-white">→</span>
                             </div>
-                            <p className="mt-2 max-w-[28rem] text-xs leading-relaxed text-slate-400">{item.subtitle}</p>
+                            <p className="mt-2 max-w-[28rem] text-xs leading-relaxed text-white/65">{item.subtitle}</p>
                           </div>
                         </div>
                         <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
