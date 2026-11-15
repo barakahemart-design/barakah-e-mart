@@ -299,13 +299,23 @@ async function startServer() {
     }
   }
 
+  // Cache account identity lookups: polling must not re-read profiles and passcode
+  // vault documents on every reconciliation request.
+  const resolvedUserIdsCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  const RESOLVED_USER_IDS_CACHE_TTL = 5 * 60 * 1000;
+
   // Helper to dynamically resolve all user/profile IDs associated with user's verified identity
   async function resolveAllUserIdsForEmail(email: string, defaultUid: string): Promise<string[]> {
+    const cleanEmail = (email || "").trim().toLowerCase();
     const ids = new Set<string>();
     if (defaultUid) ids.add(defaultUid);
-
-    const cleanEmail = (email || "").trim().toLowerCase();
     if (cleanEmail) {
+      const cached = resolvedUserIdsCache.get(cleanEmail);
+      if (cached && cached.expiresAt > Date.now()) {
+        cached.ids.forEach(id => ids.add(id));
+        ids.add(cleanEmail);
+        return Array.from(ids);
+      }
       ids.add(cleanEmail);
       if (cleanEmail === "barakahemart@gmail.com") {
         ["1d4ce803-cbf5-44f1-9ec5-56642de068a1", "DGeDhFzjTDaYCeLZiMSvm8TY4sc2", "vault_a2vflc", "xrTguetUZqSbZOxUKRiUNJV3X1M2", "C5eOR2R8WEMegF53NA5eItMWDrr2", "Lzk64vTQcRPy0MWwQK6t0echMmq1", "1ys9dKJ3fKOKIVOl0GIbuIiHeB73"].forEach(id => ids.add(id));
@@ -348,7 +358,14 @@ async function startServer() {
       }
     }
 
-    return Array.from(ids);
+    const resolvedIds = Array.from(ids);
+    if (cleanEmail) {
+      resolvedUserIdsCache.set(cleanEmail, {
+        ids: resolvedIds.filter(id => id !== defaultUid),
+        expiresAt: Date.now() + RESOLVED_USER_IDS_CACHE_TTL
+      });
+    }
+    return resolvedIds;
   }
 
   // Helper to sync REST updates from the phone directly back to the passcode_syncs backing document on Firestore
