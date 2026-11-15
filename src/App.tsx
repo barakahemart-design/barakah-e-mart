@@ -6880,7 +6880,7 @@ _${businessInfo.name}_`;
                       key={status}
                       id={`ledger-filter-${status}`}
                       onClick={() => setLedgerStatusFilter(status)}
-                      className={`w-full min-w-0 whitespace-normal break-words px-1.5 py-2 text-center text-[9px] leading-tight md:w-auto md:px-4 md:text-xs rounded-xl font-mono font-bold capitalize cursor-pointer transition-all ${ledgerStatusFilter === status ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/10' : 'bg-[#121214] border border-slate-800 text-slate-400 hover:text-white'}`}
+                      className={`w-full min-w-0 whitespace-normal break-words px-1.5 py-2 text-center text-[9px] leading-tight md:w-auto md:px-4 md:text-xs rounded-xl font-mono font-bold capitalize cursor-pointer transition-all border ${ledgerStatusFilter === status ? "bg-white text-[#111111] border-white shadow-md shadow-white/10 md:bg-gradient-to-r md:from-[#00E676] md:to-[#00B0FF] md:text-slate-950 md:border-emerald-400 md:shadow-lg md:scale-102" : "bg-white/[0.035] text-slate-400 border-white/[0.10] hover:text-white hover:bg-white/[0.08] md:bg-[#121214] md:border-[#2D2D35] md:hover:bg-slate-900"}`}
                     >
                       {status === 'all' ? 'All Transactions' : status === 'paid' ? 'Paid' : status === 'partial' ? 'Partial' : 'Due Balance'}
                     </button>
