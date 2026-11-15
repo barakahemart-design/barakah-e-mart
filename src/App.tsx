@@ -6022,21 +6022,21 @@ _${businessInfo.name}_`;
               {dueSection === "home" && (
                 <div className="relative isolate grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 sm:gap-5" id="due-management-sections">
                   {([
-                    { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a new due, payment, or both", detail: "TRANSACTION ENTRY", icon: PlusCircle, glow: "from-emerald-400/20 via-teal-300/5 to-transparent", accent: "text-emerald-300", iconBg: "bg-emerald-300/10 border-emerald-200/20" },
-                    { id: "creditors", title: "Creditor Management", subtitle: "Manage people and business accounts", detail: "ACCOUNT DIRECTORY", icon: Users, glow: "from-sky-400/20 via-blue-300/5 to-transparent", accent: "text-sky-300", iconBg: "bg-sky-300/10 border-sky-200/20" },
-                    { id: "creditor-report", title: "Due Report", subtitle: "Review balances and payment history", detail: "REPORTS & INSIGHTS", icon: BarChart3, glow: "from-violet-400/20 via-fuchsia-300/5 to-transparent", accent: "text-violet-300", iconBg: "bg-violet-300/10 border-violet-200/20" },
-                    { id: "product-due", title: "Product Due", subtitle: "Open the existing supplier due tracker", detail: "PROCUREMENT LEDGER", icon: Package, glow: "from-amber-400/20 via-orange-300/5 to-transparent", accent: "text-amber-300", iconBg: "bg-amber-300/10 border-amber-200/20" }
+                    { id: "creditor-entry", title: "Add Due & Paid", subtitle: "Record a new due, payment, or both", detail: "TRANSACTION ENTRY", icon: PlusCircle },
+                    { id: "creditors", title: "Creditor Management", subtitle: "Manage people and business accounts", detail: "ACCOUNT DIRECTORY", icon: Users },
+                    { id: "creditor-report", title: "Due Report", subtitle: "Review balances and payment history", detail: "REPORTS & INSIGHTS", icon: BarChart3 },
+                    { id: "product-due", title: "Product Due", subtitle: "Open the existing supplier due tracker", detail: "PROCUREMENT LEDGER", icon: Package }
                   ] as const).map((item, index) => {
                     const Icon = item.icon;
                     return (
                       <button key={item.id} type="button" onClick={() => setDueSection(item.id)}
-                        className="group relative min-h-[190px] sm:min-h-[220px] overflow-hidden rounded-[26px] border border-white/[0.13] bg-slate-900/55 p-5 sm:p-6 text-left shadow-[0_18px_55px_rgba(0,0,0,0.28)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/25 hover:bg-slate-800/65 hover:shadow-[0_24px_65px_rgba(0,0,0,0.38)] active:scale-[0.985]">
-                        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${item.glow} opacity-80 transition-opacity duration-300 group-hover:opacity-100`} />
+                        className="group relative min-h-[190px] sm:min-h-[220px] overflow-hidden rounded-[26px] border border-white/20 bg-gradient-to-br from-white/[0.13] via-slate-500/[0.09] to-black/60 p-5 sm:p-6 text-left text-white shadow-[0_18px_55px_rgba(0,0,0,0.32)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/35 hover:from-white/[0.18] hover:to-black/70 hover:shadow-[0_24px_65px_rgba(0,0,0,0.42)] active:scale-[0.985]">
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.10] via-transparent to-black/20 opacity-90 transition-opacity duration-300 group-hover:opacity-100" />
                         <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full bg-white/[0.035] blur-3xl transition-all duration-500 group-hover:scale-125 group-hover:bg-white/[0.07]" />
                         <div className="relative flex h-full min-h-[145px] flex-col justify-between gap-7">
                           <div className="flex items-start justify-between gap-3">
-                            <span className={`inline-flex h-14 w-14 items-center justify-center rounded-2xl border shadow-inner backdrop-blur-xl ${item.iconBg}`}>
-                              <Icon className={`h-6 w-6 ${item.accent}`} strokeWidth={1.8} />
+                            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-white/[0.10] text-white shadow-inner backdrop-blur-xl">
+                              <Icon className="h-6 w-6 text-white" strokeWidth={1.8} />
                             </span>
                             <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[9px] font-bold tracking-[0.16em] text-slate-400 backdrop-blur-xl">0{index + 1}</span>
                           </div>
