@@ -10157,9 +10157,9 @@ _${businessInfo.name}_`;
                       frame.contentWindow.print();
                     }
                   }}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white px-4 text-[11px] font-bold text-black transition-all hover:bg-slate-200 active:scale-[0.98]"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border !border-white !bg-white px-4 text-[11px] font-bold !text-black shadow-sm transition-all hover:!bg-slate-200 active:scale-[0.98]"
                 >
-                  <Printer className="h-4 w-4" /> Print
+                  <Printer className="h-4 w-4 !text-black" /> <span className="!text-black">Print</span>
                 </button>
                 <a
                   href={ledgerDocumentPreview.dataUrl}
@@ -10168,6 +10168,35 @@ _${businessInfo.name}_`;
                 >
                   <Download className="h-4 w-4" /> Download
                 </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(ledgerDocumentPreview.dataUrl);
+                      const blob = await response.blob();
+                      const safeFileName = `${ledgerDocumentPreview.title.replace(/[^a-zA-Z0-9-_ ]/g, "").trim().replace(/\\s+/g, "_") || "BARAKAH_Document"}.pdf`;
+                      const file = new File([blob], safeFileName, { type: "application/pdf" });
+                      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+                        await navigator.share({
+                          files: [file],
+                          title: ledgerDocumentPreview.title,
+                          text: `${ledgerDocumentPreview.title} - BARAKAH e-MART`
+                        });
+                      } else {
+                        triggerNotification("এই ডিভাইস বা ব্রাউজারে PDF ফাইল সরাসরি Share করা যাচ্ছে না। Download করে WhatsApp বা imo-তে সংযুক্ত করুন।", "info");
+                      }
+                    } catch (error: any) {
+                      if (error?.name !== "AbortError") {
+                        console.error("Could not share PDF document:", error);
+                        triggerNotification("PDF শেয়ার করা যায়নি। আবার চেষ্টা করুন অথবা Download করে শেয়ার করুন।", "error");
+                      }
+                    }
+                  }}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[0.08] px-4 text-[11px] font-bold text-white transition-all hover:border-white/40 hover:bg-white/[0.15] active:scale-[0.98]"
+                >
+                  <Share2 className="h-4 w-4" /> Share
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setLedgerDocumentPreview(null)}
