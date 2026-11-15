@@ -6765,7 +6765,6 @@ _${businessInfo.name}_`;
                           </div>
                           <div className="min-w-0 text-center">
                           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-                          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
                             <strong className="text-[12px] font-semibold text-white">{customerLabel}</strong>
                             {customerPhone && (
                               <span className="text-[10px] font-mono text-slate-400">{customerPhone}</span>
