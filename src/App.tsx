@@ -471,7 +471,7 @@ export default function App() {
     const productsByName = new Map<string, Product>();
     products.forEach(product => {
       productsById.set(product.id, product);
-      productsByName.set(product.name, product);
+      if (!productsByName.has(product.name)) productsByName.set(product.name, product);
     });
 
     const search = contactSearchQuery.trim().toLowerCase();
