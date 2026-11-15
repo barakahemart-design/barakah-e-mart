@@ -6891,18 +6891,18 @@ _${businessInfo.name}_`;
 
               {/* Date Preset Filter Bar */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-5 p-5 bg-[#1E1E24] border border-[#2D2D35] rounded-2xl shadow-lg relative overflow-hidden mt-4" id="ledger-date-filter-bar">
-                <div className="grid w-full grid-cols-7 items-stretch gap-1 md:flex md:w-auto md:flex-wrap md:items-center md:gap-2" id="ledger-date-presets">
-                  <span className="col-span-7 text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:col-span-1 md:mr-1">Date Range:</span>
+                <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:gap-2" id="ledger-date-presets">
+                  <span className="w-full text-[10px] font-bold text-slate-500 font-mono uppercase tracking-wide select-none md:w-auto md:mr-1">Date Range:</span>
                   {(["all", "today", "yesterday", "weekly", "monthly", "yearly", "custom"] as const).map((preset) => (
                     <button
                       key={preset}
                       id={`ledger-date-filter-${preset}`}
                       onClick={() => setLedgerDateFilterType(preset)}
-                      className={`w-full min-w-0 whitespace-normal break-words px-0.5 py-2 text-center text-[7px] leading-tight sm:text-[8px] md:w-auto md:px-3.5 md:text-[11px] rounded-xl font-bold tracking-wider transition-all border cursor-pointer uppercase font-mono ${
+                      className={\`min-w-[68px] min-h-[42px] flex-[1_1_calc(25%-0.5rem)] whitespace-nowrap px-2 py-2 text-center text-[10px] leading-none md:min-h-0 md:w-auto md:flex-none md:px-3.5 md:py-2 md:text-[11px] rounded-xl font-bold tracking-wide transition-all border cursor-pointer uppercase font-mono \${
                         ledgerDateFilterType === preset
-                          ? "bg-gradient-to-r from-[#00E676] to-[#00B0FF] text-slate-950 border-emerald-400 shadow-lg scale-102"
-                          : "bg-[#121214] text-slate-400 hover:text-white border-[#2D2D35] hover:bg-slate-900"
-                      }`}
+                          ? "bg-white text-[#111111] border-white shadow-md shadow-white/10 md:bg-gradient-to-r md:from-[#00E676] md:to-[#00B0FF] md:text-slate-950 md:border-emerald-400 md:shadow-lg md:scale-102"
+                          : "bg-white/[0.035] text-slate-400 border-white/[0.10] hover:text-white hover:bg-white/[0.08] md:bg-[#121214] md:border-[#2D2D35] md:hover:bg-slate-900"
+                      }\`}
                     >
                       {preset === "all" && "All"}
                       {preset === "today" && "Today"}
