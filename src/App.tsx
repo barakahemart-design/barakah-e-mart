@@ -406,11 +406,8 @@ export default function App() {
     document.documentElement.style.overscrollBehaviorY = "contain";
     document.body.style.overscrollBehaviorY = "contain";
 
-    const isInteractiveTarget = (target: EventTarget | null) =>
-      target instanceof Element && !!target.closest('input, textarea, select, button, [contenteditable="true"], iframe, [data-no-pull-refresh]');
-
     const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || isInteractiveTarget(event.target)) {
+      if (event.touches.length !== 1) {
         validStart = false;
         return;
       }
@@ -422,7 +419,7 @@ export default function App() {
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      if (!validStart || event.changedTouches.length !== 1 || isInteractiveTarget(event.target)) {
+      if (!validStart || event.changedTouches.length !== 1) {
         validStart = false;
         return;
       }
