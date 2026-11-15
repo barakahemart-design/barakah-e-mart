@@ -309,6 +309,11 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
    const initialLoadedRef = useRef(false);
+   const isReloadToastActiveRef = useRef(
+     typeof window !== "undefined" &&
+     performance.getEntriesByType("navigation")[0]?.type === "reload" &&
+     !!localStorage.getItem("barakah_local_active_user")
+   );
    const lastUploadedAtRef = useRef("");
    const isRemoteUpdateActiveRef = useRef(false);
    const remoteTimeoutRef = useRef<any>(null);
@@ -1237,6 +1242,9 @@ export default function App() {
 
   // Show customized temporal workspace notification
   const triggerNotification = (message: string, type: "success" | "error" | "info" = "success") => {
+    // Suppress automatic sync/recovery notifications during page reload so
+    // the user sees only the dedicated refresh confirmation.
+    if (isReloadToastActiveRef.current) return;
     setNotification({ message, type });
     if (type === "success") {
       setSuccessTriggerMsg(message);
@@ -1245,18 +1253,20 @@ export default function App() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Show a compact confirmation after browser reload (mobile pull-down,
-  // laptop refresh button, Ctrl+R, or context-menu Reload).
+  // Show exactly one small refresh message; suppress competing sync/recovery
+  // notifications and the large "Saved Successfully" overlay on reload.
   useEffect(() => {
-    try {
-      const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-      const wasReloaded = navigation?.type === "reload";
-      const hasSavedSession = !!localStorage.getItem("barakah_local_active_user");
-      if (!wasReloaded || !hasSavedSession) return;
-      setNotification({ message: "Successfully refreshed", type: "success" });
-      const timeout = window.setTimeout(() => setNotification(null), 2200);
-      return () => window.clearTimeout(timeout);
-    } catch (_) {}
+    if (!isReloadToastActiveRef.current) return;
+    setSuccessTriggerMsg(null);
+    setNotification({ message: "Successfully page refreshed", type: "success" });
+    const toastTimeout = window.setTimeout(() => setNotification(null), 1300);
+    const suppressTimeout = window.setTimeout(() => {
+      isReloadToastActiveRef.current = false;
+    }, 4500);
+    return () => {
+      window.clearTimeout(toastTimeout);
+      window.clearTimeout(suppressTimeout);
+    };
   }, []);
 
   // Handler for guest login
