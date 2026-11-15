@@ -10241,6 +10241,7 @@ _${businessInfo.name}_`;
               dataUrl={ledgerDocumentPreview.dataUrl}
               title={ledgerDocumentPreview.title}
               initialZoom={ledgerPreviewZoom}
+              fitToWidth={window.matchMedia("(max-width: 767px)").matches}
               onZoomChange={(zoom) => {
                 setLedgerPreviewZoom(zoom);
                 if (!window.matchMedia("(max-width: 767px)").matches) {
