@@ -4111,124 +4111,37 @@ _${businessInfo.name}_`;
             
             {currentPanel === "admin" ? (
               <>
-                <button
-                  id="tab-dashboard-btn"
-                  onClick={() => setActiveTab("dashboard")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'dashboard' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
-                </button>
-
-                <button
-                  id="tab-pos-btn"
-                  onClick={() => setActiveTab("pos")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'pos' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  Sales
-                </button>
-
-                <button
-                  id="tab-contacts-btn"
-                  onClick={() => setActiveTab("contacts")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'contacts' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <Users className="w-4 h-4" />
-                  Customers
-                </button>
-
-                <button
-                  id="tab-products-btn"
-                  onClick={() => setActiveTab("products")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'products' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <Package className="w-4 h-4" />
-                  Products
-                </button>
-
-                <button
-                  id="tab-negative-sales-btn"
-                  onClick={() => setActiveTab("negative-sales")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'negative-sales' ? 'bg-[#FF5252]/10 text-[#FF5252] border border-[#FF5252]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <TrendingDown className="w-4 h-4" />
-                  Stock Alert
-                </button>
-
-                <button
-                  id="tab-purchases-btn"
-                  onClick={() => setActiveTab("purchases")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'purchases' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  Purchases
-                </button>
-
-                <button
-                  id="tab-inventory-btn"
-                  onClick={() => setActiveTab("inventory")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'inventory' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <Bookmark className="w-4 h-4" />
-                  Stock
-                </button>
-
-                <button
-                  id="tab-duelist-btn"
-                  onClick={() => setActiveTab("duelist")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'duelist' ? 'bg-amber-500/10 text-amber-400 border border-amber-550/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <History className="w-4 h-4" />
-                  Due List
-                </button>
-
-                <button
-                  id="tab-ledger-btn"
-                  onClick={() => setActiveTab("ledger")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'ledger' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <FileText className="w-4 h-4" />
-                  Ledger
-                </button>
-
-                <button
-                  id="tab-expenses-btn"
-                  onClick={() => setActiveTab("expenses")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'expenses' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <PiggyBank className="w-4 h-4" />
-                  Expenses
-                </button>
-
-                <button
-                  id="tab-reports-btn"
-                  onClick={() => setActiveTab("reports")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'reports' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  Reports
-                </button>
-
-                <button
-                  id="tab-staff-btn"
-                  onClick={() => setActiveTab("staff")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'staff' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <UserCheck className="w-4 h-4" />
-                  Staff
-                </button>
-
-                <p className="text-[10px] uppercase font-mono tracking-widest text-[#A0A0A5] pl-1.5 mt-4 mb-2 font-bold">Configs</p>
-
-                <button
-                  id="tab-settings-btn"
-                  onClick={() => setActiveTab("settings")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'settings' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
-                >
-                  <Settings className="w-4 h-4" />
-                  Settings
-                </button>
+                {[
+                  { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+                  { id: "pos", label: "Sales POS", Icon: ShoppingCart },
+                  { id: "contacts", label: "Customers", Icon: Users },
+                  { id: "ledger", label: "Ledger Box", Icon: FileText },
+                  { id: "products", label: "Products", Icon: Package },
+                  { id: "expenses", label: "Expenses", Icon: PiggyBank },
+                  { id: "negative-sales", label: "Stock Alert", Icon: TrendingDown, alert: true },
+                  { id: "purchases", label: "Purchases", Icon: PlusCircle },
+                  { id: "inventory", label: "All Stock", Icon: Bookmark },
+                  { id: "duelist", label: "All Due List", Icon: History },
+                  { id: "reports", label: "Reports", Icon: BarChart3 },
+                  { id: "staff", label: "Staff Hub", Icon: UserCheck },
+                  { id: "settings", label: "Settings", Icon: Settings },
+                ] as const).map((item) => {
+                  const Icon = item.Icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      id={`tab-${item.id}-btn`}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${item.alert
+                        ? (isActive ? 'bg-[#FF5252]/10 text-[#FF5252] border border-[#FF5252]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent')
+                        : (isActive ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent')}`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${item.alert ? 'text-[#FF5252]' : ''}`} />
+                      <span className="text-xs font-semibold leading-none">{item.label}</span>
+                    </button>
+                  );
+                })}
               </>
             ) : (
               <>
