@@ -7272,7 +7272,7 @@ _${businessInfo.name}_`;
 
               return (
               <div className="relative isolate space-y-5 overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#040508] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.42)] animate-fade-in sm:p-5 lg:p-6" id="view-expenses-outer-container">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-80" style={{ backgroundImage: "radial-gradient(ellipse at 12% 5%, rgba(255,255,255,0.045), transparent 42%), radial-gradient(ellipse at 90% 90%, rgba(255,255,255,0.03), transparent 40%), linear-gradient(rgba(255,255,255,0.014) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.014) 1px, transparent 1px)", backgroundSize: "auto, auto, 42px 42px, 42px 42px" }} />
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-80" style={{ backgroundImage: "radial-gradient(ellipse at 12% 5%, rgba(255,255,255,0.035), transparent 42%), radial-gradient(ellipse at 90% 90%, rgba(255,255,255,0.025), transparent 40%)" }} />
                 <div className="relative z-10 space-y-5">
                 {expenseSection === "home" ? (
                   <section
@@ -7283,8 +7283,7 @@ _${businessInfo.name}_`;
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-0 opacity-90"
                       style={{
-                        backgroundImage: "radial-gradient(ellipse at 14% 8%, rgba(255,255,255,0.055), transparent 40%), radial-gradient(ellipse at 88% 88%, rgba(255,255,255,0.035), transparent 38%), linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px)",
-                        backgroundSize: "auto, auto, 40px 40px, 40px 40px"
+                        backgroundImage: "radial-gradient(ellipse at 14% 8%, rgba(255,255,255,0.035), transparent 40%), radial-gradient(ellipse at 88% 88%, rgba(255,255,255,0.025), transparent 38%)"
                       }}
                     />
                     <div aria-hidden="true" className="pointer-events-none absolute -top-28 right-[-5rem] h-72 w-72 rounded-full bg-white/[0.035] blur-3xl" />
