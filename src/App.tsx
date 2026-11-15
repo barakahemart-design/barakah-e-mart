@@ -324,14 +324,31 @@ export default function App() {
  
 
    // Security Locking Roles state
-   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
-  const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
+   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => {
+    try {
+      const hasSavedUser = !!localStorage.getItem("barakah_local_active_user");
+      const savedPanel = sessionStorage.getItem("barakah_active_panel");
+      return hasSavedUser && (savedPanel === "admin" || savedPanel === "sales") ? savedPanel : "none";
+    } catch (_) { return "none"; }
+  });
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => {
+    try { return !localStorage.getItem("barakah_local_active_user"); }
+    catch (_) { return true; }
+  });
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
     "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "settings"
   >(() => {
-    return typeof window !== "undefined" && window.innerWidth < 768 ? "dashboard" : "pos";
+    const defaultTab = typeof window !== "undefined" && window.innerWidth < 768 ? "dashboard" : "pos";
+    try {
+      if (localStorage.getItem("barakah_local_active_user")) {
+        const savedTab = sessionStorage.getItem("barakah_active_tab");
+        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "settings"];
+        if (savedTab && validTabs.includes(savedTab)) return savedTab as any;
+      }
+    } catch (_) {}
+    return defaultTab;
   });
 
   // Staff members state
@@ -363,6 +380,74 @@ export default function App() {
     }
     localStorage.setItem(getDbKey("barakah_billing_dark_theme"), String(isDarkMode));
   }, [isDarkMode]);
+
+  // Keep the unlocked workspace and selected page through a normal browser reload.
+  // Logout clears the panel state, so this never replaces authentication.
+  useEffect(() => {
+    try {
+      if (currentPanel === "none") sessionStorage.removeItem("barakah_active_panel");
+      else sessionStorage.setItem("barakah_active_panel", currentPanel);
+    } catch (_) {}
+  }, [currentPanel]);
+
+  useEffect(() => {
+    try { sessionStorage.setItem("barakah_active_tab", activeTab); } catch (_) {}
+  }, [activeTab]);
+
+  // Mobile pull-down refresh: a deliberate vertical pull reloads the full app.
+  // Firebase's persisted auth session and the saved workspace restore after reload.
+  useEffect(() => {
+    let startX = 0;
+    let startY = 0;
+    let startedAt = 0;
+    let validStart = false;
+    const previousOverscroll = document.documentElement.style.overscrollBehaviorY;
+    const previousBodyOverscroll = document.body.style.overscrollBehaviorY;
+    document.documentElement.style.overscrollBehaviorY = "contain";
+    document.body.style.overscrollBehaviorY = "contain";
+
+    const isInteractiveTarget = (target: EventTarget | null) =>
+      target instanceof Element && !!target.closest('input, textarea, select, button, [contenteditable="true"], iframe, [data-no-pull-refresh]');
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || isInteractiveTarget(event.target)) {
+        validStart = false;
+        return;
+      }
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      startedAt = Date.now();
+      validStart = true;
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (!validStart || event.changedTouches.length !== 1 || isInteractiveTarget(event.target)) {
+        validStart = false;
+        return;
+      }
+      const touch = event.changedTouches[0];
+      const deltaY = touch.clientY - startY;
+      const deltaX = Math.abs(touch.clientX - startX);
+      const elapsed = Date.now() - startedAt;
+      validStart = false;
+      if (deltaY >= 115 && deltaX <= 75 && elapsed <= 1800) {
+        window.location.reload();
+      }
+    };
+
+    const handleTouchCancel = () => { validStart = false; };
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", handleTouchCancel, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchCancel);
+      document.documentElement.style.overscrollBehaviorY = previousOverscroll;
+      document.body.style.overscrollBehaviorY = previousBodyOverscroll;
+    };
+  }, []);
 
   // Cloud backup sync indicator active states
   const [isBackingUp, setIsBackingUp] = useState(false);
