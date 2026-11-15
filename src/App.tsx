@@ -6993,6 +6993,7 @@ _${businessInfo.name}_`;
                               </button>
                             )
                           )}
+                          </div>
                         </div>
                       </div>
                     );
