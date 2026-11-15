@@ -19,8 +19,8 @@ type Props = {
   activeSection: "creditor-entry" | "creditors" | "creditor-report";
 };
 
-const inputClass = "w-full bg-white/[0.06] border border-white/15 rounded-xl px-3 py-3 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/40 focus:bg-white/[0.09]";
-const panelClass = "bg-gradient-to-br from-white/[0.10] via-slate-500/[0.05] to-black/30 border border-white/15 rounded-2xl p-5 backdrop-blur-2xl";
+const inputClass = "w-full bg-white/[0.075] border border-white/18 rounded-xl px-3 py-3 text-sm text-white placeholder:text-white/40 outline-none shadow-inner backdrop-blur-2xl focus:border-white/30 focus:bg-white/[0.10]";
+const panelClass = "bg-white/[0.065] border border-white/16 rounded-2xl p-5 shadow-[0_18px_55px_rgba(0,0,0,0.48)] backdrop-blur-[32px]";
 
 export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotification, toUUID, activeUser, activeSection }: Props) {
   const section = activeSection === "creditor-entry" ? "entry" : activeSection === "creditors" ? "creditors" : "report";
@@ -80,9 +80,9 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
           <label className="space-y-1"><span className="text-xs text-slate-400">Note / Reference (Optional)</span><input value={note} onChange={e => setNote(e.target.value)} placeholder="Transaction details..." className={inputClass} /></label>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-xl border border-slate-800 bg-[#050912] p-4"><p className="text-[10px] uppercase tracking-wide text-slate-500">Previous Balance</p><p className="text-lg font-bold text-white mt-1">{businessInfo.currencySymbol} {previousBalance.toLocaleString()}</p></div>
-          <div className="rounded-xl border border-slate-800 bg-[#050912] p-4"><p className="text-[10px] uppercase tracking-wide text-slate-500">This Entry Balance</p><p className="text-lg font-bold text-white mt-1">{businessInfo.currencySymbol} {Math.max(0, dueValue - paidValue).toLocaleString()}</p></div>
-          <div className="rounded-xl border border-white/20 bg-white/[0.08] p-4 backdrop-blur-xl"><p className="text-[10px] uppercase tracking-wide text-white/75">New Total Balance</p><p className="text-lg font-bold text-white mt-1">{businessInfo.currencySymbol} {Math.max(0, nextBalance).toLocaleString()}</p></div>
+          <div className="rounded-xl border border-white/16 bg-white/[0.065] p-4 shadow-inner backdrop-blur-2xl"><p className="text-[10px] uppercase tracking-wide text-slate-500">Previous Balance</p><p className="text-lg font-bold text-white mt-1">{businessInfo.currencySymbol} {previousBalance.toLocaleString()}</p></div>
+          <div className="rounded-xl border border-white/16 bg-white/[0.065] p-4 shadow-inner backdrop-blur-2xl"><p className="text-[10px] uppercase tracking-wide text-slate-500">This Entry Balance</p><p className="text-lg font-bold text-white mt-1">{businessInfo.currencySymbol} {Math.max(0, dueValue - paidValue).toLocaleString()}</p></div>
+          <div className="rounded-xl border border-white/16 bg-white/[0.065] p-4 shadow-inner backdrop-blur-2xl"><p className="text-[10px] uppercase tracking-wide text-white/75">New Total Balance</p><p className="text-lg font-bold text-white mt-1">{businessInfo.currencySymbol} {Math.max(0, nextBalance).toLocaleString()}</p></div>
         </div>
         <div className="flex justify-end"><button onClick={() => {
           if (!creditorId) { triggerNotification("Please select a creditor.", "error"); return; }
@@ -94,7 +94,7 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
           updateLedger({ creditors, entries: [entry, ...entries] });
           setDue(""); setPaid(""); setNote("");
           triggerNotification("Creditor transaction saved.", "success");
-        }} className="px-5 py-3 rounded-xl border border-white/35 bg-white/[0.14] text-white text-xs font-bold shadow-[0_8px_24px_rgba(255,255,255,0.08)] backdrop-blur-xl hover:bg-white/[0.22] transition-all">Save Transaction</button></div>
+        }} className="px-5 py-3 rounded-xl border border-white/25 bg-white/[0.10] text-white text-xs font-bold shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-2xl hover:bg-white/[0.14] transition-all">Save Transaction</button></div>
       </div>}
 
       {section === "creditors" && <div className={`${panelClass} space-y-5`}>
@@ -110,7 +110,7 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
             updateLedger({ creditors: [...creditors, newCreditor], entries });
             setName(""); setPhone("");
             triggerNotification("Creditor added.", "success");
-          }} className="px-5 py-3 rounded-xl border border-white/35 bg-white/[0.14] text-white text-xs font-bold shadow-[0_8px_24px_rgba(255,255,255,0.08)] backdrop-blur-xl hover:bg-white/[0.22] transition-all">Add Creditor</button>
+          }} className="px-5 py-3 rounded-xl border border-white/25 bg-white/[0.10] text-white text-xs font-bold shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-2xl hover:bg-white/[0.14] transition-all">Add Creditor</button>
         </div>
         <div className="divide-y divide-slate-800">
           {activeCreditors.map(c => {
