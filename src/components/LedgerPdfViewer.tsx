@@ -40,9 +40,9 @@ function loadPdfJs(): Promise<any> {
   return pdfJsLoader;
 }
 
-type Props = { dataUrl: string; title: string; initialZoom: number; onZoomChange?: (zoom: number) => void };
+type Props = { dataUrl: string; title: string; initialZoom: number; fitToWidth?: boolean; onZoomChange?: (zoom: number) => void };
 
-export function LedgerPdfViewer({ dataUrl, title, initialZoom, onZoomChange }: Props) {
+export function LedgerPdfViewer({ dataUrl, title, initialZoom, fitToWidth = false, onZoomChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const [pdf, setPdf] = useState<any>(null);
@@ -109,7 +109,7 @@ export function LedgerPdfViewer({ dataUrl, title, initialZoom, onZoomChange }: P
         if (cancelled) return;
         const baseViewport = page.getViewport({ scale: 1 });
         const fitScale = Math.max(0.1, (containerWidth - 20) / baseViewport.width);
-        const scale = initialZoom >= 1 ? fitScale * zoom : zoom;
+        const scale = fitToWidth ? fitScale * zoom : zoom;
         const viewport = page.getViewport({ scale });
         const ratio = Math.max(1, window.devicePixelRatio || 1);
         const context = canvas.getContext("2d");
@@ -126,7 +126,7 @@ export function LedgerPdfViewer({ dataUrl, title, initialZoom, onZoomChange }: P
       if (!cancelled) console.error("PDF page rendering failed:", e);
     });
     return () => { cancelled = true; };
-  }, [pdf, containerWidth, pageCount, zoom]);
+  }, [pdf, containerWidth, pageCount, zoom, fitToWidth]);
 
   const changeZoom = (delta: number) => setZoom(value => { const next = Math.min(2.5, Math.max(0.35, Math.round((value + delta) * 100) / 100)); onZoomChange?.(next); return next; });
   const resetZoom = () => { setZoom(initialZoom); onZoomChange?.(initialZoom); };
