@@ -6725,14 +6725,23 @@ _${businessInfo.name}_`;
                     const associatedContact = contacts.find(c => c.id === t.contactId);
                     const customerLabel = associatedContact ? associatedContact.name : "Walk-in Showroom Client";
                     const customerPhone = associatedContact ? associatedContact.phone : null;
-                    
+                    const outstandingDue = Math.max(
+                      0,
+                      Number(
+                        t.dueBalance ??
+                        t.due_balance ??
+                        ((Number(t.total) || 0) - (Number(t.paidAmount ?? t.paid_amount) || 0))
+                      ) || 0
+                    );
+                    const hasOutstandingDue = outstandingDue > 0;
+
                     return (
                       <div
                         key={t.id}
-                        className={`mx-auto w-full max-w-5xl rounded-2xl border bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4 ${
-                          Number(t.dueBalance) > 0
-                            ? "border-rose-400/45 shadow-[0_0_0_1px_rgba(251,113,133,0.10),0_8px_30px_rgba(244,63,94,0.07)] hover:border-rose-300/60"
-                            : "border-emerald-400/40 shadow-[0_0_0_1px_rgba(52,211,153,0.08),0_8px_30px_rgba(16,185,129,0.06)] hover:border-emerald-300/55"
+                        className={`mx-auto w-full max-w-5xl rounded-2xl border-2 bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4 ${
+                          hasOutstandingDue
+                            ? "border-rose-500/90 ring-1 ring-inset ring-rose-400/35 shadow-[0_0_0_2px_rgba(244,63,94,0.18),0_0_28px_rgba(244,63,94,0.14)] hover:border-rose-400"
+                            : "border-emerald-400/90 ring-1 ring-inset ring-emerald-300/30 shadow-[0_0_0_2px_rgba(52,211,153,0.16),0_0_28px_rgba(16,185,129,0.12)] hover:border-emerald-300"
                         }`}
                       >
                         {/* Centered invoice identity */}
@@ -6780,7 +6789,7 @@ _${businessInfo.name}_`;
                           </div>
                           <div className="hidden items-center justify-center gap-2.5 lg:flex">
                             <span className="flex flex-col items-end gap-0.5 text-right">
-                              <span className="text-[8px] font-bold tracking-[0.12em] text-slate-300">Barakah-e-MART</span>
+                              <span className="text-[8px] font-bold tracking-[0.12em] text-slate-300">BARAKAH e-MART</span>
                               <span className="text-[7px] font-mono tracking-[0.16em] text-slate-600">CUSTOMER LEDGER</span>
                             </span>
                             <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.045] text-[10px] font-black tracking-tighter text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">B</span>
