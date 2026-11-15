@@ -25,6 +25,8 @@ class RealtimeSyncManager {
   private currentEmail: string = '';
   private currentUid: string = '';
   private reconnectTimeout: any = null;
+  private pollInFlight = false;
+  private lastPollAt = 0;
   private status: SyncStatus = 'offline';
 
   public addChangeListener(cb: ChangeCallback): () => void {
@@ -83,6 +85,11 @@ class RealtimeSyncManager {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', this.handleWindowFocus);
+      window.removeEventListener('online', this.handleWindowFocus);
+    }
+    this.pollInFlight = false;
     this.setStatus('offline');
   }
 
@@ -140,12 +147,12 @@ class RealtimeSyncManager {
 
   private startPolling() {
     if (this.pollInterval) clearInterval(this.pollInterval);
-    // Lightweight polling every 2.5 seconds to guarantee 100% sync consistency across any network/device
+    // Safety reconciliation polling; SSE delivers normal changes immediately.
     this.pollInterval = setInterval(() => {
       if (this.isRunning) {
         this.pollChanges();
       }
-    }, 2500);
+    }, 30000);
 
     // Also poll immediately when window comes into focus or device goes online
     if (typeof window !== 'undefined') {
@@ -155,13 +162,15 @@ class RealtimeSyncManager {
   }
 
   private handleWindowFocus = () => {
-    if (this.isRunning) {
+    if (this.isRunning && Date.now() - this.lastPollAt > 10000) {
       this.pollChanges();
     }
   };
 
   public async pollChanges() {
-    if (!this.isRunning || !this.currentEmail) return;
+    if (!this.isRunning || !this.currentEmail || this.pollInFlight) return;
+    this.pollInFlight = true;
+    this.lastPollAt = Date.now();
 
     try {
       const url = `/api/sync/poll?since=${this.lastSyncTime}&email=${encodeURIComponent(this.currentEmail)}&uid=${encodeURIComponent(this.currentUid)}`;
@@ -195,7 +204,9 @@ class RealtimeSyncManager {
         this.setStatus('connected');
       }
     } catch (err) {
-      // Silently retry on next tick
+      // Silently retry on next scheduled reconciliation.
+    } finally {
+      this.pollInFlight = false;
     }
   }
 
