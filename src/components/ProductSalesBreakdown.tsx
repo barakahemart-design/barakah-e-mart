@@ -177,6 +177,7 @@ export function ProductSalesBreakdown({
     : "All Time";
 
   return (
+    <>
     <section className="space-y-4 rounded-2xl border border-slate-800/90 bg-[#0b0f19] p-4 sm:p-5 shadow-lg" id="dashboard-product-sales-breakdown">
       <div className="flex flex-col items-center gap-2 text-center border-b border-slate-800/80 pb-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-300">
@@ -262,5 +263,6 @@ export function ProductSalesBreakdown({
         )}
       </div>
     </section>
+    </>
   );
 }
