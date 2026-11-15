@@ -4178,44 +4178,44 @@ _${businessInfo.name}_`;
 
   if (showWelcomeScreen) {
     return (
-      <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#050505] px-5 py-10 text-white">
+      <main className="fixed inset-0 flex h-[100dvh] min-h-0 w-full items-center justify-center overflow-hidden bg-[#050505] px-3 py-3 text-white sm:px-5 sm:py-5">
         <div className="pointer-events-none absolute -left-32 top-[-8rem] h-80 w-80 rounded-full bg-emerald-500/[0.08] blur-[110px]" />
         <div className="pointer-events-none absolute -right-28 bottom-[-8rem] h-96 w-96 rounded-full bg-amber-400/[0.07] blur-[120px]" />
-        <div className="relative z-10 mx-auto flex min-h-[min(760px,88vh)] w-full max-w-5xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-gradient-to-b from-[#151515] via-[#0c0c0c] to-[#080808] px-6 py-12 text-center shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:px-12 md:min-h-[680px] md:rounded-[2.5rem]">
+        <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col items-center justify-center overflow-hidden rounded-[1.5rem] border border-white/10 bg-gradient-to-b from-[#151515] via-[#0c0c0c] to-[#080808] px-4 py-4 text-center shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:rounded-[2rem] sm:px-10 sm:py-8 md:rounded-[2.5rem] md:px-12 md:py-10">
           <p
             dir="rtl"
             lang="ar"
-            className="mb-8 text-2xl font-semibold leading-relaxed tracking-normal text-amber-200 sm:text-3xl md:text-4xl"
+            className="mb-3 text-xl font-semibold leading-relaxed tracking-normal text-amber-200 sm:mb-6 sm:text-3xl md:text-4xl"
             style={{ fontFamily: "'Noto Naskh Arabic', 'Amiri', 'Traditional Arabic', serif" }}
           >
             بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
           </p>
-          <p className="mb-2 text-sm font-medium tracking-[0.22em] text-slate-400 sm:text-base">
+          <p className="mb-1 text-xs font-medium tracking-[0.22em] text-slate-400 sm:mb-2 sm:text-base">
             {welcomeGreeting}
           </p>
-          <p className="mb-8 font-mono text-xs tracking-[0.2em] text-slate-600">{welcomeClock} · DHAKA</p>
-          <h1 className="text-3xl font-black tracking-[0.09em] text-white sm:text-5xl md:text-6xl">
+          <p className="mb-4 font-mono text-[10px] tracking-[0.2em] text-slate-600 sm:mb-7 sm:text-xs">{welcomeClock} · DHAKA</p>
+          <h1 className="text-2xl font-black tracking-[0.07em] text-white sm:text-5xl md:text-6xl">
             BARAKAH <span className="text-emerald-400">e</span>-MART
           </h1>
-          <div className="my-9 flex w-full max-w-md items-center gap-4">
+          <div className="my-4 flex w-full max-w-md items-center gap-4 sm:my-8">
             <span className="h-px flex-1 bg-gradient-to-r from-transparent to-white/20" />
             <span className="h-1.5 w-1.5 rotate-45 border border-amber-300/70" />
             <span className="h-px flex-1 bg-gradient-to-l from-transparent to-white/20" />
           </div>
-          <p className="max-w-xl text-lg font-medium leading-relaxed text-slate-200 sm:text-2xl">
+          <p className="max-w-xl text-base font-medium leading-relaxed text-slate-200 sm:text-2xl">
             “I believe patience is never wasted.”
           </p>
-          <p className="mt-3 max-w-lg text-xs leading-6 text-slate-500 sm:text-sm">
+          <p className="mt-2 max-w-lg text-[10px] leading-5 text-slate-500 sm:mt-3 sm:text-sm sm:leading-6">
             Every sincere effort, made with patience and purpose, brings its own time of success.
           </p>
           <button
             type="button"
             onClick={() => setShowWelcomeScreen(false)}
-            className="mt-12 inline-flex min-w-48 items-center justify-center gap-3 rounded-xl border border-white bg-[#f8fafc] px-8 py-4 text-xs font-black tracking-[0.22em] !text-[#050505] shadow-[0_10px_35px_rgba(255,255,255,0.14)] transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_40px_rgba(255,255,255,0.22)] active:translate-y-0"
+            className="mt-6 inline-flex min-h-11 min-w-44 shrink-0 items-center justify-center gap-3 rounded-xl border border-white bg-[#f8fafc] px-7 py-3 text-xs font-black tracking-[0.22em] !text-[#050505] shadow-[0_10px_35px_rgba(255,255,255,0.14)] transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_40px_rgba(255,255,255,0.22)] active:translate-y-0 sm:mt-10 sm:min-h-14 sm:px-8 sm:py-4"
           >
             <span className="!text-[#050505]">LOGIN</span> <ArrowLeft className="h-4 w-4 rotate-180 !text-[#050505]" />
           </button>
-          <p className="mt-8 text-[9px] font-medium tracking-[0.28em] text-slate-700">WELCOME TO YOUR NEXT SUCCESSFUL DAY</p>
+          <p className="mt-4 shrink-0 text-[8px] font-medium tracking-[0.2em] text-slate-700 sm:mt-7 sm:text-[9px] sm:tracking-[0.28em]">WELCOME TO YOUR NEXT SUCCESSFUL DAY</p>
         </div>
       </main>
     );
