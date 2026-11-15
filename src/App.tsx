@@ -402,17 +402,31 @@ export default function App() {
     try { sessionStorage.setItem("barakah_active_tab", activeTab); } catch (_) {}
   }, [activeTab]);
 
-  // Mobile pull-down refresh: a deliberate vertical pull reloads the full app.
+  // Mobile pull-down refresh: block the browser's native short pull-to-refresh
+  // and reload only after a deliberate 240px downward gesture at the top.
   // Firebase's persisted auth session and the saved workspace restore after reload.
   useEffect(() => {
     let startX = 0;
     let startY = 0;
-    let startedAt = 0;
+    let currentY = 0;
     let validStart = false;
     const previousOverscroll = document.documentElement.style.overscrollBehaviorY;
     const previousBodyOverscroll = document.body.style.overscrollBehaviorY;
-    document.documentElement.style.overscrollBehaviorY = "contain";
-    document.body.style.overscrollBehaviorY = "contain";
+    document.documentElement.style.overscrollBehaviorY = "none";
+    document.body.style.overscrollBehaviorY = "none";
+
+    const canScrollUpFromTarget = (target: EventTarget | null) => {
+      let element = target instanceof HTMLElement ? target : null;
+      while (element && element !== document.body) {
+        const style = window.getComputedStyle(element);
+        const scrollableY = /(auto|scroll)/.test(style.overflowY) &&
+          element.scrollHeight > element.clientHeight;
+        if (scrollableY && element.scrollTop > 0) return true;
+        element = element.parentElement;
+      }
+      const scrollingElement = document.scrollingElement;
+      return !!scrollingElement && scrollingElement.scrollTop > 0;
+    };
 
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) {
@@ -422,8 +436,19 @@ export default function App() {
       const touch = event.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
-      startedAt = Date.now();
+      currentY = touch.clientY;
       validStart = true;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!validStart || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      currentY = touch.clientY;
+      const deltaY = currentY - startY;
+      const deltaX = Math.abs(touch.clientX - startX);
+      if (deltaY > 0 && deltaX < 90 && !canScrollUpFromTarget(event.target)) {
+        event.preventDefault();
+      }
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
@@ -432,21 +457,22 @@ export default function App() {
         return;
       }
       const touch = event.changedTouches[0];
-      const deltaY = touch.clientY - startY;
+      const deltaY = Math.max(currentY, touch.clientY) - startY;
       const deltaX = Math.abs(touch.clientX - startX);
-      const elapsed = Date.now() - startedAt;
       validStart = false;
-      if (deltaY >= 145 && deltaX <= 75 && elapsed <= 1800) {
+      if (deltaY >= 240 && deltaX <= 75) {
         window.location.reload();
       }
     };
 
     const handleTouchCancel = () => { validStart = false; };
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("touchend", handleTouchEnd, { passive: true });
     window.addEventListener("touchcancel", handleTouchCancel, { passive: true });
     return () => {
       window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("touchcancel", handleTouchCancel);
       document.documentElement.style.overscrollBehaviorY = previousOverscroll;
