@@ -47,6 +47,7 @@ import {
   Copy,
   Menu,
   MoreHorizontal,
+  ReceiptText,
   LayoutDashboard,
   Sun,
   Moon,
@@ -4121,7 +4122,7 @@ _${businessInfo.name}_`;
                   { id: "contacts", label: "Customers", Icon: Users },
                   { id: "ledger", label: "Ledger Box", Icon: FileText },
                   { id: "products", label: "Products", Icon: Package },
-                  { id: "expenses", label: "Expenses", Icon: PiggyBank },
+                  { id: "expenses", label: "Expenses", Icon: ReceiptText },
                   { id: "negative-sales", label: "Stock Alert", Icon: TrendingDown, alert: true },
                   { id: "purchases", label: "Purchases", Icon: PlusCircle },
                   { id: "inventory", label: "All Stock", Icon: Bookmark },
@@ -6031,21 +6032,21 @@ _${businessInfo.name}_`;
                     const Icon = item.icon;
                     return (
                       <button key={item.id} type="button" onClick={() => setDueSection(item.id)}
-                        className="group relative min-h-[190px] sm:min-h-[220px] overflow-hidden rounded-[26px] border border-white/20 bg-gradient-to-br from-white/[0.13] via-slate-500/[0.09] to-black/60 p-5 sm:p-6 text-left text-white shadow-[0_18px_55px_rgba(0,0,0,0.32)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/35 hover:from-white/[0.18] hover:to-black/70 hover:shadow-[0_24px_65px_rgba(0,0,0,0.42)] active:scale-[0.985]">
-                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.10] via-transparent to-black/20 opacity-90 transition-opacity duration-300 group-hover:opacity-100" />
-                        <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full bg-white/[0.035] blur-3xl transition-all duration-500 group-hover:scale-125 group-hover:bg-white/[0.07]" />
+                        className="group relative min-h-[190px] sm:min-h-[220px] overflow-hidden rounded-[26px] border border-white/18 bg-white/[0.075] p-5 sm:p-6 text-left text-white shadow-[0_18px_55px_rgba(0,0,0,0.48)] backdrop-blur-[32px] transition-all duration-300 hover:-translate-y-1 hover:border-white/28 hover:bg-white/[0.10] hover:shadow-[0_24px_65px_rgba(0,0,0,0.58)] active:scale-[0.985]">
+                        <div className="pointer-events-none absolute inset-0 bg-white/[0.025] opacity-90 transition-opacity duration-300 group-hover:bg-white/[0.045]" />
+                        <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full bg-white/[0.025] blur-[48px] transition-all duration-500 group-hover:scale-125" />
                         <div className="relative flex h-full min-h-[145px] flex-col justify-between gap-7">
                           <div className="flex items-start justify-between gap-3">
-                            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-white/[0.10] text-white shadow-inner backdrop-blur-xl">
+                            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/18 bg-white/[0.075] text-white shadow-inner backdrop-blur-2xl">
                               <Icon className="h-6 w-6 text-white" strokeWidth={1.8} />
                             </span>
-                            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[9px] font-bold tracking-[0.16em] text-slate-400 backdrop-blur-xl">0{index + 1}</span>
+                            <span className="rounded-full border border-white/12 bg-white/[0.045] px-3 py-1.5 text-[9px] font-bold tracking-[0.16em] text-white/55 backdrop-blur-2xl">0{index + 1}</span>
                           </div>
                           <div>
                             <p className="mb-2 text-[9px] font-bold tracking-[0.2em] text-white/70">{item.detail}</p>
                             <div className="flex items-center justify-between gap-3">
                               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{item.title}</h2>
-                              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/70 transition-all group-hover:translate-x-1 group-hover:border-white/30 group-hover:bg-white/15 group-hover:text-white">→</span>
+                              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/70 transition-all group-hover:translate-x-1 group-hover:border-white/25 group-hover:bg-white/[0.10] group-hover:text-white">→</span>
                             </div>
                             <p className="mt-2 max-w-[28rem] text-xs leading-relaxed text-white/65">{item.subtitle}</p>
                           </div>
@@ -9594,12 +9595,12 @@ _${businessInfo.name}_`;
         {/* More menu - first shortcut on the far left */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+          className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
             isMobileMenuOpen ? "text-white font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Open all menu options"
         >
-          <MoreHorizontal className="w-5 h-5 mb-1" />
+          <MoreHorizontal className="block mx-auto w-5 h-5 mb-1" />
           <span className="text-[9px] font-semibold tracking-wide font-sans">More</span>
           {isMobileMenuOpen && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
@@ -9610,12 +9611,12 @@ _${businessInfo.name}_`;
             setActiveTab("pos");
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+          className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
             activeTab === "pos" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Sales POS"
         >
-          <ShoppingCart className="w-[18px] h-[18px] mb-1" />
+          <ShoppingCart className="block mx-auto w-[18px] h-[18px] mb-1" />
           <span className="text-[9px] font-semibold tracking-wide">Sales</span>
           {activeTab === "pos" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
@@ -9626,12 +9627,12 @@ _${businessInfo.name}_`;
             setActiveTab("ledger");
             setIsMobileMenuOpen(false);
           }}
-          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+          className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
             activeTab === "ledger" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Ledger Box"
         >
-          <FileText className="w-[18px] h-[18px] mb-1" />
+          <FileText className="block mx-auto w-[18px] h-[18px] mb-1" />
           <span className="text-[9px] font-semibold tracking-wide font-sans">Ledger</span>
           {activeTab === "ledger" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
@@ -9646,12 +9647,12 @@ _${businessInfo.name}_`;
               triggerNotification("Please log in as Admin to access Expenses", "info");
             }
           }}
-          className={`flex flex-col items-center justify-center h-full transition-all duration-200 relative ${
+          className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
             activeTab === "expenses" ? "text-white scale-105 font-bold" : "text-[#94a3b8] hover:text-white"
           }`}
           aria-label="Expenses"
         >
-          <PiggyBank className="w-[18px] h-[18px] mb-1" />
+          <ReceiptText className="block mx-auto w-[18px] h-[18px] mb-1" />
           <span className="text-[9px] font-semibold tracking-wide font-sans">Expenses</span>
           {activeTab === "expenses" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
@@ -9711,7 +9712,7 @@ _${businessInfo.name}_`;
                       { id: "contacts", label: "Customers", desc: "Customer and supplier directory", Icon: Users },
                       { id: "ledger", label: "Ledger Box", desc: "Cashflow and account history", Icon: FileText },
                       { id: "products", label: "Products", desc: "Product catalogue and stock", Icon: Package },
-                      { id: "expenses", label: "Expenses", desc: "Business costs and payments", Icon: PiggyBank },
+                      { id: "expenses", label: "Expenses", desc: "Business costs and payments", Icon: ReceiptText },
                       { id: "negative-sales", label: "Stock Alert", desc: "Low and negative stock alerts", Icon: TrendingDown },
                       { id: "purchases", label: "Purchases", desc: "Purchase and supplier records", Icon: PlusCircle },
                       { id: "inventory", label: "All Stock", desc: "Complete inventory overview", Icon: Bookmark },
