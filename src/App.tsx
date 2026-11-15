@@ -1972,7 +1972,7 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"stock-value" | "out-of-stock" | "supplier-bills" | "due-list">("stock-value");
+  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "out-of-stock">("home");
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5499,494 +5499,155 @@ _${businessInfo.name}_`;
               VIEW 2: STOCK MANAGEMENT & VALUATIONS (UPGRADED, NO REGISTRATION, ENGLISH ONLY)
               ----------------------------------------------------------------- */}
           {activeTab === "inventory" && (
-            <div className="space-y-6 animate-fadeIn" id="view-inventory-container">
-              
-              {/* STOCKS STATS / KPI OVERVIEW DETAILS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4" id="stock-valuation-summary-cards">
-                
-                {/* CARD 1: TOTAL STOCK VALUE VALUATION */}
-                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-total-stock-asset">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">Stock Asset Valuation</span>
-                    <Coins className="w-4 h-4 text-emerald-400" />
+            <div className="space-y-5 animate-fadeIn" id="view-inventory-container">
+              {stockSubTab === "home" ? (
+                <div className="space-y-4" id="all-stock-home">
+                  <div className="border-b border-white/10 pb-4">
+                    <h2 className="text-xl font-black text-white">All Stock</h2>
+                    <p className="mt-1 text-xs text-slate-400">Choose a stock section to view the live inventory.</p>
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                      {businessInfo.currencySymbol} {products.reduce((acc, p) => acc + (p.stock > 0 ? (p.stock * p.buyPrice) : 0), 0).toLocaleString()}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
-                      Total cost basis of remaining physical inventory stocks. Selling items dynamically reduces both physical count and asset value automatically on the database server.
-                    </p>
-                  </div>
-                </div>
-
-                {/* CARD 2: ACTIVE STOCKS */}
-                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-slate-800 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-stock-quantity-tracker">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">Active Stocks</span>
-                    <Layers className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black font-mono text-white tracking-tight flex items-baseline gap-2">
-                      <span>{products.filter(p => p.stock > 0).length}</span>
-                      <span className="text-xs text-slate-500 font-medium font-sans">In-Stock Products</span>
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-1.5 font-sans leading-relaxed">
-                      Total quantity: <span className="font-bold text-white font-mono">{products.reduce((acc, p) => acc + (p.stock > 0 ? p.stock : 0), 0)}</span> units currently across stock items.
-                    </p>
-                  </div>
-                </div>
-
-                {/* CARD 3: SUPPLIER UNPAID BILLS DUES TRACKER */}
-                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-amber-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg flex flex-col justify-between" id="card-supplier-dues-tracker">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/15 rounded-full blur-3xl -mr-10 -mt-10" />
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 font-mono">Supplier Credit Owed</span>
-                    <ShoppingBag className="w-4 h-4 text-amber-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black font-mono text-amber-400 tracking-tight">
-                      {businessInfo.currencySymbol} {purchases.reduce((acc, pur) => acc + (pur.dueAmount || 0), 0).toLocaleString()}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-1 font-sans leading-relaxed">
-                      Outstanding balance remaining for credit-based purchase invoices. Handled easily by clicking the "Settle Due" buttons on the Supplier ledger.
-                    </p>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* PHASE 1: EXPECTED SALES + PROFIT SNAPSHOT */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" id="inventory-profit-snapshot">
-                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-cyan-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 font-mono">Expected Sales Value</span>
-                    <TrendingUp className="w-4 h-4 text-cyan-400" />
-                  </div>
-                  <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                    {businessInfo.currencySymbol} {products.filter(p => p.stock > 0).reduce((acc, p) => acc + (p.stock * p.sellPrice), 0).toLocaleString()}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 mt-1 font-sans">Estimated sales value if the currently available stock is sold at today&apos;s selling price.</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-[#0c142c] to-[#0a101f] border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden shadow-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">Expected Stock Profit</span>
-                    <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <h3 className="text-2xl font-black font-mono text-white tracking-tight">
-                    {businessInfo.currencySymbol} {products.filter(p => p.stock > 0).reduce((acc, p) => acc + (p.stock * Math.max(0, p.sellPrice - p.buyPrice)), 0).toLocaleString()}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 mt-1 font-sans">Potential gross profit from the remaining stock before expenses and other adjustments.</p>
-                </div>
-              </div>
-
-              {/* PHASE 1: LOW / OUT-OF-STOCK ALERT */}
-              {(() => {
-                const inventoryProducts = products;
-                const outOfStock = inventoryProducts.filter(p => p.stock <= 0);
-                const lowStock = inventoryProducts.filter(p => p.stock > 0 && p.stock <= 5);
-                if (outOfStock.length === 0 && lowStock.length === 0) return null;
-                return (
-                  <div className="bg-[#0a101f]/80 border border-amber-500/20 rounded-2xl p-4 shadow-md" id="inventory-stock-alerts">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-400" />
-                        <span className="text-xs font-bold text-white uppercase tracking-wider">Stock Alerts</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => { setInventorySearch(""); setStockSubTab("stock-value"); }}
+                      className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
+                      id="open-stock-value-page"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white">
+                          <Coins className="h-6 w-6" />
+                        </div>
+                        <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
                       </div>
-                      <div className="flex gap-2 text-[10px] font-mono">
-                        <span className="px-2 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">Out: {outOfStock.length}</span>
-                        <span className="px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">Low: {lowStock.length}</span>
+                      <h3 className="mt-5 text-lg font-black text-white">Stock Value</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See total available quantity, current stock purchase value, and every product currently in stock.</p>
+                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{currentStockProducts.length.toLocaleString()} products in stock</span>
+                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {[...outOfStock, ...lowStock].slice(0, 8).map(p => (
-                        <span key={p.id} className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold ${p.stock <= 0 ? "bg-rose-500/10 border-rose-500/20 text-rose-300" : "bg-amber-500/10 border-amber-500/20 text-amber-300"}`}>
-                          <span className="truncate max-w-[150px]">{p.name}</span>
-                          <span className="font-mono font-bold">({p.stock} {p.unit})</span>
-                        </span>
-                      ))}
-                      {outOfStock.length + lowStock.length > 8 && <span className="text-[10px] text-slate-500 self-center">+{outOfStock.length + lowStock.length - 8} more</span>}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* STOCK VALUE + OUT OF STOCK, followed by existing supplier ledgers */}
-              <div className="flex flex-wrap gap-2 border-b border-slate-900 pb-1" id="stock-inner-tab-header">
-                <button onClick={() => setStockSubTab("stock-value")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'stock-value' ? 'bg-cyan-500/10 text-cyan-300 border-t-2 border-l border-r border-cyan-500/30 border-t-cyan-400' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><Coins className="w-3.5 h-3.5" /><span>Stock Value</span></button>
-                <button onClick={() => setStockSubTab("out-of-stock")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'out-of-stock' ? 'bg-rose-500/10 text-rose-400 border-t-2 border-l border-r border-rose-500/30 border-t-rose-500' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><AlertCircle className="w-3.5 h-3.5" /><span>Out of Stock</span></button>
-                <button onClick={() => setStockSubTab("supplier-bills")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'supplier-bills' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-slate-800 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><ShoppingBag className="w-3.5 h-3.5" /><span>Supplier Cash & Credit Ledger</span></button>
-                <button onClick={() => setStockSubTab("due-list")} className={`px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${stockSubTab === 'due-list' ? 'bg-[#00E676]/10 text-[#00E676] border-t-2 border-l border-r border-[#00E676]/20 border-t-[#00E676]' : 'text-slate-400 hover:text-white hover:bg-slate-900 border-t-2 border-transparent'}`}><FileText className="w-3.5 h-3.5 text-rose-450 animate-pulse" /><span>Supplier Items Due List</span></button>
-              </div>
-
-              {stockSubTab === "stock-value" && (
-                <div className="space-y-4 animate-slideDown" id="stock-value-view">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-emerald-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Total Available Stock</p><div className="mt-2 text-2xl font-black font-mono text-white">{currentStockUnits.toLocaleString()} <span className="text-sm font-semibold text-slate-400">pcs / units</span></div><p className="mt-1 text-[10px] text-slate-400">{currentStockProducts.length} products currently have stock</p></div>
-                    <div className="rounded-2xl border border-cyan-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Total Current Stock Value</p><div className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</div><p className="mt-1 text-[10px] text-slate-400">Available quantity × Product page Buy Price</p></div>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-[#0a101f]/70 px-3 py-2"><Search className="w-4 h-4 text-slate-500" /><input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" /></div>
-                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80"><div className="border-b border-slate-800 px-4 py-3 text-xs font-bold uppercase tracking-wider text-white">Products Currently in Stock</div>
-                    <table className="w-full text-xs text-slate-300"><thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Available Stock</th></tr></thead>
-                    <tbody className="divide-y divide-slate-800/70">{currentStockProducts.length===0?<tr><td colSpan={4} className="py-10 text-center text-slate-500">No products currently in stock.</td></tr>:currentStockProducts.map(product=><tr key={product.id} className="hover:bg-white/[0.02]"><td className="px-4 py-3 font-mono text-slate-500">{product.sku||"—"}</td><td className="px-4 py-3 font-semibold text-white">{product.name}</td><td className="px-4 py-3 text-slate-400">{product.category||"—"}</td><td className="px-4 py-3 text-right font-mono font-bold text-emerald-300">{product.stock} {product.unit}</td></tr>)}</tbody></table>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setInventorySearch(""); setStockSubTab("out-of-stock"); }}
+                      className="group w-full rounded-2xl border border-white/15 bg-[#111116] p-5 text-left transition-all hover:border-white/35 hover:bg-[#17171d] active:scale-[0.99]"
+                      id="open-out-of-stock-page"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white">
+                          <AlertCircle className="h-6 w-6" />
+                        </div>
+                        <span className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">View page</span>
+                      </div>
+                      <h3 className="mt-5 text-lg font-black text-white">Out of Stock</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">See products with zero or negative stock, shortage quantity, and shortage value.</p>
+                      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold text-white">
+                        <span>{outOfStockProducts.length.toLocaleString()} products out of stock</span>
+                        <span className="transition-transform group-hover:translate-x-1">Open →</span>
+                      </div>
+                    </button>
                   </div>
                 </div>
-              )}
-
-              {stockSubTab === "out-of-stock" && (
-                <div className="space-y-4 animate-slideDown" id="out-of-stock-view">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-rose-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">Out of Stock Products</p><div className="mt-2 text-2xl font-black font-mono text-white">{outOfStockProducts.length}</div><p className="mt-1 text-[10px] text-slate-400">Products with zero or negative stock</p></div>
-                    <div className="rounded-2xl border border-rose-500/20 bg-[#0a101f]/90 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">Shortage Stock Value</p><div className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {outOfStockValueTotal.toLocaleString()}</div><p className="mt-1 text-[10px] text-slate-400">{outOfStockMissingUnits.toLocaleString()} units below zero × Buy Price</p></div>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-[#0a101f]/70 px-3 py-2"><Search className="w-4 h-4 text-slate-500" /><input type="text" value={inventorySearch} onChange={e=>setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" /></div>
-                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a101f]/80"><div className="border-b border-slate-800 px-4 py-3 text-xs font-bold uppercase tracking-wider text-white">Out of Stock Products</div>
-                    <table className="w-full text-xs text-slate-300"><thead className="bg-slate-950/60 text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Current Stock</th><th className="px-4 py-3 text-right">Shortage Value</th></tr></thead>
-                    <tbody className="divide-y divide-slate-800/70">{outOfStockProducts.length===0?<tr><td colSpan={5} className="py-10 text-center text-slate-500">No out-of-stock products found.</td></tr>:outOfStockProducts.map(product=><tr key={product.id} className="hover:bg-white/[0.02]"><td className="px-4 py-3 font-mono text-slate-500">{product.sku||"—"}</td><td className="px-4 py-3 font-semibold text-white">{product.name}</td><td className="px-4 py-3 text-slate-400">{product.category||"—"}</td><td className="px-4 py-3 text-right font-mono text-rose-400">{product.stock} {product.unit}</td><td className="px-4 py-3 text-right font-mono font-semibold text-rose-300">{businessInfo.currencySymbol} {(Math.max(0,-Number(product.stock||0))*Number(product.buyPrice||0)).toLocaleString()}</td></tr>)}</tbody></table>
-                  </div>
-                </div>
-              )}
-
-              {stockSubTab === "supplier-bills" && (
-                /* SUPPLIER PURCHASES LEDGER WITH CASH CODE & DUE BILL TRACKING */
-                <div className="bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg animate-slideDown" id="supplier-purchases-subtab-rendered">
-                  <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2" id="supplier-bills-ledger-top flex">
-                    <div className="flex items-center gap-2">
-                      <ShoppingBag className="w-4 h-4 text-amber-500" />
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">Supplier Purchase & Credit Ledger</span>
+              ) : (
+                <div className="space-y-4" id={stockSubTab === "stock-value" ? "stock-value-page" : "out-of-stock-page"}>
+                  <div className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-4">
+                    <button
+                      type="button"
+                      onClick={() => { setStockSubTab("home"); setInventorySearch(""); }}
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/10"
+                      id="all-stock-back-button"
+                    >
+                      <ArrowLeft className="h-4 w-4" /> All Stock
+                    </button>
+                    <div>
+                      <h2 className="text-lg font-black text-white">{stockSubTab === "stock-value" ? "Stock Value" : "Out of Stock"}</h2>
+                      <p className="text-[10px] text-slate-400">Live figures based on the current Product stock and buy price.</p>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-mono">Total Transaction Vouchers: {purchases.length}</span>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead>
-                        <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
-                          <th className="py-3 px-4">Date</th>
-                          <th className="py-3 px-4">Invoice No.</th>
-                          <th className="py-3 px-4">Supplier</th>
-                          <th className="py-3 px-4">Purchased Product</th>
-                          <th className="py-3 px-4 text-right">Quantity (Qty)</th>
-                          <th className="py-3 px-4 text-right">Unit Price</th>
-                          <th className="py-3 px-4 text-right">Total Cost</th>
-                          <th className="py-3 px-4 text-center">Payment Status</th>
-                          <th className="py-3 px-4 text-center">Balance Settlement</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50 font-mono">
-                        {purchases.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
-                              No supplier purchase vouchers found. Log a new product batch with custom payment terms inside the "Purchases" view tab.
-                            </td>
-                          </tr>
-                        ) : (
-                          purchases.map((pur) => {
-                            const isDue = (pur.dueAmount || 0) > 0;
-                            const isCash = !isDue;
-                            return (
-                              <tr key={pur.id} className="hover:bg-slate-900/10 text-slate-300">
-                                <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">{pur.date}</td>
-                                <td className="py-3.5 px-4 font-bold text-emerald-400">{pur.invoiceNo || "N/A"}</td>
-                                <td className="py-3.5 px-4 font-sans text-white">{pur.supplierName || "Walk-in Supplier"}</td>
-                                <td className="py-3.5 px-4 font-sans text-slate-200">{pur.productName || "Unknown Product"}</td>
-                                <td className="py-3.5 px-4 text-right text-slate-400">{pur.quantity}</td>
-                                <td className="py-3.5 px-4 text-right">{businessInfo.currencySymbol} {pur.buyPrice}</td>
-                                <td className="py-3.5 px-4 text-right text-white font-bold">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</td>
-                                <td className="py-3.5 px-4 text-center">
-                                  {isCash ? (
-                                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-sans font-bold text-emerald-400">
-                                      <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
-                                      Paid Cash
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-sans font-bold text-amber-400">
-                                      <span className="w-1 h-1 bg-amber-400 rounded-full" />
-                                      Credit Due (Due: {businessInfo.currencySymbol} {pur.dueAmount})
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4 text-center font-sans">
-                                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
-                                    {isDue ? (
-                                      <button
-                                        onClick={() => {
-                                          setPurchases(prev => prev.map(item => item.id === pur.id ? { ...item, cashPaid: item.totalAmount, dueAmount: 0 } : item));
-                                          triggerNotification("Supplier due bill paid & fully settled in cash successfully! 🟢", "success");
-                                        }}
-                                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-205"
-                                      >
-                                        Settle Due
-                                      </button>
-                                    ) : (
-                                      <span className="text-[10px] text-slate-500 font-sans italic">Fully Settled</span>
-                                    )}
-                                    {pur.quantity > 0 && (
-                                      <button
-                                        onClick={() => {
-                                          const matchedProduct = products.find(p => p.id === pur.productId);
-                                          const availableStock = matchedProduct ? matchedProduct.stock : 0;
-                                          const maxReturnQty = Math.min(pur.quantity, availableStock);
-                                          
-                                          if (maxReturnQty <= 0) {
-                                            triggerNotification("Cannot return: No remaining warehouse stock left for this product!", "error");
-                                            return;
-                                          }
-                                          
-                                          const promptVal = prompt(
-                                            `Enter quantity of ${pur.productName} you want to return to ${pur.supplierName || 'supplier'}.\n` +
-                                            `• Purchased quantity in this batch: ${pur.quantity} pcs\n` +
-                                            `• Available physical stock: ${availableStock} pcs\n` +
-                                            `• Maximum returnable quantity: ${maxReturnQty} pcs`
-                                          );
-                                          if (promptVal === null) return;
-                                          const qtyToReturn = parseInt(promptVal);
-                                          if (isNaN(qtyToReturn) || qtyToReturn <= 0) {
-                                            triggerNotification("Please enter a valid positive number for returned items!", "error");
-                                            return;
-                                          }
-                                          if (qtyToReturn > maxReturnQty) {
-                                            triggerNotification(`Cannot return ${qtyToReturn} units. Maximum allowed is ${maxReturnQty} units!`, "error");
-                                            return;
-                                          }
-                                          handleReturnPurchase(pur.id, qtyToReturn);
-                                        }}
-                                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md duration-205 flex items-center gap-1 shrink-0"
-                                      >
-                                        <Undo2 className="w-3 h-3" />
-                                        <span>Return</span>
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
+                  {stockSubTab === "stock-value" ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" id="stock-value-summary">
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Available Quantity</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{currentStockUnits.toLocaleString()} <span className="text-xs font-semibold text-slate-400">pcs / units</span></p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Stock Value</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {stockValueTotal.toLocaleString()}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">Current quantity × Product buy price</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Products Available</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{currentStockProducts.length.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#111116] px-3 py-3">
+                        <Search className="h-4 w-4 text-slate-500" />
+                        <input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" />
+                      </div>
+                      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111116]">
+                        <div className="border-b border-white/10 px-4 py-3 text-xs font-bold text-white">Products Currently in Stock</div>
+                        <table className="w-full text-xs text-slate-300">
+                          <thead className="bg-white/[0.04] text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Available Stock</th><th className="px-4 py-3 text-right">Stock Value</th></tr></thead>
+                          <tbody className="divide-y divide-white/[0.06]">
+                            {currentStockProducts.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-500">No products currently in stock.</td></tr> : currentStockProducts.map(product => (
+                              <tr key={product.id} className="hover:bg-white/[0.025]">
+                                <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
+                                <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
+                                <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-white">{Number(product.stock || 0).toLocaleString()} {product.unit}</td>
+                                <td className="px-4 py-3 text-right font-mono text-slate-200">{businessInfo.currencySymbol} {(Number(product.stock || 0) * Number(product.buyPrice || 0)).toLocaleString()}</td>
                               </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* BRAND NEW SUPPLIER ITEMS DUE LIST & STEPWISE REPAYMENT */}
-              {stockSubTab === "due-list" && (
-                <div className="space-y-6 animate-slideDown" id="credit-due-list-sec">
-                  <div className="p-5 bg-gradient-to-r from-slate-955 to-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-rose-550" />
-                        Credit-Based Purchases Due List
-                      </h4>
-                      <p className="text-[10px] text-slate-400 max-w-xl">
-                        Tracks items purchased on credit. When a portion of the debt is repaid, the due list reflects the exact paid versus remaining quantities alongside settled visual colors.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2.5 text-xs font-mono">
-                      <div className="bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-xl text-rose-400 flex items-center gap-1.5 shadow-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                        <span>Unsettled: {purchases.filter(p => (p.dueAmount || 0) > 0).length}</span>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-emerald-400 flex items-center gap-1.5 shadow-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-450" />
-                        <span>Fully Paid: {purchases.filter(p => (p.originallyCredit || p.dueAmount > 0 || (p.totalAmount > (p.cashPaid || 0))) && (p.dueAmount || 0) === 0).length}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" id="out-of-stock-summary">
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Out-of-Stock Products</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{outOfStockProducts.length.toLocaleString()}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Shortage Quantity</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{outOfStockMissingUnits.toLocaleString()} <span className="text-xs font-semibold text-slate-400">pcs / units</span></p>
+                        </div>
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Shortage Value</p>
+                          <p className="mt-2 text-2xl font-black font-mono text-white">{businessInfo.currencySymbol} {outOfStockValueTotal.toLocaleString()}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">Negative quantity × current buy price</p>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-[#0a101f]/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg" id="due-items-registry-wrapper">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs text-slate-300 font-mono">
-                        <thead>
-                          <tr className="bg-slate-955/40 border-b border-slate-800 text-[10px] uppercase font-mono tracking-wider text-slate-400">
-                            <th className="py-3 px-4">Invoice No</th>
-                            <th className="py-3 px-4">Product Name</th>
-                            <th className="py-3 px-4">Supplier / Vendor</th>
-                            <th className="py-3 px-4 text-center">Batch Bought</th>
-                            <th className="py-3 px-4 text-center">Stepwise Units Paid Progress</th>
-                            <th className="py-3 px-4 text-right">Unit Price</th>
-                            <th className="py-3 px-4 text-right">Total Debit</th>
-                            <th className="py-3 px-4 text-right">Cash Unpaid</th>
-                            <th className="py-3 px-4 text-center">Outstanding Status</th>
-                            <th className="py-3 px-4 text-center">Dues Repay Adjustment</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/50">
-                          {(() => {
-                            const creditPurchases = purchases.filter(p => p.originallyCredit || (p.dueAmount || 0) > 0 || (p.totalAmount > (p.cashPaid || 0)));
-                            if (creditPurchases.length === 0) {
-                              return (
-                                <tr>
-                                  <td colSpan={10} className="py-16 text-center text-slate-500 font-sans">
-                                    No recorded credit-based purchases. Start logging purchase orders under credit payments on "Purchases" to monitor outstanding items.
-                                  </td>
-                                </tr>
-                              );
-                            }
-
-                            return creditPurchases.map((pur) => {
-                              const due = pur.dueAmount || 0;
-                              const isFullyPaid = due <= 0;
-                              const qty = pur.quantity || 1;
-                              const unitCost = pur.buyPrice || 0;
-
-                              // Calculate equivalent paid and due items Qty
-                              const paidAmt = pur.cashPaid || 0;
-                              const eqPaidQty = Math.min(qty, parseFloat((paidAmt / unitCost).toFixed(2)));
-                              const eqDueQty = Math.max(0, parseFloat((qty - eqPaidQty).toFixed(2)));
-
-                              return (
-                                <tr key={pur.id} className={`hover:bg-slate-900/10 text-slate-300 ${isFullyPaid ? 'bg-emerald-950/5' : ''}`}>
-                                  <td className="py-4 px-4 text-emerald-400 font-bold">{pur.invoiceNo || "N/A"}</td>
-                                  <td className="py-4 px-4 font-sans text-white font-semibold">
-                                    {pur.productName || "Unknown Product"}
-                                    <span className="block text-[9px] font-mono text-slate-500 font-normal mt-0.5">Date: {pur.date}</span>
-                                  </td>
-                                  <td className="py-4 px-4 font-sans text-slate-300">{pur.supplierName || "Walk-in Supplier"}</td>
-                                  <td className="py-4 px-4 text-center text-slate-400 font-black">{qty} units</td>
-                                  <td className="py-4 px-4 text-center font-sans mr-2">
-                                    <div className="flex flex-col items-center gap-1">
-                                      <div className="flex justify-between w-28 text-[9px] text-slate-400 font-mono font-bold">
-                                        <span className="text-emerald-400">Paid: {eqPaidQty}</span>
-                                        <span className="text-rose-455">Due: {eqDueQty}</span>
-                                      </div>
-                                      <div className="w-28 h-2 bg-slate-950/80 rounded-full overflow-hidden border border-slate-900 flex">
-                                        <div className="bg-emerald-500 h-full" style={{ width: `${(eqPaidQty / qty) * 100}%` }} />
-                                        <div className="bg-rose-500 h-full animate-pulse" style={{ width: `${(eqDueQty / qty) * 100}%` }} />
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-4 text-right text-slate-400">{businessInfo.currencySymbol} {unitCost}</td>
-                                  <td className="py-4 px-4 text-right text-slate-300">{businessInfo.currencySymbol} {pur.totalAmount.toLocaleString()}</td>
-                                  <td className="py-4 px-4 text-right font-bold text-rose-455">{businessInfo.currencySymbol} {due.toLocaleString()}</td>
-                                  <td className="py-4 px-4 text-center font-sans">
-                                    {isFullyPaid ? (
-                                      <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full text-[9px] font-bold text-emerald-400 transition-colors">
-                                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-                                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute" />
-                                        <span>Settled Green</span>
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1 rounded-full text-[9px] font-bold text-rose-455 transition-colors animate-pulse">
-                                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
-                                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full absolute" />
-                                        <span>Outstanding Red</span>
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-4 px-4 text-center font-sans lg:min-w-[190px]">
-                                    <div className="flex flex-col gap-1.5 items-center justify-center">
-                                      {isFullyPaid ? (
-                                        <span className="text-[10px] text-emerald-500 font-bold font-mono">Completed Settlement &nbsp;✔</span>
-                                      ) : (
-                                        <div className="flex items-center justify-center gap-1.5 w-full">
-                                          <button
-                                            onClick={() => {
-                                              const payAmt = Math.min(due, unitCost);
-                                              setPurchases(prev => prev.map(item => {
-                                                if (item.id === pur.id) {
-                                                  const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
-                                                  return {
-                                                    ...item,
-                                                    cashPaid: nextPaid,
-                                                    dueAmount: Math.max(0, item.totalAmount - nextPaid)
-                                                  };
-                                                }
-                                                return item;
-                                              }));
-                                              triggerNotification(`Settled cost for 1 Unit (${businessInfo.currencySymbol} ${payAmt}) toward ${pur.productName}!`, "success");
-                                            }}
-                                            className="px-2 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-emerald-500/5 duration-150 font-sans"
-                                            title="Repay cost of exactly 1 item"
-                                          >
-                                            +1 Unit
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              const customInput = prompt(`Enter cash repayment in ${businessInfo.currencySymbol} (Active Debt: ${businessInfo.currencySymbol}${due}):`);
-                                              if (customInput === null) return;
-                                              const amt = parseFloat(customInput);
-                                              if (isNaN(amt) || amt <= 0) {
-                                                triggerNotification("Please enter a valid monetary amount!", "error");
-                                                return;
-                                              }
-                                              const payAmt = Math.min(due, amt);
-                                              setPurchases(prev => prev.map(item => {
-                                                if (item.id === pur.id) {
-                                                  const nextPaid = parseFloat((item.cashPaid + payAmt).toFixed(2));
-                                                  return {
-                                                    ...item,
-                                                    cashPaid: nextPaid,
-                                                    dueAmount: Math.max(0, item.totalAmount - nextPaid)
-                                                  };
-                                                }
-                                                return item;
-                                              }));
-                                              triggerNotification(`Stepwise repayment of ${businessInfo.currencySymbol} ${payAmt} recorded successfully!`, "success");
-                                            }}
-                                            className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[9px] rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-amber-500/5 duration-150 font-sans"
-                                            title="Enter custom money amount"
-                                          >
-                                            Repay
-                                          </button>
-                                        </div>
-                                      )}
-                                      {qty > 0 && (
-                                        <button
-                                          onClick={() => {
-                                            const matchedProduct = products.find(p => p.id === pur.productId);
-                                            const availableStock = matchedProduct ? matchedProduct.stock : 0;
-                                            const maxReturnQty = Math.min(qty, availableStock);
-                                            
-                                            if (maxReturnQty <= 0) {
-                                              triggerNotification("Cannot return: No remaining warehouse stock left for this product!", "error");
-                                              return;
-                                            }
-                                            
-                                            const promptVal = prompt(
-                                              `Enter quantity of ${pur.productName} you want to return to ${pur.supplierName || 'supplier'}.\n` +
-                                              `• Purchased quantity in this batch: ${pur.quantity} pcs\n` +
-                                              `• Available physical stock: ${availableStock} pcs\n` +
-                                              `• Maximum returnable quantity: ${maxReturnQty} pcs`
-                                            );
-                                            if (promptVal === null) return;
-                                            const qtyToReturn = parseInt(promptVal);
-                                            if (isNaN(qtyToReturn) || qtyToReturn <= 0) {
-                                              triggerNotification("Please enter a valid positive number for returned items!", "error");
-                                              return;
-                                            }
-                                            if (qtyToReturn > maxReturnQty) {
-                                              triggerNotification(`Cannot return ${qtyToReturn} units. Maximum allowed is ${maxReturnQty} units!`, "error");
-                                              return;
-                                            }
-                                            handleReturnPurchase(pur.id, qtyToReturn);
-                                          }}
-                                          className="px-2.5 py-1 bg-rose-650 hover:bg-rose-500 text-white font-bold text-[9px] rounded-lg transition-all hover:scale-105 cursor-pointer shadow-md flex items-center gap-1 justify-center w-full"
-                                        >
-                                          <Undo2 className="w-3 h-3" />
-                                          <span>Return</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            });
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#111116] px-3 py-3">
+                        <Search className="h-4 w-4 text-slate-500" />
+                        <input type="text" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} placeholder="Search product name, SKU or category..." className="w-full bg-transparent text-xs text-slate-200 outline-none" />
+                      </div>
+                      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111116]">
+                        <div className="border-b border-white/10 px-4 py-3 text-xs font-bold text-white">Out-of-Stock Products</div>
+                        <table className="w-full text-xs text-slate-300">
+                          <thead className="bg-white/[0.04] text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Current Stock</th><th className="px-4 py-3 text-right">Shortage Value</th></tr></thead>
+                          <tbody className="divide-y divide-white/[0.06]">
+                            {outOfStockProducts.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-500">No out-of-stock products found.</td></tr> : outOfStockProducts.map(product => (
+                              <tr key={product.id} className="hover:bg-white/[0.025]">
+                                <td className="px-4 py-3 font-mono text-slate-500">{product.sku || "—"}</td>
+                                <td className="px-4 py-3 font-semibold text-white">{product.name}</td>
+                                <td className="px-4 py-3 text-slate-400">{product.category || "—"}</td>
+                                <td className="px-4 py-3 text-right font-mono text-white">{Number(product.stock || 0).toLocaleString()} {product.unit}</td>
+                                <td className="px-4 py-3 text-right font-mono text-slate-200">{businessInfo.currencySymbol} {(Math.max(0, -Number(product.stock || 0)) * Number(product.buyPrice || 0)).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
           )}
-                    {/* -----------------------------------------------------------------
-              VIEW 2.5: BRAND NEW SUPPLIER DUE RECORD SHEET (Due List Tracker)
-              ----------------------------------------------------------------- */}
+
           {activeTab === "duelist" && (
             <div className="space-y-6 animate-fadeIn" id="view-duelist-container">
               {/* 1. HEADER BANNER */}
