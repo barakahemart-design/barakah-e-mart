@@ -40,9 +40,9 @@ function loadPdfJs(): Promise<any> {
   return pdfJsLoader;
 }
 
-type Props = { dataUrl: string; title: string; initialZoom: number };
+type Props = { dataUrl: string; title: string; initialZoom: number; onZoomChange?: (zoom: number) => void };
 
-export function LedgerPdfViewer({ dataUrl, title, initialZoom }: Props) {
+export function LedgerPdfViewer({ dataUrl, title, initialZoom, onZoomChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const [pdf, setPdf] = useState<any>(null);
@@ -128,16 +128,17 @@ export function LedgerPdfViewer({ dataUrl, title, initialZoom }: Props) {
     return () => { cancelled = true; };
   }, [pdf, containerWidth, pageCount, zoom]);
 
-  const changeZoom = (delta: number) => setZoom(value => Math.min(2.5, Math.max(0.35, Math.round((value + delta) * 100) / 100)));
+  const changeZoom = (delta: number) => setZoom(value => { const next = Math.min(2.5, Math.max(0.35, Math.round((value + delta) * 100) / 100)); onZoomChange?.(next); return next; });
+  const resetZoom = () => { setZoom(initialZoom); onZoomChange?.(initialZoom); };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#e7e7e7]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/10 bg-[#f8f8f8] px-3 py-2 text-black">
-        <span className="text-[11px] font-semibold tabular-nums">{Math.round(zoom * 100)}% · {pageCount || "—"} page(s)</span>
-        <div className="flex items-center gap-1.5">
-          <button type="button" onClick={() => changeZoom(-0.1)} disabled={zoom <= 0.35} className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/15 bg-white disabled:opacity-40" aria-label="Zoom out"><Minus className="h-4 w-4" /></button>
-          <button type="button" onClick={() => setZoom(initialZoom)} className="flex h-8 items-center gap-1 rounded-lg border border-black/15 bg-white px-2 text-[10px] font-semibold"><Maximize2 className="h-3.5 w-3.5" /> Fit</button>
-          <button type="button" onClick={() => changeZoom(0.1)} disabled={zoom >= 2.5} className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/15 bg-white disabled:opacity-40" aria-label="Zoom in"><Plus className="h-4 w-4" /></button>
+      <div className="flex shrink-0 flex-col items-center justify-center gap-2 border-b border-black/10 bg-[#f8f8f8] px-3 py-2 text-black sm:flex-row sm:justify-between">
+        <span className="w-full text-center text-[11px] font-semibold tabular-nums text-black sm:w-auto sm:text-left">{Math.round(zoom * 100)}% · {pageCount || "—"} page(s)</span>
+        <div className="flex w-full items-center justify-center gap-2 sm:w-auto">
+          <button type="button" onClick={() => changeZoom(-0.1)} disabled={zoom <= 0.35} className="flex h-9 w-9 items-center justify-center rounded-lg border !border-black/20 !bg-white !text-black shadow-sm disabled:!bg-slate-100 disabled:!text-slate-400" aria-label="Zoom out"><Minus className="h-4 w-4 !text-black" /></button>
+          <button type="button" onClick={resetZoom} className="flex h-9 items-center gap-1.5 rounded-lg border !border-black/20 !bg-white px-3 text-[11px] font-bold !text-black shadow-sm"><Maximize2 className="h-3.5 w-3.5 !text-black" /> <span className="!text-black">Fit</span></button>
+          <button type="button" onClick={() => changeZoom(0.1)} disabled={zoom >= 2.5} className="flex h-9 w-9 items-center justify-center rounded-lg border !border-black/20 !bg-white !text-black shadow-sm disabled:!bg-slate-100 disabled:!text-slate-400" aria-label="Zoom in"><Plus className="h-4 w-4 !text-black" /></button>
         </div>
       </div>
       <div ref={containerRef} className="min-h-0 flex-1 overflow-auto px-2 py-3">
