@@ -5730,7 +5730,7 @@ _${businessInfo.name}_`;
                           <thead className="bg-white/[0.04] text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-right">Shortage</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
                           <tbody className="divide-y divide-white/[0.06]">
                             {negativeStockProducts.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-500">No negative stock shortages. All product stock levels are zero or above.</td></tr> : negativeStockProducts.filter(product => {
-                              const terms = inventorySearch.toLowerCase().trim().split(/\\s+/).filter(Boolean);
+                              const terms = inventorySearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
                               const target = `${product.name || ""} ${product.sku || ""} ${product.category || ""}`.toLowerCase();
                               return terms.every(term => target.includes(term));
                             }).map(product => (
