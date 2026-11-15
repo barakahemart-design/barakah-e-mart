@@ -404,3 +404,21 @@ html.light #root textarea {
   background-color: #94a3b8 !important;
   box-shadow: 0 0 8px rgba(148,163,184,.55) !important;
 }
+
+
+/* iPhone-native-feeling vertical scrolling and gentle programmatic scroll motion. */
+@media (max-width: 640px) {
+  html, body, #root, #viewport-workspace {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root [class*="overflow-y-auto"],
+  #root [class*="overflow-y-scroll"],
+  #root [class*="overflow-auto"],
+  #root [class*="overflow-scroll"] {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+}
