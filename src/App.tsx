@@ -9626,7 +9626,7 @@ _${businessInfo.name}_`;
 
       {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
       {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/95 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe grid grid-cols-4 h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/95 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe grid grid-cols-5 h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
         {/* More menu - first shortcut on the far left */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -9654,6 +9654,22 @@ _${businessInfo.name}_`;
           <ShoppingCart className="block mx-auto w-[18px] h-[18px] mb-1" />
           <span className="text-[9px] font-semibold tracking-wide">Sales</span>
           {activeTab === "pos" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
+        </button>
+
+        {/* Dashboard shortcut */}
+        <button
+          onClick={() => {
+            setActiveTab("dashboard");
+            setIsMobileMenuOpen(false);
+          }}
+          className={`w-full min-w-0 justify-self-stretch flex flex-col items-center justify-center text-center h-full transition-all duration-200 relative ${
+            activeTab === "dashboard" ? "text-white font-bold" : "text-[#94a3b8] hover:text-white"
+          }`}
+          aria-label="Dashboard"
+        >
+          <LayoutDashboard className="block mx-auto w-[18px] h-[18px] mb-1" />
+          <span className="text-[9px] font-semibold tracking-wide font-sans">Dashboard</span>
+          {activeTab === "dashboard" && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />}
         </button>
 
         {/* Ledger shortcut */}
