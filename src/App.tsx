@@ -325,6 +325,7 @@ export default function App() {
 
    // Security Locking Roles state
    const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
@@ -4160,6 +4161,64 @@ _${businessInfo.name}_`;
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 
+  const welcomeHour = Number(new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Asia/Dhaka"
+  }).format(new Date()));
+  const welcomeGreeting =
+    welcomeHour >= 5 && welcomeHour < 12 ? "Good Morning" :
+    welcomeHour >= 12 && welcomeHour < 16 ? "Good Afternoon" :
+    welcomeHour >= 16 && welcomeHour < 20 ? "Good Evening" : "Good Night";
+  const welcomeClock = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Dhaka"
+  }).format(new Date());
+
+  if (showWelcomeScreen) {
+    return (
+      <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#050505] px-5 py-10 text-white">
+        <div className="pointer-events-none absolute -left-32 top-[-8rem] h-80 w-80 rounded-full bg-emerald-500/[0.08] blur-[110px]" />
+        <div className="pointer-events-none absolute -right-28 bottom-[-8rem] h-96 w-96 rounded-full bg-amber-400/[0.07] blur-[120px]" />
+        <div className="relative z-10 mx-auto flex min-h-[min(760px,88vh)] w-full max-w-5xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-gradient-to-b from-[#151515] via-[#0c0c0c] to-[#080808] px-6 py-12 text-center shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:px-12 md:min-h-[680px] md:rounded-[2.5rem]">
+          <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-300 shadow-[0_0_35px_rgba(16,185,129,0.12)]">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <p className="mb-5 text-[10px] font-semibold uppercase tracking-[0.32em] text-amber-300/80 sm:text-xs">
+            Bismillahir Rahmanir Rahim
+          </p>
+          <p className="mb-2 text-sm font-medium tracking-[0.22em] text-slate-400 sm:text-base">
+            {welcomeGreeting}
+          </p>
+          <p className="mb-8 font-mono text-xs tracking-[0.2em] text-slate-600">{welcomeClock} · DHAKA</p>
+          <h1 className="text-3xl font-black tracking-[0.09em] text-white sm:text-5xl md:text-6xl">
+            BARAKAH <span className="text-emerald-400">e</span>-MART
+          </h1>
+          <div className="my-9 flex w-full max-w-md items-center gap-4">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-white/20" />
+            <span className="h-1.5 w-1.5 rotate-45 border border-amber-300/70" />
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-white/20" />
+          </div>
+          <p className="max-w-xl text-lg font-medium leading-relaxed text-slate-200 sm:text-2xl">
+            “I believe patience is never wasted.”
+          </p>
+          <p className="mt-3 max-w-lg text-xs leading-6 text-slate-500 sm:text-sm">
+            Every sincere effort, made with patience and purpose, brings its own time of success.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowWelcomeScreen(false)}
+            className="mt-12 inline-flex min-w-48 items-center justify-center gap-3 rounded-xl border border-emerald-300/30 bg-emerald-400 px-8 py-4 text-xs font-black tracking-[0.22em] text-[#06110b] shadow-[0_10px_35px_rgba(16,185,129,0.18)] transition-all hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0"
+          >
+            LOGIN <ArrowLeft className="h-4 w-4 rotate-180" />
+          </button>
+          <p className="mt-8 text-[9px] font-medium tracking-[0.28em] text-slate-700">WELCOME TO YOUR NEXT SUCCESSFUL DAY</p>
+        </div>
+      </main>
+    );
+  }
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-[#070b13] flex flex-col items-center justify-center text-white font-mono gap-3">
@@ -6725,24 +6784,28 @@ _${businessInfo.name}_`;
                     const associatedContact = contacts.find(c => c.id === t.contactId);
                     const customerLabel = associatedContact ? associatedContact.name : "Walk-in Showroom Client";
                     const customerPhone = associatedContact ? associatedContact.phone : null;
-                    const outstandingDue = Math.max(
-                      0,
-                      Number(
-                        t.dueBalance ??
-                        t.due_balance ??
-                        ((Number(t.total) || 0) - (Number(t.paidAmount ?? t.paid_amount) || 0))
-                      ) || 0
-                    );
-                    const hasOutstandingDue = outstandingDue > 0;
+                    const storedDue = t.dueBalance ?? t.due_balance;
+                    const calculatedDue = (Number(t.total ?? t.grandTotal ?? t.grand_total) || 0) -
+                      (Number(t.paidAmount ?? t.paid_amount) || 0);
+                    const outstandingDue = Math.max(0, storedDue !== undefined && storedDue !== null
+                      ? (Number(storedDue) || 0)
+                      : calculatedDue);
+                    const hasOutstandingDue = outstandingDue > 0 ||
+                      ["due", "partial", "unpaid"].includes(String(t.status || "").toLowerCase());
 
                     return (
                       <div
                         key={t.id}
-                        className={`mx-auto w-full max-w-5xl rounded-2xl border-2 bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4 ${
-                          hasOutstandingDue
-                            ? "border-rose-500/90 ring-1 ring-inset ring-rose-400/35 shadow-[0_0_0_2px_rgba(244,63,94,0.18),0_0_28px_rgba(244,63,94,0.14)] hover:border-rose-400"
-                            : "border-emerald-400/90 ring-1 ring-inset ring-emerald-300/30 shadow-[0_0_0_2px_rgba(52,211,153,0.16),0_0_28px_rgba(16,185,129,0.12)] hover:border-emerald-300"
-                        }`}
+                        data-customer-payment-status={hasOutstandingDue ? "due" : "cleared"}
+                        className="mx-auto w-full max-w-5xl rounded-2xl border-2 bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4"
+                        style={{
+                          borderColor: hasOutstandingDue ? "#FF304F" : "#00E676",
+                          borderWidth: "2px",
+                          borderStyle: "solid",
+                          boxShadow: hasOutstandingDue
+                            ? "0 0 0 1px rgba(255,48,79,0.62), 0 0 26px rgba(255,48,79,0.25)"
+                            : "0 0 0 1px rgba(0,230,118,0.58), 0 0 26px rgba(0,230,118,0.22)"
+                        }}
                       >
                         {/* Centered invoice identity */}
                         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
