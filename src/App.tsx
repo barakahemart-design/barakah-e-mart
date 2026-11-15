@@ -436,7 +436,7 @@ export default function App() {
       const deltaX = Math.abs(touch.clientX - startX);
       const elapsed = Date.now() - startedAt;
       validStart = false;
-      if (deltaY >= 115 && deltaX <= 75 && elapsed <= 1800) {
+      if (deltaY >= 145 && deltaX <= 75 && elapsed <= 1800) {
         window.location.reload();
       }
     };
