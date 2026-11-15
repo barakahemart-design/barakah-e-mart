@@ -159,3 +159,115 @@
   #top-navbar { padding-left: 12px !important; padding-right: 12px !important; }
   #mobile-bottom-navbar > button { margin-left: 2px; margin-right: 2px; }
 }
+
+
+/* ==========================================================
+   APP-WIDE PREMIUM MONOCHROME LIQUID GLASS SURFACES
+   UI-only presentation layer. No application/data logic.
+   ========================================================== */
+:root {
+  --app-glass-bg: rgba(255, 255, 255, 0.065);
+  --app-glass-bg-strong: rgba(255, 255, 255, 0.095);
+  --app-glass-border: rgba(255, 255, 255, 0.16);
+  --app-glass-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --app-glass-blur: 30px;
+}
+
+/* Neutral glass for the app's main cards, panels, and work surfaces.
+   Red/rose danger and destructive surfaces are deliberately excluded. */
+#root div[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="bg-[#ef"]):not([class*="bg-[#dc"]):not([class*="danger"]):not([class*="destructive"]),
+#root section[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+#root article[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]) {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border-color: var(--app-glass-border) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+  -webkit-backdrop-filter: blur(var(--app-glass-blur)) saturate(125%) !important;
+  backdrop-filter: blur(var(--app-glass-blur)) saturate(125%) !important;
+}
+
+/* Common translucent controls and form fields share the same glass language. */
+#root input:not([type="checkbox"]):not([type="radio"]),
+#root select,
+#root textarea {
+  background-color: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.17) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
+}
+
+/* Existing neutral/translucent buttons become glass; preserve explicit danger,
+   delete, destructive, and solid primary/status colors. */
+#root button[class*="bg-white/"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+#root button[class*="bg-black/"]:not([class*="danger"]):not([class*="destructive"]),
+#root button[class*="backdrop-blur"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]) {
+  border-color: rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(26px) saturate(125%);
+  backdrop-filter: blur(26px) saturate(125%);
+}
+
+/* Keep all four bottom shortcuts exactly centered in four equal-width cells. */
+@media (max-width: 640px) {
+  #mobile-bottom-navbar {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    justify-items: stretch !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  #mobile-bottom-navbar > button {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    justify-self: stretch !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    transform: none !important;
+  }
+
+  #mobile-bottom-navbar > button > svg {
+    display: block !important;
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  #mobile-bottom-navbar > button > span {
+    display: block !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+}
+
+/* Light mode keeps the same glass treatment without reducing text contrast. */
+html.light {
+  --app-glass-bg: rgba(255, 255, 255, 0.72);
+  --app-glass-bg-strong: rgba(255, 255, 255, 0.86);
+  --app-glass-border: rgba(100, 116, 139, 0.20);
+  --app-glass-shadow: 0 16px 42px rgba(15, 23, 42, 0.09);
+}
+html.light #root div[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+html.light #root section[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+html.light #root article[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]) {
+  background-color: var(--app-glass-bg) !important;
+  border-color: var(--app-glass-border) !important;
+}
+html.light #root input:not([type="checkbox"]):not([type="radio"]),
+html.light #root select,
+html.light #root textarea {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+  border-color: rgba(100, 116, 139, 0.24) !important;
+}
