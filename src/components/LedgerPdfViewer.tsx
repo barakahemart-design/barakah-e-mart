@@ -109,7 +109,7 @@ export function LedgerPdfViewer({ dataUrl, title, initialZoom }: Props) {
         if (cancelled) return;
         const baseViewport = page.getViewport({ scale: 1 });
         const fitScale = Math.max(0.1, (containerWidth - 20) / baseViewport.width);
-        const scale = fitScale * zoom;
+        const scale = initialZoom >= 1 ? fitScale * zoom : zoom;
         const viewport = page.getViewport({ scale });
         const ratio = Math.max(1, window.devicePixelRatio || 1);
         const context = canvas.getContext("2d");
