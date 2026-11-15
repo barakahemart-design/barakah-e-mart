@@ -182,7 +182,7 @@ export function DashboardView({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/40" id="dashboard-header-block">
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-indigo-500 rounded-full animate-ping shrink-0" />
+            <span className="relative flex h-2.5 w-2.5 shrink-0"><span className="absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-70 animate-ping" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.95)] ring-2 ring-cyan-400/20" /></span>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2">
               Dashboard
             </h1>
