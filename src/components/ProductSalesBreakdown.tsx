@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { toUUID } from "../lib/firebase-helpers";
 import { Boxes, Package, ShoppingBag } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
@@ -72,7 +72,6 @@ export function ProductSalesBreakdown({
   customStart,
   customEnd
 }: ProductSalesBreakdownProps) {
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const todayKey = new Date().toDateString();
   const report = useMemo(() => {
     const bounds = getPeriodBounds(dashboardFilter, customStart, customEnd);
@@ -179,17 +178,13 @@ export function ProductSalesBreakdown({
 
   return (
     <section className="space-y-4 rounded-2xl border border-slate-800/90 bg-[#0b0f19] p-4 sm:p-5 shadow-lg" id="dashboard-product-sales-breakdown">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-300">
-            <Boxes className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-extrabold tracking-wide text-white">Product Sales Breakdown</h2>
-            <p className="mt-1 text-[10px] sm:text-xs text-slate-400">Category-wise and product-wise quantities · {periodLabel}</p>
-          </div>
+      <div className="flex flex-col items-center gap-2 text-center border-b border-slate-800/80 pb-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-300">
+          <Boxes className="h-5 w-5" />
         </div>
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-[10px] font-bold text-emerald-300">
+        <h2 className="text-sm sm:text-base font-extrabold tracking-wide text-white">Product Sales Breakdown</h2>
+        <p className="text-[10px] sm:text-xs text-slate-400">Category-wise sales quantities · {periodLabel}</p>
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-[10px] font-bold text-emerald-300">
           <ShoppingBag className="h-3.5 w-3.5" />
           {formatQuantity(report.totalUnits)} units sold
         </div>
@@ -217,11 +212,13 @@ export function ProductSalesBreakdown({
         )}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">Category & Product Details</h3>
-          <span className="text-[10px] text-slate-500">Select a category to view products</span>
-        </div>
+    </section>
+
+    <section className="space-y-4 rounded-2xl border border-slate-800/90 bg-[#0b0f19] p-4 sm:p-5 shadow-lg" id="dashboard-category-product-details">
+      <div className="border-b border-slate-800/80 pb-4 text-center">
+        <h3 className="text-sm sm:text-base font-extrabold tracking-wide text-white">Category & Product Details</h3>
+        <p className="mt-1 text-[10px] sm:text-xs text-slate-400">All categories and their sold product quantities · {periodLabel}</p>
+      </div>
 
         {report.categories.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-700 bg-[#0e1422]/60 px-4 py-10 text-center">
@@ -231,49 +228,36 @@ export function ProductSalesBreakdown({
           </div>
         ) : (
           <div className="space-y-2">
-            {report.categories.map(category => {
-              const isExpanded = expandedCategory === category.name;
-              return (
-                <div key={category.name.toLowerCase()} className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#0e1422]">
-                  <button
-                    type="button"
-                    aria-expanded={isExpanded}
-                    onClick={() => setExpandedCategory(isExpanded ? null : category.name)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-800/40"
-                  >
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
-                        <Boxes className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="truncate text-xs font-extrabold text-white">{category.name}</h4>
-                        <p className="mt-0.5 text-[10px] text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"} · Click to {isExpanded ? "hide" : "view"} details</p>
-                      </div>
+            {report.categories.map(category => (
+              <div key={category.name.toLowerCase()} className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#0e1422]">
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
+                      <Boxes className="h-4 w-4" />
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <div className="text-right">
-                        <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
-                        <div className="text-[9px] uppercase tracking-wider text-slate-500">units sold</div>
-                      </div>
-                      <span className="text-slate-400" aria-hidden="true">{isExpanded ? "−" : "+"}</span>
+                    <div className="min-w-0">
+                      <h4 className="truncate text-xs font-extrabold text-white">{category.name}</h4>
+                      <p className="mt-0.5 text-[10px] text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"}</p>
                     </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t border-slate-800/80 divide-y divide-slate-800/70">
-                      {category.products.map(product => (
-                        <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                            <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
-                          </div>
-                          <span className="shrink-0 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
+                    <div className="text-[9px] uppercase tracking-wider text-slate-500">units sold</div>
+                  </div>
                 </div>
-              );
-            })}
+                <div className="border-t border-slate-800/80 divide-y divide-slate-800/70">
+                  {category.products.map(product => (
+                    <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                        <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
+                      </div>
+                      <span className="shrink-0 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
