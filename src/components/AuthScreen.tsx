@@ -113,7 +113,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin, isDarkMode = true
               value={email} 
               onChange={e => setEmail(e.target.value)} 
               disabled={loading}
-              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-lg text-white text-xs outline-none focus:border-emerald-500/80 focus:ring-1 focus:ring-emerald-500/20 font-mono transition-colors" 
+              className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-lg text-white text-xs outline-none focus:border-white/70 focus:ring-2 focus:ring-white/15 font-mono transition-colors" 
             />
           </div>
 
@@ -127,7 +127,7 @@ export function AuthScreen({ onSignUp, onSignIn, onGuestLogin, isDarkMode = true
                 value={password} 
                 onChange={e => setPassword(e.target.value)} 
                 disabled={loading}
-                className="w-full px-3 py-2 pr-9 bg-[#050912] border border-slate-800 rounded-lg text-white text-xs outline-none focus:border-emerald-500/80 focus:ring-1 focus:ring-emerald-500/20 font-mono transition-colors" 
+                className="w-full px-3 py-2 pr-9 bg-[#050912] border border-slate-800 rounded-lg text-white text-xs outline-none focus:border-white/70 focus:ring-2 focus:ring-white/15 font-mono transition-colors" 
               />
               <button
                 type="button"
