@@ -6729,8 +6729,10 @@ _${businessInfo.name}_`;
                     return (
                       <div
                         key={t.id}
-                        className={`mx-auto w-full max-w-5xl rounded-2xl border border-slate-800/80 bg-[#1E1E24]/95 p-3 shadow-lg transition-all hover:border-slate-700 sm:p-4 ${
-                          t.status === "paid" ? "border-t-2 border-t-emerald-500" : t.status === "partial" ? "border-t-2 border-t-amber-500" : "border-t-2 border-t-[#FF5252]"
+                        className={`mx-auto w-full max-w-5xl rounded-2xl border bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4 ${
+                          Number(t.dueBalance) > 0
+                            ? "border-rose-400/45 shadow-[0_0_0_1px_rgba(251,113,133,0.10),0_8px_30px_rgba(244,63,94,0.07)] hover:border-rose-300/60"
+                            : "border-emerald-400/40 shadow-[0_0_0_1px_rgba(52,211,153,0.08),0_8px_30px_rgba(16,185,129,0.06)] hover:border-emerald-300/55"
                         }`}
                       >
                         {/* Centered invoice identity */}
@@ -6778,8 +6780,8 @@ _${businessInfo.name}_`;
                           </div>
                           <div className="hidden items-center justify-center gap-2.5 lg:flex">
                             <span className="flex flex-col items-end gap-0.5 text-right">
-                              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-400">Barakah</span>
-                              <span className="text-[7px] font-mono tracking-[0.16em] text-slate-600">E-MART</span>
+                              <span className="text-[8px] font-bold tracking-[0.12em] text-slate-300">Barakah-e-MART</span>
+                              <span className="text-[7px] font-mono tracking-[0.16em] text-slate-600">CUSTOMER LEDGER</span>
                             </span>
                             <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.045] text-[10px] font-black tracking-tighter text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">B</span>
                             <span className="h-px w-10 bg-gradient-to-l from-transparent to-slate-500/50" />
@@ -6790,6 +6792,14 @@ _${businessInfo.name}_`;
 
                         {/* Products grouped by model with visible total quantity; unit-cost allocations remain individually editable */}
                         <div className="space-y-2" id={`ledger-items-${t.invoiceNo}`}>
+                          <div className="flex items-center justify-center gap-3 py-1.5">
+                            <div className="hidden h-px flex-1 bg-gradient-to-r from-transparent via-slate-500/35 to-slate-500/35 sm:block" />
+                            <div className="flex items-center gap-2 rounded-full border border-slate-500/25 bg-slate-400/[0.06] px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                              <Package className="h-3 w-3 text-slate-400" />
+                              <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-slate-300">Product Details</span>
+                            </div>
+                            <div className="hidden h-px flex-1 bg-gradient-to-l from-transparent via-slate-500/35 to-slate-500/35 sm:block" />
+                          </div>
                           {(() => {
                             const groupedItems = t.items.reduce((groups: any[], item, itemIdx) => {
                               const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
@@ -6896,7 +6906,13 @@ _${businessInfo.name}_`;
                         </div>
 
                         {/* All transaction actions stay on one horizontal row */}
-                        <div id={`ledger-actions-${t.invoiceNo}`} className="mt-3 grid grid-cols-2 items-stretch justify-center gap-2 border-t border-slate-800/80 pt-3 sm:flex sm:flex-wrap sm:items-center">
+                        <div id={`ledger-actions-${t.invoiceNo}`} className="mt-3 border-t border-slate-800/80 pt-3">
+                          <div className="mb-2 flex items-center justify-center gap-3">
+                            <div className="hidden h-px flex-1 bg-gradient-to-r from-transparent via-slate-500/30 to-slate-500/30 sm:block" />
+                            <span className="rounded-full border border-slate-500/20 bg-white/[0.035] px-3 py-1 text-[8px] font-bold uppercase tracking-[0.2em] text-slate-400">Documents & Actions</span>
+                            <div className="hidden h-px flex-1 bg-gradient-to-l from-transparent via-slate-500/30 to-slate-500/30 sm:block" />
+                          </div>
+                          <div className="grid grid-cols-2 items-stretch justify-center gap-2 sm:flex sm:flex-wrap sm:items-center">
                           <button
                             id={`download-pdf-${t.invoiceNo}`}
                             onClick={async () => {
