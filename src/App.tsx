@@ -331,10 +331,9 @@ export default function App() {
       return hasSavedUser && (savedPanel === "admin" || savedPanel === "sales") ? savedPanel : "none";
     } catch (_) { return "none"; }
   });
-  const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => {
-    try { return !localStorage.getItem("barakah_local_active_user"); }
-    catch (_) { return true; }
-  });
+  // Show the time-based welcome greeting on every fresh app load/reload.
+  // A saved login session can continue straight into the existing workspace.
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
@@ -4295,7 +4294,10 @@ _${businessInfo.name}_`;
             onClick={() => setShowWelcomeScreen(false)}
             className="mt-6 inline-flex min-h-11 min-w-44 shrink-0 items-center justify-center gap-3 rounded-xl border border-white bg-[#f8fafc] px-7 py-3 text-xs font-black tracking-[0.22em] !text-[#050505] shadow-[0_10px_35px_rgba(255,255,255,0.14)] transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_40px_rgba(255,255,255,0.22)] active:translate-y-0 sm:mt-10 sm:min-h-14 sm:px-8 sm:py-4"
           >
-            <span className="!text-[#050505]">LOGIN</span> <ArrowLeft className="h-4 w-4 rotate-180 !text-[#050505]" />
+            <span className="!text-[#050505]">{(() => {
+              try { return localStorage.getItem("barakah_local_active_user") ? "CONTINUE" : "LOGIN"; }
+              catch (_) { return "LOGIN"; }
+            })()}</span> <ArrowLeft className="h-4 w-4 rotate-180 !text-[#050505]" />
           </button>
           <p className="mt-4 shrink-0 text-[8px] font-medium tracking-[0.2em] text-slate-700 sm:mt-7 sm:text-[9px] sm:tracking-[0.28em]">WELCOME TO YOUR NEXT SUCCESSFUL DAY</p>
         </div>
