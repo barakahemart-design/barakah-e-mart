@@ -372,13 +372,24 @@ export default function App() {
   } | null>(null);
 
   const [ledgerDocumentPreview, setLedgerDocumentPreview] = useState<{ title: string; dataUrl: string } | null>(null);
-  const [ledgerPreviewZoom, setLedgerPreviewZoom] = useState(57);
+  const [ledgerPreviewZoom, setLedgerPreviewZoom] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(getDbKey("barakah_ledger_pdf_zoom")));
+      return Number.isFinite(saved) && saved >= 0.35 && saved <= 2.5 ? saved : 0.57;
+    } catch { return 0.57; }
+  });
   const ledgerPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     if (!ledgerDocumentPreview) return;
     const updatePreviewZoom = () => {
-      setLedgerPreviewZoom(window.matchMedia("(max-width: 767px)").matches ? 1 : 0.57);
+      if (window.matchMedia("(max-width: 767px)").matches) setLedgerPreviewZoom(1);
+      else {
+        try {
+          const saved = Number(localStorage.getItem(getDbKey("barakah_ledger_pdf_zoom")));
+          setLedgerPreviewZoom(Number.isFinite(saved) && saved >= 0.35 && saved <= 2.5 ? saved : 0.57);
+        } catch { setLedgerPreviewZoom(0.57); }
+      }
     };
     updatePreviewZoom();
     window.addEventListener("resize", updatePreviewZoom);
@@ -10149,8 +10160,8 @@ _${businessInfo.name}_`;
       {ledgerDocumentPreview && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-2 backdrop-blur-sm sm:p-5" role="dialog" aria-modal="true" aria-label={ledgerDocumentPreview.title}>
           <div className="flex h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17171D] shadow-2xl">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#202027] px-4 py-3 sm:px-5">
-              <div className="flex min-w-0 items-center gap-3">
+            <div className="flex shrink-0 flex-col items-center justify-center gap-3 border-b border-white/10 bg-[#202027] px-3 py-3 sm:flex-row sm:justify-between sm:px-5">
+              <div className="flex w-full min-w-0 items-center justify-center gap-3 text-center sm:w-auto sm:justify-start sm:text-left">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white">
                   <FileText className="h-4 w-4" />
                 </div>
@@ -10159,7 +10170,7 @@ _${businessInfo.name}_`;
                   <p className="text-[10px] text-slate-400">Document preview</p>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex w-full shrink-0 flex-wrap items-center justify-center gap-2 sm:w-auto">
                 <button
                   type="button"
                   onClick={() => {
@@ -10230,6 +10241,12 @@ _${businessInfo.name}_`;
               dataUrl={ledgerDocumentPreview.dataUrl}
               title={ledgerDocumentPreview.title}
               initialZoom={ledgerPreviewZoom}
+              onZoomChange={(zoom) => {
+                setLedgerPreviewZoom(zoom);
+                if (!window.matchMedia("(max-width: 767px)").matches) {
+                  try { localStorage.setItem(getDbKey("barakah_ledger_pdf_zoom"), String(zoom)); } catch {}
+                }
+              }}
             />
           </div>
         </div>
