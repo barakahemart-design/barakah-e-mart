@@ -6805,10 +6805,9 @@ _${businessInfo.name}_`;
                     const storedDue = t.dueBalance ?? t.due_balance;
                     const calculatedDue = (Number(t.total ?? t.grandTotal ?? t.grand_total) || 0) -
                       (Number(t.paidAmount ?? t.paid_amount) || 0);
-                    const outstandingDue = Math.max(0, storedDue !== undefined && storedDue !== null
-                      ? (Number(storedDue) || 0)
-                      : calculatedDue);
-                    const hasOutstandingDue = outstandingDue > 0 || ["due", "partial", "unpaid"].includes(String(t.status || "").toLowerCase());
+                    // Determine card color from the real remaining balance, not a stale status label.
+                    const outstandingDue = Math.max(0, Number(storedDue) || 0, calculatedDue);
+                    const hasOutstandingDue = outstandingDue > 0;
 
                     return (
                       <div
