@@ -279,7 +279,6 @@ export function getDbKey(baseKey: string, customEmail?: string, uid?: string): s
 import { 
   subscribeToAuthChanges, 
   signOut, 
-  uploadPasscodeBackup, 
   fetchAndRestoreCloudBackup,
   signInOrSignUpWithPasscode,
   signUpWithEmail,
@@ -481,7 +480,6 @@ export default function App() {
   }, []);
 
   // Cloud backup sync indicator active states
-  const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"connecting" | "connected" | "reconciling" | "error" | "offline">("offline");
   const [syncErrorMessage, setSyncErrorMessage] = useState("");
@@ -1340,32 +1338,6 @@ export default function App() {
     setPurchases(getStored("barakah_purchases", INITIAL_PURCHASES));
     triggerNotification("Guest Mode Activated (Welcome to Sandbox Guest Mode!)", "info");
     initialLoadedRef.current = true;
-  };
-
-  // Trigger PIN Backup upload
-  const triggerCloudBackupSync = async () => {
-    if (!activeUser || activeUser.isGuest) {
-      triggerNotification("Cloud backup is only available for registered store members.", "info");
-      return;
-    }
-    setIsBackingUp(true);
-    const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
-    const res = await uploadPasscodeBackup(activeUser.email, passcode, {
-      products,
-      contacts,
-      expenses,
-      transactions,
-      businessInfo,
-      purchases
-    });
-    setIsBackingUp(false);
-    const isSuccess = !!(res && (res as any).success);
-    if (isSuccess) {
-      triggerNotification("Cloud backup successfully synchronized!", "success");
-    } else {
-      const errorMsg = (res && typeof res === 'object' && (res as any).error) ? (res as any).error : "Please check your network and credentials";
-      triggerNotification(`Cloud backup failed: ${errorMsg}`, "error");
-    }
   };
 
   // Trigger PIN Backup restore/pull
@@ -4682,10 +4654,6 @@ _${businessInfo.name}_`;
               transactions={transactions}
               storeEmail={activeUser?.email || firebaseAuth.currentUser?.email || ""}
               businessInfo={businessInfo}
-              isBackingUp={isBackingUp}
-              isRestoring={isRestoring}
-              triggerCloudBackupSync={triggerCloudBackupSync}
-              triggerCloudBackupRestore={triggerCloudBackupRestore}
               onDataImport={handleDataImport}
               onNavigate={(tab) => {
                 setActiveTab(tab);
@@ -8098,7 +8066,7 @@ _${businessInfo.name}_`;
                       type="button"
                       id="settings-restore-cloud-btn"
                       onClick={triggerCloudBackupRestore}
-                      disabled={!activeUser || activeUser.isGuest || isBackingUp || isRestoring || isFirestoreQuotaLimited}
+                      disabled={!activeUser || activeUser.isGuest || isRestoring || isFirestoreQuotaLimited || syncStatus === "error"}
                       className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-xs font-bold text-sky-300 hover:bg-sky-500/15 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {isRestoring ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
