@@ -6707,6 +6707,10 @@ _${businessInfo.name}_`;
               ----------------------------------------------------------------- */}
           {activeTab === "ledger" && (
             <div className="space-y-6 animate-fadeIn" id="view-ledger-container">
+              <div id="ledger-sticky-mobile-header" className="hidden">
+                <span className="dashboard-sticky-live-dot" aria-hidden="true" />
+                <span>Account Balance</span>
+              </div>
               {/* Filtering Controls */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 bg-[#1E1E24] border border-slate-800/80 rounded-2xl shadow-xl" id="ledger-filter-bar">
                 
@@ -6804,7 +6808,7 @@ _${businessInfo.name}_`;
                     const outstandingDue = Math.max(0, storedDue !== undefined && storedDue !== null
                       ? (Number(storedDue) || 0)
                       : calculatedDue);
-                    const hasOutstandingDue = outstandingDue > 0;
+                    const hasOutstandingDue = outstandingDue > 0 || ["due", "partial", "unpaid"].includes(String(t.status || "").toLowerCase());
 
                     return (
                       <div
