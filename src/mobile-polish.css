@@ -1335,3 +1335,24 @@ html.light #root textarea {
     min-width: 0 !important;
   }
 }
+
+
+/* Ledger page title stays visible like the Dashboard header. */
+@media (max-width: 640px) {
+  #view-ledger-container {
+    gap: 12px !important;
+  }
+
+  #ledger-sticky-page-title {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 40 !important;
+    min-height: 48px !important;
+    margin: 0 !important;
+    border-radius: 0 0 14px 14px !important;
+  }
+
+  #ledger-filter-bar {
+    margin-top: 0 !important;
+  }
+}
