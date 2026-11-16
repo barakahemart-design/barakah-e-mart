@@ -502,10 +502,10 @@ html.light #root textarea {
    Scoped only to the dashboard and only to phone-sized viewports. */
 @media (max-width: 640px) {
   #premium-dashboard-panel {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    margin-left: calc(50% - 50vw) !important;
-    margin-right: calc(50% - 50vw) !important;
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    margin-left: calc(50% - 50vw + 8px) !important;
+    margin-right: calc(50% - 50vw + 8px) !important;
     padding: 10px 0 18px !important;
     gap: 12px !important;
     overflow: visible !important;
