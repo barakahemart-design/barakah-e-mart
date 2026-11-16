@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ProductSalesBreakdown } from "./ProductSalesBreakdown";
 import { 
-  CloudUpload, 
-  CloudDownload, 
-  RefreshCw, 
   Calendar, 
   TrendingUp, 
   TrendingDown, 
@@ -192,40 +189,7 @@ export function DashboardView({
           </p>
         </div>
         
-        {/* Right Action buttons mimicking the screenshot */}
-        <div className="flex flex-wrap items-center gap-2.5" id="dashboard-cloud-actions-row">
-          <div className="flex items-center gap-2 bg-[#0d1222]/90 px-3 py-1.5 rounded-xl border border-slate-800/80 text-xs font-semibold">
-            <button
-              onClick={triggerCloudBackupSync}
-              disabled={isBackingUp || isRestoring}
-              className="flex items-center gap-1.5 hover:text-[#00E676] text-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
-              id="sync-cloud-lbl-btn"
-            >
-              <CloudUpload className="w-4 h-4 text-[#00E676]" />
-              <span>Sync Cloud</span>
-            </button>
-            <span className="text-slate-700 font-normal">|</span>
-            <button
-              onClick={triggerCloudBackupRestore}
-              disabled={isBackingUp || isRestoring}
-              className="flex items-center gap-1.5 hover:text-sky-400 text-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
-              id="restore-cloud-lbl-btn"
-            >
-              <CloudDownload className="w-4 h-4 text-sky-400" />
-              <span>Restore Cloud</span>
-            </button>
-          </div>
 
-          <div className="flex items-center gap-2 bg-[#090d16]/80 px-2.5 py-1.5 rounded-lg border border-slate-900 text-[10px] font-mono uppercase tracking-wider text-slate-400 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Cloud: Synced</span>
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#090d16]/80 px-2.5 py-1.5 rounded-lg border border-slate-900 text-[10px] font-mono uppercase tracking-wider text-slate-400 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-            <span>Offline Core: OK</span>
-          </div>
-        </div>
       </div>
 
       {/* 2. DYNAMIC HORIZON FILTERS (Styled exactly like the pills in the screenshot) */}
