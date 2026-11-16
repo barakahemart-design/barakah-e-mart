@@ -4578,7 +4578,7 @@ _${businessInfo.name}_`;
                 {activeTab === 'purchases' && 'Purchases Ledger'}
                 {activeTab === "pos" && "Counter Cash Memo"}
                 {activeTab === 'inventory' && 'Stock'}
-                {activeTab === 'ledger' && 'Account Ledger'}
+                {activeTab === 'ledger' && <><span className="ledger-sticky-live-dot" aria-hidden="true" /><span id="ledger-mobile-title">Ledger Account</span></>}
                 {activeTab === 'expenses' && 'Expenses'}
                 {activeTab === 'contacts' && 'Customers Directory'}
                 {activeTab === 'settings' && 'System Settings'}
@@ -6707,10 +6707,6 @@ _${businessInfo.name}_`;
               ----------------------------------------------------------------- */}
           {activeTab === "ledger" && (
             <div className="space-y-6 animate-fadeIn" id="view-ledger-container">
-              <div id="ledger-sticky-page-title" className="sticky top-0 z-30 flex w-full items-center justify-center border-b border-white/[0.10] bg-[#08090d]/95 px-3 py-3 text-center shadow-lg backdrop-blur-xl">
-                <h2 className="text-base font-extrabold tracking-wide text-white">Ledger Box</h2>
-              </div>
-              
               {/* Filtering Controls */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 bg-[#1E1E24] border border-slate-800/80 rounded-2xl shadow-xl" id="ledger-filter-bar">
                 
