@@ -1438,17 +1438,19 @@ html.light #root textarea {
     box-shadow: inset 0 0 0 2px rgba(255,48,79,.72), 0 0 18px rgba(255,48,79,.32) !important;
   }
 
-  /* Search must remain a full-width, clearly visible row below Account Balance. */
+  /* Flatten the old combined filter wrapper so mobile order is:
+     Account Balance -> Search -> Date Range -> payment-status filters -> ledger cards. */
   #ledger-filter-bar {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
+    display: contents !important;
   }
+
+  #ledger-search-wrap { order: 1 !important; }
+  #ledger-date-filter-bar { order: 2 !important; }
+  #ledger-filter-tabs {
+    order: 3 !important;
+    width: 100% !important;
+  }
+  #ledger-timeline-feed { order: 4 !important; }
 
   #ledger-search-wrap,
   #ledger-search-input {
