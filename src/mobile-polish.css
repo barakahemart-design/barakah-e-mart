@@ -1171,10 +1171,11 @@ html.light #root textarea {
 }
 
 
-/* Mobile account identity strip: fixed directly above the bottom navigation.
-   Keep the content viewport clear of both fixed bars while it scrolls. */
+
+/* Reuse the existing built-in terminal footer as the fixed mobile account bar.
+   No duplicate account/header element is created. */
 @media (max-width: 767px) {
-  #mobile-account-status-strip {
+  #terminal-footer {
     position: fixed !important;
     left: 0 !important;
     right: 0 !important;
@@ -1183,12 +1184,12 @@ html.light #root textarea {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 10px !important;
+    gap: 8px !important;
     min-height: 34px !important;
     padding: 6px 12px !important;
     box-sizing: border-box !important;
-    color: #cbd5e1 !important;
     background: rgba(10, 13, 20, .97) !important;
+    color: #94a3b8 !important;
     border-top: 1px solid rgba(148, 163, 184, .16) !important;
     border-bottom: 1px solid rgba(148, 163, 184, .16) !important;
     box-shadow: 0 -4px 14px rgba(0,0,0,.18) !important;
@@ -1196,25 +1197,21 @@ html.light #root textarea {
     backdrop-filter: blur(18px) !important;
   }
 
-  #mobile-account-status-strip .mobile-account-brand {
-    flex: 0 0 auto !important;
-    font-size: 9px !important;
-    line-height: 14px !important;
-    font-weight: 800 !important;
-    letter-spacing: .035em !important;
-    color: #e2e8f0 !important;
-    white-space: nowrap !important;
-  }
-
-  #mobile-account-status-strip .mobile-account-email {
+  #terminal-footer > span:first-child {
     min-width: 0 !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
-    text-align: right !important;
     font-size: 9px !important;
     line-height: 14px !important;
-    color: #94a3b8 !important;
+  }
+
+  #terminal-footer > span:last-child {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    font-size: 9px !important;
+    line-height: 14px !important;
+    color: #cbd5e1 !important;
   }
 
   #mobile-bottom-navbar {
@@ -1223,46 +1220,5 @@ html.light #root textarea {
 
   #viewport-workspace {
     padding-bottom: calc(118px + env(safe-area-inset-bottom)) !important;
-  }
-}
-
-/* Slightly larger title and the small pulsing live indicator. */
-@media (max-width: 640px) {
-  #dashboard-sticky-mobile-header {
-    gap: 9px !important;
-    font-size: 18px !important;
-    line-height: 23px !important;
-    letter-spacing: .025em !important;
-  }
-
-  #dashboard-sticky-mobile-header .dashboard-sticky-live-dot {
-    position: relative !important;
-    display: inline-block !important;
-    flex: 0 0 9px !important;
-    width: 9px !important;
-    height: 9px !important;
-    border-radius: 9999px !important;
-    background: #67e8f9 !important;
-    box-shadow: 0 0 9px rgba(103,232,249,.9) !important;
-  }
-
-  #dashboard-sticky-mobile-header .dashboard-sticky-live-dot::after {
-    content: "" !important;
-    position: absolute !important;
-    inset: -3px !important;
-    border: 1px solid rgba(103,232,249,.8) !important;
-    border-radius: 9999px !important;
-    animation: dashboard-live-pulse 1.5s ease-out infinite !important;
-  }
-}
-
-@keyframes dashboard-live-pulse {
-  0% { transform: scale(.72); opacity: .95; }
-  100% { transform: scale(1.9); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #dashboard-sticky-mobile-header .dashboard-sticky-live-dot::after {
-    animation: none !important;
   }
 }
