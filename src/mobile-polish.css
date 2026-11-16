@@ -1172,53 +1172,23 @@ html.light #root textarea {
 
 
 
-/* Reuse the existing built-in terminal footer as the fixed mobile account bar.
-   No duplicate account/header element is created. */
+/* Mobile dashboard: remove the account/footer strip completely.
+   Keep only the Dashboard title at the top and the primary navigation at the bottom.
+   Reclaim the footer's space so dashboard content sits directly between them. */
 @media (max-width: 767px) {
   #terminal-footer {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: calc(64px + env(safe-area-inset-bottom)) !important;
-    z-index: 41 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 8px !important;
-    min-height: 34px !important;
-    padding: 6px 12px !important;
-    box-sizing: border-box !important;
-    background: rgba(10, 13, 20, .97) !important;
-    color: #94a3b8 !important;
-    border-top: 1px solid rgba(148, 163, 184, .16) !important;
-    border-bottom: 1px solid rgba(148, 163, 184, .16) !important;
-    box-shadow: 0 -4px 14px rgba(0,0,0,.18) !important;
-    -webkit-backdrop-filter: blur(18px) !important;
-    backdrop-filter: blur(18px) !important;
-  }
-
-  #terminal-footer > span:first-child {
-    min-width: 0 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    font-size: 9px !important;
-    line-height: 14px !important;
-  }
-
-  #terminal-footer > span:last-child {
-    flex: 0 0 auto !important;
-    white-space: nowrap !important;
-    font-size: 9px !important;
-    line-height: 14px !important;
-    color: #cbd5e1 !important;
-  }
-
-  #mobile-bottom-navbar {
-    z-index: 42 !important;
+    display: none !important;
   }
 
   #viewport-workspace {
-    padding-bottom: calc(118px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: calc(62px + env(safe-area-inset-bottom)) !important;
+  }
+
+  #scrollable-content-area:has(#dashboard-sticky-mobile-header) {
+    padding-bottom: 12px !important;
+  }
+
+  #premium-dashboard-panel {
+    padding-bottom: 0 !important;
   }
 }
