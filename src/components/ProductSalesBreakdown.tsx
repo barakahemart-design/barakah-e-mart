@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { toUUID } from "../lib/firebase-helpers";
 import { Boxes, Package, ShoppingBag } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
@@ -73,6 +73,7 @@ export function ProductSalesBreakdown({
   customEnd
 }: ProductSalesBreakdownProps) {
   const todayKey = new Date().toDateString();
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set());
   const report = useMemo(() => {
     const bounds = getPeriodBounds(dashboardFilter, customStart, customEnd);
     const safeProducts = Array.isArray(products) ? products : [];
@@ -232,7 +233,18 @@ export function ProductSalesBreakdown({
           <div className="space-y-2">
             {report.categories.map(category => (
               <div key={category.name.toLowerCase()} className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#0e1422]">
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <button
+                  type="button"
+                  aria-expanded={expandedCategories.has(category.name.toLowerCase())}
+                  onClick={() => setExpandedCategories(previous => {
+                    const next = new Set(previous);
+                    const key = category.name.toLowerCase();
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400"
+                >
                   <div className="flex min-w-0 items-center gap-2.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
                       <Boxes className="h-4 w-4" />
@@ -246,7 +258,9 @@ export function ProductSalesBreakdown({
                     <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
                     <div className="text-[9px] uppercase tracking-wider text-slate-500">units sold</div>
                   </div>
-                </div>
+                  <span className={`shrink-0 text-slate-400 transition-transform ${expandedCategories.has(category.name.toLowerCase()) ? "rotate-180" : ""}`} aria-hidden="true">⌄</span>
+                </button>
+                {expandedCategories.has(category.name.toLowerCase()) && (
                 <div className="border-t border-slate-800/80 divide-y divide-slate-800/70">
                   {category.products.map(product => (
                     <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -258,6 +272,7 @@ export function ProductSalesBreakdown({
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             ))}
           </div>
