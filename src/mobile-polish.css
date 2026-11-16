@@ -801,3 +801,145 @@ html.light #root textarea {
     padding-right: 9px !important;
   }
 }
+
+
+/* Compact single-row mobile top bar, visually balanced like the bottom nav.
+   Only the top header is affected; all controls keep their existing behavior. */
+@media (max-width: 640px) {
+  #top-navbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 70 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-height: calc(54px + env(safe-area-inset-top)) !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: calc(6px + env(safe-area-inset-top)) 10px 6px !important;
+    box-sizing: border-box !important;
+    background: rgba(8, 13, 24, .97) !important;
+    border-bottom: 1px solid rgba(255,255,255,.10) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(140%) !important;
+    backdrop-filter: blur(22px) saturate(140%) !important;
+  }
+
+  #active-tab-title-display {
+    display: flex !important;
+    flex: 0 1 auto !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+  }
+
+  #active-tab-title-display > div {
+    justify-content: flex-start !important;
+  }
+
+  #active-tab-title-display h1 {
+    display: block !important;
+    font-size: 12px !important;
+    line-height: 16px !important;
+    letter-spacing: .035em !important;
+    font-weight: 800 !important;
+    text-align: left !important;
+  }
+
+  #active-tab-title-display h1 .hidden.md\\:inline {
+    display: inline !important;
+  }
+
+  #top-navbar-actions {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+  }
+
+  #top-navbar-actions > div:first-child {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+  }
+
+  #top-navbar-actions #manual-backup-cloud-btn,
+  #top-navbar-actions #manual-restore-cloud-btn,
+  #top-navbar-actions #global-theme-toggle {
+    display: inline-flex !important;
+    flex: 0 0 32px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0 !important;
+    border: 1px solid rgba(255,255,255,.13) !important;
+    border-radius: 9px !important;
+    background: rgba(255,255,255,.055) !important;
+    box-shadow: none !important;
+  }
+
+  #top-navbar-actions #manual-backup-cloud-btn svg,
+  #top-navbar-actions #manual-restore-cloud-btn svg,
+  #top-navbar-actions #global-theme-toggle svg {
+    display: block !important;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    margin: 0 !important;
+    stroke-width: 2 !important;
+  }
+
+  #top-navbar-actions #cloud-sync-status-indicator,
+  #top-navbar-actions #engine-status {
+    display: inline-flex !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 7px !important;
+    border: 1px solid rgba(255,255,255,.12) !important;
+    border-radius: 9px !important;
+    background: rgba(255,255,255,.045) !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    font-size: 8px !important;
+    line-height: 1 !important;
+  }
+
+  #top-navbar-actions #cloud-sync-status-indicator {
+    gap: 5px !important;
+  }
+
+  #top-navbar-actions #cloud-sync-status-indicator span[class*="rounded-full"] {
+    width: 6px !important;
+    height: 6px !important;
+  }
+
+  #top-navbar-actions #engine-status {
+    gap: 4px !important;
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+  }
+}
