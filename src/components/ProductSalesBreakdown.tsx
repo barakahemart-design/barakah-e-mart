@@ -243,7 +243,7 @@ export function ProductSalesBreakdown({
                     else next.add(key);
                     return next;
                   })}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400"
+                  className="grid w-full grid-cols-[minmax(0,1fr)_88px_12px] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400"
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
@@ -254,7 +254,7 @@ export function ProductSalesBreakdown({
                       <p className="mt-0.5 text-[10px] text-slate-500">{category.products.length} product{category.products.length === 1 ? "" : "s"}</p>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="min-w-0 text-right">
                     <div className="text-lg font-black tabular-nums text-emerald-300">{formatQuantity(category.units)}</div>
                     <div className="text-[9px] uppercase tracking-wider text-slate-500">units sold</div>
                   </div>
@@ -263,12 +263,12 @@ export function ProductSalesBreakdown({
                 {expandedCategories.has(category.name.toLowerCase()) && (
                 <div className="border-t border-slate-800/80 divide-y divide-slate-800/70">
                   {category.products.map(product => (
-                    <div key={product.productId || product.name} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div key={product.productId || product.name} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 px-4 py-2.5">
                       <div className="flex min-w-0 items-center gap-2">
                         <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                         <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
                       </div>
-                      <span className="shrink-0 text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>
+                      <span className="min-w-0 text-right text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>
                     </div>
                   ))}
                 </div>
