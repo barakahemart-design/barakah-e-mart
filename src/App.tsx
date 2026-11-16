@@ -484,6 +484,7 @@ export default function App() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"connecting" | "connected" | "reconciling" | "error" | "offline">("offline");
+  const [syncErrorMessage, setSyncErrorMessage] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Custom dialog state overrides for iframe friendliness
@@ -928,12 +929,28 @@ export default function App() {
 
   // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
+    const handleFirestoreSyncError = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      const code = String(detail.code || "");
+      const message = String(detail.message || "Firestore connection error");
+      setSyncStatus("error");
+      setSyncErrorMessage(code.includes("resource-exhausted")
+        ? "Firestore daily usage limit reached. Cloud updates may be unavailable until the quota resets. Your locally saved data remains on this device."
+        : `${detail.collection ? `${detail.collection}: ` : ""}${message}`);
+    };
+    window.addEventListener("barakah-firestore-sync-error", handleFirestoreSyncError);
+    return () => window.removeEventListener("barakah-firestore-sync-error", handleFirestoreSyncError);
+  }, []);
+
+  useEffect(() => {
     if (!activeUser || activeUser.isGuest) {
       setSyncStatus("offline");
+      setSyncErrorMessage("");
       return;
     }
 
     setSyncStatus("connecting");
+    setSyncErrorMessage("");
 
     const cleanEmail = (activeUser.email || "").trim().toLowerCase();
     const activeUserId = activeUser.uid || firebaseAuth.currentUser?.uid || cleanEmail;
@@ -1554,7 +1571,9 @@ export default function App() {
   const [showSignaturePad, setShowSignaturePad] = useState<boolean>(true);
 
   // Local temp states for Settings with individual block saves
-  const [activeSettingsSection, setActiveSettingsSection] = useState<"overview" | "shop" | "font" | "invoice" | "sales" | "security" | "danger">("overview");
+  const [activeSettingsSection, setActiveSettingsSection] = useState<"overview" | "shop" | "font" | "invoice" | "sales" | "security" | "danger" | "cloud">("overview");
+  const localCoreAvailable = (() => { try { window.localStorage.getItem("barakah_local_active_user"); return true; } catch { return false; } })();
+  const isFirestoreQuotaLimited = syncErrorMessage.toLowerCase().includes("daily usage limit");
   const [tempShopName, setTempShopName] = useState("");
   const [tempShopAddress, setTempShopAddress] = useState("");
   const [tempShopPhone, setTempShopPhone] = useState("");
@@ -4605,125 +4624,7 @@ _${businessInfo.name}_`;
             </p>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-3 shrink-0" id="top-navbar-actions">
-            
-             {/* Sync Cloud Button (For registered users) */}
-             {activeUser && !activeUser.isGuest && (
-               <div className="flex gap-1 bg-[#121214]/60 p-1 border border-slate-800/80 rounded-xl">
-                 <button
-                   id="manual-backup-cloud-btn"
-                   onClick={triggerCloudBackupSync}
-                   disabled={isBackingUp || isRestoring}
-                   className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:bg-slate-900 rounded-lg text-[10px] md:text-xs font-mono font-bold tracking-wide transition-colors cursor-pointer"
-                   title="Force push local database up to cloud (Emergency Force Backup)"
-                 >
-                   {isBackingUp ? (
-                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                   ) : (
-                     <>
-                       <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
-                       <span className="hidden lg:inline">Force Push</span>
-                     </>
-                   )}
-                 </button>
 
-                 <button
-                   id="manual-restore-cloud-btn"
-                   onClick={triggerCloudBackupRestore}
-                   disabled={isBackingUp || isRestoring}
-                   className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 disabled:bg-slate-900 rounded-lg text-[10px] md:text-xs font-mono font-bold tracking-wide transition-colors cursor-pointer"
-                   title="Force pull database down from cloud (Emergency Overwrite)"
-                 >
-                   {isRestoring ? (
-                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                   ) : (
-                     <>
-                       <CloudDownload className="w-3.5 h-3.5 text-sky-400" />
-                       <span className="hidden lg:inline">Force Pull</span>
-                     </>
-                   )}
-                 </button>
-               </div>
-             )}
-
-            {/* Offline Engine status dot indicator */}
-            {/* Global theme dark/light toggle button */}
-            <button
-              id="global-theme-toggle"
-              type="button"
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="flex items-center justify-center p-2.5 bg-[#050912]/80 hover:bg-slate-800/80 text-white rounded-xl border border-slate-800 hover:border-slate-700 hover:text-emerald-400 transition-all cursor-pointer shadow-sm h-8.5 w-8.5"
-              title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {isDarkMode ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-[#00E676]" />
-              )}
-            </button>
-
-            {activeUser && !activeUser.isGuest && (
-              <div 
-                id="cloud-sync-status-indicator"
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-xl border text-[9px] md:text-[10px] font-mono font-bold shadow-sm transition-all duration-300 ${
-                  syncStatus === "connected" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
-                  syncStatus === "reconciling" ? "bg-amber-500/10 border-amber-500/20 text-amber-500 animate-pulse" :
-                  syncStatus === "connecting" ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400 animate-pulse" :
-                  syncStatus === "error" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
-                  "bg-slate-500/10 border-slate-800 text-slate-400"
-                }`}
-                title={
-                  syncStatus === "connected" ? "Your local device is connected and up-to-date with cloud" :
-                  syncStatus === "reconciling" ? "Reconciling live data with cloud document..." :
-                  syncStatus === "connecting" ? "Connecting to secure live cloud stream..." :
-                  syncStatus === "error" ? "Cloud connection interrupted / unauthorized" :
-                  "Cloud sync is offline"
-                }
-              >
-                {syncStatus === "connected" && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse" />
-                    <span className="hidden sm:inline">CLOUD: SYNCED</span>
-                    <span className="sm:hidden">CLOUD: OK</span>
-                  </>
-                )}
-                {syncStatus === "reconciling" && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.85)] animate-pulse" />
-                    <span className="hidden sm:inline">CLOUD: RECONCILING</span>
-                    <span className="sm:hidden">CLOUD: SYNC</span>
-                  </>
-                )}
-                {syncStatus === "connecting" && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)] animate-pulse" />
-                    <span className="hidden sm:inline">CLOUD: CONNECTING</span>
-                    <span className="sm:hidden">CLOUD: CONN</span>
-                  </>
-                )}
-                {syncStatus === "error" && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.9)]" />
-                    <span className="hidden sm:inline">CLOUD: ERR</span>
-                    <span className="sm:hidden">CLOUD: ERR</span>
-                  </>
-                )}
-                {syncStatus === "offline" && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-slate-400 shadow-[0_0_8px_rgba(148,163,184,0.45)]" />
-                    <span>CLOUD: OFFLINE</span>
-                  </>
-                )}
-              </div>
-            )}
-
-            <div className="bg-[#050912]/80 border border-slate-800 rounded-xl px-2 py-1 flex items-center gap-1.5 font-mono text-[9px] md:text-[10px]" id="engine-status">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-slate-400 font-mono hidden md:inline">OFFLINE CORE: OK</span>
-              <span className="text-emerald-400 font-mono md:hidden font-bold">OK</span>
-            </div>
-
-          </div>
 
         </header>
 
@@ -8090,7 +7991,7 @@ _${businessInfo.name}_`;
                       <h4 className="text-sm font-bold text-white">Settings Workspace</h4>
                       <p className="text-[10px] text-slate-400 mt-1">Select a section to view and update its settings.</p>
                     </div>
-                    <span className="text-[9px] uppercase tracking-widest text-slate-400 border border-white/10 rounded-full px-3 py-1">6 Sections</span>
+                    <span className="text-[9px] uppercase tracking-widest text-slate-400 border border-white/10 rounded-full px-3 py-1">7 Sections</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                     {[
@@ -8099,7 +8000,8 @@ _${businessInfo.name}_`;
                       { id: "invoice" as const, title: "Invoice & PDF Layout", desc: "Invoice templates, logo, signatures and print details", Icon: FileText, meta: "Print customization" },
                       { id: "sales" as const, title: "Sales Panel & Assistant Restrictions", desc: "Control editing, deleting and price override permissions", Icon: SlidersHorizontal, meta: "Access permissions" },
                       { id: "security" as const, title: "Security & Panel Passcodes", desc: "Manage Admin and Sales panel access PINs", Icon: ShieldCheck, meta: "Account security" },
-                      { id: "danger" as const, title: "Danger Zone", desc: "Review high-risk reset and deletion actions", Icon: AlertTriangle, meta: "Advanced actions" }
+                      { id: "danger" as const, title: "Danger Zone", desc: "Review high-risk reset and deletion actions", Icon: AlertTriangle, meta: "Advanced actions" },
+                      { id: "cloud" as const, title: "Data & Cloud Management", desc: "Cloud connection, local device status, backup and appearance controls", Icon: CloudLightning, meta: "System status" }
                     ].map((item) => {
                       const Icon = item.Icon;
                       const isDanger = item.id === "danger";
@@ -8141,13 +8043,81 @@ _${businessInfo.name}_`;
                     <div className="min-w-0">
                       <p className="text-[9px] uppercase tracking-widest text-slate-400">Settings Workspace</p>
                       <p className="text-xs sm:text-sm font-bold text-white truncate">
-                        {({ shop: "Registered Shop Information", font: "Font Customization & Settings", invoice: "Invoice & PDF Layout Customization", sales: "Sales Panel & Assistant Restrictions", security: "Security & Panel Passcodes", danger: "Danger Zone" } as Record<string, string>)[activeSettingsSection]}
+                        {({ shop: "Registered Shop Information", font: "Font Customization & Settings", invoice: "Invoice & PDF Layout Customization", sales: "Sales Panel & Assistant Restrictions", security: "Security & Panel Passcodes", danger: "Danger Zone", cloud: "Data & Cloud Management" } as Record<string, string>)[activeSettingsSection]}
                       </p>
                     </div>
                   </div>
                   <span className="text-[9px] text-slate-400 border border-white/10 rounded-full px-3 py-1">Changes are saved per section</span>
                 </div>
               )}
+              {activeSettingsSection === "cloud" && (
+                <div className="space-y-4 animate-fadeIn" id="settings-cloud-management">
+                  <div className="rounded-2xl border border-white/10 bg-[#101319]/95 p-4 sm:p-5 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"><CloudLightning className="w-5 h-5 text-slate-100" /></div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Live Cloud Connection</h4>
+                        <p className="text-[10px] text-slate-400">Status is based on the existing Firestore listeners; this panel does not run extra database checks.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-[9px] uppercase tracking-widest text-slate-400">Firestore</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${syncStatus === "connected" ? "bg-emerald-400" : syncStatus === "error" ? "bg-rose-400" : syncStatus === "connecting" || syncStatus === "reconciling" ? "bg-amber-400 animate-pulse" : "bg-slate-400"}`} />
+                          <span className="text-xs font-bold text-white">{syncStatus === "connected" ? "Connected — latest listener snapshot received" : syncStatus === "connecting" ? "Connecting…" : syncStatus === "reconciling" ? "Updating local data…" : syncStatus === "error" ? "Connection error" : "Offline / not connected"}</span>
+                        </div>
+                        {syncErrorMessage && <p className="mt-2 text-[10px] leading-relaxed text-rose-300">{syncErrorMessage}</p>}
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-[9px] uppercase tracking-widest text-slate-400">Offline Core / Local Storage</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${localCoreAvailable ? "bg-emerald-400" : "bg-rose-400"}`} />
+                          <span className="text-xs font-bold text-white">{localCoreAvailable ? "Available on this device" : "Unavailable — local storage access failed"}</span>
+                        </div>
+                        <p className="mt-2 text-[10px] text-slate-400">Local data remains separate from Firestore and may still be available when the cloud quota is exhausted.</p>
+                      </div>
+                    </div>
+                    {isFirestoreQuotaLimited && (
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-200">
+                        Firestore daily quota is currently exhausted. To avoid more failed requests, do not force cloud restore or repeated sync attempts until the quota resets. Continue using the locally available data carefully.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-[#101319]/95 p-4 sm:p-5 space-y-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Cloud Backup & Restore</h4>
+                      <p className="text-[10px] text-slate-400 mt-1">Manual controls are kept here instead of the Dashboard and top bar.</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                      <p className="text-xs font-bold text-amber-200">Cloud backup upload is not available</p>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">The current backup-upload function is disabled in this app version. The old button could show a false success message, so it has been removed until a real backup implementation is ready.</p>
+                    </div>
+                    <button
+                      type="button"
+                      id="settings-restore-cloud-btn"
+                      onClick={triggerCloudBackupRestore}
+                      disabled={!activeUser || activeUser.isGuest || isBackingUp || isRestoring || isFirestoreQuotaLimited}
+                      className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-xs font-bold text-sky-300 hover:bg-sky-500/15 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isRestoring ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
+                      {isRestoring ? "Restoring…" : "Restore Cloud Backup"}
+                    </button>
+                    <p className="text-[10px] text-slate-500">Restore may replace this device’s local data. It is disabled while Firestore’s daily quota error is active.</p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-[#101319]/95 p-4 sm:p-5">
+                    <h4 className="text-sm font-bold text-white">Appearance</h4>
+                    <p className="text-[10px] text-slate-400 mt-1">Change the app theme from this settings panel.</p>
+                    <button type="button" id="settings-theme-toggle" onClick={() => setIsDarkMode(!isDarkMode)} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-white hover:bg-white/10">
+                      {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-emerald-400" />}
+                      {isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {activeSettingsSection === "shop" && (
                 <>
               {/* 1. Shop Information Card Block */}
