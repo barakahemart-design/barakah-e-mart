@@ -176,7 +176,7 @@ export function DashboardView({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 py-6 space-y-6 text-slate-200" id="premium-dashboard-panel">
+    <div className="w-full max-w-none mx-0 px-0 sm:px-4 py-4 sm:py-6 space-y-5 sm:space-y-6 text-slate-200" id="premium-dashboard-panel">
       
       {/* 1. HEADER HERO BANNER (Title with real-time indicators and Sync actions) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/40" id="dashboard-header-block">
