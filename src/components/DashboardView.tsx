@@ -28,10 +28,6 @@ interface DashboardViewProps {
   transactions: any[];
   storeEmail: string;
   businessInfo: any;
-  isBackingUp: boolean;
-  isRestoring: boolean;
-  triggerCloudBackupSync: () => Promise<void>;
-  triggerCloudBackupRestore: () => Promise<void>;
   onDataImport: (importedData: any) => void;
   onNavigate: (tab: any) => void;
   
@@ -61,10 +57,6 @@ export function DashboardView({
   transactions,
   storeEmail,
   businessInfo,
-  isBackingUp,
-  isRestoring,
-  triggerCloudBackupSync,
-  triggerCloudBackupRestore,
   onDataImport,
   onNavigate,
   
