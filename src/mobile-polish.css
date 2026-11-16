@@ -1090,3 +1090,82 @@ html.light #root textarea {
     margin: 0 !important;
   }
 }
+
+
+/* Dashboard mobile: a dedicated slim sticky title strip sits at the very top
+   of the scrolling viewport. The generic app title bar is hidden only on this
+   screen so the date-range controls follow directly beneath this strip. */
+@media (max-width: 640px) {
+  #viewport-workspace:has(#dashboard-sticky-mobile-header) > #top-navbar {
+    display: none !important;
+  }
+
+  #scrollable-content-area:has(#dashboard-sticky-mobile-header) {
+    padding: 0 12px calc(90px + env(safe-area-inset-bottom)) !important;
+    gap: 0 !important;
+    scroll-padding-top: 0 !important;
+  }
+
+  #premium-dashboard-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 0 20px !important;
+    gap: 0 !important;
+    overflow: visible !important;
+  }
+
+  #dashboard-sticky-mobile-header {
+    display: flex !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 120 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: calc(100% + 24px) !important;
+    min-height: 42px !important;
+    margin: 0 -12px 12px !important;
+    padding: 8px 12px !important;
+    box-sizing: border-box !important;
+    color: #fff !important;
+    background: rgba(8, 13, 24, .98) !important;
+    border-bottom: 1px solid rgba(255,255,255,.14) !important;
+    box-shadow: 0 5px 16px rgba(0,0,0,.24) !important;
+    font-size: 15px !important;
+    line-height: 20px !important;
+    font-weight: 800 !important;
+    letter-spacing: .035em !important;
+    text-align: center !important;
+    -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+    backdrop-filter: blur(20px) saturate(140%) !important;
+  }
+
+  #premium-dashboard-panel #dashboard-header-block {
+    display: none !important;
+  }
+
+  #premium-dashboard-panel #dashboard-period-menu-container {
+    margin: 0 0 16px !important;
+  }
+
+  #premium-dashboard-panel #premium-metrics-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 16px !important;
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #premium-metrics-grid > div {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /* Keep Product Sales Breakdown visually detached from the Net Profit card. */
+  #premium-dashboard-panel #dashboard-product-sales-breakdown {
+    margin: 20px 0 0 !important;
+  }
+
+  #premium-dashboard-panel #dashboard-category-product-details {
+    margin: 20px 0 0 !important;
+  }
+}
