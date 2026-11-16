@@ -1151,8 +1151,10 @@ html.light #root textarea {
     position: sticky !important;
     top: 0 !important;
     z-index: 120 !important;
+    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    gap: 11px !important;
     width: calc(100% + 24px) !important;
     min-height: 42px !important;
     margin: 0 -12px 12px !important;
