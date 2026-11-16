@@ -1356,3 +1356,129 @@ html.light #root textarea {
     margin-top: 0 !important;
   }
 }
+
+
+/* Ledger Account header mirrors the Dashboard title and keeps the live pulse. */
+@media (max-width: 640px) {
+  #top-navbar:has(#ledger-mobile-title) {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    min-height: calc(56px + env(safe-area-inset-top)) !important;
+    height: auto !important;
+    margin-top: calc(-1 * env(safe-area-inset-top)) !important;
+    padding: calc(12px + env(safe-area-inset-top)) 14px 12px !important;
+    box-sizing: border-box !important;
+    background: rgba(8, 13, 24, .98) !important;
+    border-bottom: 1px solid rgba(255,255,255,.14) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,.24) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(145%) !important;
+    backdrop-filter: blur(24px) saturate(145%) !important;
+  }
+
+  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 !important;
+    text-align: center !important;
+  }
+
+  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display > div {
+    width: 100% !important;
+    justify-content: center !important;
+    gap: 11px !important;
+  }
+
+  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display > div > span:first-child {
+    display: none !important;
+  }
+
+  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display h1 {
+    display: flex !important;
+    width: 100% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 11px !important;
+    margin: 0 !important;
+    text-align: center !important;
+    font-size: 20px !important;
+    line-height: 25px !important;
+    letter-spacing: .04em !important;
+    font-weight: 800 !important;
+  }
+
+  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display p {
+    display: none !important;
+  }
+}
+
+#top-navbar:has(#ledger-mobile-title) {
+  justify-content: center !important;
+}
+
+#top-navbar:has(#ledger-mobile-title) #active-tab-title-display {
+  width: 100% !important;
+  min-width: 0 !important;
+  text-align: center !important;
+}
+
+#top-navbar:has(#ledger-mobile-title) #active-tab-title-display > div {
+  justify-content: center !important;
+}
+
+#top-navbar:has(#ledger-mobile-title) #active-tab-title-display h1 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 11px !important;
+  width: 100% !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+}
+
+.ledger-sticky-live-dot {
+  position: relative !important;
+  display: inline-block !important;
+  flex: 0 0 9px !important;
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 50% !important;
+  background: #22d3ee !important;
+  box-shadow: 0 0 8px rgba(34, 211, 238, .75) !important;
+}
+
+.ledger-sticky-live-dot::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: -4px !important;
+  border: 1px solid rgba(34, 211, 238, .7) !important;
+  border-radius: 50% !important;
+  animation: dashboard-live-pulse 1.8s ease-out infinite !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger-sticky-live-dot::after {
+    animation: none !important;
+  }
+}
+
+/* Force the payment-state outline to win over generic glass-card borders. */
+#ledger-timeline-feed [data-customer-payment-status="cleared"] {
+  border: 2px solid #00E676 !important;
+  border-color: #00E676 !important;
+  box-shadow: 0 0 0 1px rgba(0,230,118,.58), 0 0 26px rgba(0,230,118,.22) !important;
+}
+
+#ledger-timeline-feed [data-customer-payment-status="due"] {
+  border: 2px solid #FF304F !important;
+  border-color: #FF304F !important;
+  box-shadow: 0 0 0 1px rgba(255,48,79,.62), 0 0 26px rgba(255,48,79,.25) !important;
+}
