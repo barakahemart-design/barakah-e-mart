@@ -96,6 +96,11 @@ function createSubscription(collName: string) {
       },
       (error) => {
         console.error(`[Realtime Listener Error] ${collName}`, error);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("barakah-firestore-sync-error", {
+            detail: { code: (error as any)?.code || "", message: (error as any)?.message || String(error), collection: collName }
+          }));
+        }
       }
     );
 
