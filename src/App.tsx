@@ -9565,6 +9565,14 @@ _${businessInfo.name}_`;
         </div>
       )}
 
+      {/* Fixed signed-in account strip above the mobile navigation */}
+      <div id="mobile-account-status-strip" className="md:hidden" aria-label="Signed-in account">
+        <span className="mobile-account-brand">Barakah E-Mart Bill Pro</span>
+        <span className="mobile-account-email" title={activeUser?.email || firebaseAuth.currentUser?.email || ""}>
+          {activeUser?.email || firebaseAuth.currentUser?.email || "Guest Mode"}
+        </span>
+      </div>
+
       {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
       {/* -------------------- MOBILE BOTTOM NAVIGATION BAR -------------------- */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0d14]/95 backdrop-blur-xl border-t border-[#1e293b]/70 pb-safe grid grid-cols-5 h-16 shadow-[0_-10px_35px_rgba(0,0,0,0.6)]" id="mobile-bottom-navbar">
