@@ -1261,3 +1261,77 @@ html.light #root textarea {
     border-left: 0 !important;
   }
 }
+
+
+/* Expenses and Ledger mobile polish: use the dashboard's consistent side
+   gutters and remove redundant nested panels without changing data controls. */
+@media (max-width: 640px) {
+  #scrollable-content-area:has(#view-expenses-outer-container),
+  #scrollable-content-area:has(#view-ledger-container) {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  #view-expenses-outer-container,
+  #view-ledger-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  #view-expenses-outer-container {
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  #view-expenses-outer-container > .relative.z-10 {
+    min-width: 0 !important;
+  }
+
+  #view-expenses-outer-container > .relative.z-10 > .relative.z-10.rounded-2xl {
+    padding: 12px !important;
+    border: 1px solid rgba(255,255,255,.10) !important;
+    border-radius: 18px !important;
+    background: rgba(255,255,255,.025) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  #view-expenses-outer-container > .relative.z-10 > .grid > div.rounded-2xl {
+    box-shadow: none !important;
+  }
+
+  #view-ledger-container {
+    gap: 14px !important;
+  }
+
+  #ledger-account-page-header {
+    width: 100% !important;
+    min-height: 54px !important;
+    margin: 0 0 2px !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  #ledger-filter-bar,
+  #ledger-date-filter-bar {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 12px !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+  }
+
+  #ledger-timeline-feed {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
