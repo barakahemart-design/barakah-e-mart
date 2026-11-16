@@ -943,3 +943,48 @@ html.light #root textarea {
     padding-right: 7px !important;
   }
 }
+
+
+/* Dashboard-only mobile layout: remove excess top padding and keep each
+   dashboard section visually separate without changing the existing theme. */
+@media (max-width: 640px) {
+  #scrollable-content-area:has(#premium-dashboard-panel) {
+    padding: 4px 12px 90px !important;
+    gap: 12px !important;
+  }
+
+  #premium-dashboard-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 0 18px !important;
+    gap: 14px !important;
+    box-sizing: border-box !important;
+  }
+
+  #premium-dashboard-panel #dashboard-header-block {
+    padding: 2px 4px 10px !important;
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #dashboard-period-menu-container {
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #premium-metrics-grid {
+    gap: 12px !important;
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #premium-metrics-grid > div {
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #dashboard-product-sales-breakdown {
+    margin: 2px 0 0 !important;
+  }
+
+  #premium-dashboard-panel #dashboard-category-product-details {
+    margin: 16px 0 0 !important;
+  }
+}
