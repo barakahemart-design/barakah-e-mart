@@ -1337,148 +1337,109 @@ html.light #root textarea {
 }
 
 
-/* Ledger page title stays visible like the Dashboard header. */
+/* Ledger mobile layout: mirror the Dashboard's dedicated sticky title strip.
+   All rules in this section are phone-only; desktop Ledger remains unchanged. */
 @media (max-width: 640px) {
+  #viewport-workspace:has(#ledger-sticky-mobile-header) > #top-navbar {
+    display: none !important;
+  }
+
+  #scrollable-content-area:has(#ledger-sticky-mobile-header) {
+    padding: 0 12px calc(90px + env(safe-area-inset-bottom)) !important;
+    gap: 0 !important;
+    scroll-padding-top: 0 !important;
+  }
+
   #view-ledger-container {
-    gap: 12px !important;
-  }
-
-  #ledger-sticky-page-title {
-    position: sticky !important;
-    top: 0 !important;
-    z-index: 40 !important;
-    min-height: 48px !important;
-    margin: 0 !important;
-    border-radius: 0 0 14px 14px !important;
-  }
-
-  #ledger-filter-bar {
-    margin-top: 0 !important;
-  }
-}
-
-
-/* Ledger Account header mirrors the Dashboard title and keeps the live pulse. */
-@media (max-width: 640px) {
-  #top-navbar:has(#ledger-mobile-title) {
-    position: sticky !important;
-    top: 0 !important;
-    z-index: 100 !important;
     display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 0 20px !important;
+    overflow: visible !important;
+  }
+
+  #ledger-sticky-mobile-header {
+    display: flex !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 120 !important;
     align-items: center !important;
     justify-content: center !important;
-    width: 100% !important;
-    min-height: calc(56px + env(safe-area-inset-top)) !important;
-    height: auto !important;
-    margin-top: calc(-1 * env(safe-area-inset-top)) !important;
-    padding: calc(12px + env(safe-area-inset-top)) 14px 12px !important;
+    column-gap: 20px !important;
+    width: calc(100% + 24px) !important;
+    min-height: 42px !important;
+    margin: 0 -12px 12px !important;
+    padding: 8px 12px !important;
     box-sizing: border-box !important;
+    color: #fff !important;
     background: rgba(8, 13, 24, .98) !important;
     border-bottom: 1px solid rgba(255,255,255,.14) !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,.24) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(145%) !important;
-    backdrop-filter: blur(24px) saturate(145%) !important;
-  }
-
-  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display {
-    display: flex !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    justify-content: center !important;
-    align-items: center !important;
-    margin: 0 !important;
-    text-align: center !important;
-  }
-
-  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display > div {
-    width: 100% !important;
-    justify-content: center !important;
-    gap: 11px !important;
-  }
-
-  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display > div > span:first-child {
-    display: none !important;
-  }
-
-  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display h1 {
-    display: flex !important;
-    width: 100% !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 11px !important;
-    margin: 0 !important;
-    text-align: center !important;
+    box-shadow: 0 5px 16px rgba(0,0,0,.24) !important;
     font-size: 20px !important;
     line-height: 25px !important;
-    letter-spacing: .04em !important;
     font-weight: 800 !important;
+    letter-spacing: .035em !important;
+    text-align: center !important;
+    -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+    backdrop-filter: blur(20px) saturate(140%) !important;
   }
 
-  #top-navbar:has(#ledger-mobile-title) #active-tab-title-display p {
-    display: none !important;
+  #ledger-sticky-mobile-header .dashboard-sticky-live-dot {
+    position: relative !important;
+    display: inline-block !important;
+    flex: 0 0 9px !important;
+    width: 9px !important;
+    height: 9px !important;
+    border-radius: 50% !important;
+    background: #22d3ee !important;
+    box-shadow: 0 0 8px rgba(34, 211, 238, .75) !important;
   }
-}
 
-#top-navbar:has(#ledger-mobile-title) {
-  justify-content: center !important;
-}
+  #ledger-sticky-mobile-header .dashboard-sticky-live-dot::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: -4px !important;
+    border: 1px solid rgba(34, 211, 238, .7) !important;
+    border-radius: 50% !important;
+    animation: dashboard-live-pulse 1.8s ease-out infinite !important;
+  }
 
-#top-navbar:has(#ledger-mobile-title) #active-tab-title-display {
-  width: 100% !important;
-  min-width: 0 !important;
-  text-align: center !important;
-}
+  #ledger-filter-bar,
+  #ledger-date-filter-bar {
+    width: 100% !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
 
-#top-navbar:has(#ledger-mobile-title) #active-tab-title-display > div {
-  justify-content: center !important;
-}
+  #ledger-timeline-feed {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-top: 0 !important;
+  }
 
-#top-navbar:has(#ledger-mobile-title) #active-tab-title-display h1 {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 11px !important;
-  width: 100% !important;
-  font-size: 20px !important;
-  font-weight: 800 !important;
-  text-align: center !important;
-}
+  /* Make the rounded payment-status border visibly override card/theme styles. */
+  #ledger-timeline-feed > [data-customer-payment-status="cleared"] {
+    border: 3px solid #00E676 !important;
+    border-color: #00E676 !important;
+    outline: 1px solid rgba(0,230,118,.72) !important;
+    outline-offset: -3px !important;
+    box-shadow: inset 0 0 0 1px rgba(0,230,118,.65), 0 0 16px rgba(0,230,118,.20) !important;
+  }
 
-.ledger-sticky-live-dot {
-  position: relative !important;
-  display: inline-block !important;
-  flex: 0 0 9px !important;
-  width: 9px !important;
-  height: 9px !important;
-  border-radius: 50% !important;
-  background: #22d3ee !important;
-  box-shadow: 0 0 8px rgba(34, 211, 238, .75) !important;
-}
-
-.ledger-sticky-live-dot::after {
-  content: "" !important;
-  position: absolute !important;
-  inset: -4px !important;
-  border: 1px solid rgba(34, 211, 238, .7) !important;
-  border-radius: 50% !important;
-  animation: dashboard-live-pulse 1.8s ease-out infinite !important;
+  #ledger-timeline-feed > [data-customer-payment-status="due"] {
+    border: 3px solid #FF304F !important;
+    border-color: #FF304F !important;
+    outline: 1px solid rgba(255,48,79,.78) !important;
+    outline-offset: -3px !important;
+    box-shadow: inset 0 0 0 1px rgba(255,48,79,.65), 0 0 16px rgba(255,48,79,.20) !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ledger-sticky-live-dot::after {
+  #ledger-sticky-mobile-header .dashboard-sticky-live-dot::after {
     animation: none !important;
   }
-}
-
-/* Force the payment-state outline to win over generic glass-card borders. */
-#ledger-timeline-feed [data-customer-payment-status="cleared"] {
-  border: 2px solid #00E676 !important;
-  border-color: #00E676 !important;
-  box-shadow: 0 0 0 1px rgba(0,230,118,.58), 0 0 26px rgba(0,230,118,.22) !important;
-}
-
-#ledger-timeline-feed [data-customer-payment-status="due"] {
-  border: 2px solid #FF304F !important;
-  border-color: #FF304F !important;
-  box-shadow: 0 0 0 1px rgba(255,48,79,.62), 0 0 26px rgba(255,48,79,.25) !important;
 }
