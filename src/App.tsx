@@ -483,6 +483,7 @@ export default function App() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"connecting" | "connected" | "reconciling" | "error" | "offline">("offline");
   const [syncErrorMessage, setSyncErrorMessage] = useState("");
+  const firestoreListenerErrorRef = useRef(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Custom dialog state overrides for iframe friendliness
@@ -931,6 +932,7 @@ export default function App() {
       const detail = (event as CustomEvent).detail || {};
       const code = String(detail.code || "");
       const message = String(detail.message || "Firestore connection error");
+      firestoreListenerErrorRef.current = true;
       setSyncStatus("error");
       setSyncErrorMessage(code.includes("resource-exhausted")
         ? "Firestore daily usage limit reached. Cloud updates may be unavailable until the quota resets. Your locally saved data remains on this device."
@@ -948,6 +950,7 @@ export default function App() {
     }
 
     setSyncStatus("connecting");
+    firestoreListenerErrorRef.current = false;
     setSyncErrorMessage("");
 
     const cleanEmail = (activeUser.email || "").trim().toLowerCase();
@@ -1051,7 +1054,7 @@ export default function App() {
       initialLoadedRef.current = false;
       setProducts(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
-      setSyncStatus("connected");
+      if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
     });
 
     // 2. CUSTOMERS SUBSCRIBER
@@ -1076,7 +1079,7 @@ export default function App() {
       initialLoadedRef.current = false;
       setContacts(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
-      setSyncStatus("connected");
+      if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
     });
 
     // 3. EXPENSES SUBSCRIBER
@@ -1097,7 +1100,7 @@ export default function App() {
       initialLoadedRef.current = false;
       setExpenses(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
-      setSyncStatus("connected");
+      if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
     });
 
     // 4. PURCHASES SUBSCRIBER
@@ -1128,7 +1131,7 @@ export default function App() {
       initialLoadedRef.current = false;
       setPurchases(updatedList);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
-      setSyncStatus("connected");
+      if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
     });
 
     // Helper to merge and trigger transaction state rebuild
@@ -1149,7 +1152,7 @@ export default function App() {
       initialLoadedRef.current = false;
       setTransactions(nestedTx);
       setTimeout(() => { initialLoadedRef.current = true; }, 100);
-      setSyncStatus("connected");
+      if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
     };
 
     // 5. TRANSACTIONS SUBSCRIBER
@@ -1195,7 +1198,7 @@ export default function App() {
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
       handleTransactionsChange(undefined, flatItems);
-      setSyncStatus("connected");
+      if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
     });
 
     // 7. BUSINESS INFO / SETTINGS SUBSCRIBER
@@ -1224,7 +1227,7 @@ export default function App() {
       });
     }
 
-    setSyncStatus("connected");
+    if (!firestoreListenerErrorRef.current) setSyncStatus("connected");
 
     return () => {
       unsubProducts();
