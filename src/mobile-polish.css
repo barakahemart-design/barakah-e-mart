@@ -1340,7 +1340,8 @@ html.light #root textarea {
 /* Ledger mobile layout: mirror the Dashboard's dedicated sticky title strip.
    All rules in this section are phone-only; desktop Ledger remains unchanged. */
 @media (max-width: 640px) {
-  #viewport-workspace:has(#ledger-sticky-mobile-header) > #top-navbar {
+  /* Mirror Dashboard: place Account Balance at the very top of the mobile page. */
+  #root:has(#ledger-sticky-mobile-header) #top-navbar {
     display: none !important;
   }
 
@@ -1420,21 +1421,49 @@ html.light #root textarea {
     margin-top: 0 !important;
   }
 
-  /* Make the rounded payment-status border visibly override card/theme styles. */
-  #ledger-timeline-feed > [data-customer-payment-status="cleared"] {
+  /* Higher specificity overrides the app-wide glass-card border rule. */
+  #root #ledger-timeline-feed > div[data-customer-payment-status="cleared"][class*="rounded-2xl"][class*="border"][class*="bg-"] {
     border: 3px solid #00E676 !important;
     border-color: #00E676 !important;
-    outline: 1px solid rgba(0,230,118,.72) !important;
+    outline: 1px solid rgba(0,230,118,.9) !important;
     outline-offset: -3px !important;
-    box-shadow: inset 0 0 0 1px rgba(0,230,118,.65), 0 0 16px rgba(0,230,118,.20) !important;
+    box-shadow: inset 0 0 0 2px rgba(0,230,118,.72), 0 0 18px rgba(0,230,118,.32) !important;
   }
 
-  #ledger-timeline-feed > [data-customer-payment-status="due"] {
+  #root #ledger-timeline-feed > div[data-customer-payment-status="due"][class*="rounded-2xl"][class*="border"][class*="bg-"] {
     border: 3px solid #FF304F !important;
     border-color: #FF304F !important;
-    outline: 1px solid rgba(255,48,79,.78) !important;
+    outline: 1px solid rgba(255,48,79,.9) !important;
     outline-offset: -3px !important;
-    box-shadow: inset 0 0 0 1px rgba(255,48,79,.65), 0 0 16px rgba(255,48,79,.20) !important;
+    box-shadow: inset 0 0 0 2px rgba(255,48,79,.72), 0 0 18px rgba(255,48,79,.32) !important;
+  }
+
+  /* Search must remain a full-width, clearly visible row below Account Balance. */
+  #ledger-filter-bar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  #ledger-search-wrap,
+  #ledger-search-input {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  #ledger-search-input {
+    min-height: 46px !important;
+    border: 1px solid rgba(255,255,255,.22) !important;
+    background: #121214 !important;
+    font-size: 14px !important;
   }
 }
 
