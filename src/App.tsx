@@ -6707,6 +6707,10 @@ _${businessInfo.name}_`;
               ----------------------------------------------------------------- */}
           {activeTab === "ledger" && (
             <div className="space-y-6 animate-fadeIn" id="view-ledger-container">
+              <div id="ledger-account-page-header" className="flex items-center justify-center gap-3 rounded-2xl border border-slate-800/80 bg-[#1E1E24] px-4 py-4 shadow-lg">
+                <Wallet className="h-5 w-5 text-emerald-400" aria-hidden="true" />
+                <h2 className="text-base font-extrabold tracking-wide text-white">Ledger Account</h2>
+              </div>
               
               {/* Filtering Controls */}
               <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 bg-[#1E1E24] border border-slate-800/80 rounded-2xl shadow-xl" id="ledger-filter-bar">
