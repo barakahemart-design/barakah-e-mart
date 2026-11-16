@@ -166,7 +166,10 @@ export function DashboardView({
 
   return (
     <div className="w-full max-w-none mx-0 px-0 sm:px-4 pt-1 sm:pt-2 pb-4 sm:pb-6 space-y-4 sm:space-y-5 text-slate-200" id="premium-dashboard-panel">
-      <div id="dashboard-sticky-mobile-header" className="hidden">Dashboard</div>
+      <div id="dashboard-sticky-mobile-header" className="hidden">
+        <span className="dashboard-sticky-live-dot" aria-hidden="true" />
+        <span>Dashboard</span>
+      </div>
       
       {/* 1. HEADER HERO BANNER (Title with real-time indicators and Sync actions) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800/40" id="dashboard-header-block">
