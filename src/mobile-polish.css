@@ -567,3 +567,96 @@ html.light #root textarea {
     border-radius: 12px !important;
   }
 }
+
+
+/* Mobile top header: center the existing action controls without changing
+   their handlers or behavior. Extend the header background into the iPhone
+   safe-area so the notch/status-bar region is covered cleanly. */
+@media (max-width: 640px) {
+  #top-navbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 60 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-top: calc(-1 * env(safe-area-inset-top)) !important;
+    padding-top: calc(11px + env(safe-area-inset-top)) !important;
+    padding-right: 12px !important;
+    padding-bottom: 11px !important;
+    padding-left: 12px !important;
+    min-height: calc(62px + env(safe-area-inset-top)) !important;
+    background: rgba(10, 16, 31, .96) !important;
+    border-top: 0 !important;
+    -webkit-backdrop-filter: blur(22px) saturate(135%) !important;
+    backdrop-filter: blur(22px) saturate(135%) !important;
+  }
+
+  #active-tab-title-display {
+    display: none !important;
+  }
+
+  #top-navbar-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 auto !important;
+    flex: 0 1 auto !important;
+  }
+
+  #top-navbar-actions > div:first-child {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+  }
+
+  #top-navbar-actions #manual-backup-cloud-btn,
+  #top-navbar-actions #manual-restore-cloud-btn,
+  #top-navbar-actions #global-theme-toggle {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 40px !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    border-radius: 12px !important;
+  }
+
+  #top-navbar-actions #manual-backup-cloud-btn svg,
+  #top-navbar-actions #manual-restore-cloud-btn svg,
+  #top-navbar-actions #global-theme-toggle svg {
+    width: 17px !important;
+    height: 17px !important;
+    margin: 0 !important;
+  }
+
+  #top-navbar-actions #cloud-sync-status-indicator,
+  #top-navbar-actions #engine-status {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: center !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    box-sizing: border-box !important;
+    padding: 0 10px !important;
+    border-radius: 12px !important;
+    white-space: nowrap !important;
+  }
+}
