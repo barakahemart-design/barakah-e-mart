@@ -1054,6 +1054,37 @@ html.light #root textarea {
     gap: 16px !important;
   }
 
+  #dashboard-sticky-mobile-header .dashboard-sticky-live-dot {
+    position: relative !important;
+    display: inline-block !important;
+    flex: 0 0 9px !important;
+    width: 9px !important;
+    height: 9px !important;
+    border-radius: 50% !important;
+    background: #22d3ee !important;
+    box-shadow: 0 0 8px rgba(34, 211, 238, .75) !important;
+  }
+
+  #dashboard-sticky-mobile-header .dashboard-sticky-live-dot::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: -4px !important;
+    border: 1px solid rgba(34, 211, 238, .7) !important;
+    border-radius: 50% !important;
+    animation: dashboard-live-pulse 1.8s ease-out infinite !important;
+  }
+
+  @keyframes dashboard-live-pulse {
+    0% { transform: scale(.65); opacity: .85; }
+    100% { transform: scale(1.7); opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #dashboard-sticky-mobile-header .dashboard-sticky-live-dot::after {
+      animation: none !important;
+    }
+  }
+
   #premium-dashboard-panel #dashboard-header-block {
     display: none !important;
   }
@@ -1131,8 +1162,8 @@ html.light #root textarea {
     background: rgba(8, 13, 24, .98) !important;
     border-bottom: 1px solid rgba(255,255,255,.14) !important;
     box-shadow: 0 5px 16px rgba(0,0,0,.24) !important;
-    font-size: 15px !important;
-    line-height: 20px !important;
+    font-size: 18px !important;
+    line-height: 23px !important;
     font-weight: 800 !important;
     letter-spacing: .035em !important;
     text-align: center !important;
