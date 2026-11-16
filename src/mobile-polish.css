@@ -988,3 +988,105 @@ html.light #root textarea {
     margin: 16px 0 0 !important;
   }
 }
+
+
+/* Final dashboard phone layout:
+   The page title lives in the fixed top bar; the date filter starts the scroll
+   content. Keep all metric cards visually separate with a consistent gap. */
+@media (max-width: 640px) {
+  #top-navbar:has(#dashboard-mobile-title) {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    min-height: calc(56px + env(safe-area-inset-top)) !important;
+    height: auto !important;
+    margin-top: calc(-1 * env(safe-area-inset-top)) !important;
+    padding: calc(12px + env(safe-area-inset-top)) 14px 12px !important;
+    box-sizing: border-box !important;
+    background: rgba(8, 13, 24, .98) !important;
+    border-bottom: 1px solid rgba(255,255,255,.14) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,.24) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(145%) !important;
+    backdrop-filter: blur(24px) saturate(145%) !important;
+  }
+
+  #top-navbar:has(#dashboard-mobile-title) #active-tab-title-display {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 !important;
+    text-align: center !important;
+  }
+
+  #top-navbar:has(#dashboard-mobile-title) #active-tab-title-display > div {
+    width: 100% !important;
+    justify-content: center !important;
+    gap: 0 !important;
+  }
+
+  #top-navbar:has(#dashboard-mobile-title) #active-tab-title-display > div > span:first-child {
+    display: none !important;
+  }
+
+  #top-navbar:has(#dashboard-mobile-title) #active-tab-title-display h1 {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    text-align: center !important;
+    font-size: 17px !important;
+    line-height: 22px !important;
+    letter-spacing: .04em !important;
+    font-weight: 800 !important;
+  }
+
+  #top-navbar:has(#dashboard-mobile-title) #active-tab-title-display p {
+    display: none !important;
+  }
+
+  #premium-dashboard-panel {
+    padding-top: 0 !important;
+    gap: 16px !important;
+  }
+
+  #premium-dashboard-panel #dashboard-header-block {
+    display: none !important;
+  }
+
+  #scrollable-content-area:has(#premium-dashboard-panel) {
+    padding: 12px 12px calc(90px + env(safe-area-inset-bottom)) !important;
+    gap: 16px !important;
+  }
+
+  #premium-dashboard-panel #dashboard-period-menu-container {
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #premium-metrics-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    row-gap: 16px !important;
+    column-gap: 16px !important;
+    gap: 16px !important;
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #premium-metrics-grid > div {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  #premium-dashboard-panel #fin-total-profit-card {
+    margin-top: 2px !important;
+  }
+
+  #premium-dashboard-panel #dashboard-product-sales-breakdown,
+  #premium-dashboard-panel #dashboard-category-product-details {
+    margin: 0 !important;
+  }
+}
