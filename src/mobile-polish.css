@@ -1225,3 +1225,39 @@ html.light #root textarea {
     padding-bottom: 0 !important;
   }
 }
+
+/* Final dashboard mobile alignment: give the live indicator clear breathing
+   room from the title and center every date-range control. */
+@media (max-width: 640px) {
+  #dashboard-sticky-mobile-header {
+    column-gap: 20px !important;
+  }
+
+  #dashboard-sticky-mobile-header .dashboard-sticky-live-dot {
+    margin-right: 2px !important;
+  }
+
+  #premium-dashboard-panel #dashboard-period-menu-container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+  }
+
+  #premium-dashboard-panel #preset-horizontal-pills {
+    display: flex !important;
+    width: 100% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  #premium-dashboard-panel #custom-limits-deck {
+    justify-content: center !important;
+    width: 100% !important;
+    padding-left: 0 !important;
+    border-left: 0 !important;
+  }
+}
