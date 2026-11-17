@@ -7880,7 +7880,7 @@ _${businessInfo.name}_`;
                                   <button
                                     type="button"
                                     onClick={() => handleCopyContactDetails(c)}
-                                    className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
+                                    className="order-4 p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
                                     title="Copy Customer Details"
                                     aria-label={`Copy details for ${c.name}`}
                                   >
@@ -7890,7 +7890,7 @@ _${businessInfo.name}_`;
                                 <button
                                   type="button"
                                   onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")}
-                                  className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
+                                  className="order-3 p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
                                   title="Call Client"
                                 >
                                   <Phone className="w-3 h-3" />
@@ -7901,7 +7901,7 @@ _${businessInfo.name}_`;
                                     setActiveTab("ledger");
                                     triggerNotification(`Ledger catalog loaded for filtering: ${c.name}`, "info");
                                   }}
-                                  className="p-1.5 hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded transition-colors cursor-pointer"
+                                  className="order-2 p-1.5 hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded transition-colors cursor-pointer"
                                   title="Ledger History"
                                 >
                                   <History className="w-3 h-3" />
@@ -7913,7 +7913,7 @@ _${businessInfo.name}_`;
                                     setEditingContact(c);
                                     triggerNotification(`Editing profile for: ${c.name}`, "info");
                                   }}
-                                  className="p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
+                                  className="order-1 p-1.5 hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded transition-colors cursor-pointer"
                                   title="Edit Profile"
                                 >
                                   <Edit3 className="w-3 h-3" />
@@ -7950,7 +7950,7 @@ _${businessInfo.name}_`;
                                 ) : (
                                   <button
                                     onClick={() => setDeleteContactId(c.id)}
-                                    className="p-1.5 hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded transition-colors cursor-pointer"
+                                    className="order-5 p-1.5 hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded transition-colors cursor-pointer"
                                     title="Unregister Profile"
                                   >
                                     <Trash2 className="w-3 h-3" />
