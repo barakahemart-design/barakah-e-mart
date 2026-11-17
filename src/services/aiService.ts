@@ -1,3 +1,4 @@
+import { auth } from "../lib/firebase";
 import { Transaction, Expense, Product } from "../lib/mockDB";
 
 export interface AIInsight {
@@ -12,10 +13,14 @@ export async function generateBusinessInsights(
   products: Product[]
 ): Promise<AIInsight[]> {
   try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error("Sign in required");
+    const idToken = await currentUser.getIdToken();
     const response = await fetch("/api/ai/insights", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({ transactions, expenses, products }),
     });
@@ -49,10 +54,14 @@ export async function generateBusinessInsights(
 
 export async function suggestExpenseCategory(description: string): Promise<string> {
   try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return "Others";
+    const idToken = await currentUser.getIdToken();
     const response = await fetch("/api/ai/expense-category", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({ description }),
     });
