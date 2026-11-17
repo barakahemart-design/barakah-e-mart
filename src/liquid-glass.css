@@ -80,3 +80,24 @@ html:not(.light) #root #cloud-sync-status-indicator span.bg-rose-400{background:
 @supports not ((backdrop-filter:blur(1px))){
  html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"]{background-color:rgba(24,26,31,.92)!important}
 }
+
+/* Fixed bottom navigation must be a solid, opaque dock.
+   Keep page content from showing through its background. */
+html:not(.light) #root #mobile-bottom-navbar {
+  background: #080b12 !important;
+  background-image: linear-gradient(180deg, rgba(255,255,255,.035), transparent 42%) !important;
+  opacity: 1 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 -1px 0 rgba(255,255,255,.10), 0 -10px 28px rgba(0,0,0,.58) !important;
+  isolation: isolate !important;
+}
+html:not(.light) #root #mobile-bottom-navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #080b12;
+  opacity: 1;
+  pointer-events: none;
+}
