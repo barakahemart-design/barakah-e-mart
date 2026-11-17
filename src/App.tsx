@@ -7604,7 +7604,7 @@ _${businessInfo.name}_`;
                 return { label: "Loyal Shopper", color: "bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold text-[10px]" };
               }
               
-              return { label: "Regular Client", color: "bg-[#A0A0A5]/10 text-[#A0A0A5] border border-slate-700/50 text-[10px]" };
+              return null;
             };
 
             const filteredContacts = customerDirectoryData.filteredContacts;
@@ -7856,7 +7856,7 @@ _${businessInfo.name}_`;
                             <div className="pt-3 border-t border-[#2D2D35]/50 flex items-center justify-between gap-2 flex-nowrap">
                               {/* Compact single-row customer actions. */}
                               <div className="flex min-w-0 items-center gap-2 flex-nowrap">
-                                {!(totalOutstandingDue > 0) && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
+                                {!(totalOutstandingDue > 0) && status && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
@@ -7875,25 +7875,25 @@ _${businessInfo.name}_`;
                               </div>
 
                               {/* Action buttons */}
-                              <div className="flex shrink-0 items-center justify-center gap-1 bg-[#121214] p-1.5 rounded-xl border border-[#2D2D35] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                              <div className="flex shrink-0 items-center justify-center gap-1.5 bg-[#121214] p-2 rounded-xl border border-[#2D2D35] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
                                     onClick={() => handleCopyContactDetails(c)}
-                                    className="order-4 flex h-10 w-10 shrink-0 items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer sm:h-8 sm:w-8"
+                                    className="order-4 flex h-12 w-12 shrink-0 items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer sm:h-10 sm:w-10"
                                     title="Copy Customer Details"
                                     aria-label={`Copy details for ${c.name}`}
                                   >
-                                    <Copy className="w-4 h-4 sm:w-3 sm:h-3" />
+                                    <Copy className="w-[18px] h-[18px] sm:w-4 sm:h-4" />
                                   </button>
                                 )}
                                 <button
                                   type="button"
                                   onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")}
-                                  className="order-3 flex h-10 w-10 shrink-0 items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer sm:h-8 sm:w-8"
+                                  className="order-3 flex h-12 w-12 shrink-0 items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer sm:h-10 sm:w-10"
                                   title="Call Client"
                                 >
-                                  <Phone className="w-4 h-4 sm:w-3 sm:h-3" />
+                                  <Phone className="w-[18px] h-[18px] sm:w-4 sm:h-4" />
                                 </button>
                                 <button
                                   type="button"
@@ -7901,10 +7901,10 @@ _${businessInfo.name}_`;
                                     setActiveTab("ledger");
                                     triggerNotification(`Ledger catalog loaded for filtering: ${c.name}`, "info");
                                   }}
-                                  className="order-2 flex h-10 w-10 shrink-0 items-center justify-center hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded-lg transition-colors cursor-pointer sm:h-8 sm:w-8"
+                                  className="order-2 flex h-12 w-12 shrink-0 items-center justify-center hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded-lg transition-colors cursor-pointer sm:h-10 sm:w-10"
                                   title="Ledger History"
                                 >
-                                  <History className="w-4 h-4 sm:w-3 sm:h-3" />
+                                  <History className="w-[18px] h-[18px] sm:w-4 sm:h-4" />
                                 </button>
                                 
                                 <button
@@ -7913,10 +7913,10 @@ _${businessInfo.name}_`;
                                     setEditingContact(c);
                                     triggerNotification(`Editing profile for: ${c.name}`, "info");
                                   }}
-                                  className="order-1 flex h-10 w-10 shrink-0 items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer sm:h-8 sm:w-8"
+                                  className="order-1 flex h-12 w-12 shrink-0 items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer sm:h-10 sm:w-10"
                                   title="Edit Profile"
                                 >
-                                  <Edit3 className="w-4 h-4 sm:w-3 sm:h-3" />
+                                  <Edit3 className="w-[18px] h-[18px] sm:w-4 sm:h-4" />
                                 </button>
 
                                 {deleteContactId === c.id ? (
@@ -7950,10 +7950,10 @@ _${businessInfo.name}_`;
                                 ) : (
                                   <button
                                     onClick={() => setDeleteContactId(c.id)}
-                                    className="order-5 ml-1 flex h-10 w-10 shrink-0 items-center justify-center border-l border-[#2D2D35] pl-1 hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded-lg transition-colors cursor-pointer sm:h-8 sm:w-8"
+                                    className="order-5 ml-1 flex h-10 w-10 shrink-0 items-center justify-center border-l border-[#2D2D35] pl-1 hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded-lg transition-colors cursor-pointer sm:h-10 sm:w-10"
                                     title="Unregister Profile"
                                   >
-                                    <Trash2 className="w-4 h-4 sm:w-3 sm:h-3" />
+                                    <Trash2 className="w-[18px] h-[18px] sm:w-4 sm:h-4" />
                                   </button>
                                 )}
                               </div>
