@@ -141,6 +141,21 @@ function classifyExpenseLocally(description: string): string {
   return "Others";
 }
 
+function isOwnedByVerifiedAccount(data: any, verified: { uid: string; email: string }): boolean {
+  if (!data || typeof data !== "object") return false;
+  const uidValues = [data.user_id, data.userId, data.owner_id].filter((v) => typeof v === "string");
+  const email = (verified.email || "").trim().toLowerCase();
+  const emailValues = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail]
+    .filter((v) => typeof v === "string")
+    .map((v) => v.trim().toLowerCase());
+  return uidValues.includes(verified.uid) || (!!email && emailValues.includes(email));
+}
+
+const ALLOWED_SYNC_TABLES = new Set([
+  "products", "customers", "expenses", "transactions",
+  "transaction_items", "purchases", "business_info"
+]);
+
 async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: string } | null> {
   // Only a Firebase-issued ID token is an identity proof. Client-supplied UID/email
   // headers and query parameters are deliberately never trusted.
@@ -591,9 +606,15 @@ async function startServer() {
       }
 
       const cleanEmail = (verified.email || "").trim().toLowerCase();
+      const tableStr = String(table || "");
+      if (!ALLOWED_SYNC_TABLES.has(tableStr)) {
+        return res.status(400).json({ error: "Unsupported data collection." });
+      }
+      if (typeof owner_email === "string" && owner_email.trim().toLowerCase() !== cleanEmail) {
+        return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      }
       const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
       const recordsMap = new Map<string, any>();
-      const tableStr = String(table);
 
       // 1. First populate from server in-memory real-time sync cache
       const memCache = getTableCache(tableStr);
@@ -663,16 +684,26 @@ async function startServer() {
         return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
       }
 
-      const cleanEmail = (verified.email || data?.email || "").trim().toLowerCase();
-      const tableStr = String(table);
-      const docId = String(id || data?.id);
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      const tableStr = String(table || "");
+      const docId = String(id || data?.id || "");
+      if (!ALLOWED_SYNC_TABLES.has(tableStr) || !docId || docId.length > 128) {
+        return res.status(400).json({ error: "Invalid collection or record ID." });
+      }
+      if (!cleanEmail) return res.status(403).json({ error: "A Firebase account email is required." });
+
+      const existingRef = doc(db, tableStr, docId);
+      const existingSnap = await getDoc(existingRef);
+      if (existingSnap.exists() && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
+        return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
+      }
 
       const enrichedData = {
         ...data,
         id: docId,
-        user_id: data?.user_id || verified.uid,
-        userId: data?.userId || verified.uid,
-        owner_id: data?.owner_id || verified.uid,
+        user_id: verified.uid,
+        userId: verified.uid,
+        owner_id: verified.uid,
         store_id: cleanEmail,
         storeId: cleanEmail,
         email: cleanEmail,
@@ -729,8 +760,15 @@ async function startServer() {
       }
 
       const cleanEmail = (verified.email || "").trim().toLowerCase();
-      const tableStr = String(table);
-      const docId = String(id);
+      const tableStr = String(table || "");
+      const docId = String(id || "");
+      if (!ALLOWED_SYNC_TABLES.has(tableStr) || !docId || docId.length > 128) {
+        return res.status(400).json({ error: "Invalid collection or record ID." });
+      }
+      const existingSnap = await getDoc(doc(db, tableStr, docId));
+      if (existingSnap.exists() && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
+        return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
+      }
 
       // 1. Remove from server cache
       getTableCache(tableStr).delete(docId);
@@ -895,6 +933,11 @@ async function startServer() {
   app.post("/api/auth/pin-credentials/migrate", async (req: Request, res: Response) => {
     const { store_id, admin_pin, sales_pin } = req.body;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      if (!store_id || String(store_id).trim().toLowerCase() !== verified.email) {
+        return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      }
       if (!store_id) {
         return res.status(400).json({ error: "Missing store_id parameter." });
       }
@@ -911,6 +954,11 @@ async function startServer() {
   app.get("/api/auth/pin-credentials/status", async (req: Request, res: Response) => {
     const { store_id } = req.query;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      if (!store_id || String(store_id).trim().toLowerCase() !== verified.email) {
+        return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      }
       if (!store_id) {
         return res.status(400).json({ error: "Missing store_id parameter." });
       }
@@ -933,6 +981,11 @@ async function startServer() {
   app.post("/api/auth/pin-credentials/verify", async (req: Request, res: Response) => {
     const { store_id, role, pin } = req.body;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      if (!store_id || String(store_id).trim().toLowerCase() !== verified.email) {
+        return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      }
       if (!store_id || !role || !pin) {
         return res.status(400).json({ error: "Missing store_id, role, or pin parameter." });
       }
