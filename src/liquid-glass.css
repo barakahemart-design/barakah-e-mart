@@ -13,9 +13,9 @@ html:not(.light) body{
 html:not(.light) #root,html:not(.light) #viewport-workspace,html:not(.light) #scrollable-content-area{background-color:transparent!important}
 
 /* Broad app-wide panels. Deliberately stronger than legacy mobile CSS selectors. */
-html:not(.light) #root #root div[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
-html:not(.light) #root #root section[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
-html:not(.light) #root #root article[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]){
+html:not(.light) #root :not(#never) div[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+html:not(.light) #root :not(#never) section[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+html:not(.light) #root :not(#never) article[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]){
  background-color:var(--app-glass-bg)!important;
  background-image:linear-gradient(145deg,rgba(255,255,255,.13),rgba(255,255,255,.045) 28%,rgba(255,255,255,.012) 68%,transparent),radial-gradient(ellipse at 0 0,rgba(255,255,255,.085),transparent 58%)!important;
  border-color:var(--app-glass-border)!important;
