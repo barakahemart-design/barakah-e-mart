@@ -1178,21 +1178,11 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
     if (currentUser) {
       const token = await currentUser.getIdToken();
       headers["Authorization"] = `Bearer ${token}`;
-      headers["x-user-uid"] = currentUser.uid;
-      headers["x-user-email"] = currentUser.email || "";
-    } else {
-      const cached = localStorage.getItem('barakah_local_active_user');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed?.uid) {
-          headers["x-user-uid"] = parsed.uid;
-          headers["x-user-email"] = parsed.email || "";
-        }
-      }
     }
   } catch (e) {
-    console.warn("Could not get auth headers:", e);
+    console.warn("Could not obtain Firebase ID token:", e);
   }
+  // No localStorage UID/email fallback: cached identity is not authentication.
   return headers;
 }
 
