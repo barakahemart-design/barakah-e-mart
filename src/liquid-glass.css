@@ -1,240 +1,82 @@
-/*
- * BARAKAH POS — Premium Black Liquid Glass UI
- * Presentation-only layer. No React state, business logic, Firebase,
- * Firestore, storage, calculations, routes, or event handlers are changed.
- * Scoped to the app's dark theme; the existing light theme is untouched.
- */
-html:not(.light) {
-  --liquid-bg: #050608;
-  --liquid-panel: rgba(18, 19, 23, .66);
-  --liquid-panel-strong: rgba(12, 13, 16, .82);
-  --liquid-border: rgba(235, 240, 255, .16);
-  --liquid-border-soft: rgba(235, 240, 255, .10);
-  --liquid-text: #f8fafc;
-  --liquid-muted: #c2cad6;
-  --liquid-dim: #a4afbf;
-  --liquid-blur: 24px;
-  background: var(--liquid-bg) !important;
-  color: var(--liquid-text);
+/* BARAKAH POS — cross-device Premium Black Liquid Glass. Visual only. */
+html:not(.light){
+ --app-glass-bg:rgba(20,22,27,.56);--app-glass-border:rgba(242,246,255,.20);
+ --app-glass-blur:30px;--app-glass-muted:#cbd3df;color:#fff;background:#050608!important
+}
+html:not(.light) body{
+ color:#fff!important;min-height:100%;background:
+ radial-gradient(ellipse 72% 46% at 8% 0%,rgba(116,130,157,.20),transparent 72%),
+ radial-gradient(ellipse 58% 48% at 100% 35%,rgba(85,96,119,.15),transparent 72%),
+ radial-gradient(ellipse 68% 44% at 42% 100%,rgba(90,98,118,.12),transparent 74%),#050608!important;
+ background-attachment:fixed!important
+}
+html:not(.light) #root,html:not(.light) #viewport-workspace,html:not(.light) #scrollable-content-area{background-color:transparent!important}
+
+/* Broad app-wide panels. Deliberately stronger than legacy mobile CSS selectors. */
+html:not(.light) #root #root div[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+html:not(.light) #root #root section[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]),
+html:not(.light) #root #root article[class*="rounded-"][class*="border"][class*="bg-"]:not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="danger"]):not([class*="destructive"]){
+ background-color:var(--app-glass-bg)!important;
+ background-image:linear-gradient(145deg,rgba(255,255,255,.13),rgba(255,255,255,.045) 28%,rgba(255,255,255,.012) 68%,transparent),radial-gradient(ellipse at 0 0,rgba(255,255,255,.085),transparent 58%)!important;
+ border-color:var(--app-glass-border)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(255,255,255,.035),0 16px 42px rgba(0,0,0,.38)!important;
+ -webkit-backdrop-filter:blur(var(--app-glass-blur)) saturate(150%)!important;
+ backdrop-filter:blur(var(--app-glass-blur)) saturate(150%)!important
 }
 
-html:not(.light) body {
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(95, 111, 140, .10), transparent 34%),
-    radial-gradient(ellipse at 92% 48%, rgba(65, 77, 105, .08), transparent 38%),
-    #050608 !important;
-  color: var(--liquid-text) !important;
+/* Explicit IDs override high-specificity page layout rules. */
+html:not(.light) #root #premium-dashboard-panel #dashboard-period-menu-container,
+html:not(.light) #root #premium-dashboard-panel #premium-metrics-grid>div,
+html:not(.light) #root #premium-dashboard-panel #dashboard-product-sales-breakdown,
+html:not(.light) #root #premium-dashboard-panel #dashboard-category-product-details,
+html:not(.light) #root #view-ledger-container #ledger-filter-bar,
+html:not(.light) #root #view-ledger-container #ledger-date-filter-bar,
+html:not(.light) #root #view-ledger-container #ledger-sticky-metrics>div,
+html:not(.light) #root #view-ledger-container #ledger-pagination,
+html:not(.light) #root #view-expenses-outer-container,
+html:not(.light) #root #view-expenses-outer-container section,
+html:not(.light) #root #view-settings-container [class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root #view-staff-container [class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root #view-contacts-container [class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root #view-inventory-container [class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root #view-duelist-container [class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root #view-pos-container-wrapper [class*="rounded-"][class*="border"][class*="bg-"]{
+ background-color:var(--app-glass-bg)!important;
+ background-image:linear-gradient(145deg,rgba(255,255,255,.13),rgba(255,255,255,.045) 28%,rgba(255,255,255,.012) 68%,transparent),radial-gradient(ellipse at 0 0,rgba(255,255,255,.085),transparent 58%)!important;
+ border-color:var(--app-glass-border)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(255,255,255,.035),0 16px 42px rgba(0,0,0,.38)!important;
+ -webkit-backdrop-filter:blur(var(--app-glass-blur)) saturate(150%)!important;
+ backdrop-filter:blur(var(--app-glass-blur)) saturate(150%)!important
 }
 
-/* Main cards, panels, grouped sections, dialogs and nested containers */
-html:not(.light) #root div[class*="rounded"][class*="border"],
-html:not(.light) #root section[class*="rounded"][class*="border"],
-html:not(.light) #root article[class*="rounded"][class*="border"],
-html:not(.light) #root [role="dialog"] {
-  background-color: var(--liquid-panel) !important;
-  background-image:
-    linear-gradient(145deg, rgba(255,255,255,.075) 0%, rgba(255,255,255,.018) 34%, transparent 72%),
-    linear-gradient(315deg, rgba(255,255,255,.025), transparent 48%) !important;
-  border-color: var(--liquid-border) !important;
-  -webkit-backdrop-filter: blur(var(--liquid-blur)) saturate(145%);
-  backdrop-filter: blur(var(--liquid-blur)) saturate(145%);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.10),
-    inset 0 -1px 0 rgba(255,255,255,.025),
-    0 10px 28px rgba(0,0,0,.24) !important;
+/* Headers and navigation receive the same translucent glass material. */
+html:not(.light) #root #dashboard-sticky-mobile-header,
+html:not(.light) #root #ledger-sticky-mobile-header,
+html:not(.light) #root #top-navbar,
+html:not(.light) #root #mobile-bottom-navbar{
+ background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.025) 58%,transparent),rgba(9,10,13,.62)!important;
+ border-color:rgba(242,246,255,.14)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 12px 34px rgba(0,0,0,.34)!important;
+ -webkit-backdrop-filter:blur(32px) saturate(155%)!important;backdrop-filter:blur(32px) saturate(155%)!important
 }
-
-/* Dark filled surfaces that are not necessarily bordered cards */
-html:not(.light) #root [class*="bg-[#0e111a]"],
-html:not(.light) #root [class*="bg-[#0b0f19]"],
-html:not(.light) #root [class*="bg-[#050912]"],
-html:not(.light) #root [class*="bg-[#0c0c0e]"],
-html:not(.light) #root [class*="bg-[#121214]"],
-html:not(.light) #root [class*="bg-slate-950"],
-html:not(.light) #root [class*="bg-slate-900"],
-html:not(.light) #root [class*="bg-slate-800"] {
-  background-color: rgba(15,16,20,.68) !important;
-  background-image: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.012) 52%, transparent) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  backdrop-filter: blur(20px) saturate(140%);
+html:not(.light) #root input:not([type="checkbox"]):not([type="radio"]),html:not(.light) #root select,html:not(.light) #root textarea{
+ color:#fff!important;background:rgba(8,9,12,.48)!important;border-color:rgba(242,246,255,.20)!important;
+ -webkit-backdrop-filter:blur(22px) saturate(145%)!important;backdrop-filter:blur(22px) saturate(145%)!important
 }
-
-/* Header and navigation surfaces */
-html:not(.light) #root header,
-html:not(.light) #root nav,
-html:not(.light) #root [class*="sticky"][class*="border"],
-html:not(.light) #root [class*="fixed"][class*="border"] {
-  background-color: rgba(8,9,12,.78) !important;
-  background-image: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.008)) !important;
-  border-color: var(--liquid-border-soft) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
-  backdrop-filter: blur(28px) saturate(150%);
-}
-
-/* Inputs: clearly legible, softly frosted, with a crisp focus ring */
-html:not(.light) #root input,
-html:not(.light) #root select,
-html:not(.light) #root textarea {
-  color: #ffffff !important;
-  background: rgba(7,8,11,.72) !important;
-  border-color: rgba(225,232,245,.18) !important;
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-}
-html:not(.light) #root input::placeholder,
-html:not(.light) #root textarea::placeholder {
-  color: #aeb8c8 !important;
-  opacity: 1;
-}
-html:not(.light) #root input:focus,
-html:not(.light) #root select:focus,
-html:not(.light) #root textarea:focus {
-  border-color: rgba(148,178,255,.62) !important;
-  box-shadow: 0 0 0 3px rgba(91,130,220,.14), 0 0 18px rgba(91,130,220,.10) !important;
-  outline: none !important;
-}
-
-/* Sharper white typography throughout the dark interface */
-html:not(.light) #root .text-white,
-html:not(.light) #root .text-slate-100,
-html:not(.light) #root .text-slate-200 {
-  color: #ffffff !important;
-}
-html:not(.light) #root .text-slate-300,
-html:not(.light) #root .text-slate-400,
-html:not(.light) #root .text-\[\#A0A0A5\] {
-  color: var(--liquid-muted) !important;
-}
-html:not(.light) #root .text-slate-500,
-html:not(.light) #root .text-slate-600 {
-  color: var(--liquid-dim) !important;
-}
-
-/* Subtle glass treatment for neutral controls; preserve colored action buttons */
-html:not(.light) #root button:not([class*="bg-[#00E676]"]):not([class*="bg-emerald-"]):not([class*="bg-blue-"]):not([class*="bg-indigo-"]):not([class*="bg-rose-"]):not([class*="bg-red-"]) {
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-}
-html:not(.light) #root button[class*="border-slate"],
-html:not(.light) #root button[class*="border-[#2"] {
-  border-color: rgba(235,240,255,.15) !important;
-}
-
-/* Tables and separators retain structure while blending into the glass panels */
-html:not(.light) #root table thead,
-html:not(.light) #root [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgba(235,240,255,.10) !important;
-}
-html:not(.light) #root hr {
-  border-color: rgba(235,240,255,.12) !important;
-}
-
-/* Keep the original brand/status accents vivid against black glass */
-html:not(.light) #root .text-cyan-300,
-html:not(.light) #root .text-cyan-400,
-html:not(.light) #root .text-blue-400,
-html:not(.light) #root .text-indigo-400 {
-  filter: saturate(1.12);
-}
-
-/* Respect reduced-motion preferences and avoid forcing blur on low-power devices */
-@media (prefers-reduced-motion: reduce) {
-  html:not(.light) #root * {
-    scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
-    animation-duration: .01ms !important;
-  }
-}
-@media (max-width: 640px) {
-  html:not(.light) {
-    --liquid-blur: 22px;
-  }
-}
-@supports not ((backdrop-filter: blur(1px))) {
-  html:not(.light) #root div[class*="rounded"][class*="border"],
-  html:not(.light) #root section[class*="rounded"][class*="border"],
-  html:not(.light) #root article[class*="rounded"][class*="border"] {
-    background-color: rgba(18,19,23,.94) !important;
-  }
-}
-
-
-/* ==========================================================
-   HIGH-VISIBILITY BLACK LIQUID GLASS — final cascade override
-   This deliberately creates a visible glass surface even when the
-   content behind a card is dark; blur alone on a flat black page
-   is visually imperceptible.
-   ========================================================== */
-html:not(.light) body,
-html.dark body {
-  background:
-    radial-gradient(ellipse at 8% 4%, rgba(150,160,180,.10), transparent 34%),
-    radial-gradient(ellipse at 92% 62%, rgba(110,120,145,.075), transparent 38%),
-    #050608 !important;
-}
-
-html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],
-html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],
-html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"],
-html.dark #root div[class*="rounded-"][class*="border"][class*="bg-"],
-html.dark #root section[class*="rounded-"][class*="border"][class*="bg-"],
-html.dark #root article[class*="rounded-"][class*="border"][class*="bg-"] {
-  background-color: rgba(25,27,33,.70) !important;
-  background-image:
-    linear-gradient(145deg, rgba(255,255,255,.105) 0%, rgba(255,255,255,.035) 28%, rgba(255,255,255,.008) 68%, transparent 100%),
-    radial-gradient(ellipse at 0% 0%, rgba(255,255,255,.075), transparent 54%) !important;
-  border-color: rgba(235,240,250,.22) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.16),
-    inset 0 -1px 0 rgba(255,255,255,.035),
-    0 14px 38px rgba(0,0,0,.38) !important;
-  -webkit-backdrop-filter: blur(30px) saturate(145%) !important;
-  backdrop-filter: blur(30px) saturate(145%) !important;
-}
-
-html:not(.light) #root [role="dialog"],
-html.dark #root [role="dialog"] {
-  background-color: rgba(17,19,24,.88) !important;
-  background-image: linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.018) 62%, transparent) !important;
-  border-color: rgba(235,240,250,.22) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 24px 70px rgba(0,0,0,.58) !important;
-  -webkit-backdrop-filter: blur(34px) saturate(145%) !important;
-  backdrop-filter: blur(34px) saturate(145%) !important;
-}
-
-html:not(.light) #root input:not([type="checkbox"]):not([type="radio"]),
-html:not(.light) #root select,
-html:not(.light) #root textarea,
-html.dark #root input:not([type="checkbox"]):not([type="radio"]),
-html.dark #root select,
-html.dark #root textarea {
-  background-color: rgba(8,9,12,.66) !important;
-  border-color: rgba(235,240,250,.22) !important;
-  color: #fff !important;
-  -webkit-backdrop-filter: blur(22px) saturate(140%) !important;
-  backdrop-filter: blur(22px) saturate(140%) !important;
-}
-
-html:not(.light) #root h1,
-html:not(.light) #root h2,
-html:not(.light) #root h3,
-html:not(.light) #root h4,
-html.dark #root h1,
-html.dark #root h2,
-html.dark #root h3,
-html.dark #root h4 {
-  color: #fff !important;
-  text-shadow: 0 1px 12px rgba(255,255,255,.08);
-}
-
-@media (max-width: 640px) {
-  html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],
-  html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],
-  html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"],
-  html.dark #root div[class*="rounded-"][class*="border"][class*="bg-"],
-  html.dark #root section[class*="rounded-"][class*="border"][class*="bg-"],
-  html.dark #root article[class*="rounded-"][class*="border"][class*="bg-"] {
-    -webkit-backdrop-filter: blur(26px) saturate(145%) !important;
-    backdrop-filter: blur(26px) saturate(145%) !important;
-  }
+html:not(.light) #root input::placeholder,html:not(.light) #root textarea::placeholder{color:#b9c3d1!important;opacity:1}
+html:not(.light) #root input:focus,html:not(.light) #root select:focus,html:not(.light) #root textarea:focus{border-color:rgba(160,190,255,.66)!important;box-shadow:0 0 0 3px rgba(91,130,220,.16),0 0 20px rgba(91,130,220,.12)!important;outline:none!important}
+html:not(.light) #root .text-white,html:not(.light) #root .text-slate-100,html:not(.light) #root .text-slate-200,html:not(.light) #root h1,html:not(.light) #root h2,html:not(.light) #root h3,html:not(.light) #root h4{color:#fff!important}
+html:not(.light) #root .text-slate-300,html:not(.light) #root .text-slate-400{color:var(--app-glass-muted)!important}
+html:not(.light) #root .text-slate-500,html:not(.light) #root .text-slate-600{color:#aeb9c9!important}
+/* Preserve semantic payment states and sync status indicators. */
+html:not(.light) #root [data-customer-payment-status="due"]{border-color:rgba(255,48,79,.94)!important}
+html:not(.light) #root [data-customer-payment-status="cleared"]{border-color:rgba(0,230,118,.90)!important}
+html:not(.light) #root #cloud-sync-status-indicator span.bg-emerald-400{background:#34d399!important}
+html:not(.light) #root #cloud-sync-status-indicator span.bg-amber-400{background:#fbbf24!important}
+html:not(.light) #root #cloud-sync-status-indicator span.bg-sky-400{background:#38bdf8!important}
+html:not(.light) #root #cloud-sync-status-indicator span.bg-rose-400{background:#fb7185!important}
+@media(max-width:640px){html:not(.light){--app-glass-blur:28px}}
+@media(min-width:641px){html:not(.light){--app-glass-blur:32px}}
+@supports not ((backdrop-filter:blur(1px))){
+ html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"]{background-color:rgba(24,26,31,.92)!important}
 }
