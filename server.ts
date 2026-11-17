@@ -308,9 +308,9 @@ async function startServer() {
       try {
         const clientEmail = (client.email || "").trim().toLowerCase();
         const eventEmail = (change.storeEmail || "").trim().toLowerCase();
-        const isMatch = (clientEmail && eventEmail && clientEmail === eventEmail) ||
-                        (!clientEmail || !eventEmail) ||
-                        (client.uid && change.userIds.includes(client.uid));
+        // Never broadcast when either side lacks a verified store identity.
+        // A missing email must not become a wildcard that leaks one store's data to another.
+        const isMatch = !!clientEmail && !!eventEmail && clientEmail === eventEmail;
         if (isMatch) {
           client.res.write(payload);
         }
@@ -843,10 +843,9 @@ async function startServer() {
     const changes = syncChangeHistory.filter(c => {
       if (c.timestamp <= since) return false;
       const changeEmail = (c.storeEmail || "").trim().toLowerCase();
-      if (email && changeEmail === email) return true;
-      if (c.userIds && c.userIds.some(id => allowedIds.includes(id))) return true;
-      if (!email && !changeEmail) return true;
-      return false;
+      // Store-scoped sync must match the verified Firebase email exactly.
+      // Do not fall back to shared/legacy UID aliases or blank identities here.
+      return !!email && !!changeEmail && changeEmail === email;
     });
 
     res.json({
