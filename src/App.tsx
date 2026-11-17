@@ -7853,9 +7853,9 @@ _${businessInfo.name}_`;
                             )}
 
                             {/* Status and Action bar */}
-                            <div className="pt-3 border-t border-[#2D2D35]/50 flex items-center justify-between gap-2 flex-nowrap">
-                              {/* Compact single-row customer actions. */}
-                              <div className="flex min-w-0 items-center gap-2 flex-nowrap">
+                            <div className="pt-3 border-t border-[#2D2D35]/50 flex items-center justify-between gap-1.5 sm:gap-2 flex-nowrap">
+                              {/* Keep Direct Sale in its own matching-height cell beside the grouped actions. */}
+                              <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-nowrap">
                                 {!(totalOutstandingDue > 0) && status && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
                                 {c.type === "customer" && (
                                   <button
@@ -7865,7 +7865,7 @@ _${businessInfo.name}_`;
                                       setActiveTab("pos");
                                       triggerNotification(`POS Cash Memo loaded. Customer context: ${c.name}`, "success");
                                     }}
-                                    className="shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center gap-1 transition-all uppercase cursor-pointer"
+                                    className="h-12 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer"
                                     title="Direct Sale POS Checkout"
                                   >
                                     <ShoppingCart className="w-3.5 h-3.5 text-[#00E676]" />
@@ -7875,12 +7875,12 @@ _${businessInfo.name}_`;
                               </div>
 
                               {/* Action buttons */}
-                              <div className="flex shrink-0 items-center justify-center gap-1.5 bg-[#121214] p-2 rounded-xl border border-[#2D2D35]">
+                              <div className="h-12 shrink-0 flex items-center justify-center gap-0.5 sm:gap-1.5 bg-[#121214] p-1 sm:p-2 rounded-xl border border-[#2D2D35] box-border">
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
                                     onClick={() => handleCopyContactDetails(c)}
-                                    className="order-4 h-12 w-12 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
+                                    className="order-4 h-10 w-10 sm:h-12 sm:w-12 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
                                     title="Copy Customer Details"
                                     aria-label={`Copy details for ${c.name}`}
                                   >
@@ -7890,7 +7890,7 @@ _${businessInfo.name}_`;
                                 <button
                                   type="button"
                                   onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")}
-                                  className="order-3 h-12 w-12 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
+                                  className="order-3 h-10 w-10 sm:h-12 sm:w-12 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
                                   title="Call Client"
                                 >
                                   <Phone className="w-4 h-4" />
@@ -7901,7 +7901,7 @@ _${businessInfo.name}_`;
                                     setActiveTab("ledger");
                                     triggerNotification(`Ledger catalog loaded for filtering: ${c.name}`, "info");
                                   }}
-                                  className="order-2 h-12 w-12 shrink-0 flex items-center justify-center hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded-lg transition-colors cursor-pointer"
+                                  className="order-2 h-10 w-10 sm:h-12 sm:w-12 shrink-0 flex items-center justify-center hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded-lg transition-colors cursor-pointer"
                                   title="Ledger History"
                                 >
                                   <History className="w-4 h-4" />
@@ -7913,7 +7913,7 @@ _${businessInfo.name}_`;
                                     setEditingContact(c);
                                     triggerNotification(`Editing profile for: ${c.name}`, "info");
                                   }}
-                                  className="order-1 h-12 w-12 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
+                                  className="order-1 h-10 w-10 sm:h-12 sm:w-12 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
                                   title="Edit Profile"
                                 >
                                   <Edit3 className="w-4 h-4" />
@@ -7950,7 +7950,7 @@ _${businessInfo.name}_`;
                                 ) : (
                                   <button
                                     onClick={() => setDeleteContactId(c.id)}
-                                    className="order-5 h-12 w-12 shrink-0 flex items-center justify-center hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded-lg transition-colors cursor-pointer"
+                                    className="order-5 h-10 w-10 sm:h-12 sm:w-12 shrink-0 flex items-center justify-center hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded-lg transition-colors cursor-pointer"
                                     title="Unregister Profile"
                                   >
                                     <Trash2 className="w-4 h-4" />
