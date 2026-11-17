@@ -526,7 +526,10 @@ export default function App() {
   const [collectAmount, setCollectAmount] = useState("");
   const [showAdvancedPos, setShowAdvancedPos] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState("");
-  const [contactTypeFilter, setContactTypeFilter] = useState<"all" | "customer" | "supplier">("all");
+  const [contactTypeFilter, setContactTypeFilter] = useState<"all" | "customer" | "supplier">(() => {
+    try { const v = localStorage.getItem(getDbKey("barakah_contact_type_filter")); return v === "customer" || v === "supplier" ? v : "all"; }
+    catch { return "all"; }
+  });
 
   // Build the CRM directory indexes only when the Customer workspace is opened.
   // This replaces repeated full transaction/contact/product scans inside every card.
@@ -613,7 +616,10 @@ export default function App() {
   }, [activeTab, contacts, transactions, purchases, products, activeUser?.email, contactSearchQuery, contactTypeFilter]);
 
   // --- DUE LIST STATE DEFINITIONS ---
-  const [duelistFilter, setDuelistFilter] = useState<"all" | "today" | "weekly" | "monthly" | "yearly">("all");
+  const [duelistFilter, setDuelistFilter] = useState<"all" | "today" | "weekly" | "monthly" | "yearly">(() => {
+    try { const v = localStorage.getItem(getDbKey("barakah_duelist_filter")); return v === "today" || v === "weekly" || v === "monthly" || v === "yearly" ? v : "all"; }
+    catch { return "all"; }
+  });
   const [duelistSearch, setDuelistSearch] = useState("");
   const [isAddingDue, setIsAddingDue] = useState(false);
   const [dueSupplierId, setDueSupplierId] = useState("");
@@ -2102,7 +2108,13 @@ export default function App() {
   const [newProdStock, setNewProdStock] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("piece");
   const [inventorySearch, setInventorySearch] = useState("");
-  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "sales-value" | "out-of-stock" | "edit-stock">("home");
+  const [stockSubTab, setStockSubTab] = useState<"home" | "stock-value" | "sales-value" | "out-of-stock" | "edit-stock">(() => {
+    try { const v = localStorage.getItem(getDbKey("barakah_stock_subtab")); return v === "stock-value" || v === "sales-value" || v === "out-of-stock" || v === "edit-stock" ? v : "home"; }
+    catch { return "home"; }
+  });
+  useEffect(() => { try { localStorage.setItem(getDbKey("barakah_contact_type_filter"), contactTypeFilter); } catch (_) {} }, [contactTypeFilter]);
+  useEffect(() => { try { localStorage.setItem(getDbKey("barakah_duelist_filter"), duelistFilter); } catch (_) {} }, [duelistFilter]);
+  useEffect(() => { try { localStorage.setItem(getDbKey("barakah_stock_subtab"), stockSubTab); } catch (_) {} }, [stockSubTab]);
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2873,9 +2885,25 @@ export default function App() {
     }
   });
 
-  const [ledgerDateFilterType, setLedgerDateFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
-  const [ledgerStartDate, setLedgerStartDate] = useState(() => safeFormat(safeSubDays(new Date(), 30), "yyyy-MM-dd"));
-  const [ledgerEndDate, setLedgerEndDate] = useState(() => safeFormat(new Date(), "yyyy-MM-dd"));
+  const [ledgerDateFilterType, setLedgerDateFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">(() => {
+    try {
+      const saved = localStorage.getItem(getDbKey("barakah_ledger_date_filter"));
+      return saved === "all" || saved === "today" || saved === "yesterday" || saved === "weekly" || saved === "monthly" || saved === "yearly" || saved === "custom" ? saved : "all";
+    } catch { return "all"; }
+  });
+  const [ledgerStartDate, setLedgerStartDate] = useState(() => {
+    try { return localStorage.getItem(getDbKey("barakah_ledger_start_date")) || safeFormat(safeSubDays(new Date(), 30), "yyyy-MM-dd"); }
+    catch { return safeFormat(safeSubDays(new Date(), 30), "yyyy-MM-dd"); }
+  });
+  const [ledgerEndDate, setLedgerEndDate] = useState(() => {
+    try { return localStorage.getItem(getDbKey("barakah_ledger_end_date")) || safeFormat(new Date(), "yyyy-MM-dd"); }
+    catch { return safeFormat(new Date(), "yyyy-MM-dd"); }
+  });
+  const [ledgerCurrentPage, setLedgerCurrentPage] = useState(() => {
+    try { const saved = Number(localStorage.getItem(getDbKey("barakah_ledger_current_page"))); return Number.isInteger(saved) && saved > 0 ? saved : 1; }
+    catch { return 1; }
+  });
+  const ledgerPageSize = 10;
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -2889,15 +2917,24 @@ export default function App() {
   }, [ledgerSearch]);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      try {
-        localStorage.setItem(getDbKey("barakah_ledger_status_filter"), ledgerStatusFilter);
-      } catch (e) {
-        console.error("Failed to save ledger status filter to localStorage", e);
-      }
-    }, 450);
-    return () => clearTimeout(handler);
+    try { localStorage.setItem(getDbKey("barakah_ledger_status_filter"), ledgerStatusFilter); } catch (_) {}
   }, [ledgerStatusFilter]);
+
+  useEffect(() => {
+    try { localStorage.setItem(getDbKey("barakah_ledger_date_filter"), ledgerDateFilterType); } catch (_) {}
+  }, [ledgerDateFilterType]);
+
+  useEffect(() => {
+    try { localStorage.setItem(getDbKey("barakah_ledger_start_date"), ledgerStartDate); } catch (_) {}
+  }, [ledgerStartDate]);
+
+  useEffect(() => {
+    try { localStorage.setItem(getDbKey("barakah_ledger_end_date"), ledgerEndDate); } catch (_) {}
+  }, [ledgerEndDate]);
+
+  useEffect(() => {
+    try { localStorage.setItem(getDbKey("barakah_ledger_current_page"), String(ledgerCurrentPage)); } catch (_) {}
+  }, [ledgerCurrentPage]);
 
   const incrementDuePayment = (invoiceNo: string, collectionAmt: number) => {
     if (!collectionAmt || collectionAmt <= 0) return;
@@ -4265,6 +4302,19 @@ _${businessInfo.name}_`;
     if (ledgerStatusFilter === "all") return matchesSearch;
     return matchesSearch && t.status === ledgerStatusFilter;
   }), [transactions, contacts, ledgerDateFilterType, ledgerStartDate, ledgerEndDate, ledgerSearch, ledgerStatusFilter]);
+
+  const ledgerTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / ledgerPageSize));
+  const safeLedgerPage = Math.min(ledgerCurrentPage, ledgerTotalPages);
+  const paginatedLedgerTransactions = filteredTransactions.slice(
+    (safeLedgerPage - 1) * ledgerPageSize,
+    safeLedgerPage * ledgerPageSize
+  );
+  useEffect(() => {
+    if (ledgerCurrentPage !== safeLedgerPage) setLedgerCurrentPage(safeLedgerPage);
+  }, [ledgerCurrentPage, safeLedgerPage]);
+  useEffect(() => {
+    setLedgerCurrentPage(1);
+  }, [ledgerSearch, ledgerStatusFilter, ledgerDateFilterType, ledgerStartDate, ledgerEndDate]);
 
   // Recharts analytic plot models 
   const ledgerTrendsPlotData = useMemo(() => transactions.slice().reverse().map(t => {
@@ -6798,7 +6848,7 @@ _${businessInfo.name}_`;
                     <p className="text-xs font-mono leading-normal">No custom entries or receipt files found in active filter catalog.</p>
                   </div>
                 ) : (
-                  filteredTransactions.map((t) => {
+                  paginatedLedgerTransactions.map((t) => {
                     const associatedContact = contacts.find(c => c.id === t.contactId);
                     const customerLabel = associatedContact ? associatedContact.name : "Walk-in Showroom Client";
                     const customerPhone = associatedContact ? associatedContact.phone : null;
@@ -7088,6 +7138,22 @@ _${businessInfo.name}_`;
                   })
                 )}
               </div>
+
+              {/* Pagination is available for every date range, not only All Time. */}
+              {filteredTransactions.length > ledgerPageSize && (
+                <div id="ledger-pagination" className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-3">
+                  <span className="text-[11px] font-medium text-slate-300">
+                    Showing {(safeLedgerPage - 1) * ledgerPageSize + 1}–{Math.min(safeLedgerPage * ledgerPageSize, filteredTransactions.length)} of {filteredTransactions.length}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" disabled={safeLedgerPage <= 1} onClick={() => setLedgerCurrentPage(1)} className="rounded-lg border border-white/15 px-2.5 py-2 text-[11px] font-bold text-white disabled:opacity-35">First</button>
+                    <button type="button" disabled={safeLedgerPage <= 1} onClick={() => setLedgerCurrentPage(p => Math.max(1, p - 1))} className="rounded-lg border border-white/15 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-35">Prev</button>
+                    <span className="min-w-[58px] text-center text-[11px] font-bold text-white">{safeLedgerPage} / {ledgerTotalPages}</span>
+                    <button type="button" disabled={safeLedgerPage >= ledgerTotalPages} onClick={() => setLedgerCurrentPage(p => Math.min(ledgerTotalPages, p + 1))} className="rounded-lg border border-white/15 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-35">Next</button>
+                    <button type="button" disabled={safeLedgerPage >= ledgerTotalPages} onClick={() => setLedgerCurrentPage(ledgerTotalPages)} className="rounded-lg border border-white/15 px-2.5 py-2 text-[11px] font-bold text-white disabled:opacity-35">Last</button>
+                  </div>
+                </div>
+              )}
 
               {/* Sticky Top Metrics Summary Pane */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4" id="ledger-sticky-metrics">
