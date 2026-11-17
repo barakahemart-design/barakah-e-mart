@@ -7647,7 +7647,7 @@ _${businessInfo.name}_`;
                     const linkedTransactions = transactions.filter(tx => tx.contactId === contact.id);
                     try {
                       await Promise.all(linkedTransactions.map(tx => deleteCloudDocument("transactions", tx.firestoreId ?? tx.id)));
-                      await deleteCloudDocument("customers", contact.firestoreId ?? contact.id);
+                      await deleteCloudDocument("customers", contact.id);
                       setTransactions(prev => prev.filter(tx => tx.contactId !== contact.id));
                       setContacts(prev => prev.filter(item => item.id !== contact.id));
                       setEditingContact(null);
