@@ -157,3 +157,84 @@ html:not(.light) #root .text-indigo-400 {
     background-color: rgba(18,19,23,.94) !important;
   }
 }
+
+
+/* ==========================================================
+   HIGH-VISIBILITY BLACK LIQUID GLASS — final cascade override
+   This deliberately creates a visible glass surface even when the
+   content behind a card is dark; blur alone on a flat black page
+   is visually imperceptible.
+   ========================================================== */
+html:not(.light) body,
+html.dark body {
+  background:
+    radial-gradient(ellipse at 8% 4%, rgba(150,160,180,.10), transparent 34%),
+    radial-gradient(ellipse at 92% 62%, rgba(110,120,145,.075), transparent 38%),
+    #050608 !important;
+}
+
+html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],
+html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"],
+html.dark #root div[class*="rounded-"][class*="border"][class*="bg-"],
+html.dark #root section[class*="rounded-"][class*="border"][class*="bg-"],
+html.dark #root article[class*="rounded-"][class*="border"][class*="bg-"] {
+  background-color: rgba(25,27,33,.70) !important;
+  background-image:
+    linear-gradient(145deg, rgba(255,255,255,.105) 0%, rgba(255,255,255,.035) 28%, rgba(255,255,255,.008) 68%, transparent 100%),
+    radial-gradient(ellipse at 0% 0%, rgba(255,255,255,.075), transparent 54%) !important;
+  border-color: rgba(235,240,250,.22) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.16),
+    inset 0 -1px 0 rgba(255,255,255,.035),
+    0 14px 38px rgba(0,0,0,.38) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(145%) !important;
+  backdrop-filter: blur(30px) saturate(145%) !important;
+}
+
+html:not(.light) #root [role="dialog"],
+html.dark #root [role="dialog"] {
+  background-color: rgba(17,19,24,.88) !important;
+  background-image: linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.018) 62%, transparent) !important;
+  border-color: rgba(235,240,250,.22) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 24px 70px rgba(0,0,0,.58) !important;
+  -webkit-backdrop-filter: blur(34px) saturate(145%) !important;
+  backdrop-filter: blur(34px) saturate(145%) !important;
+}
+
+html:not(.light) #root input:not([type="checkbox"]):not([type="radio"]),
+html:not(.light) #root select,
+html:not(.light) #root textarea,
+html.dark #root input:not([type="checkbox"]):not([type="radio"]),
+html.dark #root select,
+html.dark #root textarea {
+  background-color: rgba(8,9,12,.66) !important;
+  border-color: rgba(235,240,250,.22) !important;
+  color: #fff !important;
+  -webkit-backdrop-filter: blur(22px) saturate(140%) !important;
+  backdrop-filter: blur(22px) saturate(140%) !important;
+}
+
+html:not(.light) #root h1,
+html:not(.light) #root h2,
+html:not(.light) #root h3,
+html:not(.light) #root h4,
+html.dark #root h1,
+html.dark #root h2,
+html.dark #root h3,
+html.dark #root h4 {
+  color: #fff !important;
+  text-shadow: 0 1px 12px rgba(255,255,255,.08);
+}
+
+@media (max-width: 640px) {
+  html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],
+  html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],
+  html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"],
+  html.dark #root div[class*="rounded-"][class*="border"][class*="bg-"],
+  html.dark #root section[class*="rounded-"][class*="border"][class*="bg-"],
+  html.dark #root article[class*="rounded-"][class*="border"][class*="bg-"] {
+    -webkit-backdrop-filter: blur(26px) saturate(145%) !important;
+    backdrop-filter: blur(26px) saturate(145%) !important;
+  }
+}
