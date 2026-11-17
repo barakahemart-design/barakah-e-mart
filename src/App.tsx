@@ -7865,7 +7865,7 @@ _${businessInfo.name}_`;
                                       setActiveTab("pos");
                                       triggerNotification(`POS Cash Memo loaded. Customer context: ${c.name}`, "success");
                                     }}
-                                    className="h-12 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer"
+                                    className="h-12 sm:h-16 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer"
                                     title="Direct Sale POS Checkout"
                                   >
                                     <ShoppingCart className="w-3.5 h-3.5 text-[#00E676]" />
@@ -7875,7 +7875,7 @@ _${businessInfo.name}_`;
                               </div>
 
                               {/* Action buttons */}
-                              <div className="h-12 shrink-0 flex items-center justify-center gap-0.5 sm:gap-1.5 bg-[#121214] p-1 sm:p-2 rounded-xl border border-[#2D2D35] box-border">
+                              <div className="h-12 sm:h-16 shrink-0 flex items-center justify-center gap-0.5 sm:gap-1.5 bg-[#121214] p-[3px] sm:p-[7px] rounded-xl border border-[#2D2D35] box-border">
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
