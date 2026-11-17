@@ -1,0 +1,159 @@
+/*
+ * BARAKAH POS — Premium Black Liquid Glass UI
+ * Presentation-only layer. No React state, business logic, Firebase,
+ * Firestore, storage, calculations, routes, or event handlers are changed.
+ * Scoped to the app's dark theme; the existing light theme is untouched.
+ */
+html:not(.light) {
+  --liquid-bg: #050608;
+  --liquid-panel: rgba(18, 19, 23, .66);
+  --liquid-panel-strong: rgba(12, 13, 16, .82);
+  --liquid-border: rgba(235, 240, 255, .16);
+  --liquid-border-soft: rgba(235, 240, 255, .10);
+  --liquid-text: #f8fafc;
+  --liquid-muted: #c2cad6;
+  --liquid-dim: #a4afbf;
+  --liquid-blur: 24px;
+  background: var(--liquid-bg) !important;
+  color: var(--liquid-text);
+}
+
+html:not(.light) body {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(95, 111, 140, .10), transparent 34%),
+    radial-gradient(ellipse at 92% 48%, rgba(65, 77, 105, .08), transparent 38%),
+    #050608 !important;
+  color: var(--liquid-text) !important;
+}
+
+/* Main cards, panels, grouped sections, dialogs and nested containers */
+html:not(.light) #root div[class*="rounded"][class*="border"],
+html:not(.light) #root section[class*="rounded"][class*="border"],
+html:not(.light) #root article[class*="rounded"][class*="border"],
+html:not(.light) #root [role="dialog"] {
+  background-color: var(--liquid-panel) !important;
+  background-image:
+    linear-gradient(145deg, rgba(255,255,255,.075) 0%, rgba(255,255,255,.018) 34%, transparent 72%),
+    linear-gradient(315deg, rgba(255,255,255,.025), transparent 48%) !important;
+  border-color: var(--liquid-border) !important;
+  -webkit-backdrop-filter: blur(var(--liquid-blur)) saturate(145%);
+  backdrop-filter: blur(var(--liquid-blur)) saturate(145%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -1px 0 rgba(255,255,255,.025),
+    0 10px 28px rgba(0,0,0,.24) !important;
+}
+
+/* Dark filled surfaces that are not necessarily bordered cards */
+html:not(.light) #root [class*="bg-[#0e111a]"],
+html:not(.light) #root [class*="bg-[#0b0f19]"],
+html:not(.light) #root [class*="bg-[#050912]"],
+html:not(.light) #root [class*="bg-[#0c0c0e]"],
+html:not(.light) #root [class*="bg-[#121214]"],
+html:not(.light) #root [class*="bg-slate-950"],
+html:not(.light) #root [class*="bg-slate-900"],
+html:not(.light) #root [class*="bg-slate-800"] {
+  background-color: rgba(15,16,20,.68) !important;
+  background-image: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.012) 52%, transparent) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+
+/* Header and navigation surfaces */
+html:not(.light) #root header,
+html:not(.light) #root nav,
+html:not(.light) #root [class*="sticky"][class*="border"],
+html:not(.light) #root [class*="fixed"][class*="border"] {
+  background-color: rgba(8,9,12,.78) !important;
+  background-image: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.008)) !important;
+  border-color: var(--liquid-border-soft) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+}
+
+/* Inputs: clearly legible, softly frosted, with a crisp focus ring */
+html:not(.light) #root input,
+html:not(.light) #root select,
+html:not(.light) #root textarea {
+  color: #ffffff !important;
+  background: rgba(7,8,11,.72) !important;
+  border-color: rgba(225,232,245,.18) !important;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+html:not(.light) #root input::placeholder,
+html:not(.light) #root textarea::placeholder {
+  color: #aeb8c8 !important;
+  opacity: 1;
+}
+html:not(.light) #root input:focus,
+html:not(.light) #root select:focus,
+html:not(.light) #root textarea:focus {
+  border-color: rgba(148,178,255,.62) !important;
+  box-shadow: 0 0 0 3px rgba(91,130,220,.14), 0 0 18px rgba(91,130,220,.10) !important;
+  outline: none !important;
+}
+
+/* Sharper white typography throughout the dark interface */
+html:not(.light) #root .text-white,
+html:not(.light) #root .text-slate-100,
+html:not(.light) #root .text-slate-200 {
+  color: #ffffff !important;
+}
+html:not(.light) #root .text-slate-300,
+html:not(.light) #root .text-slate-400,
+html:not(.light) #root .text-\[\#A0A0A5\] {
+  color: var(--liquid-muted) !important;
+}
+html:not(.light) #root .text-slate-500,
+html:not(.light) #root .text-slate-600 {
+  color: var(--liquid-dim) !important;
+}
+
+/* Subtle glass treatment for neutral controls; preserve colored action buttons */
+html:not(.light) #root button:not([class*="bg-[#00E676]"]):not([class*="bg-emerald-"]):not([class*="bg-blue-"]):not([class*="bg-indigo-"]):not([class*="bg-rose-"]):not([class*="bg-red-"]) {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+html:not(.light) #root button[class*="border-slate"],
+html:not(.light) #root button[class*="border-[#2"] {
+  border-color: rgba(235,240,255,.15) !important;
+}
+
+/* Tables and separators retain structure while blending into the glass panels */
+html:not(.light) #root table thead,
+html:not(.light) #root [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(235,240,255,.10) !important;
+}
+html:not(.light) #root hr {
+  border-color: rgba(235,240,255,.12) !important;
+}
+
+/* Keep the original brand/status accents vivid against black glass */
+html:not(.light) #root .text-cyan-300,
+html:not(.light) #root .text-cyan-400,
+html:not(.light) #root .text-blue-400,
+html:not(.light) #root .text-indigo-400 {
+  filter: saturate(1.12);
+}
+
+/* Respect reduced-motion preferences and avoid forcing blur on low-power devices */
+@media (prefers-reduced-motion: reduce) {
+  html:not(.light) #root * {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+@media (max-width: 640px) {
+  html:not(.light) {
+    --liquid-blur: 22px;
+  }
+}
+@supports not ((backdrop-filter: blur(1px))) {
+  html:not(.light) #root div[class*="rounded"][class*="border"],
+  html:not(.light) #root section[class*="rounded"][class*="border"],
+  html:not(.light) #root article[class*="rounded"][class*="border"] {
+    background-color: rgba(18,19,23,.94) !important;
+  }
+}
