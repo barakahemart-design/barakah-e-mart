@@ -1108,7 +1108,7 @@ async function startServer() {
           ...payload,
           user_id: verified.uid,
           userId: verified.uid,
-          linked_email: payload.linked_email || verified.email,
+          linked_email: verified.email,
           updated_at: new Date().toISOString()
         };
 
@@ -1126,6 +1126,8 @@ async function startServer() {
   app.post("/api/ai/insights", async (req: Request, res: Response) => {
     const { transactions, expenses, products } = req.body;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const dataSummary = {
         transactions: (transactions || []).slice(0, 30).map((t: any) => ({ type: t.type, total: t.total, date: t.date })),
         expenses: (expenses || []).map((e: any) => ({ cat: e.category, amount: e.amount, desc: e.description })),
@@ -1190,6 +1192,8 @@ Format the output ONLY as a valid JSON list of objects with the exact schema blo
   app.post("/api/ai/expense-category", async (req: Request, res: Response) => {
     const { description } = req.body;
     try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       if (!description) {
         res.json({ category: "Others" });
         return;
