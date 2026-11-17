@@ -6871,7 +6871,8 @@ _${businessInfo.name}_`;
                           boxShadow: hasOutstandingDue
                             ? "inset 0 0 0 1px rgba(255,48,79,0.10), 0 0 8px rgba(255,48,79,0.12)"
                             : "inset 0 0 0 1px rgba(0,230,118,0.10), 0 0 8px rgba(0,230,118,0.12)"
-                        }                      >
+                        }}
+                      >
                         {/* Centered invoice identity */}
                         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
                           <span className="rounded-md border border-slate-700 bg-black/35 px-2.5 py-1 text-[11px] font-black tracking-wide text-white">
