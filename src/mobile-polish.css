@@ -1573,3 +1573,35 @@ html.light #root textarea {
     padding-top: 8px !important;
   }
 }
+
+
+@media (max-width: 767px) {
+  #active-tab-title-display h1 .dashboard-sticky-live-dot,
+  #active-tab-title-display h1 .ledger-sticky-live-dot {
+    position: relative !important;
+    display: inline-block !important;
+    flex: 0 0 8px !important;
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: #22d3ee !important;
+    box-shadow: 0 0 8px rgba(34, 211, 238, .75) !important;
+  }
+
+  #active-tab-title-display h1 .dashboard-sticky-live-dot::after,
+  #active-tab-title-display h1 .ledger-sticky-live-dot::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: -4px !important;
+    border: 1px solid rgba(34, 211, 238, .7) !important;
+    border-radius: 50% !important;
+    animation: dashboard-live-pulse 1.8s ease-out infinite !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #active-tab-title-display h1 .dashboard-sticky-live-dot::after,
+  #active-tab-title-display h1 .ledger-sticky-live-dot::after {
+    animation: none !important;
+  }
+}
