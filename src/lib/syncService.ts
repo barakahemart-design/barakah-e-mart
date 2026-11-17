@@ -1,5 +1,6 @@
 // Multi-device real-time sync service for Barakah Mart POS & Admin
 import { getActiveStoreEmail } from './firestoreService';
+import { auth } from './firebase';
 
 export interface SyncChangeEvent {
   type: 'upsert' | 'delete';
@@ -93,7 +94,7 @@ class RealtimeSyncManager {
     this.setStatus('offline');
   }
 
-  private connectSSE() {
+  private async connectSSE() {
     if (!this.isRunning) return;
 
     if (this.eventSource) {
@@ -102,7 +103,13 @@ class RealtimeSyncManager {
     }
 
     try {
-      const url = `/api/sync/stream?email=${encodeURIComponent(this.currentEmail)}&uid=${encodeURIComponent(this.currentUid)}`;
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        this.setStatus('offline');
+        return;
+      }
+      const idToken = await currentUser.getIdToken();
+      const url = `/api/sync/stream?idToken=${encodeURIComponent(idToken)}`;
       const es = new EventSource(url);
       this.eventSource = es;
 
@@ -173,12 +180,12 @@ class RealtimeSyncManager {
     this.lastPollAt = Date.now();
 
     try {
-      const url = `/api/sync/poll?since=${this.lastSyncTime}&email=${encodeURIComponent(this.currentEmail)}&uid=${encodeURIComponent(this.currentUid)}`;
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+      const idToken = await currentUser.getIdToken();
+      const url = `/api/sync/poll?since=${this.lastSyncTime}`;
       const res = await fetch(url, {
-        headers: {
-          'x-user-email': this.currentEmail,
-          'x-user-uid': this.currentUid
-        }
+        headers: { Authorization: `Bearer ${idToken}` }
       });
 
       if (res.ok) {
@@ -225,11 +232,11 @@ class RealtimeSyncManager {
     const targetEmail = (email || this.currentEmail || getActiveStoreEmail()).trim().toLowerCase();
     if (!targetEmail) return null;
     try {
-      const res = await fetch(`/api/sync/full?email=${encodeURIComponent(targetEmail)}`, {
-        headers: {
-          'x-user-email': targetEmail,
-          'x-user-uid': this.currentUid || targetEmail
-        }
+      const currentUser = auth.currentUser;
+      if (!currentUser) return null;
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch('/api/sync/full', {
+        headers: { Authorization: `Bearer ${idToken}` }
       });
       if (res.ok) {
         return await res.json();
