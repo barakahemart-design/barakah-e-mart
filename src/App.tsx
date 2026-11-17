@@ -6863,16 +6863,15 @@ _${businessInfo.name}_`;
                       <div
                         key={t.id}
                         data-customer-payment-status={hasOutstandingDue ? "due" : "cleared"}
-                        className="mx-auto w-full max-w-5xl rounded-2xl border-2 bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4"
+                        className="mx-auto w-full max-w-5xl rounded-2xl border-[1.5px] bg-[#1E1E24]/95 p-3 shadow-lg transition-all sm:p-4"
                         style={{
                           borderColor: hasOutstandingDue ? "#FF304F" : "#00E676",
-                          borderWidth: "2px",
+                          borderWidth: "1.5px",
                           borderStyle: "solid",
                           boxShadow: hasOutstandingDue
-                            ? "0 0 0 1px rgba(255,48,79,0.62), 0 0 26px rgba(255,48,79,0.25)"
-                            : "0 0 0 1px rgba(0,230,118,0.58), 0 0 26px rgba(0,230,118,0.22)"
-                        }}
-                      >
+                            ? "inset 0 0 0 1px rgba(255,48,79,0.10), 0 0 8px rgba(255,48,79,0.12)"
+                            : "inset 0 0 0 1px rgba(0,230,118,0.10), 0 0 8px rgba(0,230,118,0.12)"
+                        }                      >
                         {/* Centered invoice identity */}
                         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
                           <span className="rounded-md border border-slate-700 bg-black/35 px-2.5 py-1 text-[11px] font-black tracking-wide text-white">
@@ -7640,6 +7639,24 @@ _${businessInfo.name}_`;
                   editingContact={editingContact}
                   onSubmit={handleAddContact}
                   onCancel={() => setEditingContact(null)}
+                  onDelete={async (contact) => {
+                    if (currentPanel !== "admin") {
+                      triggerNotification("Only administrators can delete a customer ledger.", "error");
+                      return;
+                    }
+                    const linkedTransactions = transactions.filter(tx => tx.contactId === contact.id);
+                    try {
+                      await Promise.all(linkedTransactions.map(tx => deleteCloudDocument("transactions", tx.firestoreId ?? tx.id)));
+                      await deleteCloudDocument("customers", contact.firestoreId ?? contact.id);
+                      setTransactions(prev => prev.filter(tx => tx.contactId !== contact.id));
+                      setContacts(prev => prev.filter(item => item.id !== contact.id));
+                      setEditingContact(null);
+                      triggerNotification(`Customer ledger for '${contact.name}' and ${linkedTransactions.length} linked invoice(s) deleted.`, "success");
+                    } catch (error) {
+                      console.error("Customer ledger deletion failed:", error);
+                      triggerNotification("Could not fully delete this customer ledger. Please try again.", "error");
+                    }
+                  }}
                 />
 
                 {/* Contacts directory table representation (8 Cols) */}
