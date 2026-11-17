@@ -7727,6 +7727,7 @@ _${businessInfo.name}_`;
                         
                         // Resolve client transactions with extremely robust fallback and normalization checks
                         const clientTxs = customerDirectoryData.transactionsByContact.get(c.id) || [];
+                        const totalOutstandingDue = clientTxs.reduce((sum, tx) => sum + Math.max(0, Number(tx.dueBalance) || 0), 0);
                         
                         // Aggregate products bought by customer
                         const purchasedProductsMap: { [productName: string]: { quantity: number; total: number; price: number } } = {};
@@ -7774,7 +7775,7 @@ _${businessInfo.name}_`;
                         return (
                           <div 
                             key={c.id} 
-                            className="bg-[#1E1E24] border border-[#2D2D35] p-5 rounded-2xl shadow-md transition-all hover:border-[#00E676]/20 flex flex-col justify-between space-y-4 group relative overflow-hidden"
+                            className="bg-[#1E1E24] border border-[#2D2D35] p-3.5 sm:p-5 rounded-2xl shadow-md transition-all hover:border-[#00E676]/20 flex flex-col justify-between gap-3 sm:gap-4 group relative overflow-hidden"
                             id={`contact-profile-card-${c.id}`}
                           >
                             {/* Unregistered or Empty Purchases Indicator Badge */}
@@ -7815,9 +7816,11 @@ _${businessInfo.name}_`;
                             {/* Purchased Products Details Section */}
                             {c.type === "customer" && (
                               <div className="bg-[#121214]/60 border border-[#2D2D35]/30 rounded-xl p-3 space-y-1.5" id={`purchased-products-box-${c.id}`}>
-                                <div className="text-[10px] font-bold text-[#A0A0A5] font-mono tracking-wider flex items-center gap-1.5 border-b border-[#2D2D35]/50 pb-1 uppercase">
-                                  <Package className="w-3.5 h-3.5 text-[#00E676]" />
-                                  Purchased Items:
+                                <div className="text-[10px] font-bold text-[#A0A0A5] font-mono tracking-wider flex items-center justify-between gap-2 border-b border-[#2D2D35]/50 pb-1 uppercase">
+                                  <span className="flex min-w-0 items-center gap-1.5"><Package className="w-3.5 h-3.5 text-[#00E676]" />Purchased Items:</span>
+                                  {totalOutstandingDue > 0 && purchasedProductsList.length !== 1 && (
+                                    <span className="shrink-0 rounded-md border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-black normal-case tracking-normal text-rose-400">Due: {businessInfo.currencySymbol || "৳"}{totalOutstandingDue.toLocaleString()}</span>
+                                  )}
                                 </div>
                                 {purchasedProductsList.length > 0 ? (
                                   <div className="max-h-[120px] overflow-y-auto space-y-1.5 pr-1 custom-scrollbar scrollbar-thin">
@@ -7827,9 +7830,10 @@ _${businessInfo.name}_`;
                                           <span className="text-slate-200 font-semibold text-wrap text-left" title={prod.name}>
                                             • {prod.name} <span className="text-slate-400 font-normal text-[9px]">(@ {businessInfo.currencySymbol || "৳"}{prod.price.toLocaleString()}/unit)</span>
                                           </span>
-                                          <span className="text-[#00E676] font-bold shrink-0 bg-[#1e1e24] px-1.5 py-0.5 rounded border border-[#2D2D35] text-[9px]">
-                                            {prod.quantity} {prod.quantity === 1 ? "Unit" : "Units"}
-                                          </span>
+                                          <div className="flex shrink-0 items-center gap-1">
+                                            <span className="text-[#00E676] font-bold bg-[#1e1e24] px-1.5 py-0.5 rounded border border-[#2D2D35] text-[9px]">{prod.quantity} {prod.quantity === 1 ? "Unit" : "Units"}</span>
+                                            {totalOutstandingDue > 0 && purchasedProductsList.length === 1 && <span className="rounded-md border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-black text-rose-400">Due: {businessInfo.currencySymbol || "৳"}{totalOutstandingDue.toLocaleString()}</span>}
+                                          </div>
                                         </div>
                                         {prod.quantity > 1 && (
                                           <div className="text-[9px] text-slate-500 pl-2.5 mt-0.5">
@@ -7849,12 +7853,10 @@ _${businessInfo.name}_`;
                             )}
 
                             {/* Status and Action bar */}
-                            <div className="pt-3 border-t border-[#2D2D35]/50 flex flex-wrap items-center justify-between gap-2.5">
-                              {/* Status badge & Direct Sale shortcut */}
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider ${status.color}`}>
-                                  {status.label}
-                                </span>
+                            <div className="pt-3 border-t border-[#2D2D35]/50 flex items-center justify-between gap-2 flex-nowrap">
+                              {/* Compact single-row customer actions. */}
+                              <div className="flex min-w-0 items-center gap-2 flex-nowrap">
+                                {!(totalOutstandingDue > 0) && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
@@ -7863,7 +7865,7 @@ _${businessInfo.name}_`;
                                       setActiveTab("pos");
                                       triggerNotification(`POS Cash Memo loaded. Customer context: ${c.name}`, "success");
                                     }}
-                                    className="px-2 py-1 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center gap-1 transition-all uppercase cursor-pointer"
+                                    className="shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center gap-1 transition-all uppercase cursor-pointer"
                                     title="Direct Sale POS Checkout"
                                   >
                                     <ShoppingCart className="w-3.5 h-3.5 text-[#00E676]" />
@@ -7873,7 +7875,7 @@ _${businessInfo.name}_`;
                               </div>
 
                               {/* Action buttons */}
-                              <div className="flex items-center gap-1 bg-[#121214] p-1 rounded-lg border border-[#2D2D35]">
+                              <div className="flex shrink-0 items-center justify-center gap-0.5 bg-[#121214] p-1 rounded-lg border border-[#2D2D35]">
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
