@@ -4621,16 +4621,18 @@ _${businessInfo.name}_`;
             <div className="flex items-center gap-1.5 md:gap-2">
               <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/10" />
               <h1 className="text-sm md:text-lg font-bold text-white tracking-wide font-display truncate">
-                {activeTab === 'dashboard' && <span id="dashboard-mobile-title">Dashboard</span>}
+                {activeTab === 'dashboard' && <><span className="dashboard-sticky-live-dot" aria-hidden="true" /><span id="dashboard-mobile-title">Dashboard</span></>}
                 {activeTab === 'reports' && 'Reports'}
                 {activeTab === 'products' && 'Product Settings'}
                 {activeTab === 'negative-sales' && 'Stock Alert'}
                 {activeTab === 'purchases' && 'Purchases Ledger'}
                 {activeTab === "pos" && "Counter Cash Memo"}
-                {activeTab === 'inventory' && 'Stock'}
+                {activeTab === 'inventory' && (stockSubTab === "home" ? "All Stock" : stockSubTab === "stock-value" ? "Stock Value" : stockSubTab === "sales-value" ? "Sales Value" : stockSubTab === "edit-stock" ? "Edit Stock" : "Out of Stock")}
                 {activeTab === 'ledger' && <><span className="ledger-sticky-live-dot" aria-hidden="true" /><span id="ledger-mobile-title">Ledger Account</span></>}
                 {activeTab === 'expenses' && 'Expenses'}
                 {activeTab === 'contacts' && 'Customers Directory'}
+                {activeTab === 'duelist' && 'All Due List'}
+                {activeTab === 'staff' && 'Staff Hub'}
                 {activeTab === 'settings' && 'System Settings'}
               </h1>
             </div>
