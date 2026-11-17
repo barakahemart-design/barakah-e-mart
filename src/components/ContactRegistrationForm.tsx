@@ -13,6 +13,7 @@ type Props = {
   editingContact: Contact | null;
   onSubmit: (values: ContactFormValues) => void | Promise<void>;
   onCancel: () => void;
+  onDelete?: (contact: Contact) => void | Promise<void>;
 };
 
 const banglaToEnglishDigits = (value: string) => {
@@ -22,14 +23,16 @@ const banglaToEnglishDigits = (value: string) => {
 
 const hasBengaliCharacters = (value: string) => /[\u0980-\u09FF]/.test(value);
 
-function ContactRegistrationFormComponent({ editingContact, onSubmit, onCancel }: Props) {
+function ContactRegistrationFormComponent({ editingContact, onSubmit, onCancel, onDelete }: Props) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [type, setType] = useState<"customer" | "supplier">("customer");
   const [isTranslating, setIsTranslating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
+    setConfirmDelete(false);
     setName(editingContact?.name || "");
     setPhone(editingContact?.phone || "");
     setAddress(editingContact?.address || "");
@@ -125,6 +128,26 @@ function ContactRegistrationFormComponent({ editingContact, onSubmit, onCancel }
           <PlusCircle className="w-4 h-4" /> {editingContact ? "Save Profile Changes" : "Register Profile"}
         </button>
 
+        {editingContact && onDelete && (
+          <div className="space-y-2">
+            {!confirmDelete ? (
+              <button type="button" onClick={() => setConfirmDelete(true)}
+                className="w-full py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-rose-500/35">
+                Delete Customer Ledger Box
+              </button>
+            ) : (
+              <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 space-y-2">
+                <p className="text-[10px] leading-relaxed text-rose-100 font-semibold">Delete {editingContact.name}'s customer profile and all linked ledger invoices? This cannot be undone.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => { void onDelete(editingContact); setConfirmDelete(false); }}
+                    className="py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[10px] uppercase rounded-lg">Yes, Delete</button>
+                  <button type="button" onClick={() => setConfirmDelete(false)}
+                    className="py-2 bg-white/5 hover:bg-white/10 text-white font-bold text-[10px] uppercase rounded-lg border border-white/10">Keep Ledger</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {editingContact && <button type="button" onClick={onCancel} className="w-full py-2 bg-[#2D2D35]/50 hover:bg-[#2D2D35] text-[#A0A0A5] hover:text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-[#2D2D35]">Cancel Editing</button>}
       </form>
     </div>
