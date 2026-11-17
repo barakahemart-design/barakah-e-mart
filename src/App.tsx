@@ -7082,16 +7082,20 @@ _${businessInfo.name}_`;
                           >
                             <Printer className="h-4 w-4" /> Challan
                           </button>
-                          {t.dueBalance > 0 && (
+                          {t.dueBalance > 0 ? (
                             <button
                               onClick={() => {
                                 setCollectionTx(t);
                                 setCollectAmount(t.dueBalance.toString());
                               }}
-                              className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center rounded-xl border border-white/90 !bg-white px-3 text-[11px] font-bold !text-red-600 shadow-[0_2px_12px_rgba(255,255,255,0.14)] backdrop-blur-xl transition-all hover:!bg-white/90 hover:!text-red-700 active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
+                              className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center rounded-xl border border-rose-400/45 bg-rose-500/12 px-3 text-[11px] font-bold text-rose-200 shadow-sm transition-all hover:bg-rose-500/20 active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
                             >
                               Collect Due
                             </button>
+                          ) : (
+                            <span className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-3 text-[11px] font-bold text-emerald-300 sm:w-auto sm:min-w-[104px] sm:px-4">
+                              Paid
+                            </span>
                           )}
                           <button
                             onClick={() => setEditingTx(t)}
@@ -7100,36 +7104,7 @@ _${businessInfo.name}_`;
                           >
                             <Edit3 className="h-4 w-4" /> Edit
                           </button>
-                          {currentPanel === "admin" && (
-                            deleteTxId === t.id ? (
-                              <div className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-slate-700 bg-black/40 px-1">
-                                <span className="px-1 text-[8px] text-slate-400">Delete?</span>
-                                <button
-                                  onClick={() => {
-                                    handleDeleteTransaction(t.id);
-                                    setDeleteTxId(null);
-                                  }}
-                                  className="rounded bg-rose-500 px-2 py-1 text-[9px] font-bold text-white"
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  onClick={() => setDeleteTxId(null)}
-                                  className="rounded bg-slate-700 px-2 py-1 text-[9px] text-white"
-                                >
-                                  No
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setDeleteTxId(t.id)}
-                                className="inline-flex h-10 w-full min-w-0 shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 text-[11px] font-bold text-rose-300 transition-all hover:border-rose-400 hover:bg-rose-500/20 active:scale-[0.98] sm:w-auto sm:min-w-[104px] sm:px-4"
-                                title="Delete transaction memo"
-                              >
-                                <Trash2 className="h-4 w-4" /> Delete
-                              </button>
-                            )
-                          )}
+
                           </div>
                         </div>
                       </div>
@@ -9241,22 +9216,49 @@ _${businessInfo.name}_`;
               </div>
             </div>
 
-            <div className="flex items-center gap-3 pt-2 font-sans">
-              <button
-                onClick={() => {
-                  handleEditTransaction(editingTx.id, editingTx);
-                  setEditingTx(null);
-                }}
-                className="flex-1 py-1 px-4 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-sm text-center"
-              >
-                Commit invoice edit
-              </button>
-              <button
-                onClick={() => setEditingTx(null)}
-                className="flex-1 py-1 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center"
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col gap-2 pt-2 font-sans">
+              {currentPanel === "admin" && (
+                deleteTxId === editingTx.id ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-2">
+                    <span className="min-w-0 flex-1 text-[10px] font-semibold text-rose-200">Delete this complete customer ledger memo?</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleDeleteTransaction(editingTx.id);
+                        setDeleteTxId(null);
+                        setEditingTx(null);
+                      }}
+                      className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white"
+                    >Yes, Delete</button>
+                    <button type="button" onClick={() => setDeleteTxId(null)} className="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-semibold text-white">Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTxId(editingTx.id)}
+                    className="w-full rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 py-2.5 text-[11px] font-bold text-rose-300 transition-colors hover:bg-rose-500/20"
+                  >
+                    <Trash2 className="mr-1 inline h-3.5 w-3.5" /> Delete Customer Ledger Box
+                  </button>
+                )
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    handleEditTransaction(editingTx.id, editingTx);
+                    setEditingTx(null);
+                  }}
+                  className="flex-1 py-1 px-4 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-sm text-center"
+                >
+                  Commit invoice edit
+                </button>
+                <button
+                  onClick={() => { setDeleteTxId(null); setEditingTx(null); }}
+                  className="flex-1 py-1 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl h-10 transition-all cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
