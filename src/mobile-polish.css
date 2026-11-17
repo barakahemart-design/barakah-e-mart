@@ -1421,25 +1421,24 @@ html.light #root textarea {
     margin-top: 0 !important;
   }
 
-  /* Higher specificity overrides the app-wide glass-card border rule. */
+  /* Thin, restrained premium status borders for customer Ledger cards. */
   #root #ledger-timeline-feed > div[data-customer-payment-status="cleared"][class*="rounded-2xl"][class*="border"][class*="bg-"] {
-    border: 3px solid #00E676 !important;
-    border-color: #00E676 !important;
-    outline: 1px solid rgba(0,230,118,.9) !important;
-    outline-offset: -3px !important;
-    box-shadow: inset 0 0 0 2px rgba(0,230,118,.72), 0 0 18px rgba(0,230,118,.32) !important;
+    border: 1.5px solid #00E676 !important;
+    border-color: rgba(0,230,118,.92) !important;
+    outline: none !important;
+    box-shadow: inset 0 0 0 1px rgba(0,230,118,.10), 0 0 8px rgba(0,230,118,.12) !important;
   }
 
   #root #ledger-timeline-feed > div[data-customer-payment-status="due"][class*="rounded-2xl"][class*="border"][class*="bg-"] {
-    border: 3px solid #FF304F !important;
-    border-color: #FF304F !important;
-    outline: 1px solid rgba(255,48,79,.9) !important;
-    outline-offset: -3px !important;
-    box-shadow: inset 0 0 0 2px rgba(255,48,79,.72), 0 0 18px rgba(255,48,79,.32) !important;
+    border: 1.5px solid #FF304F !important;
+    border-color: rgba(255,48,79,.94) !important;
+    outline: none !important;
+    box-shadow: inset 0 0 0 1px rgba(255,48,79,.10), 0 0 8px rgba(255,48,79,.13) !important;
   }
 
-  /* Flatten the old combined filter wrapper so mobile order is:
-     Account Balance -> Search -> Date Range -> payment-status filters -> ledger cards. */
+  /* Mobile sequence:
+     Account Balance -> Search -> Date Range -> payment-status filters
+     -> customer Ledger cards -> Total Memos / sales summary. */
   #ledger-filter-bar {
     display: contents !important;
   }
@@ -1451,6 +1450,11 @@ html.light #root textarea {
     width: 100% !important;
   }
   #ledger-timeline-feed { order: 4 !important; }
+  #ledger-sticky-metrics {
+    order: 5 !important;
+    width: 100% !important;
+    margin-top: 4px !important;
+  }
 
   #ledger-search-wrap,
   #ledger-search-input {
