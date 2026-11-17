@@ -142,31 +142,37 @@ function classifyExpenseLocally(description: string): string {
 }
 
 async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: string } | null> {
+  // Only a Firebase-issued ID token is an identity proof. Client-supplied UID/email
+  // headers and query parameters are deliberately never trusted.
   const authHeader = req.headers.authorization;
-  const headerUid = (req.headers["x-user-uid"] || req.query.uid) as string;
-  const headerEmail = (req.headers["x-user-email"] || req.query.email) as string;
+  const headerToken = authHeader && authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
+  const queryToken = typeof req.query.idToken === "string" ? req.query.idToken : "";
+  const idToken = headerToken || queryToken;
+  if (!idToken || idToken.length > 5000 || !firebaseConfig.apiKey) return null;
 
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const idToken = authHeader.split(" ")[1];
-    try {
-      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-      if (response.ok) {
-        const tokenInfo = await response.json();
-        if (tokenInfo && tokenInfo.sub) {
-          return { uid: tokenInfo.sub, email: tokenInfo.email || headerEmail || "" };
-        }
+  try {
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken })
       }
-    } catch (err) {
-      console.warn("Token verification calling Google tokeninfo endpoint failed:", err);
-    }
+    );
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const account = Array.isArray(payload?.users) ? payload.users[0] : null;
+    if (!account?.localId || typeof account.localId !== "string") return null;
+    return {
+      uid: account.localId,
+      email: typeof account.email === "string" ? account.email.trim().toLowerCase() : ""
+    };
+  } catch (err) {
+    console.warn("Firebase ID token verification failed:", err);
+    return null;
   }
-
-  // Header or query parameter identity verification
-  if (headerUid || headerEmail) {
-    return { uid: headerUid || headerEmail, email: headerEmail || "" };
-  }
-
-  return null;
 }
 
 async function startServer() {
@@ -767,8 +773,9 @@ async function startServer() {
   // Real-time SSE Stream Endpoint for Live Multi-Device Push
   app.get("/api/sync/stream", async (req: Request, res: Response) => {
     const verified = await verifyFirebaseToken(req);
-    const email = (verified?.email || (req.query.email as string) || "").trim().toLowerCase();
-    const uid = verified?.uid || (req.query.uid as string) || email;
+    if (!verified) return res.status(401).json({ error: "Access Denied: Valid Firebase login required." });
+    const email = verified.email.trim().toLowerCase();
+    const uid = verified.uid;
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -789,7 +796,8 @@ async function startServer() {
   // Real-time Poll Endpoint for incremental sync reconciliation
   app.get("/api/sync/poll", async (req: Request, res: Response) => {
     const verified = await verifyFirebaseToken(req);
-    const email = (verified?.email || (req.query.email as string) || "").trim().toLowerCase();
+    if (!verified) return res.status(401).json({ error: "Access Denied: Valid Firebase login required." });
+    const email = verified.email.trim().toLowerCase();
     const since = Number(req.query.since) || 0;
 
     const allowedIds = email ? await resolveAllUserIdsForEmail(email, verified?.uid || "") : [];
@@ -812,7 +820,8 @@ async function startServer() {
   // Full aggregate state sync endpoint across all collections for fresh device boots
   app.get("/api/sync/full", async (req: Request, res: Response) => {
     const verified = await verifyFirebaseToken(req);
-    const cleanEmail = (verified?.email || (req.query.email as string) || "").trim().toLowerCase();
+    if (!verified) return res.status(401).json({ error: "Access Denied: Valid Firebase login required." });
+    const cleanEmail = verified.email.trim().toLowerCase();
     if (!cleanEmail) {
       return res.status(400).json({ error: "Email is required for full sync" });
     }
