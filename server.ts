@@ -1502,6 +1502,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         }
       }
       const assignmentId = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
+      const assignmentRef = adminDb.collection("delivery_assignments").doc(assignmentId);
+      const previousAssignmentSnap = await assignmentRef.get();
+      const previousAssignment = previousAssignmentSnap.exists ? previousAssignmentSnap.data() || {} : {};
       const assignment = {
         id: assignmentId,
         owner_store_id: PRIMARY_ADMIN_EMAIL,
@@ -1517,14 +1520,15 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           quantity: Number(item.quantity) || 0
         })) : [],
         delivery_status: "assigned",
-        delivery_fee: 0,
-        payment_status: "unpaid",
-        payment_timing: "after_delivery",
-        payment_updated_at: "",
+        delivery_fee: Number(previousAssignment.delivery_fee) || 0,
+        payment_status: previousAssignment.payment_status === "paid" ? "paid" : "unpaid",
+        payment_timing: previousAssignment.payment_timing === "advance" ? "advance" : "after_delivery",
+        payment_updated_at: String(previousAssignment.payment_updated_at || ""),
+        payment_received_at: String(previousAssignment.payment_received_at || ""),
         assigned_at: new Date().toISOString(),
         assigned_by: manager.uid
       };
-      await adminDb.collection("delivery_assignments").doc(assignmentId).set(assignment, { merge: true });
+      await assignmentRef.set(assignment, { merge: true });
       if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: new Date().toISOString() }, { merge: true });
       return res.status(201).json({ success: true, assignment });
     } catch (error: any) {
