@@ -55,25 +55,44 @@ const PRIMARY_ADMIN_EMAIL = "barakahbillpro@gmail.com";
 
 async function verifyPrimaryAdminPin(email: string, pin: string): Promise<boolean> {
   const cleanEmail = String(email || "").trim().toLowerCase();
-  const attemptKey = `${PRIMARY_ADMIN_EMAIL}:delivery-admin-actions`;
+  if (!adminDb || cleanEmail !== PRIMARY_ADMIN_EMAIL || !/^\\d{4}$/.test(String(pin || ""))) return false;
+
+  // A Firestore transaction keeps the failed-attempt lock consistent across
+  // separate Vercel Function instances and cold starts.
+  const credentialRef = adminDb.collection("store_auth_credentials").doc(getCredentialDocId(cleanEmail));
+  const rateLimitId = createHash("sha256").update(`${cleanEmail}:delivery-admin-actions`).digest("hex");
+  const rateLimitRef = adminDb.collection("security_rate_limits").doc(rateLimitId);
   const now = Date.now();
-  const attempt = pinAttemptMap.get(attemptKey) || { attempts: 0, windowStartedAt: now, lockedUntil: 0 };
-  if (!adminDb || cleanEmail !== PRIMARY_ADMIN_EMAIL || !/^\d{4}$/.test(String(pin || ""))) return false;
-  if (attempt.lockedUntil > now) return false;
-  if (now - attempt.windowStartedAt > 5 * 60 * 1000) {
-    attempt.attempts = 0;
-    attempt.windowStartedAt = now;
-    attempt.lockedUntil = 0;
-  }
-  const credentials = await getAdminPinCredentials(cleanEmail);
-  if (!credentials?.admin_pin_hash || !verifyPinAgainstHash(String(pin), credentials.admin_pin_hash)) {
-    attempt.attempts += 1;
-    if (attempt.attempts >= 5) attempt.lockedUntil = now + 60 * 1000;
-    pinAttemptMap.set(attemptKey, attempt);
+
+  return adminDb.runTransaction(async (transaction) => {
+    const [credentialSnap, rateLimitSnap] = await Promise.all([
+      transaction.get(credentialRef),
+      transaction.get(rateLimitRef)
+    ]);
+    const credential = credentialSnap.exists ? credentialSnap.data() as AdminPinCredentials : null;
+    const current = rateLimitSnap.exists ? rateLimitSnap.data() as any : {};
+    const windowStartedAt = Number(current.window_started_at) || now;
+    const lockedUntil = Number(current.locked_until) || 0;
+    let attempts = Number(current.attempts) || 0;
+
+    if (lockedUntil > now) return false;
+    if (now - windowStartedAt > 5 * 60 * 1000) attempts = 0;
+
+    if (credential?.admin_pin_hash && verifyPinAgainstHash(String(pin), credential.admin_pin_hash)) {
+      transaction.delete(rateLimitRef);
+      return true;
+    }
+
+    attempts += 1;
+    const nextLockedUntil = attempts >= 5 ? now + 60 * 1000 : 0;
+    transaction.set(rateLimitRef, {
+      attempts,
+      window_started_at: attempts === 1 || now - windowStartedAt > 5 * 60 * 1000 ? now : windowStartedAt,
+      locked_until: nextLockedUntil,
+      updated_at: new Date(now).toISOString()
+    }, { merge: true });
     return false;
-  }
-  pinAttemptMap.delete(attemptKey);
-  return true;
+  });
 }
 
 // PIN credential operations use the privileged Admin Firestore instance only.
