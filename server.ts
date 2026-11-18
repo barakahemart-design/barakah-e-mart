@@ -1,11 +1,13 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
 import path from "path";
+import { createHash } from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
 import { cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth, type Auth as FirebaseAdminAuth } from "firebase-admin/auth";
+import { getFirestore as getAdminFirestore, type Firestore as FirebaseAdminFirestore } from "firebase-admin/firestore";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -45,6 +47,7 @@ const firebaseAuth = getAuth(firebaseApp);
 
 // Initialize privileged Firebase Admin Auth from the encrypted Vercel Secret.
 let adminAuth: FirebaseAdminAuth | null = null;
+let adminDb: FirebaseAdminFirestore | null = null;
 let adminSdkInitError = "";
 try {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -56,6 +59,7 @@ try {
     const adminApp = getAdminApps().find((app) => app.name === "[DEFAULT]") ||
       initializeAdminApp({ credential: cert(serviceAccount), projectId: firebaseConfig.projectId });
     adminAuth = getAdminAuth(adminApp);
+    adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
   }
 } catch (error) {
   // Never log service-account contents or private keys.
@@ -222,9 +226,8 @@ async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: 
   }
 }
 
-async function startServer() {
+async function createApp(options: { serveFrontend?: boolean } = {}) {
   const app = express();
-  const PORT = 3000;
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -310,8 +313,8 @@ async function startServer() {
   const syncChangeHistory: SyncChangeRecord[] = [];
   const sseClients = new Set<{ res: Response; email: string; uid: string }>();
 
-  // Periodically send SSE keepalive ping to prevent browser connection drop
-  setInterval(() => {
+  // Periodically send SSE keepalive ping only for the traditional local server.
+  if (options.serveFrontend) setInterval(() => {
     const pingPayload = `: ping\n\n`;
     for (const client of sseClients) {
       try {
@@ -322,8 +325,20 @@ async function startServer() {
     }
   }, 15000);
 
-  function broadcastSyncChange(change: SyncChangeRecord) {
-    // Keep max 1000 history items
+  async function broadcastSyncChange(change: SyncChangeRecord) {
+    // Persist the change so polling works across stateless Vercel Function instances.
+    if (adminDb) {
+      const storeKey = createHash("sha256").update(change.storeEmail).digest("hex");
+      await adminDb.collection("sync_events").doc(storeKey).collection("events").add({
+        table: change.table,
+        docId: change.docId,
+        data: change.data ?? null,
+        isDelete: change.isDelete,
+        storeEmail: change.storeEmail,
+        timestamp: change.timestamp
+      });
+    }
+    // Keep max 1000 local history items for local development.
     syncChangeHistory.push(change);
     if (syncChangeHistory.length > 1000) {
       syncChangeHistory.shift();
@@ -751,7 +766,7 @@ async function startServer() {
 
       // 2. Instantly broadcast change to all connected devices in realtime via SSE (< 10ms latency)
       const allowedIds = [verified.uid, cleanEmail];
-      broadcastSyncChange({
+      await broadcastSyncChange({
         id: `${tableStr}_${docId}_${Date.now()}`,
         table: tableStr,
         docId: docId,
@@ -809,7 +824,7 @@ async function startServer() {
 
       // 2. Instantly broadcast deletion to all connected devices in realtime via SSE
       const allowedIds = [verified.uid, cleanEmail];
-      broadcastSyncChange({
+      await broadcastSyncChange({
         id: `${tableStr}_${docId}_del_${Date.now()}`,
         table: tableStr,
         docId: docId,
@@ -874,13 +889,28 @@ async function startServer() {
 
     const allowedIds = email ? await resolveAllUserIdsForEmail(email, verified?.uid || "") : [];
 
-    const changes = syncChangeHistory.filter(c => {
-      if (c.timestamp <= since) return false;
-      const changeEmail = (c.storeEmail || "").trim().toLowerCase();
-      // Store-scoped sync must match the verified Firebase email exactly.
-      // Do not fall back to shared/legacy UID aliases or blank identities here.
-      return !!email && !!changeEmail && changeEmail === email;
-    });
+    let changes: SyncChangeRecord[] = [];
+    if (adminDb && email) {
+      try {
+        const storeKey = createHash("sha256").update(email).digest("hex");
+        const eventsSnap = await adminDb.collection("sync_events").doc(storeKey).collection("events")
+          .where("timestamp", ">", since).orderBy("timestamp", "asc").limit(500).get();
+        changes = eventsSnap.docs.map((eventDoc) => ({
+          id: eventDoc.id,
+          ...(eventDoc.data() as Omit<SyncChangeRecord, "id" | "userIds">),
+          userIds: [verified.uid, email]
+        }));
+      } catch (eventError) {
+        console.error("[sync/poll] Durable event read failed:", eventError instanceof Error ? eventError.message : "unknown");
+        return res.status(503).json({ error: "Sync temporarily unavailable. Please retry." });
+      }
+    } else {
+      changes = syncChangeHistory.filter(c => {
+        if (c.timestamp <= since) return false;
+        const changeEmail = (c.storeEmail || "").trim().toLowerCase();
+        return !!email && !!changeEmail && changeEmail === email;
+      });
+    }
 
     res.json({
       changes,
@@ -1347,24 +1377,42 @@ Example response structure:
     }
   });
 
-  // Serve static assets or use Vite dev server
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  // The Vite frontend is served by Vercel's static output. Only local development
+  // attaches Vite middleware and starts an HTTP listener.
+  if (options.serveFrontend) {
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   }
 
+  return app;
+}
+
+let serverlessAppPromise: ReturnType<typeof createApp> | null = null;
+export function getServerlessApp() {
+  if (!serverlessAppPromise) serverlessAppPromise = createApp({ serveFrontend: false });
+  return serverlessAppPromise;
+}
+
+async function startServer() {
+  const app = await createApp({ serveFrontend: true });
+  const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[Proxy Server] running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+// Vercel imports this module for the API function; local development still starts normally.
+if (process.env.VERCEL !== "1") {
+  startServer();
+}
