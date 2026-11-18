@@ -7,6 +7,7 @@ type Assignment = {
   id: string; invoice_no: string; driver_uid: string; driver_name: string;
   customer_name: string; customer_phone: string; customer_address: string;
   delivery_status: string; assigned_at: string;
+  delivery_fee?: number; payment_status?: "paid" | "unpaid"; payment_timing?: "advance" | "after_delivery"; payment_updated_at?: string; payment_received_at?: string;
   items?: Array<{ name: string; quantity: number }>;
 };
 type DeliveryExpense = {
@@ -38,6 +39,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [invoiceNo, setInvoiceNo] = useState("");
   const [driverUid, setDriverUid] = useState("");
   const [expenseFilter, setExpenseFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { fee: string; status: "paid" | "unpaid"; timing: "advance" | "after_delivery" }>>({});
   const notifyRef = React.useRef(triggerNotification);
   notifyRef.current = triggerNotification;
 
@@ -123,24 +125,24 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } catch (error: any) { notifyRef.current(error?.message || "Could not update expense status.", "error"); }
   };
 
+  const getPaymentDraft = (assignment: Assignment) => paymentDrafts[assignment.id] || {
+    fee: String(assignment.delivery_fee || 0),
+    status: assignment.payment_status === "paid" ? "paid" as const : "unpaid" as const,
+    timing: assignment.payment_timing === "advance" ? "advance" as const : "after_delivery" as const
+  };
+
   const updateAssignmentPayment = async (assignment: Assignment) => {
     if (panelRole !== "admin") return;
-    const amountInput = window.prompt("Delivery payment amount:", String((assignment as any).delivery_fee || 0));
-    if (amountInput === null) return;
-    const fee = Number(amountInput);
-    if (!Number.isFinite(fee) || fee < 0) { notifyRef.current("Enter a valid payment amount.", "error"); return; }
-    const nextStatus = window.prompt("Payment status: type paid or unpaid", String((assignment as any).payment_status || "unpaid"));
-    if (nextStatus === null) return;
-    if (!["paid", "unpaid"].includes(nextStatus.toLowerCase())) { notifyRef.current("Status must be paid or unpaid.", "error"); return; }
-    const timing = window.prompt("Payment timing: type advance or after_delivery", String((assignment as any).payment_timing || "after_delivery"));
-    if (timing === null) return;
-    if (!["advance", "after_delivery"].includes(timing.toLowerCase())) { notifyRef.current("Timing must be advance or after_delivery.", "error"); return; }
+    const draft = getPaymentDraft(assignment);
+    const fee = Number(draft.fee);
+    if (!Number.isFinite(fee) || fee < 0 || fee > 1000000) { notifyRef.current("Enter a valid payment amount.", "error"); return; }
     try {
       await request("/api/delivery/assignments/payment", {
         assignment_id: assignment.id, delivery_fee: fee,
-        payment_status: nextStatus.toLowerCase(), payment_timing: timing.toLowerCase()
+        payment_status: draft.status, payment_timing: draft.timing
       });
       await loadAll();
+      setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
       notifyRef.current("Delivery payment updated.", "success");
     } catch (error: any) { notifyRef.current(error?.message || "Could not update delivery payment.", "error"); }
   };
@@ -202,10 +204,18 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
         <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
-        {assignments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned deliveries yet.</p> : assignments.map(a => <div key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <div><p className="text-sm font-black text-white">Invoice {a.invoice_no} · {a.customer_name}</p><p className="mt-1 text-xs text-slate-300">{currencySymbol}{Number((a as any).delivery_fee || 0).toLocaleString("en-BD")} · {(a as any).payment_timing === "advance" ? "Advance" : "After delivery"}</p><p className="mt-1 text-[10px] text-slate-500">{a.driver_name} · Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "—"}</p>{(a as any).payment_updated_at && <p className="text-[10px] text-slate-500">Updated {new Date((a as any).payment_updated_at).toLocaleString("en-BD")}</p>}</div>
-          <button onClick={() => updateAssignmentPayment(a)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${(a as any).payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{(a as any).payment_status === "paid" ? "Paid · Edit" : "Unpaid · Set Payment"}</button>
-        </div>)}
+        {assignments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned deliveries yet.</p> : assignments.map(a => {
+          const draft = getPaymentDraft(a);
+          return <div key={a.id} className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-black text-white">Invoice {a.invoice_no} · {a.customer_name}</p><p className="mt-1 text-[10px] text-slate-500">{a.driver_name} · Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "—"}</p>{a.payment_updated_at && <p className="text-[10px] text-slate-500">Last updated {new Date(a.payment_updated_at).toLocaleString("en-BD")}</p>}</div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${a.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{a.payment_status === "paid" ? "Paid" : "Unpaid"}</span></div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label className="text-[10px] font-bold text-slate-400">Delivery payment ({currencySymbol})<input type="number" min="0" step="0.01" value={draft.fee} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, fee: e.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white" /></label>
+              <label className="text-[10px] font-bold text-slate-400">Payment status<select value={draft.status} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, status: e.target.value as "paid" | "unpaid" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="unpaid">Unpaid · Due</option><option value="paid">Paid · Received</option></select></label>
+              <label className="text-[10px] font-bold text-slate-400">When paid?<select value={draft.timing} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, timing: e.target.value as "advance" | "after_delivery" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="advance">Advance payment</option><option value="after_delivery">After delivery</option></select></label>
+            </div>
+            <button onClick={() => updateAssignmentPayment(a)} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-[10px] font-black text-slate-950">Save Payment Details</button>
+          </div>;
+        })}
       </div>}
 
       {tab === "assignments" && <div className="space-y-4">
