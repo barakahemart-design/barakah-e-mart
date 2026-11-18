@@ -31,6 +31,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [driverUid, setDriverUid] = useState("");
   const [expenseFilter, setExpenseFilter] = useState<"all" | "paid" | "unpaid">("all");
@@ -80,6 +81,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
         name, email, phone, temporary_password: password
       });
       setStaff(prev => [result.staff, ...prev]);
+      setCreatedCredentials({ email: result.staff.email, password });
       setName(""); setEmail(""); setPhone(""); setPassword("");
       notifyRef.current("Delivery staff account created successfully.", "success");
     } catch (error: any) {
@@ -150,6 +152,13 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
           <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone number (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
           <input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Temporary password (min. 8 characters)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
           <p className="text-[10px] leading-relaxed text-slate-500">Share the login email and temporary password privately with the driver. The password is not stored in the delivery profile.</p>
+          {createdCredentials && <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+            <p className="text-[11px] font-black text-emerald-300">New account credentials â€” share privately</p>
+            <p className="break-all text-[11px] text-slate-200">Email: {createdCredentials.email}</p>
+            <p className="break-all text-[11px] text-slate-200">Temporary password: {createdCredentials.password}</p>
+            <button type="button" onClick={() => { navigator.clipboard?.writeText(`Email: ${createdCredentials.email}\\nTemporary password: ${createdCredentials.password}`); }} className="rounded-lg bg-emerald-500 px-3 py-2 text-[10px] font-black text-slate-950">Copy Login Details</button>
+            <button type="button" onClick={() => setCreatedCredentials(null)} className="ml-2 text-[10px] font-bold text-slate-400">Hide</button>
+          </div>}
           <button disabled={loading} className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-xs font-black text-slate-950 hover:bg-emerald-400 disabled:opacity-50">Create Delivery Staff</button>
         </form>
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
