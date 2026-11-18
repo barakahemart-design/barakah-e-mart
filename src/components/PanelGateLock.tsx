@@ -2,17 +2,13 @@ import React, { useState } from "react";
 import { ShieldCheck, UserCheck, Lock, ArrowRight, ShieldAlert } from "lucide-react";
 
 interface PanelGateLockProps {
-  adminPasscode: string;
-  salesPasscode: string;
-  onUnlock: (panel: "admin" | "sales") => void;
+  onUnlock: (panel: "admin" | "sales", pin: string) => Promise<void> | void;
   onLogout: () => void;
   isGuest: boolean;
   isDarkMode?: boolean;
 }
 
 export function PanelGateLock({ 
-  adminPasscode = "1234", 
-  salesPasscode = "5555", 
   onUnlock, 
   onLogout,
   isGuest,
@@ -21,15 +17,20 @@ export function PanelGateLock({
   const [selectedMode, setSelectedMode] = useState<"admin" | "sales">("admin");
   const [pin, setPin] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const triggerVerification = (currentPin: string) => {
-    const correctPin = selectedMode === "admin" ? adminPasscode : salesPasscode;
-    if (currentPin === correctPin) {
-      onUnlock(selectedMode);
-    } else {
-      setErrorMessage("Wrong Passcode! Please enter the correct PIN code.");
+  const triggerVerification = async (currentPin: string) => {
+    if (currentPin.length !== 4 || isVerifying) return;
+    setIsVerifying(true);
+    setErrorMessage("");
+    try {
+      await onUnlock(selectedMode, currentPin);
+    } catch (error: any) {
+      setErrorMessage(error?.message || "PIN verification failed. Please try again.");
       setPin("");
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -210,10 +211,10 @@ export function PanelGateLock({
           <button
             type="button"
             onClick={() => handleSubmit()}
-            disabled={pin.length < 4}
+            disabled={pin.length < 4 || isVerifying}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/15 cursor-pointer"
           >
-            Unlock Dashboard <ArrowRight className="w-3.5 h-3.5" />
+            {isVerifying ? "Verifying..." : "Unlock Dashboard"} <ArrowRight className="w-3.5 h-3.5" />
           </button>
 
           <button
