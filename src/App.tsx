@@ -4426,18 +4426,70 @@ _${businessInfo.name}_`;
     );
   }
 
+  const handlePanelUnlock = async (panel: "admin" | "sales", pin: string) => {
+    if (activeUser?.isGuest) {
+      // Guest mode is an isolated sandbox and does not expose authenticated store data.
+      setCurrentPanel(panel);
+      setActiveTab(panel === "sales" ? "pos" : "dashboard");
+      triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} sandbox opened.`, "success");
+      return;
+    }
+
+    const firebaseUser = firebaseAuth.currentUser;
+    const storeId = String(activeUser?.email || "").trim().toLowerCase();
+    if (!firebaseUser || !storeId || firebaseUser.email?.trim().toLowerCase() !== storeId) {
+      throw new Error("Your secure login session is not ready. Please log out and sign in again.");
+    }
+
+    const idToken = await firebaseUser.getIdToken();
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`
+    };
+
+    const statusResponse = await fetch(`/api/auth/pin-credentials/status?store_id=${encodeURIComponent(storeId)}`, { headers });
+    const statusData = await statusResponse.json().catch(() => ({}));
+    if (!statusResponse.ok) {
+      throw new Error(statusData.error || "Could not check secure PIN settings.");
+    }
+
+    if (!statusData.configured) {
+      const migrationResponse = await fetch("/api/auth/pin-credentials/migrate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          store_id: storeId,
+          admin_pin: String(businessInfo.adminPasscode || ""),
+          sales_pin: String(businessInfo.salesPasscode || "")
+        })
+      });
+      const migrationData = await migrationResponse.json().catch(() => ({}));
+      if (!migrationResponse.ok || !migrationData.success) {
+        throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
+      }
+    }
+
+    const verifyResponse = await fetch("/api/auth/pin-credentials/verify", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ store_id: storeId, role: panel, pin })
+    });
+    const verifyData = await verifyResponse.json().catch(() => ({}));
+    if (!verifyResponse.ok || !verifyData.valid) {
+      throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
+    }
+
+    setCurrentPanel(panel);
+    setActiveTab(panel === "sales" ? "pos" : "dashboard");
+    triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} unlocked successfully.`, "success");
+  };
+
   if (currentPanel === "none") {
     return (
       <PanelGateLock
-        adminPasscode={businessInfo.adminPasscode || "1234"}
-        salesPasscode={businessInfo.salesPasscode || "5555"}
         isGuest={!!activeUser?.isGuest}
         isDarkMode={isDarkMode}
-        onUnlock={(panel) => {
-          setCurrentPanel(panel);
-          setActiveTab(panel === "sales" ? "pos" : "dashboard");
-          triggerNotification(`${panel === 'admin' ? 'Admin Panel' : 'Sales Panel'} accessible successfully`, "success");
-        }}
+        onUnlock={handlePanelUnlock}
         onLogout={handleLogOut}
       />
     );
