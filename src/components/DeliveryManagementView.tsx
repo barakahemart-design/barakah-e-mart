@@ -122,7 +122,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "唰
   const tabs = [
     { id: "staff" as const, label: "Delivery Staff", icon: UserRound },
     { id: "assignments" as const, label: "Invoice Assignments", icon: ClipboardList },
-    { id: "expenses" as const, label: "Delivery Expenses", icon: Wallet }
+    { id: "expenses" as const, label: "Staff Expenses", icon: Wallet }
   ];
 
   return (
@@ -184,8 +184,8 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "唰
       </div>}
 
       {tab === "expenses" && <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black text-white">Driver Expense Requests</h3><select value={expenseFilter} onChange={e => setExpenseFilter(e.target.value as any)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option value="all">All expenses</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select></div>
-        {expenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery expenses submitted.</p> : expenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black text-white">Staff Expense Requests</h3><select value={expenseFilter} onChange={e => setExpenseFilter(e.target.value as any)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option value="all">All expenses</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select></div>
+        {expenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No expenses submitted yet.</p> : expenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div><p className="text-sm font-black text-white">{currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")} 路 {expense.reason}</p><p className="mt-1 text-[11px] text-slate-400">{expense.driver_name} 路 {expense.category} 路 {expense.date}</p></div>
           <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid 路 Mark Unpaid" : "Unpaid 路 Mark Paid"}</button>
         </div>)}
