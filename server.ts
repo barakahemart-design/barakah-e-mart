@@ -577,12 +577,13 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const profilesQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
         const profilesSnap = await getDocs(profilesQ);
         profilesSnap.forEach(docSnap => {
-          ids.add(docSnap.id);
           const data = docSnap.data();
-          if (data.id) ids.add(String(data.id));
-          if (data.user_id) ids.add(String(data.user_id));
-          if (data.userId) ids.add(String(data.userId));
-          if (data.owner_id) ids.add(String(data.owner_id));
+          const profileEmail = String(data.email || "").trim().toLowerCase();
+          // The profile document ID is the only trusted legacy UID here.
+          // Ignore secondary ID fields, which may be stale or copied from another store.
+          if (profileEmail === cleanEmail) {
+            ids.add(docSnap.id);
+          }
         });
       } catch (err) {
         console.warn("resolveAllUserIdsForEmail profile fetch error:", err);
