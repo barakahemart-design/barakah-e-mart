@@ -1367,10 +1367,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_assignments")
-        .where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL)
-        .where("driver_uid", "==", verified.uid)
-        .get();
-      const assignments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        .where("driver_uid", "==", verified.uid).get();
+      const assignments = snap.docs
+        .filter(d => d.data().owner_store_id === PRIMARY_ADMIN_EMAIL)
+        .map(d => ({ id: d.id, ...d.data() }));
       return res.json({ assignments });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not load assigned deliveries." });
@@ -1393,11 +1393,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
 
       const transactionSnap = await adminDb.collection("transactions")
-        .where("store_id", "==", PRIMARY_ADMIN_EMAIL)
-        .where("invoiceNo", "==", invoiceNo)
-        .limit(1).get();
-      if (transactionSnap.empty) return res.status(404).json({ error: "Invoice not found in this store." });
-      const transactionDoc = transactionSnap.docs[0];
+        .where("invoiceNo", "==", invoiceNo).limit(5).get();
+      const transactionDoc = transactionSnap.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === PRIMARY_ADMIN_EMAIL);
+      if (!transactionDoc) return res.status(404).json({ error: "Invoice not found in this store." });
       const transaction = transactionDoc.data();
       const contactId = String(transaction.contactId || transaction.contact_id || "");
       let customer: any = {};
@@ -1554,9 +1552,11 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_expenses")
-        .where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL)
         .where("driver_uid", "==", verified.uid).get();
-      return res.json({ expenses: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+      const expenses = snap.docs
+        .filter(d => d.data().owner_store_id === PRIMARY_ADMIN_EMAIL)
+        .map(d => ({ id: d.id, ...d.data() }));
+      return res.json({ expenses });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not load your delivery expenses." });
     }
@@ -1568,10 +1568,11 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
       if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
-      let queryRef: any = adminDb.collection("delivery_expenses").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL);
-      if (payment_status === "paid" || payment_status === "unpaid") queryRef = queryRef.where("payment_status", "==", payment_status);
-      const snap = await queryRef.get();
-      return res.json({ expenses: snap.docs.map((d: any) => ({ id: d.id, ...d.data() })) });
+      const snap = await adminDb.collection("delivery_expenses").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+      const expenses = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter((item: any) => (payment_status !== "paid" && payment_status !== "unpaid") || item.payment_status === payment_status);
+      return res.json({ expenses });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not load delivery expenses." });
     }
