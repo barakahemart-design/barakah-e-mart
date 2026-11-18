@@ -50,6 +50,16 @@ let adminDb: FirebaseAdminFirestore | null = null;
 
 let adminSdkInitError = "";
 
+// Only the designated owner account may enter or administer the Admin panel.
+const PRIMARY_ADMIN_EMAIL = "barakahbillpro@gmail.com";
+
+async function verifyPrimaryAdminPin(email: string, pin: string): Promise<boolean> {
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!adminDb || cleanEmail !== PRIMARY_ADMIN_EMAIL || !/^\d{4}$/.test(String(pin || ""))) return false;
+  const credentials = await getAdminPinCredentials(cleanEmail);
+  return !!credentials?.admin_pin_hash && verifyPinAgainstHash(String(pin), credentials.admin_pin_hash);
+}
+
 // PIN credential operations use the privileged Admin Firestore instance only.
 // This prevents server routes from depending on an unauthenticated Firebase client SDK.
 type AdminPinCredentials = {
@@ -1085,8 +1095,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const cleanStoreId = String(store_id || "").trim().toLowerCase();
-      if (!cleanStoreId || cleanStoreId !== verified.email) {
-        return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      if (!cleanStoreId || cleanStoreId !== verified.email || verified.email !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Only the primary Admin account can change panel security settings." });
       }
       const newAdminPin = String(admin_pin || "");
       const newSalesPin = String(sales_pin || "");
@@ -1155,6 +1165,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (cleanRole !== "admin" && cleanRole !== "sales") {
         return res.status(400).json({ error: "Invalid panel role." });
+      }
+      if (cleanRole === "admin" && verified.email !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Admin Panel access is restricted to the primary Admin account." });
       }
       if (!/^\d{4}$/.test(enteredPin)) {
         return res.status(400).json({ error: "Enter a valid 4-digit PIN." });
