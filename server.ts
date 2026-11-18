@@ -1637,6 +1637,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
   app.post("/api/delivery/assignments/update-mine", async (req: Request, res: Response) => {
     const { assignment_id, delivery_status, delivery_note } = req.body || {};
+    const hasFeeUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, "delivery_fee");
+    const fee = Number(req.body?.delivery_fee);
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
@@ -1646,23 +1648,42 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const id = String(assignment_id || "").trim();
-      if (!id || !["delivered", "failed", "returned"].includes(String(delivery_status))) {
+      const allowedStatuses = ["assigned", "delivered", "cancelled", "failed", "returned"];
+      if (!id || !allowedStatuses.includes(String(delivery_status))) {
         return res.status(400).json({ error: "Invalid delivery update." });
       }
-      const ref = adminDb.collection("delivery_assignments").doc(id);
-      const snap = await ref.get();
-      if (!snap.exists || snap.data()?.driver_uid !== verified.uid || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
-        return res.status(403).json({ error: "This delivery is not assigned to your account." });
+      if (hasFeeUpdate && (!Number.isFinite(fee) || fee < 0 || fee > 1000000)) {
+        return res.status(400).json({ error: "Enter a valid delivery amount." });
       }
-      await ref.update({
-        delivery_status,
-        delivery_note: String(delivery_note || "").trim().slice(0, 500),
-        status_updated_at: new Date().toISOString(),
-        status_updated_by: verified.uid
+
+      const assignmentRef = adminDb.collection("delivery_assignments").doc(id);
+      const now = new Date().toISOString();
+      const result = await adminDb.runTransaction(async (transaction) => {
+        const snap = await transaction.get(assignmentRef);
+        const assignment = snap.exists ? snap.data() : null;
+        if (!assignment || assignment.driver_uid !== verified.uid || assignment.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+          return "not_assigned";
+        }
+        if (hasFeeUpdate && assignment.payment_status === "paid") return "already_paid";
+        const updates: Record<string, any> = {
+          delivery_status,
+          delivery_note: String(delivery_note || "").trim().slice(0, 500),
+          status_updated_at: now,
+          status_updated_by: verified.uid
+        };
+        if (hasFeeUpdate) {
+          updates.delivery_fee = fee;
+          updates.amount_updated_at = now;
+          updates.amount_updated_by = verified.uid;
+        }
+        transaction.update(assignmentRef, updates);
+        return "updated";
       });
-      return res.json({ success: true });
+      if (result === "not_assigned") return res.status(403).json({ error: "This delivery is not assigned to your account." });
+      if (result === "already_paid") return res.status(409).json({ error: "This payment is already marked Paid. The amount can no longer be edited by delivery staff." });
+      return res.json({ success: true, updated_at: now });
     } catch (error: any) {
-      return res.status(503).json({ error: error?.message || "Could not update delivery status." });
+      return res.status(503).json({ error: error?.message || "Could not update delivery details." });
     }
   });
 
