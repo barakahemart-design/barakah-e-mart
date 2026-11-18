@@ -34,6 +34,8 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
   const [invoiceNo, setInvoiceNo] = useState("");
   const [driverUid, setDriverUid] = useState("");
   const [expenseFilter, setExpenseFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const notifyRef = React.useRef(triggerNotification);
+  notifyRef.current = triggerNotification;
 
   const request = useCallback(async (path: string, body?: any) => {
     const user = auth.currentUser;
@@ -61,13 +63,13 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
       setStaff(staffData.staff || []);
       setAssignments(assignmentData.assignments || []);
       setExpenses(expenseData.expenses || []);
-      if (!driverUid && staffData.staff?.length) setDriverUid(staffData.staff.find((x: Driver) => x.status === "active")?.uid || "");
+      setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
     } catch (error: any) {
-      triggerNotification(error?.message || "Could not load delivery management data.", "error");
+      notifyRef.current(error?.message || "Could not load delivery management data.", "error");
     } finally {
       setLoading(false);
     }
-  }, [adminPin, storeId, request, expenseFilter, driverUid, triggerNotification]);
+  }, [adminPin, storeId, request, expenseFilter]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -79,9 +81,9 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
       });
       setStaff(prev => [result.staff, ...prev]);
       setName(""); setEmail(""); setPhone(""); setPassword("");
-      triggerNotification("Delivery staff account created successfully.", "success");
+      notifyRef.current("Delivery staff account created successfully.", "success");
     } catch (error: any) {
-      triggerNotification(error?.message || "Could not create delivery staff.", "error");
+      notifyRef.current(error?.message || "Could not create delivery staff.", "error");
     }
   };
 
@@ -91,9 +93,9 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
       const result = await request("/api/delivery/assignments/create", { invoice_no: invoiceNo, driver_uid: driverUid });
       setAssignments(prev => [result.assignment, ...prev.filter(x => x.id !== result.assignment.id)]);
       setInvoiceNo("");
-      triggerNotification("Invoice assigned to delivery staff.", "success");
+      notifyRef.current("Invoice assigned to delivery staff.", "success");
     } catch (error: any) {
-      triggerNotification(error?.message || "Could not assign invoice.", "error");
+      notifyRef.current(error?.message || "Could not assign invoice.", "error");
     }
   };
 
@@ -101,8 +103,8 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
     try {
       await request("/api/delivery/staff/status", { staff_uid: person.uid, status: person.status === "active" ? "inactive" : "active" });
       setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: x.status === "active" ? "inactive" : "active" } : x));
-      triggerNotification("Delivery staff status updated.", "success");
-    } catch (error: any) { triggerNotification(error?.message || "Could not update staff status.", "error"); }
+      notifyRef.current("Delivery staff status updated.", "success");
+    } catch (error: any) { notifyRef.current(error?.message || "Could not update staff status.", "error"); }
   };
 
   const updateExpense = async (expense: DeliveryExpense) => {
@@ -110,8 +112,8 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
     try {
       await request("/api/delivery/expenses/payment-status", { expense_id: expense.id, payment_status: next });
       setExpenses(prev => prev.map(x => x.id === expense.id ? { ...x, payment_status: next } : x));
-      triggerNotification(next === "paid" ? "Expense marked as Paid." : "Expense marked as Unpaid.", "success");
-    } catch (error: any) { triggerNotification(error?.message || "Could not update expense status.", "error"); }
+      notifyRef.current(next === "paid" ? "Expense marked as Paid." : "Expense marked as Unpaid.", "success");
+    } catch (error: any) { notifyRef.current(error?.message || "Could not update expense status.", "error"); }
   };
 
   const activeDrivers = staff.filter(x => x.status === "active");
