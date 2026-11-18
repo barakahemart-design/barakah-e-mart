@@ -2326,6 +2326,7 @@ export default function App() {
         salesPasscode: tempSalesPasscode
       };
       persistBusinessInfoState(updated);
+      if (currentPanel === "admin") setAdminActionPin(tempAdminPasscode);
       triggerNotification("Admin and Sales PINs updated securely.", "success");
       setActiveSettingsSection("overview");
     } catch (error: any) {
