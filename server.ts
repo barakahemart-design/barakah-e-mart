@@ -1292,8 +1292,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const verified = await verifyFirebaseToken(req);
     const storeId = String(storeIdInput || "").trim().toLowerCase();
     const pin = String(pinInput || "");
-    if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL || storeId !== PRIMARY_ADMIN_EMAIL) return null;
-    if (!await verifyPrimaryAdminPin(storeId, pin)) return null;
+    if (!verified || !verified.email || verified.email.trim().toLowerCase() !== storeId) return null;
+    if (await verifyStorePanelPin(storeId, "admin", pin) !== "valid") return null;
     return verified;
   }
 
@@ -1301,7 +1301,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const verified = await verifyFirebaseToken(req);
     const storeId = String(storeIdInput || "").trim().toLowerCase();
     const pin = String(pinInput || "");
-    if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL || storeId !== PRIMARY_ADMIN_EMAIL) return null;
+    if (!verified || !verified.email || verified.email.trim().toLowerCase() !== storeId) return null;
     if (await verifyStorePanelPin(storeId, "sales", pin) !== "valid") return null;
     return verified;
   }
@@ -1316,7 +1316,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+      if (!staff || !staff.owner_store_id) {
         return res.status(404).json({ isDeliveryStaff: false, isDeliveryAccount: false });
       }
       // Keep disabled delivery accounts out of the normal Admin/Sales login flow.
@@ -1342,7 +1342,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const { store_id, admin_pin, name, email, phone, temporary_password } = req.body || {};
     try {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
-      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!admin) return res.status(403).json({ error: "Admin login and current Admin PIN are required." });
+      const storeId = String(store_id || "").trim().toLowerCase();
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
 
       const cleanName = String(name || "").trim();
@@ -1350,7 +1351,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const cleanPhone = String(phone || "").trim();
       const password = String(temporary_password || "");
       if (cleanName.length < 2 || cleanName.length > 100) return res.status(400).json({ error: "Enter a valid staff name." });
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail === PRIMARY_ADMIN_EMAIL) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail === String(store_id || "").trim().toLowerCase()) {
         return res.status(400).json({ error: "Enter a valid, separate delivery staff email." });
       }
       if (password.length < 8 || password.length > 128) return res.status(400).json({ error: "Temporary password must be 8–128 characters." });
@@ -1371,9 +1372,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(400).json({ error: "Firebase could not create this staff account. Check the email and password requirements." });
       }
 
+      const storeId = String(store_id || "").trim().toLowerCase();
       const staffRecord = {
         uid: authResult.localId,
-        owner_store_id: PRIMARY_ADMIN_EMAIL,
+        owner_store_id: storeId,
         name: cleanName,
         email: cleanEmail,
         phone: cleanPhone,
@@ -1412,7 +1414,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
-      const snap = await adminDb.collection("delivery_staff").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+      const storeId = String(req.body?.store_id || "").trim().toLowerCase();
+      const snap = await adminDb.collection("delivery_staff").where("owner_store_id", "==", storeId).get();
       const staff = snap.docs.map(d => {
         const v = d.data();
         return { uid: d.id, name: v.name || "", email: v.email || "", phone: v.phone || "", status: v.status || "inactive", created_at: v.created_at || "" };
@@ -1429,11 +1432,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
       if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
       const uid = String(staff_uid || "").trim();
       if (!uid || !["active", "inactive"].includes(String(status))) return res.status(400).json({ error: "Invalid staff status request." });
       const ref = adminDb.collection("delivery_staff").doc(uid);
       const staffSnap = await ref.get();
-      if (!staffSnap.exists || staffSnap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) return res.status(404).json({ error: "Delivery staff member not found." });
+      if (!staffSnap.exists || staffSnap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery staff member not found." });
       await ref.update({ status, updated_at: new Date().toISOString(), updated_by: admin.uid });
       return res.json({ success: true });
     } catch (error: any) {
@@ -1447,11 +1451,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
       if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
       const uid = String(staff_uid || "").trim();
       if (!uid || uid === admin.uid) return res.status(400).json({ error: "Invalid delivery staff account." });
       const staffRef = adminDb.collection("delivery_staff").doc(uid);
       const staffSnap = await staffRef.get();
-      if (!staffSnap.exists || staffSnap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+      if (!staffSnap.exists || staffSnap.data()?.owner_store_id !== storeId) {
         return res.status(404).json({ error: "Delivery staff member not found." });
       }
 
@@ -1464,7 +1469,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         adminDb.collection("delivery_expenses").where("driver_uid", "==", uid).get(),
         adminDb.collection("delivery_queue").where("assigned_to", "==", uid).get()
       ]);
-      const docsToDelete = [...assignmentSnap.docs, ...expenseSnap.docs];
+      const docsToDelete = [...assignmentSnap.docs, ...expenseSnap.docs].filter(d => d.data().owner_store_id === staff.owner_store_id);
       for (let offset = 0; offset < docsToDelete.length; offset += 450) {
         const batch = adminDb.batch();
         docsToDelete.slice(offset, offset + 450).forEach(docSnap => batch.delete(docSnap.ref));
@@ -1472,7 +1477,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       for (let offset = 0; offset < queueSnap.docs.length; offset += 450) {
         const batch = adminDb.batch();
-        queueSnap.docs.slice(offset, offset + 450).forEach(docSnap => {
+        queueSnap.docs.slice(offset, offset + 450).filter(docSnap => docSnap.data().owner_store_id === storeId).forEach(docSnap => {
           batch.set(docSnap.ref, { assigned: false, assigned_to: "", assigned_at: "" }, { merge: true });
         });
         await batch.commit();
@@ -1490,14 +1495,14 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+      if (!staff || staff.status !== "active" || !staff.owner_store_id) {
         return res.status(403).json({ error: "Active delivery staff account required." });
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_assignments")
         .where("driver_uid", "==", verified.uid).get();
       const assignments = snap.docs
-        .filter(d => d.data().owner_store_id === PRIMARY_ADMIN_EMAIL)
+        .filter(d => d.data().owner_store_id === staff.owner_store_id)
         .map(d => ({ id: d.id, ...d.data() }));
       return res.json({ assignments });
     } catch (error: any) {
@@ -1508,16 +1513,17 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   app.post("/api/delivery/queue/add", async (req: Request, res: Response) => {
     try {
       const verified = await verifyFirebaseToken(req);
-      if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL) return res.status(403).json({ error: "Primary store account required." });
+      if (!verified || !verified.email) return res.status(403).json({ error: "Authenticated business account required." });
+      const storeId = verified.email.trim().toLowerCase();
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const invoiceNo = String(req.body?.invoice_no || "").trim();
       if (!invoiceNo) return res.status(400).json({ error: "Invoice number is required." });
-      const id = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
+      const id = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
       const ref = adminDb.collection("delivery_queue").doc(id);
       const existing = await ref.get();
       if (existing.exists && existing.data()?.assigned === true) return res.json({ success: true, queued: false, already_assigned: true });
       const record = {
-        id, owner_store_id: PRIMARY_ADMIN_EMAIL, invoice_no: invoiceNo,
+        id, owner_store_id: storeId, invoice_no: invoiceNo,
         transaction_id: String(req.body?.transaction_id || ""),
         customer_name: String(req.body?.customer_name || "Customer"),
         customer_phone: String(req.body?.customer_phone || ""),
@@ -1542,7 +1548,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
-      const snap = await adminDb.collection("delivery_queue").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+      const storeId = String(req.body?.store_id || "").trim().toLowerCase();
+      const snap = await adminDb.collection("delivery_queue").where("owner_store_id", "==", storeId).get();
       const queue = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((item: any) => item.assigned !== true);
       return res.json({ queue });
     } catch (error: any) {
@@ -1556,16 +1563,17 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
       const invoiceNo = String(invoice_no || "").trim();
       const driverUid = String(driver_uid || "").trim();
       if (!invoiceNo || !driverUid) return res.status(400).json({ error: "Invoice number and delivery staff are required." });
 
       const driver = await getDeliveryStaff(driverUid);
-      if (!driver || driver.owner_store_id !== PRIMARY_ADMIN_EMAIL || driver.status !== "active") {
+      if (!driver || driver.owner_store_id !== storeId || driver.status !== "active") {
         return res.status(404).json({ error: "Active delivery staff member not found." });
       }
 
-      const queueId = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
+      const queueId = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
       const queuedSnap = await adminDb.collection("delivery_queue").doc(queueId).get();
       let transaction: any = queuedSnap.exists ? queuedSnap.data() : null;
       let transactionId = String(transaction?.transaction_id || "");
@@ -1573,7 +1581,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!transaction) {
         const transactionSnap = await adminDb.collection("transactions")
           .where("invoiceNo", "==", invoiceNo).limit(5).get();
-        const transactionDoc = transactionSnap.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === PRIMARY_ADMIN_EMAIL);
+        const transactionDoc = transactionSnap.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === storeId);
         if (!transactionDoc) return res.status(404).json({ error: "Invoice not found in this store." });
         transaction = transactionDoc.data();
         transactionId = transactionDoc.id;
@@ -1594,7 +1602,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (!sourceTransaction) {
         const sourceMatches = await adminDb.collection("transactions").where("invoiceNo", "==", invoiceNo).limit(5).get();
-        const sourceDoc = sourceMatches.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === PRIMARY_ADMIN_EMAIL);
+        const sourceDoc = sourceMatches.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === storeId);
         if (sourceDoc) {
           sourceTransaction = sourceDoc.data();
           transactionId = sourceDoc.id;
@@ -1602,13 +1610,13 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (sourceTransaction) transaction = { ...sourceTransaction, ...transaction };
 
-      const assignmentId = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
+      const assignmentId = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
       const assignmentRef = adminDb.collection("delivery_assignments").doc(assignmentId);
       const previousAssignmentSnap = await assignmentRef.get();
       const previousAssignment = previousAssignmentSnap.exists ? previousAssignmentSnap.data() || {} : {};
       const assignment = {
         id: assignmentId,
-        owner_store_id: PRIMARY_ADMIN_EMAIL,
+        owner_store_id: storeId,
         driver_uid: driverUid,
         driver_name: String(driver.name || ""),
         invoice_no: invoiceNo,
@@ -1648,7 +1656,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+      if (!staff || staff.status !== "active" || !staff.owner_store_id) {
         return res.status(403).json({ error: "Active delivery staff account required." });
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
@@ -1666,7 +1674,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const result = await adminDb.runTransaction(async (transaction) => {
         const snap = await transaction.get(assignmentRef);
         const assignment = snap.exists ? snap.data() : null;
-        if (!assignment || assignment.driver_uid !== verified.uid || assignment.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        if (!assignment || assignment.driver_uid !== verified.uid || assignment.owner_store_id !== staff.owner_store_id) {
           return "not_assigned";
         }
         if (hasFeeUpdate && assignment.payment_status === "paid") return "already_paid";
@@ -1699,7 +1707,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_assignments")
-        .where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+        const storeId = String(req.body?.store_id || "").trim().toLowerCase();
+      const snap = await adminDb.collection("delivery_assignments")
+        .where("owner_store_id", "==", storeId).get();
       return res.json({ assignments: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not load delivery assignments." });
@@ -1711,6 +1721,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     try {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
       if (!admin) return res.status(403).json({ error: "Only Admin can control delivery payments." });
+      const storeId = String(store_id || "").trim().toLowerCase();
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const id = String(assignment_id || "").trim();
       const fee = Number(delivery_fee);
@@ -1728,7 +1739,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
       const result = await adminDb.runTransaction(async (transaction) => {
         const assignmentSnap = await transaction.get(assignmentRef);
-        if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== storeId) {
           throw new Error("DELIVERY_ASSIGNMENT_NOT_FOUND");
         }
         const assignment = assignmentSnap.data() || {};
@@ -1783,11 +1794,11 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             user_id: admin.uid,
             userId: admin.uid,
             owner_id: admin.uid,
-            store_id: PRIMARY_ADMIN_EMAIL,
-            storeId: PRIMARY_ADMIN_EMAIL,
-            email: PRIMARY_ADMIN_EMAIL,
-            linked_email: PRIMARY_ADMIN_EMAIL,
-            linkedEmail: PRIMARY_ADMIN_EMAIL,
+            store_id: storeId,
+            storeId: storeId,
+            email: storeId,
+            linked_email: storeId,
+            linkedEmail: storeId,
             deleted: false,
             isDeleted: false,
             created_at: paymentWasAlreadyPaid ? (assignment.payment_received_at || now) : now,
@@ -1823,7 +1834,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       const ref = adminDb.collection("delivery_assignments").doc(id);
       const snap = await ref.get();
-      if (!snap.exists || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) return res.status(404).json({ error: "Delivery assignment not found." });
+      if (!snap.exists || snap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery assignment not found." });
       await ref.update({ delivery_status, status_updated_at: new Date().toISOString(), status_updated_by: admin.uid });
       return res.json({ success: true });
     } catch (error: any) {
@@ -1837,7 +1848,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+      if (!staff || staff.status !== "active" || staff.owner_store_id !== storeId) {
         return res.status(403).json({ error: "Active delivery staff account required." });
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
@@ -1853,14 +1864,14 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (assignment_id) {
         assignmentId = String(assignment_id);
         const assignment = await adminDb.collection("delivery_assignments").doc(assignmentId).get();
-        if (!assignment.exists || assignment.data()?.driver_uid !== verified.uid || assignment.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        if (!assignment.exists || assignment.data()?.driver_uid !== verified.uid || assignment.data()?.owner_store_id !== staff.owner_store_id) {
           return res.status(403).json({ error: "Expense must belong to one of your assigned deliveries." });
         }
       }
       const ref = adminDb.collection("delivery_expenses").doc();
       const record = {
         id: ref.id,
-        owner_store_id: PRIMARY_ADMIN_EMAIL,
+        owner_store_id: storeId,
         driver_uid: verified.uid,
         driver_name: String(staff.name || ""),
         amount: cleanAmount,
@@ -1883,14 +1894,14 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+      if (!staff || staff.status !== "active" || staff.owner_store_id !== storeId) {
         return res.status(403).json({ error: "Active delivery staff account required." });
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_expenses")
         .where("driver_uid", "==", verified.uid).get();
       const expenses = snap.docs
-        .filter(d => d.data().owner_store_id === PRIMARY_ADMIN_EMAIL)
+        .filter(d => d.data().owner_store_id === storeId)
         .map(d => ({ id: d.id, ...d.data() }));
       return res.json({ expenses });
     } catch (error: any) {
@@ -1904,7 +1915,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
       if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
-      const snap = await adminDb.collection("delivery_expenses").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const snap = await adminDb.collection("delivery_expenses").where("owner_store_id", "==", storeId).get();
       const expenses = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter((item: any) => (payment_status !== "paid" && payment_status !== "unpaid") || item.payment_status === payment_status);
@@ -1924,7 +1936,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!id || !["paid", "unpaid"].includes(String(payment_status))) return res.status(400).json({ error: "Invalid expense payment status." });
       const ref = adminDb.collection("delivery_expenses").doc(id);
       const snap = await ref.get();
-      if (!snap.exists || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) return res.status(404).json({ error: "Delivery expense not found." });
+      if (!snap.exists || snap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery expense not found." });
       await ref.update({ payment_status, reviewed_at: new Date().toISOString(), reviewed_by: admin.uid });
       return res.json({ success: true });
     } catch (error: any) {
