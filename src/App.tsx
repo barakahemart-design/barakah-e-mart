@@ -58,7 +58,8 @@ import {
   Undo2,
   Languages,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Truck
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
@@ -97,6 +98,8 @@ import { PurchasesView } from "./components/PurchasesView";
 import { ContactRegistrationForm } from "./components/ContactRegistrationForm";
 import { CreditorDueView } from "./components/CreditorDueView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
+import { DeliveryManagementView } from "./components/DeliveryManagementView";
+import { DeliveryDriverView } from "./components/DeliveryDriverView";
 import { 
   INITIAL_PRODUCTS,
   INITIAL_CONTACTS,
@@ -328,13 +331,46 @@ export default function App() {
  
 
    // Security Locking Roles state
-   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => {
-    try {
-      const hasSavedUser = !!localStorage.getItem("barakah_local_active_user");
-      const savedPanel = sessionStorage.getItem("barakah_active_panel");
-      return hasSavedUser && (savedPanel === "admin" || savedPanel === "sales") ? savedPanel : "none";
-    } catch (_) { return "none"; }
-  });
+   // Never restore an unlocked role from browser storage. Require PIN verification
+  // again after a page reload so sessionStorage cannot bypass the panel gate.
+  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+  // Keep the verified Admin PIN in memory only for privileged delivery actions.
+  // It is never written to localStorage or sessionStorage.
+  const [adminActionPin, setAdminActionPin] = useState("");
+  const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
+  const [deliverySessionChecked, setDeliverySessionChecked] = useState(false);
+
+  // After Firebase login, check the server-owned delivery role before showing
+  // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
+  useEffect(() => {
+    let cancelled = false;
+    const checkDeliveryRole = async () => {
+      if (!activeUser || activeUser.isGuest) {
+        setDeliveryStaffProfile(null);
+        setDeliverySessionChecked(true);
+        return;
+      }
+      setDeliverySessionChecked(false);
+      try {
+        const user = firebaseAuth.currentUser;
+        if (!user) throw new Error("Firebase user session unavailable.");
+        const token = await user.getIdToken();
+        const response = await fetch("/api/delivery/session", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        setDeliveryStaffProfile(response.ok && result.isDeliveryAccount ? result.staff : null);
+      } catch (error) {
+        if (!cancelled) setDeliveryStaffProfile(null);
+      } finally {
+        if (!cancelled) setDeliverySessionChecked(true);
+      }
+    };
+    checkDeliveryRole();
+    return () => { cancelled = true; };
+  }, [activeUser?.uid, activeUser?.email, activeUser?.isGuest]);
+
   // Show Welcome once per app/browser session. sessionStorage survives a
   // normal refresh, but is cleared when the app tab/window is fully closed.
   // Keep the persistent login in localStorage untouched.
@@ -345,13 +381,13 @@ export default function App() {
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
-    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "settings"
+    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "delivery" | "settings"
   >(() => {
     const defaultTab = typeof window !== "undefined" && window.innerWidth < 768 ? "dashboard" : "pos";
     try {
       if (localStorage.getItem("barakah_local_active_user")) {
         const savedTab = sessionStorage.getItem("barakah_active_tab");
-        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "settings"];
+        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "delivery", "settings"];
         if (savedTab && validTabs.includes(savedTab)) return savedTab as any;
       }
     } catch (_) {}
@@ -1532,6 +1568,7 @@ export default function App() {
     await signOut();
     setActiveUser(null);
     setCurrentPanel("none");
+    setAdminActionPin("");
     triggerNotification("Logged out from terminal successfully.");
   };
 
@@ -2083,6 +2120,23 @@ export default function App() {
 
     // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
+    if (activeUser && !activeUser.isGuest && cleanEmail === "barakahbillpro@gmail.com") {
+      firebaseAuth.currentUser?.getIdToken().then(token => fetch("/api/delivery/queue/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          invoice_no: newTransaction.invoiceNo,
+          transaction_id: newTransaction.id,
+          customer_name: String((pairedContact as any)?.name || (pairedContact as any)?.fullName || "Customer"),
+          customer_phone: String((pairedContact as any)?.phone || (pairedContact as any)?.mobile || ""),
+          customer_address: String((pairedContact as any)?.address || ""),
+          items: newTransaction.items.map(item => ({ name: item.name, quantity: item.quantity })),
+          total_amount: newTransaction.total
+        })
+      })).then(async response => {
+        if (!response.ok) console.warn("Delivery queue update failed:", await response.text());
+      }).catch(error => console.warn("Delivery queue update failed:", error));
+    }
     try {
       generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
@@ -2248,30 +2302,53 @@ export default function App() {
   };
 
   // Save Security Passcodes settings change
-  const handleSaveSecurityPasscodes = () => {
-    const isNumeric = (str: string) => /^\d+$/.test(str);
-    
-    if (tempAdminPasscode.length < 4 || tempSalesPasscode.length < 4) {
-      triggerNotification("Password/Passcode must be at least 4 digits long!", "error");
-      return;
-    }
-    if (!isNumeric(tempAdminPasscode) || !isNumeric(tempSalesPasscode)) {
-      triggerNotification("Password/Passcode must only contain numeric digits (0-9)!", "error");
+  const handleSaveSecurityPasscodes = async () => {
+    const isFourDigits = (value: string) => /^\d{4}$/.test(value);
+
+    if (!isFourDigits(tempAdminPasscode) || !isFourDigits(tempSalesPasscode)) {
+      triggerNotification("Admin and Sales PINs must each contain exactly 4 digits.", "error");
       return;
     }
     if (tempAdminPasscode === tempSalesPasscode) {
-      triggerNotification("Admin passcode and Sales panel passcode must be distinct!", "error");
+      triggerNotification("Admin PIN and Sales PIN must be different.", "error");
       return;
     }
-    
-    const updated = {
-      ...businessInfo,
-      adminPasscode: tempAdminPasscode,
-      salesPasscode: tempSalesPasscode
-    };
-    persistBusinessInfoState(updated);
-    triggerNotification("Admin and Sales security passcodes updated successfully!", "success");
-    setActiveSettingsSection("overview");
+
+    try {
+      const firebaseUser = firebaseAuth.currentUser;
+      const storeId = String(activeUser?.email || "").trim().toLowerCase();
+      if (!firebaseUser || !storeId) throw new Error("Secure login session not available.");
+      const idToken = await firebaseUser.getIdToken();
+      const response = await fetch("/api/panel-security/pin/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          store_id: storeId,
+          current_admin_pin: String(businessInfo.adminPasscode || "1234"),
+          admin_pin: tempAdminPasscode,
+          sales_pin: tempSalesPasscode
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Could not update secure PINs.");
+      }
+
+      const updated = {
+        ...businessInfo,
+        adminPasscode: tempAdminPasscode,
+        salesPasscode: tempSalesPasscode
+      };
+      persistBusinessInfoState(updated);
+      if (currentPanel === "admin") setAdminActionPin(tempAdminPasscode);
+      triggerNotification("Admin and Sales PINs updated securely.", "success");
+      setActiveSettingsSection("overview");
+    } catch (error: any) {
+      triggerNotification(error?.message || "PIN update failed. Please try again.", "error");
+    }
   };
 
   // Logo upload processing inside App.tsx with Canvas-level compression and no size limits
@@ -4426,18 +4503,126 @@ _${businessInfo.name}_`;
     );
   }
 
+  if (activeUser && !activeUser.isGuest && !deliverySessionChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
+        <div className="text-center"><Truck className="mx-auto mb-3 h-8 w-8 animate-pulse text-emerald-400" /><p className="text-sm font-semibold">Checking secure account access…</p></div>
+      </div>
+    );
+  }
+
+  if (deliveryStaffProfile && deliveryStaffProfile.status !== "active") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080d18] p-5 text-white">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-rose-500/20 bg-slate-900 p-6 text-center">
+          <Truck className="mx-auto h-10 w-10 text-rose-400" />
+          <h1 className="text-xl font-black">Delivery Access Disabled</h1>
+          <p className="text-sm leading-relaxed text-slate-400">This delivery account has been disabled by the Admin. You cannot access deliveries or the POS workspace. Please contact your Admin.</p>
+          <button
+            onClick={async () => {
+              await signOut();
+              setActiveUser(null);
+              setDeliveryStaffProfile(null);
+              setDeliverySessionChecked(false);
+              setCurrentPanel("none");
+              setAdminActionPin("");
+            }}
+            className="w-full rounded-xl bg-rose-500 px-4 py-3 text-sm font-black text-white"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (deliveryStaffProfile) {
+    return (
+      <DeliveryDriverView
+        staff={deliveryStaffProfile}
+        currencySymbol={businessInfo.currencySymbol || "৳"}
+        onLogout={async () => {
+          await signOut();
+          setActiveUser(null);
+          setDeliveryStaffProfile(null);
+          setDeliverySessionChecked(false);
+          setCurrentPanel("none");
+          setAdminActionPin("");
+        }}
+      />
+    );
+  }
+
+  const handlePanelUnlock = async (panel: "admin" | "sales", pin: string) => {
+    if (activeUser?.isGuest) {
+      // Guest mode is an isolated sandbox and does not expose authenticated store data.
+      setCurrentPanel(panel);
+      setAdminActionPin("");
+      setActiveTab(panel === "sales" ? "pos" : "dashboard");
+      triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} sandbox opened.`, "success");
+      return;
+    }
+
+    if (!settingsHydrated) {
+      throw new Error("Your store security settings are still loading. Please wait a few seconds and try again.");
+    }
+
+    const firebaseUser = firebaseAuth.currentUser;
+    const storeId = String(activeUser?.email || "").trim().toLowerCase();
+    if (!firebaseUser || !storeId || firebaseUser.email?.trim().toLowerCase() !== storeId) {
+      throw new Error("Your secure login session is not ready. Please log out and sign in again.");
+    }
+
+    const idToken = await firebaseUser.getIdToken();
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`
+    };
+
+    const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
+    const statusData = await statusResponse.json().catch(() => ({}));
+    if (!statusResponse.ok) {
+      throw new Error(statusData.error || "Could not check secure PIN settings.");
+    }
+
+    if (!statusData.configured) {
+      const migrationResponse = await fetch("/api/panel-security/pin/migrate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          store_id: storeId,
+          admin_pin: String(businessInfo.adminPasscode || ""),
+          sales_pin: String(businessInfo.salesPasscode || "")
+        })
+      });
+      const migrationData = await migrationResponse.json().catch(() => ({}));
+      if (!migrationResponse.ok || !migrationData.success) {
+        throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
+      }
+    }
+
+    const verifyResponse = await fetch("/api/panel-security/pin/verify", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ store_id: storeId, role: panel, pin })
+    });
+    const verifyData = await verifyResponse.json().catch(() => ({}));
+    if (!verifyResponse.ok || !verifyData.valid) {
+      throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
+    }
+
+    setCurrentPanel(panel);
+    setAdminActionPin(panel === "admin" ? pin : "");
+    setActiveTab(panel === "sales" ? "pos" : "dashboard");
+    triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} unlocked successfully.`, "success");
+  };
+
   if (currentPanel === "none") {
     return (
       <PanelGateLock
-        adminPasscode={businessInfo.adminPasscode || "1234"}
-        salesPasscode={businessInfo.salesPasscode || "5555"}
         isGuest={!!activeUser?.isGuest}
         isDarkMode={isDarkMode}
-        onUnlock={(panel) => {
-          setCurrentPanel(panel);
-          setActiveTab(panel === "sales" ? "pos" : "dashboard");
-          triggerNotification(`${panel === 'admin' ? 'Admin Panel' : 'Sales Panel'} accessible successfully`, "success");
-        }}
+        onUnlock={handlePanelUnlock}
         onLogout={handleLogOut}
       />
     );
@@ -4489,8 +4674,11 @@ _${businessInfo.name}_`;
                   { id: "duelist", label: "All Due List", Icon: History },
                   { id: "reports", label: "Reports", Icon: BarChart3 },
                   { id: "staff", label: "Staff Hub", Icon: UserCheck },
+                  { id: "delivery", label: "Delivery Management", Icon: Truck },
                   { id: "settings", label: "Settings", Icon: Settings },
-                ] as const).map((item) => {
+                ] as const)
+                .filter((item) => item.id !== "delivery" || String(activeUser?.email || "").trim().toLowerCase() === "barakahbillpro@gmail.com")
+                .map((item) => {
                   const Icon = item.Icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -4545,6 +4733,15 @@ _${businessInfo.name}_`;
                   <FileText className="w-4 h-4" />
                   Ledger
                 </button>
+
+                <button
+                  id="tab-delivery-btn"
+                  onClick={() => setActiveTab("delivery")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'delivery' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
+                >
+                  <Truck className="w-4 h-4" />
+                  Delivery Management
+                </button>
               </>
             )}
           </nav>
@@ -4579,6 +4776,7 @@ _${businessInfo.name}_`;
               type="button"
               onClick={() => {
                 setCurrentPanel("sales");
+                setAdminActionPin("");
                 setActiveTab("pos");
                 triggerNotification("Switched to Sales Panel", "info");
               }}
@@ -4591,6 +4789,7 @@ _${businessInfo.name}_`;
               type="button"
               onClick={() => {
                 setCurrentPanel("none");
+                setAdminActionPin("");
                 triggerNotification("Enter passcode to unlock admin controls", "info");
               }}
               className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/20 border border-[#00E676]/20 cursor-pointer transition-all"
@@ -7974,6 +8173,17 @@ _${businessInfo.name}_`;
           {/* -----------------------------------------------------------------
               VIEW: STAFF & STORE PAYROLL MANAGEMENT
               ----------------------------------------------------------------- */}
+          {activeTab === "delivery" && (
+            <DeliveryManagementView
+              adminPin={currentPanel === "admin" ? adminActionPin : ""}
+              salesPin={String(businessInfo.salesPasscode || "")}
+              panelRole={currentPanel === "admin" ? "admin" : "sales"}
+              storeId={String(activeUser?.email || "").trim().toLowerCase()}
+              currencySymbol={businessInfo.currencySymbol || "৳"}
+              triggerNotification={triggerNotification}
+            />
+          )}
+
           {activeTab === "staff" && (
             <div className="animate-fadeIn max-w-7xl mx-auto space-y-6" id="view-staff-container">
               <StaffManagementView
@@ -9899,6 +10109,7 @@ _${businessInfo.name}_`;
                   type="button"
                   onClick={() => {
                     setCurrentPanel("sales");
+                    setAdminActionPin("");
                     setActiveTab("pos");
                     setIsMobileMenuOpen(false);
                     triggerNotification("Switched to Sales Panel", "info");
@@ -9912,6 +10123,7 @@ _${businessInfo.name}_`;
                   type="button"
                   onClick={() => {
                     setCurrentPanel("none");
+                    setAdminActionPin("");
                     setIsMobileMenuOpen(false);
                     triggerNotification("Enter passcode to unlock admin controls", "info");
                   }}
