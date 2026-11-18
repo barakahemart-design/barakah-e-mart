@@ -55,9 +55,25 @@ const PRIMARY_ADMIN_EMAIL = "barakahbillpro@gmail.com";
 
 async function verifyPrimaryAdminPin(email: string, pin: string): Promise<boolean> {
   const cleanEmail = String(email || "").trim().toLowerCase();
+  const attemptKey = `${PRIMARY_ADMIN_EMAIL}:delivery-admin-actions`;
+  const now = Date.now();
+  const attempt = pinAttemptMap.get(attemptKey) || { attempts: 0, windowStartedAt: now, lockedUntil: 0 };
   if (!adminDb || cleanEmail !== PRIMARY_ADMIN_EMAIL || !/^\d{4}$/.test(String(pin || ""))) return false;
+  if (attempt.lockedUntil > now) return false;
+  if (now - attempt.windowStartedAt > 5 * 60 * 1000) {
+    attempt.attempts = 0;
+    attempt.windowStartedAt = now;
+    attempt.lockedUntil = 0;
+  }
   const credentials = await getAdminPinCredentials(cleanEmail);
-  return !!credentials?.admin_pin_hash && verifyPinAgainstHash(String(pin), credentials.admin_pin_hash);
+  if (!credentials?.admin_pin_hash || !verifyPinAgainstHash(String(pin), credentials.admin_pin_hash)) {
+    attempt.attempts += 1;
+    if (attempt.attempts >= 5) attempt.lockedUntil = now + 60 * 1000;
+    pinAttemptMap.set(attemptKey, attempt);
+    return false;
+  }
+  pinAttemptMap.delete(attemptKey);
+  return true;
 }
 
 // PIN credential operations use the privileged Admin Firestore instance only.
@@ -1225,8 +1241,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const storeId = String(storeIdInput || "").trim().toLowerCase();
     const pin = String(pinInput || "");
     if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL || storeId !== PRIMARY_ADMIN_EMAIL) return null;
-    const credentials = await getAdminPinCredentials(storeId);
-    if (!credentials?.admin_pin_hash || !verifyPinAgainstHash(pin, credentials.admin_pin_hash)) return null;
+    if (!await verifyPrimaryAdminPin(storeId, pin)) return null;
     return verified;
   }
 
