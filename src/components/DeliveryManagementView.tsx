@@ -27,6 +27,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [tab, setTab] = useState<"staff" | "assignments" | "expenses" | "payments">("staff");
   const [staff, setStaff] = useState<Driver[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [queueItems, setQueueItems] = useState<Array<{id:string; invoice_no:string; customer_name:string; customer_phone:string; customer_address:string; items?:Array<{name:string;quantity:number}>; total_amount?:number; queued_at:string}>>([]);
   const [expenses, setExpenses] = useState<DeliveryExpense[]>([]);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
@@ -58,13 +59,15 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     if (!adminPin || !storeId) return;
     setLoading(true);
     try {
-      const [staffData, assignmentData, expenseData] = await Promise.all([
+      const [staffData, assignmentData, queueData, expenseData] = await Promise.all([
         request("/api/delivery/staff/list", {}),
         request("/api/delivery/assignments/admin-list", {}),
+        request("/api/delivery/queue/list", {}),
         panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: expenseFilter === "all" ? "" : expenseFilter }) : Promise.resolve({ expenses: [] })
       ]);
       setStaff(staffData.staff || []);
       setAssignments(assignmentData.assignments || []);
+      setQueueItems(queueData.queue || []);
       setExpenses(expenseData.expenses || []);
       setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
     } catch (error: any) {
@@ -211,6 +214,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Assign to Driver<select required value={driverUid} onChange={e => setDriverUid(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500"><option value="">Select delivery staff</option>{activeDrivers.map(x => <option key={x.uid} value={x.uid}>{x.name} · {x.email}</option>)}</select></label>
           <button disabled={!activeDrivers.length} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
         </form>
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+          <h3 className="text-sm font-black text-white">New Sales Delivery Queue <span className="text-emerald-300">({queueItems.length})</span></h3>
+          {queueItems.length === 0 ? <p className="text-xs text-slate-500">No new sales waiting for delivery assignment.</p> : queueItems.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+            <div><p className="text-xs font-black text-white">Invoice {item.invoice_no} · {item.customer_name}</p><p className="text-[10px] text-slate-400">{item.customer_phone} · {item.customer_address}</p><p className="text-[10px] text-slate-500">{item.items?.map(x => `${x.name} × ${x.quantity}`).join(", ")}</p></div>
+            <button type="button" onClick={() => setInvoiceNo(item.invoice_no)} className="rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black text-emerald-300">Select Invoice</button>
+          </div>)}
+        </div>
         <div className="space-y-2">{assignments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No invoice assignments yet.</p> : assignments.map(a => <div key={a.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {a.invoice_no}</p><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${a.delivery_status === "delivered" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{a.delivery_status}</span></div>
           <p className="mt-1 text-xs text-slate-300">{a.customer_name} · {a.driver_name}</p>
