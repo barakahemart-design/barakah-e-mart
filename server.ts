@@ -53,14 +53,17 @@ let adminSdkInitError = "";
 // Only the designated owner account may enter or administer the Admin panel.
 const PRIMARY_ADMIN_EMAIL = "barakahbillpro@gmail.com";
 
-async function verifyPrimaryAdminPin(email: string, pin: string): Promise<boolean> {
-  const cleanEmail = String(email || "").trim().toLowerCase();
-  if (!adminDb || cleanEmail !== PRIMARY_ADMIN_EMAIL || !/^\\d{4}$/.test(String(pin || ""))) return false;
+async function verifyStorePanelPin(
+  storeIdInput: string,
+  role: "admin" | "sales",
+  pinInput: string
+): Promise<"valid" | "invalid" | "locked"> {
+  const cleanEmail = String(storeIdInput || "").trim().toLowerCase();
+  const pin = String(pinInput || "");
+  if (!adminDb || !cleanEmail || !/^\\d{4}$/.test(pin)) return "invalid";
 
-  // A Firestore transaction keeps the failed-attempt lock consistent across
-  // separate Vercel Function instances and cold starts.
   const credentialRef = adminDb.collection("store_auth_credentials").doc(getCredentialDocId(cleanEmail));
-  const rateLimitId = createHash("sha256").update(`${cleanEmail}:delivery-admin-actions`).digest("hex");
+  const rateLimitId = createHash("sha256").update(`${cleanEmail}:panel-pin:${role}`).digest("hex");
   const rateLimitRef = adminDb.collection("security_rate_limits").doc(rateLimitId);
   const now = Date.now();
 
@@ -75,24 +78,31 @@ async function verifyPrimaryAdminPin(email: string, pin: string): Promise<boolea
     const lockedUntil = Number(current.locked_until) || 0;
     let attempts = Number(current.attempts) || 0;
 
-    if (lockedUntil > now) return false;
+    if (lockedUntil > now) return "locked";
     if (now - windowStartedAt > 5 * 60 * 1000) attempts = 0;
 
-    if (credential?.admin_pin_hash && verifyPinAgainstHash(String(pin), credential.admin_pin_hash)) {
+    const targetHash = role === "admin" ? credential?.admin_pin_hash : credential?.sales_pin_hash;
+    if (targetHash && verifyPinAgainstHash(pin, targetHash)) {
       transaction.delete(rateLimitRef);
-      return true;
+      return "valid";
     }
 
     attempts += 1;
-    const nextLockedUntil = attempts >= 5 ? now + 60 * 1000 : 0;
+    const expiredWindow = now - windowStartedAt > 5 * 60 * 1000;
     transaction.set(rateLimitRef, {
       attempts,
-      window_started_at: attempts === 1 || now - windowStartedAt > 5 * 60 * 1000 ? now : windowStartedAt,
-      locked_until: nextLockedUntil,
+      window_started_at: attempts === 1 || expiredWindow ? now : windowStartedAt,
+      locked_until: attempts >= 5 ? now + 60 * 1000 : 0,
       updated_at: new Date(now).toISOString()
     }, { merge: true });
-    return false;
+    return attempts >= 5 ? "locked" : "invalid";
   });
+}
+
+async function verifyPrimaryAdminPin(email: string, pin: string): Promise<boolean> {
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (cleanEmail !== PRIMARY_ADMIN_EMAIL) return false;
+  return (await verifyStorePanelPin(cleanEmail, "admin", pin)) === "valid";
 }
 
 // PIN credential operations use the privileged Admin Firestore instance only.
@@ -1208,35 +1218,16 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(400).json({ error: "Enter a valid 4-digit PIN." });
       }
 
-      const creds = await getAdminPinCredentials(cleanStoreId);
-      const targetHash = cleanRole === "admin" ? creds?.admin_pin_hash : creds?.sales_pin_hash;
-      if (!targetHash) {
-        return res.status(409).json({ error: "PIN credentials are not initialized. Please refresh and try again." });
-      }
-
-      const attemptKey = `${cleanStoreId}:${cleanRole}`;
-      const now = Date.now();
-      const attempt = pinAttemptMap.get(attemptKey) || { attempts: 0, windowStartedAt: now, lockedUntil: 0 };
-      if (attempt.lockedUntil > now) {
-        return res.status(429).json({ error: `Too many failed attempts. Please wait ${Math.ceil((attempt.lockedUntil - now) / 1000)} seconds.` });
-      }
-      if (now - attempt.windowStartedAt > 5 * 60 * 1000) {
-        attempt.attempts = 0;
-        attempt.windowStartedAt = now;
-        attempt.lockedUntil = 0;
-      }
-
-      if (!verifyPinAgainstHash(enteredPin, targetHash)) {
-        attempt.attempts += 1;
-        if (attempt.attempts >= 5) attempt.lockedUntil = now + 60 * 1000;
-        pinAttemptMap.set(attemptKey, attempt);
-        return res.status(attempt.lockedUntil > now ? 429 : 401).json({
+      const pinResult = await verifyStorePanelPin(cleanStoreId, cleanRole as "admin" | "sales", enteredPin);
+      if (pinResult !== "valid") {
+        return res.status(pinResult === "locked" ? 429 : 401).json({
           valid: false,
-          error: attempt.lockedUntil > now ? "Too many failed attempts. Locked for 60 seconds." : "Incorrect PIN."
+          error: pinResult === "locked"
+            ? "Too many failed attempts. Please wait 60 seconds."
+            : "Incorrect PIN."
         });
       }
 
-      pinAttemptMap.delete(attemptKey);
       return res.json({ success: true, valid: true, store_id: cleanStoreId, role: cleanRole });
     } catch (err: any) {
       console.warn("[pin-credentials/verify] Verification failed:", err?.message || "Unknown error");
