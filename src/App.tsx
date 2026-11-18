@@ -4716,6 +4716,15 @@ _${businessInfo.name}_`;
                   <FileText className="w-4 h-4" />
                   Ledger
                 </button>
+
+                <button
+                  id="tab-delivery-btn"
+                  onClick={() => setActiveTab("delivery")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${activeTab === 'delivery' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent'}`}
+                >
+                  <Truck className="w-4 h-4" />
+                  Delivery Management
+                </button>
               </>
             )}
           </nav>
@@ -8147,9 +8156,11 @@ _${businessInfo.name}_`;
           {/* -----------------------------------------------------------------
               VIEW: STAFF & STORE PAYROLL MANAGEMENT
               ----------------------------------------------------------------- */}
-          {activeTab === "delivery" && currentPanel === "admin" && (
+          {activeTab === "delivery" && (
             <DeliveryManagementView
-              adminPin={adminActionPin}
+              adminPin={currentPanel === "admin" ? adminActionPin : ""}
+              salesPin={String(businessInfo.salesPasscode || "")}
+              panelRole={currentPanel}
               storeId={String(activeUser?.email || "").trim().toLowerCase()}
               currencySymbol={businessInfo.currencySymbol || "৳"}
               triggerNotification={triggerNotification}
