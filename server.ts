@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
 import path from "path";
-import { createHash } from "crypto";
+import { createHash, createSign } from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
@@ -47,6 +47,7 @@ const firebaseAuth = getAuth(firebaseApp);
 // ID tokens are verified through Firebase Identity Toolkit below to avoid loading
 // the Admin Auth dependency chain in the serverless CommonJS bundle.
 let adminDb: FirebaseAdminFirestore | null = null;
+let serviceAccountForAuth: any = null;
 
 let adminSdkInitError = "";
 
@@ -186,6 +187,7 @@ try {
     if (serviceAccount.project_id !== firebaseConfig.projectId) {
       throw new Error("Firebase service account project does not match the app project.");
     }
+    serviceAccountForAuth = serviceAccount;
     const adminApp = getAdminApps().find((app) => app.name === "[DEFAULT]") ||
       initializeAdminApp({ credential: cert(serviceAccount), projectId: firebaseConfig.projectId });
     adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
@@ -194,6 +196,57 @@ try {
   // Never log service-account contents or private keys.
   adminSdkInitError = error instanceof Error ? error.message : "Unknown initialization error";
   console.error("Firebase Admin SDK initialization failed:", adminSdkInitError);
+}
+
+async function getFirebaseAdminAccessToken(): Promise<string> {
+  if (!serviceAccountForAuth?.client_email || !serviceAccountForAuth?.private_key) {
+    throw new Error("Firebase Admin service account is not configured.");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: any) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const unsigned = [
+    encode({ alg: "RS256", typ: "JWT" }),
+    encode({
+      iss: serviceAccountForAuth.client_email,
+      scope: "https://www.googleapis.com/auth/cloud-platform",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600
+    })
+  ].join(".");
+  const signer = createSign("RSA-SHA256");
+  signer.update(unsigned);
+  signer.end();
+  const assertion = unsigned + "." + signer.sign(serviceAccountForAuth.private_key, "base64url");
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion
+    }).toString()
+  });
+  const tokenData: any = await tokenResponse.json().catch(() => ({}));
+  if (!tokenResponse.ok || !tokenData.access_token) {
+    throw new Error("Could not authorize Firebase account management.");
+  }
+  return String(tokenData.access_token);
+}
+
+async function deleteFirebaseAuthUser(uid: string): Promise<void> {
+  const accessToken = await getFirebaseAdminAccessToken();
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/accounts:batchDelete`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ localIds: [uid], force: true })
+    }
+  );
+  const result: any = await response.json().catch(() => ({}));
+  if (!response.ok || Number(result?.deleteResp?.[0]) !== 0) {
+    throw new Error("Firebase could not delete this delivery login account. No staff records were removed.");
+  }
 }
 
 let aiInstance: GoogleGenAI | null = null;
@@ -1400,6 +1453,50 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       return res.json({ success: true });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not update delivery staff status." });
+    }
+  });
+
+  app.post("/api/delivery/staff/delete", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, staff_uid } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const uid = String(staff_uid || "").trim();
+      if (!uid || uid === admin.uid) return res.status(400).json({ error: "Invalid delivery staff account." });
+      const staffRef = adminDb.collection("delivery_staff").doc(uid);
+      const staffSnap = await staffRef.get();
+      if (!staffSnap.exists || staffSnap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(404).json({ error: "Delivery staff member not found." });
+      }
+
+      // Delete the Firebase Authentication identity first. If this fails, keep all
+      // Firestore records intact so the admin can safely retry.
+      await deleteFirebaseAuthUser(uid);
+
+      const [assignmentSnap, expenseSnap, queueSnap] = await Promise.all([
+        adminDb.collection("delivery_assignments").where("driver_uid", "==", uid).get(),
+        adminDb.collection("delivery_expenses").where("driver_uid", "==", uid).get(),
+        adminDb.collection("delivery_queue").where("assigned_to", "==", uid).get()
+      ]);
+      const docsToDelete = [...assignmentSnap.docs, ...expenseSnap.docs];
+      for (let offset = 0; offset < docsToDelete.length; offset += 450) {
+        const batch = adminDb.batch();
+        docsToDelete.slice(offset, offset + 450).forEach(docSnap => batch.delete(docSnap.ref));
+        await batch.commit();
+      }
+      for (let offset = 0; offset < queueSnap.docs.length; offset += 450) {
+        const batch = adminDb.batch();
+        queueSnap.docs.slice(offset, offset + 450).forEach(docSnap => {
+          batch.set(docSnap.ref, { assigned: false, assigned_to: "", assigned_at: "" }, { merge: true });
+        });
+        await batch.commit();
+      }
+      await staffRef.delete();
+      return res.json({ success: true, deleted: true });
+    } catch (error: any) {
+      console.warn("[delivery/staff/delete] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not completely delete delivery staff account." });
     }
   });
 
