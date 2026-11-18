@@ -60,7 +60,7 @@ async function verifyStorePanelPin(
 ): Promise<"valid" | "invalid" | "locked"> {
   const cleanEmail = String(storeIdInput || "").trim().toLowerCase();
   const pin = String(pinInput || "");
-  if (!adminDb || !cleanEmail || !/^\\d{4}$/.test(pin)) return "invalid";
+  if (!adminDb || !cleanEmail || !/^\d{4}$/.test(pin)) return "invalid";
 
   const credentialRef = adminDb.collection("store_auth_credentials").doc(getCredentialDocId(cleanEmail));
   const rateLimitId = createHash("sha256").update(`${cleanEmail}:panel-pin:${role}`).digest("hex");
@@ -1147,10 +1147,14 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(400).json({ error: "Set two different 4-digit numeric PINs." });
       }
 
-      const existing = await getAdminPinCredentials(cleanStoreId);
-      if (!existing?.admin_pin_hash || !verifyPinAgainstHash(String(current_admin_pin || ""), existing.admin_pin_hash)) {
-        return res.status(403).json({ error: "Current Admin PIN is incorrect." });
+      const currentPinResult = await verifyStorePanelPin(cleanStoreId, "admin", String(current_admin_pin || ""));
+      if (currentPinResult !== "valid") {
+        return res.status(currentPinResult === "locked" ? 429 : 403).json({
+          error: currentPinResult === "locked" ? "Too many failed attempts. Please wait 60 seconds." : "Current Admin PIN is incorrect."
+        });
       }
+      const existing = await getAdminPinCredentials(cleanStoreId);
+      if (!existing?.admin_pin_hash) return res.status(409).json({ error: "Admin PIN credentials are not initialized." });
 
       const now = new Date().toISOString();
       const updated = {
