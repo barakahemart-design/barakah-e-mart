@@ -1432,6 +1432,37 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  app.post("/api/delivery/assignments/update-mine", async (req: Request, res: Response) => {
+    const { assignment_id, delivery_status, delivery_note } = req.body || {};
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      const staff = await getDeliveryStaff(verified.uid);
+      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Active delivery staff account required." });
+      }
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const id = String(assignment_id || "").trim();
+      if (!id || !["delivered", "failed", "returned"].includes(String(delivery_status))) {
+        return res.status(400).json({ error: "Invalid delivery update." });
+      }
+      const ref = adminDb.collection("delivery_assignments").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data()?.driver_uid !== verified.uid || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "This delivery is not assigned to your account." });
+      }
+      await ref.update({
+        delivery_status,
+        delivery_note: String(delivery_note || "").trim().slice(0, 500),
+        status_updated_at: new Date().toISOString(),
+        status_updated_by: verified.uid
+      });
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not update delivery status." });
+    }
+  });
+
   app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {
     const { store_id, admin_pin } = req.body || {};
     try {
