@@ -485,7 +485,7 @@ function mergeTransactionsLists(listA: any[], listB: any[]) {
   return merged;
 }
 
-export const fetchAndRestoreCloudBackup = async (email: string, pin: string, overwrite: boolean = false) => {
+export const fetchAndRestoreCloudBackup = async (email: string, pin: string, overwrite: boolean = false, includeCollectionSync: boolean = true) => {
   const cleanEmail = email.trim().toLowerCase();
   const syncId = getPasscodeSyncId(cleanEmail, pin);
 
@@ -614,7 +614,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
         let transactionsRes: any = { empty: true, docs: [] };
         let purchasesRes: any = { empty: true, docs: [] };
 
-        if (firebaseAuth.currentUser && (activeUserId === firebaseAuth.currentUser.uid || cleanEmail === (firebaseAuth.currentUser.email || '').trim().toLowerCase())) {
+        if (includeCollectionSync && firebaseAuth.currentUser && (activeUserId === firebaseAuth.currentUser.uid || cleanEmail === (firebaseAuth.currentUser.email || '').trim().toLowerCase())) {
           try {
             const storeId = cleanEmail || activeUserId;
             const results = await Promise.all([
