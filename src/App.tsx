@@ -4711,7 +4711,6 @@ _${businessInfo.name}_`;
                   { id: "delivery", label: "Delivery Management", Icon: Truck },
                   { id: "settings", label: "Settings", Icon: Settings },
                 ] as const)
-                .filter((item) => item.id !== "delivery" || String(activeUser?.email || "").trim().toLowerCase() === "barakahbillpro@gmail.com")
                 .map((item) => {
                   const Icon = item.Icon;
                   const isActive = activeTab === item.id;
@@ -10046,6 +10045,7 @@ _${businessInfo.name}_`;
                       { id: "duelist", label: "All Due List", desc: "Due, creditor and product due records", Icon: History },
                       { id: "reports", label: "Reports", desc: "Business reports and statements", Icon: BarChart3 },
                       { id: "staff", label: "Staff Hub", desc: "Staff and salary management", Icon: UserCheck },
+                      { id: "delivery", label: "Delivery Management", desc: "Delivery staff, invoice assignments and payments", Icon: Truck },
                       { id: "settings", label: "Settings", desc: "Business and app settings", Icon: Settings },
                     ] as const).map((item) => {
                       const Icon = item.Icon;
@@ -10085,6 +10085,7 @@ _${businessInfo.name}_`;
                       { id: "contacts", label: "Customers", desc: "Due balances & contact logs", Icon: Users },
                       { id: "products", label: "Products", desc: "Real-time standard stock index", Icon: Package },
                       { id: "ledger", label: "Ledger", desc: "Sales history, edit selling price & print challan", Icon: FileText },
+                      { id: "delivery", label: "Delivery Management", desc: "Assign invoices to delivery staff", Icon: Truck },
                     ].map((item) => {
                       const Icon = item.Icon;
                       const isActive = activeTab === item.id;
