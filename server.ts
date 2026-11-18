@@ -6,7 +6,6 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
 import { cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
-import { getAuth as getAdminAuth, type Auth as FirebaseAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore, type Firestore as FirebaseAdminFirestore } from "firebase-admin/firestore";
 import { 
   getAuth, 
@@ -45,8 +44,9 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 const firebaseAuth = getAuth(firebaseApp);
 
-// Initialize privileged Firebase Admin Auth from the encrypted Vercel Secret.
-let adminAuth: FirebaseAdminAuth | null = null;
+// Initialize privileged Firebase Admin Firestore from the encrypted Vercel Secret.
+// ID tokens are verified through Firebase Identity Toolkit below to avoid loading
+// the Admin Auth dependency chain in the serverless CommonJS bundle.
 let adminDb: FirebaseAdminFirestore | null = null;
 let adminSdkInitError = "";
 try {
@@ -58,7 +58,6 @@ try {
     }
     const adminApp = getAdminApps().find((app) => app.name === "[DEFAULT]") ||
       initializeAdminApp({ credential: cert(serviceAccount), projectId: firebaseConfig.projectId });
-    adminAuth = getAdminAuth(adminApp);
     adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
   }
 } catch (error) {
@@ -194,15 +193,8 @@ async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: 
   if (!idToken || idToken.length > 5000) return null;
 
   try {
-    if (adminAuth) {
-      const decoded = await adminAuth.verifyIdToken(idToken, true);
-      return {
-        uid: decoded.uid,
-        email: typeof decoded.email === "string" ? decoded.email.trim().toLowerCase() : ""
-      };
-    }
-
-    // Compatibility fallback for local development without the server secret.
+    // Verify the Firebase-issued ID token with the project Identity Toolkit API.
+    // This validates the signature, issuer, audience, expiry and account identity.
     if (!firebaseConfig.apiKey) return null;
     const response = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
@@ -215,7 +207,7 @@ async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: 
     if (!response.ok) return null;
     const payload = await response.json();
     const account = Array.isArray(payload?.users) ? payload.users[0] : null;
-    if (!account?.localId || typeof account.localId !== "string") return null;
+    if (!account?.localId || typeof account.localId !== "string" || account.disabled === true) return null;
     return {
       uid: account.localId,
       email: typeof account.email === "string" ? account.email.trim().toLowerCase() : ""
@@ -236,8 +228,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     res.json({ 
       status: "ok", 
       firebaseConfigured: !!firebaseConfig.apiKey,
-      firebaseAdminConfigured: !!adminAuth,
+      firebaseAdminConfigured: !!adminDb,
       firebaseAdminInitError: adminSdkInitError ? "initialization_failed" : null,
+      tokenVerificationMode: "firebase_identity_toolkit",
       isUsingFallback: false 
     });
   });
