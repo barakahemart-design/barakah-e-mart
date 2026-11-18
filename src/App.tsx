@@ -825,7 +825,7 @@ export default function App() {
         (async () => {
           try {
             const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
-            const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false);
+            const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false, false);
             if (wasRestored) {
               console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount in background.");
               // Dynamically re-hydrate state with the restored values
