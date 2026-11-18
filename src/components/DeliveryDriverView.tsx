@@ -4,7 +4,7 @@ import { Truck, MapPin, Phone, PackageCheck, Wallet, RefreshCw, LogOut, CheckCir
 
 type Assignment = {
   id: string; invoice_no: string; customer_name: string; customer_phone: string;
-  customer_address: string; delivery_status: string; items?: Array<{name: string; quantity: number}>;
+  customer_address: string; delivery_status: string; assigned_at?: string; items?: Array<{name: string; quantity: number}>;
 };
 type Expense = { id: string; amount: number; reason: string; category: string; date: string; payment_status: string };
 type DriverProfile = { uid: string; name: string; email: string; phone?: string };
@@ -106,7 +106,11 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
         {tab === "payments" && <div className="space-y-3">
           {assignments.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">No delivery payments yet.</div> : assignments.map(item => <article key={item.id} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black">Invoice {item.invoice_no}</h3><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${(item as any).payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{(item as any).payment_status === "paid" ? "Payment Received" : "Payment Pending"}</span></div>
-            <p className="text-xs font-bold text-slate-200">{item.customer_name}</p>
+            <div className="space-y-1 rounded-xl bg-slate-950/60 p-3">
+              <p className="text-xs font-bold text-slate-200">{item.customer_name || "Customer name unavailable"}</p>
+              {item.customer_phone ? <a href={`tel:${item.customer_phone}`} className="inline-flex items-center gap-1 text-xs font-semibold text-sky-300"><Phone className="h-3 w-3" /> {item.customer_phone}</a> : <p className="text-xs text-slate-500">Customer phone unavailable</p>}
+              <p className="flex items-start gap-1 text-xs leading-relaxed text-slate-300"><MapPin className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" /> <span>{item.customer_address || "Customer address unavailable"}</span></p>
+            </div>
             <p className="text-lg font-black text-white">{currencySymbol}{Number((item as any).delivery_fee || 0).toLocaleString("en-BD")}</p>
             <p className="text-[11px] text-slate-400">{(item as any).payment_timing === "advance" ? "Advance payment" : "Payment after delivery"} · {item.assigned_at ? new Date(item.assigned_at).toLocaleString("en-BD") : "Date unavailable"}</p>
             {(item as any).payment_updated_at && <p className="text-[10px] text-slate-500">Last payment update: {new Date((item as any).payment_updated_at).toLocaleString("en-BD")}</p>}
