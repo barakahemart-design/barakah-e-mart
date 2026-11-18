@@ -56,7 +56,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   }, [adminPin, salesPin, panelRole, storeId]);
 
   const loadAll = useCallback(async () => {
-    if (!adminPin || !storeId) return;
+    if ((panelRole === "admin" && !adminPin) || (panelRole === "sales" && !salesPin) || !storeId) return;
     setLoading(true);
     try {
       const [staffData, assignmentData, queueData, expenseData] = await Promise.all([
@@ -75,7 +75,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } finally {
       setLoading(false);
     }
-  }, [adminPin, storeId, request, expenseFilter, panelRole]);
+  }, [adminPin, salesPin, storeId, request, expenseFilter, panelRole]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -174,8 +174,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         })}
       </div>
 
-      {tab === "staff" && <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.85fr)_1.15fr]">
-        <form onSubmit={createStaff} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      {tab === "staff" && <div className={`grid gap-4 ${panelRole === "admin" ? "lg:grid-cols-[minmax(280px,0.85fr)_1.15fr]" : "grid-cols-1"}`}>
+        {panelRole === "admin" && <form onSubmit={createStaff} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="flex items-center gap-2 text-sm font-black text-white"><UserPlus className="h-4 w-4 text-emerald-400" /> Create Delivery Account</h3>
           <input required minLength={2} value={name} onChange={e => setName(e.target.value)} placeholder="Staff full name" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
           <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Login email address" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
@@ -190,12 +190,12 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             <button type="button" onClick={() => setCreatedCredentials(null)} className="ml-2 text-[10px] font-bold text-slate-400">Hide</button>
           </div>}
           <button disabled={loading} className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-xs font-black text-slate-950 hover:bg-emerald-400 disabled:opacity-50">Create Delivery Staff</button>
-        </form>
+        </form>}
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="text-sm font-black text-white">Delivery Staff Accounts <span className="ml-1 text-emerald-300">({staff.length})</span></h3>
           {staff.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery staff accounts yet.</p> : staff.map(person => <div key={person.uid} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
             <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p></div>
-            <button onClick={() => toggleStaff(person)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{person.status === "active" ? "Active · Disable" : "Inactive · Enable"}</button>
+            {panelRole === "admin" && <button onClick={() => toggleStaff(person)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{person.status === "active" ? "Active · Disable" : "Inactive · Enable"}</button>}
           </div>)}
         </div>
       </div>}
