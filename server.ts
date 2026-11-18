@@ -1372,7 +1372,6 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(400).json({ error: "Firebase could not create this staff account. Check the email and password requirements." });
       }
 
-      const storeId = String(store_id || "").trim().toLowerCase();
       const staffRecord = {
         uid: authResult.localId,
         owner_store_id: storeId,
