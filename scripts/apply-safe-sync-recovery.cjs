@@ -14,14 +14,8 @@ serverSource = serverSource.replace(
   'if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid)) {',
   'if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid) || allowedIds.includes(docId)) {'
 );
-serverSource = serverSource.replace(
-  'if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid) {\n            return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });',
-  'if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid && String(resDoc.linked_email || "").trim().toLowerCase() !== String(verified.email || "").trim().toLowerCase()) {\n            return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });'
-);
-serverSource = serverSource.replace(
-  'if (syncData.user_id && syncData.user_id !== verified.uid && syncData.linked_email !== verified.email) {\n          return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });',
-  'if (syncData.user_id && syncData.user_id !== verified.uid && String(syncData.linked_email || "").trim().toLowerCase() !== String(verified.email || "").trim().toLowerCase()) {\n          return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });'
-);
+// Keep the server's strict verified-UID checks for passcode vault access.
+// A matching linked_email alone must never override a conflicting user_id.
 if (serverSource !== originalServer) fs.writeFileSync(serverFile, serverSource, 'utf8');
 
 const helperFile = path.join(process.cwd(), 'src', 'lib', 'firebase-helpers.ts');
