@@ -40,6 +40,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [driverUid, setDriverUid] = useState("");
   const [expenseFilter, setExpenseFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { fee: string; status: "paid" | "unpaid"; timing: "advance" | "after_delivery" }>>({});
+  type DateRangeFilter = "all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom";
+  const [expenseDateFilter, setExpenseDateFilter] = useState<DateRangeFilter>("monthly");
+  const [paymentDateFilter, setPaymentDateFilter] = useState<DateRangeFilter>("monthly");
+  const [expenseCustomStart, setExpenseCustomStart] = useState(new Date().toISOString().slice(0, 10));
+  const [expenseCustomEnd, setExpenseCustomEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentCustomStart, setPaymentCustomStart] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentCustomEnd, setPaymentCustomEnd] = useState(new Date().toISOString().slice(0, 10));
   const notifyRef = React.useRef(triggerNotification);
   notifyRef.current = triggerNotification;
 
@@ -160,6 +167,85 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } catch (error: any) { notifyRef.current(error?.message || "Could not update delivery payment.", "error"); }
   };
 
+  const isDateInRange = (value: any, filter: DateRangeFilter, customStart: string, customEnd: string) => {
+    if (filter === "all") return true;
+    if (!value) return false;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return false;
+    const target = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (filter === "today") return target.getTime() === today.getTime();
+    if (filter === "yesterday") {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return target.getTime() === yesterday.getTime();
+    }
+    if (filter === "weekly") {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6);
+      return target >= start && target <= today;
+    }
+    if (filter === "monthly") return target.getMonth() === today.getMonth() && target.getFullYear() === today.getFullYear();
+    if (filter === "yearly") return target.getFullYear() === today.getFullYear();
+    if (filter === "custom") {
+      if (!customStart || !customEnd || customStart > customEnd) return false;
+      const key = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+      return key >= customStart && key <= customEnd;
+    }
+    return false;
+  };
+
+  const renderDateRangeFilter = (
+    id: string,
+    filter: DateRangeFilter,
+    setFilter: (value: DateRangeFilter) => void,
+    customStart: string,
+    setCustomStart: (value: string) => void,
+    customEnd: string,
+    setCustomEnd: (value: string) => void
+  ) => (
+    <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3" id={id}>
+      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Date Range</div>
+      <div className="flex flex-wrap gap-1.5">
+        {[
+          { id: "all", label: "All" },
+          { id: "today", label: "Today" },
+          { id: "yesterday", label: "Yesterday" },
+          { id: "weekly", label: "7 Days" },
+          { id: "monthly", label: "This Month" },
+          { id: "yearly", label: "This Year" },
+          { id: "custom", label: "Custom" }
+        ].map(preset => (
+          <button key={preset.id} type="button" onClick={() => setFilter(preset.id as DateRangeFilter)}
+            className={`rounded-lg border px-3 py-2 text-[10px] font-bold transition-all ${filter === preset.id ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-slate-700 bg-slate-900 text-slate-400 hover:text-white"}`}>
+            {preset.label}
+          </button>
+        ))}
+      </div>
+      {filter === "custom" && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-[10px] font-bold text-slate-400">From Date<input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white" /></label>
+          <label className="text-[10px] font-bold text-slate-400">To Date<input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white" /></label>
+          {customStart && customEnd && customStart > customEnd && <p className="text-[10px] text-rose-300 sm:col-span-2">From Date cannot be later than To Date.</p>}
+        </div>
+      )}
+    </div>
+  );
+
+  const filteredStaffExpenses = expenses.filter(expense =>
+    (expenseFilter === "all" || expense.payment_status === expenseFilter) &&
+    isDateInRange(expense.date, expenseDateFilter, expenseCustomStart, expenseCustomEnd)
+  );
+  const filteredDeliveryPayments = assignments.filter(assignment =>
+    isDateInRange(
+      assignment.payment_received_at || assignment.payment_updated_at || assignment.assigned_at,
+      paymentDateFilter,
+      paymentCustomStart,
+      paymentCustomEnd
+    )
+  );
+
   const activeDrivers = staff.filter(x => x.status === "active");
   const tabs = [
     { id: "staff" as const, label: "Delivery Staff", icon: UserRound },
@@ -217,10 +303,11 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
         <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
-        {assignments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned deliveries yet.</p> : assignments.map(a => {
+        {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
+        {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
           const draft = getPaymentDraft(a);
           return <div key={a.id} className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-black text-white">Invoice {a.invoice_no} · {a.customer_name}</p><p className="mt-1 text-[10px] text-slate-500">{a.driver_name} · Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "—"}</p>{a.payment_updated_at && <p className="text-[10px] text-slate-500">Last updated {new Date(a.payment_updated_at).toLocaleString("en-BD")}</p>}</div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${a.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{a.payment_status === "paid" ? "Paid" : "Unpaid"}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-black text-white">Invoice {a.invoice_no} · {a.customer_name}</p><p className="mt-1 text-[10px] text-slate-500">{a.driver_name} · Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "—"}</p>{a.payment_updated_at && <p className="text-[10px] text-slate-500">Last updated {new Date(a.payment_updated_at).toLocaleString("en-BD")}</p>}{a.customer_note && <p className="mt-1 text-[10px] text-slate-400">Customer Note: {a.customer_note}</p>}{a.delivery_note && <p className="mt-1 text-[10px] text-slate-400">Delivery Note: {a.delivery_note}</p>}</div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${a.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{a.payment_status === "paid" ? "Paid" : "Unpaid"}</span></div>
             <div className="grid gap-2 sm:grid-cols-3">
               <label className="text-[10px] font-bold text-slate-400">Delivery payment ({currencySymbol})<input type="number" min="0" step="0.01" value={draft.fee} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, fee: e.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white" /></label>
               <label className="text-[10px] font-bold text-slate-400">Payment status<select value={draft.status} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, status: e.target.value as "paid" | "unpaid" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="unpaid">Unpaid · Due</option><option value="paid">Paid · Received</option></select></label>
@@ -253,7 +340,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
       {tab === "expenses" && panelRole === "admin" && <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black text-white">Staff Expense Requests</h3><select value={expenseFilter} onChange={e => setExpenseFilter(e.target.value as any)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option value="all">All expenses</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select></div>
-        {expenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No expenses submitted yet.</p> : expenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        {renderDateRangeFilter("staff-expense-date-range", expenseDateFilter, setExpenseDateFilter, expenseCustomStart, setExpenseCustomStart, expenseCustomEnd, setExpenseCustomEnd)}
+        {filteredStaffExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No staff expenses found for this date range.</p> : filteredStaffExpenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div><p className="text-sm font-black text-white">{currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")} · {expense.reason}</p><p className="mt-1 text-[11px] text-slate-400">{expense.driver_name} · {expense.category} · {expense.date}</p></div>
           <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Unpaid · Mark Paid"}</button>
         </div>)}
