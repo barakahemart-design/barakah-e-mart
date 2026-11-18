@@ -16,7 +16,7 @@ interface Props {
 }
 
 export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: Props) {
-  const [tab, setTab] = useState<"deliveries" | "expenses">("deliveries");
+  const [tab, setTab] = useState<"deliveries" | "expenses" | "payments">("deliveries");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
@@ -86,9 +86,10 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           <button onClick={onLogout} className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300"><LogOut className="mr-1 inline h-3.5 w-3.5" /> Logout</button>
         </header>
 
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
           <button onClick={() => setTab("deliveries")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "deliveries" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Deliveries ({assignments.length})</button>
           <button onClick={() => setTab("expenses")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "expenses" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Expenses ({expenses.length})</button>
+          <button onClick={() => setTab("payments")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "payments" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Payments ({assignments.length})</button>
         </div>
 
         <div className="flex justify-end"><button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-[11px] font-bold text-slate-300"><RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> Refresh</button></div>
@@ -99,6 +100,17 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
             <div className="space-y-1 text-xs text-slate-300"><p className="font-bold">{item.customer_name}</p>{item.customer_phone && <a className="inline-flex items-center gap-1 text-sky-300" href={`tel:${item.customer_phone}`}><Phone className="h-3 w-3" /> {item.customer_phone}</a>}<p className="flex items-start gap-1 text-slate-400"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "Customer address not available"}</p></div>
             {item.items?.length ? <div className="rounded-xl bg-slate-950/70 p-3 text-[11px] text-slate-300">{item.items.map((x,i) => <p key={i}>{x.name} × {x.quantity}</p>)}</div> : null}
             {item.delivery_status !== "delivered" && <div className="space-y-2"><input value={notes[item.id] || ""} onChange={e => setNotes(prev => ({...prev,[item.id]:e.target.value}))} placeholder="Delivery note (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-white" /><div className="grid grid-cols-3 gap-2"><button onClick={() => updateStatus(item,"delivered")} className="rounded-lg bg-emerald-500/15 px-2 py-2.5 text-[10px] font-black text-emerald-300">Delivered</button><button onClick={() => updateStatus(item,"failed")} className="rounded-lg bg-rose-500/15 px-2 py-2.5 text-[10px] font-black text-rose-300">Failed</button><button onClick={() => updateStatus(item,"returned")} className="rounded-lg bg-amber-500/15 px-2 py-2.5 text-[10px] font-black text-amber-300">Returned</button></div></div>}
+          </article>)}
+        </div>}
+
+        {tab === "payments" && <div className="space-y-3">
+          {assignments.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">No delivery payments yet.</div> : assignments.map(item => <article key={item.id} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black">Invoice {item.invoice_no}</h3><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${(item as any).payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{(item as any).payment_status === "paid" ? "Payment Received" : "Payment Pending"}</span></div>
+            <p className="text-xs font-bold text-slate-200">{item.customer_name}</p>
+            <p className="text-lg font-black text-white">{currencySymbol}{Number((item as any).delivery_fee || 0).toLocaleString("en-BD")}</p>
+            <p className="text-[11px] text-slate-400">{(item as any).payment_timing === "advance" ? "Advance payment" : "Payment after delivery"} · {item.assigned_at ? new Date(item.assigned_at).toLocaleString("en-BD") : "Date unavailable"}</p>
+            {(item as any).payment_updated_at && <p className="text-[10px] text-slate-500">Last payment update: {new Date((item as any).payment_updated_at).toLocaleString("en-BD")}</p>}
+            {(item as any).payment_received_at && <p className="text-[10px] text-emerald-300">Received: {new Date((item as any).payment_received_at).toLocaleString("en-BD")}</p>}
           </article>)}
         </div>}
 
