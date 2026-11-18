@@ -1468,7 +1468,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         adminDb.collection("delivery_expenses").where("driver_uid", "==", uid).get(),
         adminDb.collection("delivery_queue").where("assigned_to", "==", uid).get()
       ]);
-      const docsToDelete = [...assignmentSnap.docs, ...expenseSnap.docs].filter(d => d.data().owner_store_id === staff.owner_store_id);
+      const docsToDelete = [...assignmentSnap.docs, ...expenseSnap.docs].filter(d => d.data().owner_store_id === storeId);
       for (let offset = 0; offset < docsToDelete.length; offset += 450) {
         const batch = adminDb.batch();
         docsToDelete.slice(offset, offset + 450).forEach(docSnap => batch.delete(docSnap.ref));
