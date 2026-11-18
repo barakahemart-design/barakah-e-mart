@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { auth } from "../lib/firebase";
-import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin } from "lucide-react";
+import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
 type Assignment = {
@@ -109,11 +109,24 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   };
 
   const toggleStaff = async (person: Driver) => {
+    const nextStatus = person.status === "active" ? "inactive" : "active";
     try {
-      await request("/api/delivery/staff/status", { staff_uid: person.uid, status: person.status === "active" ? "inactive" : "active" });
-      setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: x.status === "active" ? "inactive" : "active" } : x));
-      notifyRef.current("Delivery staff status updated.", "success");
+      await request("/api/delivery/staff/status", { staff_uid: person.uid, status: nextStatus });
+      setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: nextStatus } : x));
+      notifyRef.current(nextStatus === "inactive" ? "Delivery account put on hold." : "Delivery account reactivated.", "success");
     } catch (error: any) { notifyRef.current(error?.message || "Could not update staff status.", "error"); }
+  };
+
+  const deleteStaff = async (person: Driver) => {
+    const confirmed = window.confirm(`Permanently delete ${person.name} ( ${person.email} )? Their Firebase login, delivery assignments and expense records will be deleted. This cannot be undone.`);
+    if (!confirmed) return;
+    try {
+      await request("/api/delivery/staff/delete", { staff_uid: person.uid });
+      setStaff(prev => prev.filter(x => x.uid !== person.uid));
+      setAssignments(prev => prev.filter(x => x.driver_uid !== person.uid));
+      if (driverUid === person.uid) setDriverUid(staff.find(x => x.uid !== person.uid && x.status === "active")?.uid || "");
+      notifyRef.current("Delivery staff account and its linked records were deleted.", "success");
+    } catch (error: any) { notifyRef.current(error?.message || "Could not delete delivery staff account.", "error"); }
   };
 
   const updateExpense = async (expense: DeliveryExpense) => {
@@ -196,8 +209,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="text-sm font-black text-white">Delivery Staff Accounts <span className="ml-1 text-emerald-300">({staff.length})</span></h3>
           {staff.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery staff accounts yet.</p> : staff.map(person => <div key={person.uid} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p></div>
-            {panelRole === "admin" && <button onClick={() => toggleStaff(person)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{person.status === "active" ? "Active · Disable" : "Inactive · Enable"}</button>}
+            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span></div>
+            {panelRole === "admin" && <div className="flex flex-wrap gap-2"><button onClick={() => toggleStaff(person)} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300"}`}>{person.status === "active" ? <><PauseCircle className="h-3 w-3" /> Hold</> : <><PlayCircle className="h-3 w-3" /> Unhold</>}</button><button onClick={() => deleteStaff(person)} className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete</button></div>}
           </div>)}
         </div>
       </div>}
