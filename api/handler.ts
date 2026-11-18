@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
-import { getServerlessApp } from "../server.ts";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 export default async function handler(req: Request, res: Response) {
   const routePath = Array.isArray(req.query.path)
@@ -17,6 +19,10 @@ export default async function handler(req: Request, res: Response) {
   }
 
   req.url = `/api/${routePath}${forwardedQuery.size ? `?${forwardedQuery.toString()}` : ""}`;
+
+  const { getServerlessApp } = require("../dist/server.cjs") as {
+    getServerlessApp: () => Promise<import("express").Express>;
+  };
   const app = await getServerlessApp();
   app(req, res);
 }
