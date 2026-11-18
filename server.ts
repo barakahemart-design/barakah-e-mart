@@ -1259,6 +1259,20 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     return verified;
   }
 
+  async function requireDeliverySales(req: Request, storeIdInput: any, pinInput: any) {
+    const verified = await verifyFirebaseToken(req);
+    const storeId = String(storeIdInput || "").trim().toLowerCase();
+    const pin = String(pinInput || "");
+    if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL || storeId !== PRIMARY_ADMIN_EMAIL) return null;
+    if (await verifyStorePanelPin(storeId, "sales", pin) !== "valid") return null;
+    return verified;
+  }
+
+  async function requireDeliveryAssignmentManager(req: Request, body: any) {
+    if (body?.panel_role === "sales") return await requireDeliverySales(req, body.store_id, body.sales_pin);
+    return await requireDeliveryAdmin(req, body?.store_id, body?.admin_pin);
+  }
+
   app.get("/api/delivery/session", async (req: Request, res: Response) => {
     try {
       const verified = await verifyFirebaseToken(req);
@@ -1357,8 +1371,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   app.post("/api/delivery/staff/list", async (req: Request, res: Response) => {
     const { store_id, admin_pin } = req.body || {};
     try {
-      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
-      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
+      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_staff").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
       const staff = snap.docs.map(d => {
@@ -1412,8 +1426,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   app.post("/api/delivery/assignments/create", async (req: Request, res: Response) => {
     const { store_id, admin_pin, invoice_no, driver_uid } = req.body || {};
     try {
-      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
-      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
+      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const invoiceNo = String(invoice_no || "").trim();
       const driverUid = String(driver_uid || "").trim();
@@ -1451,8 +1465,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           quantity: Number(item.quantity) || 0
         })) : [],
         delivery_status: "assigned",
+        delivery_fee: 0,
+        payment_status: "unpaid",
+        payment_timing: "after_delivery",
+        payment_updated_at: "",
         assigned_at: new Date().toISOString(),
-        assigned_by: admin.uid
+        assigned_by: manager.uid
       };
       await adminDb.collection("delivery_assignments").doc(assignmentId).set(assignment, { merge: true });
       return res.status(201).json({ success: true, assignment });
@@ -1496,14 +1514,47 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {
     const { store_id, admin_pin } = req.body || {};
     try {
-      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
-      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
+      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const snap = await adminDb.collection("delivery_assignments")
         .where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
       return res.json({ assignments: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not load delivery assignments." });
+    }
+  });
+
+  app.post("/api/delivery/assignments/payment", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, assignment_id, delivery_fee, payment_status, payment_timing } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Only Admin can control delivery payments." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const id = String(assignment_id || "").trim();
+      const fee = Number(delivery_fee);
+      if (!id || !Number.isFinite(fee) || fee < 0 || fee > 1000000 ||
+          !["paid", "unpaid"].includes(String(payment_status)) ||
+          !["advance", "after_delivery"].includes(String(payment_timing))) {
+        return res.status(400).json({ error: "Invalid delivery payment details." });
+      }
+      const ref = adminDb.collection("delivery_assignments").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(404).json({ error: "Delivery assignment not found." });
+      }
+      const now = new Date().toISOString();
+      await ref.update({
+        delivery_fee: fee,
+        payment_status,
+        payment_timing,
+        payment_updated_at: now,
+        payment_updated_by: admin.uid,
+        payment_received_at: payment_status === "paid" ? now : ""
+      });
+      return res.json({ success: true, payment_updated_at: now });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not update delivery payment." });
     }
   });
 
