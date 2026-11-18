@@ -99,6 +99,7 @@ import { ContactRegistrationForm } from "./components/ContactRegistrationForm";
 import { CreditorDueView } from "./components/CreditorDueView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { DeliveryManagementView } from "./components/DeliveryManagementView";
+import { DeliveryDriverView } from "./components/DeliveryDriverView";
 import { 
   INITIAL_PRODUCTS,
   INITIAL_CONTACTS,
@@ -336,6 +337,40 @@ export default function App() {
   // Keep the verified Admin PIN in memory only for privileged delivery actions.
   // It is never written to localStorage or sessionStorage.
   const [adminActionPin, setAdminActionPin] = useState("");
+  const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
+  const [deliverySessionChecked, setDeliverySessionChecked] = useState(false);
+
+  // After Firebase login, check the server-owned delivery role before showing
+  // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
+  useEffect(() => {
+    let cancelled = false;
+    const checkDeliveryRole = async () => {
+      if (!activeUser || activeUser.isGuest) {
+        setDeliveryStaffProfile(null);
+        setDeliverySessionChecked(true);
+        return;
+      }
+      setDeliverySessionChecked(false);
+      try {
+        const user = firebaseAuth.currentUser;
+        if (!user) throw new Error("Firebase user session unavailable.");
+        const token = await user.getIdToken();
+        const response = await fetch("/api/delivery/session", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        setDeliveryStaffProfile(response.ok && result.isDeliveryStaff ? result.staff : null);
+      } catch (error) {
+        if (!cancelled) setDeliveryStaffProfile(null);
+      } finally {
+        if (!cancelled) setDeliverySessionChecked(true);
+      }
+    };
+    checkDeliveryRole();
+    return () => { cancelled = true; };
+  }, [activeUser?.uid, activeUser?.email, activeUser?.isGuest]);
+
   // Show Welcome once per app/browser session. sessionStorage survives a
   // normal refresh, but is cleared when the app tab/window is fully closed.
   // Keep the persistent login in localStorage untouched.
@@ -4446,6 +4481,31 @@ _${businessInfo.name}_`;
         onSignIn={handleSignIn} 
         onGuestLogin={handleGuestLogin}
         isDarkMode={isDarkMode}
+      />
+    );
+  }
+
+  if (activeUser && !activeUser.isGuest && !deliverySessionChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
+        <div className="text-center"><Truck className="mx-auto mb-3 h-8 w-8 animate-pulse text-emerald-400" /><p className="text-sm font-semibold">Checking secure account access…</p></div>
+      </div>
+    );
+  }
+
+  if (deliveryStaffProfile) {
+    return (
+      <DeliveryDriverView
+        staff={deliveryStaffProfile}
+        currencySymbol={businessInfo.currencySymbol || "৳"}
+        onLogout={async () => {
+          await signOut();
+          setActiveUser(null);
+          setDeliveryStaffProfile(null);
+          setDeliverySessionChecked(false);
+          setCurrentPanel("none");
+          setAdminActionPin("");
+        }}
       />
     );
   }
