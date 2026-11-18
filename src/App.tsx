@@ -2121,7 +2121,7 @@ export default function App() {
     // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
     if (activeUser && !activeUser.isGuest && cleanEmail === "barakahbillpro@gmail.com") {
-      auth.currentUser?.getIdToken().then(token => fetch("/api/delivery/queue/add", {
+      firebaseAuth.currentUser?.getIdToken().then(token => fetch("/api/delivery/queue/add", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
