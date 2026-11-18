@@ -1430,9 +1430,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const { store_id, admin_pin, staff_uid, status } = req.body || {};
     try {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
-      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
-      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      if (!admin) return res.status(403).json({ error: "Admin login and current Admin PIN are required." });
       const storeId = String(store_id || "").trim().toLowerCase();
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const uid = String(staff_uid || "").trim();
       if (!uid || !["active", "inactive"].includes(String(status))) return res.status(400).json({ error: "Invalid staff status request." });
       const ref = adminDb.collection("delivery_staff").doc(uid);
@@ -1894,7 +1894,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.status !== "active" || staff.owner_store_id !== storeId) {
+      if (!staff || staff.status !== "active" || !staff.owner_store_id) {
         return res.status(403).json({ error: "Active delivery staff account required." });
       }
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
@@ -1930,7 +1930,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const { store_id, admin_pin, expense_id, payment_status } = req.body || {};
     try {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
-      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!admin) return res.status(403).json({ error: "Admin login and current Admin PIN are required." });
+      const storeId = String(store_id || "").trim().toLowerCase();
       if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
       const id = String(expense_id || "").trim();
       if (!id || !["paid", "unpaid"].includes(String(payment_status))) return res.status(400).json({ error: "Invalid expense payment status." });
