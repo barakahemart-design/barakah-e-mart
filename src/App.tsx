@@ -4573,42 +4573,76 @@ _${businessInfo.name}_`;
       throw new Error("Your secure login session is not ready. Please log out and sign in again.");
     }
 
-    const idToken = await firebaseUser.getIdToken();
-    const headers = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`
+    // A previously authenticated device must remain usable when Firestore is
+    // temporarily unavailable. Only use the PIN already cached for this exact
+    // Firebase UID/store; never use a shared/global PIN or another account's data.
+    const unlockFromThisDeviceCache = () => {
+      const cachedPin = String(panel === "admin" ? businessInfo.adminPasscode || "" : businessInfo.salesPasscode || "");
+      if (!/^\\d{4}$/.test(cachedPin) || cachedPin !== pin) return false;
+      setCurrentPanel(panel);
+      setAdminActionPin(panel === "admin" ? pin : "");
+      setActiveTab(panel === "sales" ? "pos" : "dashboard");
+      triggerNotification("Offline access: this device's saved PIN was verified. Cloud sync will resume when available.", "info");
+      return true;
     };
 
-    const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
-    const statusData = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok) {
-      throw new Error(statusData.error || "Could not check secure PIN settings.");
-    }
+    let cloudTemporarilyUnavailable = false;
+    try {
+      const idToken = await firebaseUser.getIdToken();
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`
+      };
 
-    if (!statusData.configured) {
-      const migrationResponse = await fetch("/api/panel-security/pin/migrate", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          store_id: storeId,
-          admin_pin: String(businessInfo.adminPasscode || ""),
-          sales_pin: String(businessInfo.salesPasscode || "")
-        })
-      });
-      const migrationData = await migrationResponse.json().catch(() => ({}));
-      if (!migrationResponse.ok || !migrationData.success) {
-        throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
+      const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
+      const statusData = await statusResponse.json().catch(() => ({}));
+      if (!statusResponse.ok) {
+        if (statusResponse.status >= 500) cloudTemporarilyUnavailable = true;
+        else throw new Error(statusData.error || "Could not check secure PIN settings.");
       }
+
+      if (!cloudTemporarilyUnavailable && !statusData.configured) {
+        const migrationResponse = await fetch("/api/panel-security/pin/migrate", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            store_id: storeId,
+            admin_pin: String(businessInfo.adminPasscode || ""),
+            sales_pin: String(businessInfo.salesPasscode || "")
+          })
+        });
+        const migrationData = await migrationResponse.json().catch(() => ({}));
+        if (!migrationResponse.ok || !migrationData.success) {
+          if (migrationResponse.status >= 500) cloudTemporarilyUnavailable = true;
+          else throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
+        }
+      }
+
+      if (!cloudTemporarilyUnavailable) {
+        const verifyResponse = await fetch("/api/panel-security/pin/verify", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ store_id: storeId, role: panel, pin })
+        });
+        const verifyData = await verifyResponse.json().catch(() => ({}));
+        if (!verifyResponse.ok) {
+          if (verifyResponse.status >= 500) cloudTemporarilyUnavailable = true;
+          else throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
+        } else if (!verifyData.valid) {
+          // A definite server-side rejection must never be overridden by cache.
+          throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
+        }
+      }
+    } catch (error: any) {
+      // Network failures and service/Firestore outages may use the local cache.
+      // Explicit 401/403/429 responses are thrown above and are not bypassed.
+      if (!cloudTemporarilyUnavailable && error?.name !== "TypeError") throw error;
+      cloudTemporarilyUnavailable = true;
     }
 
-    const verifyResponse = await fetch("/api/panel-security/pin/verify", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ store_id: storeId, role: panel, pin })
-    });
-    const verifyData = await verifyResponse.json().catch(() => ({}));
-    if (!verifyResponse.ok || !verifyData.valid) {
-      throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
+    if (cloudTemporarilyUnavailable) {
+      if (unlockFromThisDeviceCache()) return;
+      throw new Error("Cloud PIN verification is unavailable, and this device has no matching saved PIN. Please reconnect and try again.");
     }
 
     setCurrentPanel(panel);
