@@ -360,7 +360,7 @@ export default function App() {
         });
         const result = await response.json().catch(() => ({}));
         if (cancelled) return;
-        setDeliveryStaffProfile(response.ok && result.isDeliveryStaff ? result.staff : null);
+        setDeliveryStaffProfile(response.ok && result.isDeliveryAccount ? result.staff : null);
       } catch (error) {
         if (!cancelled) setDeliveryStaffProfile(null);
       } finally {
@@ -4490,6 +4490,31 @@ _${businessInfo.name}_`;
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
         <div className="text-center"><Truck className="mx-auto mb-3 h-8 w-8 animate-pulse text-emerald-400" /><p className="text-sm font-semibold">Checking secure account access…</p></div>
+      </div>
+    );
+  }
+
+  if (deliveryStaffProfile && deliveryStaffProfile.status !== "active") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080d18] p-5 text-white">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-rose-500/20 bg-slate-900 p-6 text-center">
+          <Truck className="mx-auto h-10 w-10 text-rose-400" />
+          <h1 className="text-xl font-black">Delivery Access Disabled</h1>
+          <p className="text-sm leading-relaxed text-slate-400">This delivery account has been disabled by the Admin. You cannot access deliveries or the POS workspace. Please contact your Admin.</p>
+          <button
+            onClick={async () => {
+              await signOut();
+              setActiveUser(null);
+              setDeliveryStaffProfile(null);
+              setDeliverySessionChecked(false);
+              setCurrentPanel("none");
+              setAdminActionPin("");
+            }}
+            className="w-full rounded-xl bg-rose-500 px-4 py-3 text-sm font-black text-white"
+          >
+            Logout
+          </button>
+        </div>
       </div>
     );
   }
