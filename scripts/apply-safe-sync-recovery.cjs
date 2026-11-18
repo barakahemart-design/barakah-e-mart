@@ -45,7 +45,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
       'barakahbillpro@gmail.com': ['xckXTyRn5AbsrU1paXbmj9dR6HX2'],
       'tendabangladesh72@gmail.com': ['yVAiT3KAHnMYGX2D1hSxWGiZETw1', 'rb0SFawVFSTANoZhNwYokmJOFyP2']
     };
-    const trustedUids = new Set([activeUid, ...(legacyAccountUids[cleanEmail] || [])].filter(Boolean));
+    const trustedUids = new Set([activeUid, cleanEmail, ...(legacyAccountUids[cleanEmail] || [])].filter(Boolean));
     const recordBelongsToAccount = (row: any, allowUnstamped = false) => {
       if (!row || typeof row !== 'object') return false;
       const ownerIds = [row.user_id, row.userId, row.owner_id].map(v => String(v || '').trim()).filter(Boolean);
