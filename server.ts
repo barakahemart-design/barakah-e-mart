@@ -1116,7 +1116,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (cleanRole !== "admin" && cleanRole !== "sales") {
         return res.status(400).json({ error: "Invalid panel role." });
       }
-      if (!/^\\d{4}$/.test(enteredPin)) {
+      if (!/^\d{4}$/.test(enteredPin)) {
         return res.status(400).json({ error: "Enter a valid 4-digit PIN." });
       }
 
