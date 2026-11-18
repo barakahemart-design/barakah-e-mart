@@ -58,7 +58,8 @@ import {
   Undo2,
   Languages,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Truck
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
@@ -97,6 +98,7 @@ import { PurchasesView } from "./components/PurchasesView";
 import { ContactRegistrationForm } from "./components/ContactRegistrationForm";
 import { CreditorDueView } from "./components/CreditorDueView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
+import { DeliveryManagementView } from "./components/DeliveryManagementView";
 import { 
   INITIAL_PRODUCTS,
   INITIAL_CONTACTS,
@@ -331,6 +333,9 @@ export default function App() {
    // Never restore an unlocked role from browser storage. Require PIN verification
   // again after a page reload so sessionStorage cannot bypass the panel gate.
   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+  // Keep the verified Admin PIN in memory only for privileged delivery actions.
+  // It is never written to localStorage or sessionStorage.
+  const [adminActionPin, setAdminActionPin] = useState("");
   // Show Welcome once per app/browser session. sessionStorage survives a
   // normal refresh, but is cleared when the app tab/window is fully closed.
   // Keep the persistent login in localStorage untouched.
@@ -341,13 +346,13 @@ export default function App() {
 
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
-    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "settings"
+    "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "delivery" | "settings"
   >(() => {
     const defaultTab = typeof window !== "undefined" && window.innerWidth < 768 ? "dashboard" : "pos";
     try {
       if (localStorage.getItem("barakah_local_active_user")) {
         const savedTab = sessionStorage.getItem("barakah_active_tab");
-        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "settings"];
+        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "delivery", "settings"];
         if (savedTab && validTabs.includes(savedTab)) return savedTab as any;
       }
     } catch (_) {}
@@ -1528,6 +1533,7 @@ export default function App() {
     await signOut();
     setActiveUser(null);
     setCurrentPanel("none");
+    setAdminActionPin("");
     triggerNotification("Logged out from terminal successfully.");
   };
 
@@ -4448,6 +4454,7 @@ _${businessInfo.name}_`;
     if (activeUser?.isGuest) {
       // Guest mode is an isolated sandbox and does not expose authenticated store data.
       setCurrentPanel(panel);
+      setAdminActionPin("");
       setActiveTab(panel === "sales" ? "pos" : "dashboard");
       triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} sandbox opened.`, "success");
       return;
@@ -4502,6 +4509,7 @@ _${businessInfo.name}_`;
     }
 
     setCurrentPanel(panel);
+    setAdminActionPin(panel === "admin" ? pin : "");
     setActiveTab(panel === "sales" ? "pos" : "dashboard");
     triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} unlocked successfully.`, "success");
   };
@@ -4563,6 +4571,7 @@ _${businessInfo.name}_`;
                   { id: "duelist", label: "All Due List", Icon: History },
                   { id: "reports", label: "Reports", Icon: BarChart3 },
                   { id: "staff", label: "Staff Hub", Icon: UserCheck },
+                  { id: "delivery", label: "Delivery Management", Icon: Truck },
                   { id: "settings", label: "Settings", Icon: Settings },
                 ] as const).map((item) => {
                   const Icon = item.Icon;
@@ -4653,6 +4662,7 @@ _${businessInfo.name}_`;
               type="button"
               onClick={() => {
                 setCurrentPanel("sales");
+                setAdminActionPin("");
                 setActiveTab("pos");
                 triggerNotification("Switched to Sales Panel", "info");
               }}
@@ -4665,6 +4675,7 @@ _${businessInfo.name}_`;
               type="button"
               onClick={() => {
                 setCurrentPanel("none");
+                setAdminActionPin("");
                 triggerNotification("Enter passcode to unlock admin controls", "info");
               }}
               className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/20 border border-[#00E676]/20 cursor-pointer transition-all"
@@ -8048,6 +8059,15 @@ _${businessInfo.name}_`;
           {/* -----------------------------------------------------------------
               VIEW: STAFF & STORE PAYROLL MANAGEMENT
               ----------------------------------------------------------------- */}
+          {activeTab === "delivery" && currentPanel === "admin" && (
+            <DeliveryManagementView
+              adminPin={adminActionPin}
+              storeId={String(activeUser?.email || "").trim().toLowerCase()}
+              currencySymbol={businessInfo.currencySymbol || "৳"}
+              triggerNotification={triggerNotification}
+            />
+          )}
+
           {activeTab === "staff" && (
             <div className="animate-fadeIn max-w-7xl mx-auto space-y-6" id="view-staff-container">
               <StaffManagementView
@@ -9973,6 +9993,7 @@ _${businessInfo.name}_`;
                   type="button"
                   onClick={() => {
                     setCurrentPanel("sales");
+                    setAdminActionPin("");
                     setActiveTab("pos");
                     setIsMobileMenuOpen(false);
                     triggerNotification("Switched to Sales Panel", "info");
@@ -9986,6 +10007,7 @@ _${businessInfo.name}_`;
                   type="button"
                   onClick={() => {
                     setCurrentPanel("none");
+                    setAdminActionPin("");
                     setIsMobileMenuOpen(false);
                     triggerNotification("Enter passcode to unlock admin controls", "info");
                   }}
