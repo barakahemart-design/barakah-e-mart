@@ -572,36 +572,20 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         ["yVAiT3KAHnMYGX2D1hSxWGiZETw1", "rb0SFawVFSTANoZhNwYokmJOFyP2"].forEach(id => ids.add(id));
       }
 
-      // 1. Get profile document IDs (the primary Firebase Auth UIDs)
+      // Do not infer account ownership from profile payload fields or backup vaults.
+      // passcode_syncs IDs are backup identifiers, not authenticated user identities.
+      // Legacy account UIDs are kept only in the explicit per-email allowlist above.
+      // This prevents a stale/mislinked vault from importing another business's records.
       try {
         const profilesQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
         const profilesSnap = await getDocs(profilesQ);
         profilesSnap.forEach(docSnap => {
-          ids.add(docSnap.id);
-          const data = docSnap.data();
-          if (data.id) ids.add(String(data.id));
-          if (data.user_id) ids.add(String(data.user_id));
-          if (data.userId) ids.add(String(data.userId));
-          if (data.owner_id) ids.add(String(data.owner_id));
+          // A profile document ID is a Firebase UID, but only trust it when it is
+          // the UID presented by the verified Firebase ID token.
+          if (docSnap.id === defaultUid) ids.add(docSnap.id);
         });
       } catch (err) {
-        console.warn("resolveAllUserIdsForEmail profile fetch error:", err);
-      }
-
-      // 2. Get passcode_syncs document IDs (the Passcode / PIN Vault Sync IDs)
-      try {
-        const syncsQ = query(collection(db, "passcode_syncs"), where("linked_email", "==", cleanEmail));
-        const syncsSnap = await getDocs(syncsQ);
-        syncsSnap.forEach(docSnap => {
-          ids.add(docSnap.id);
-          const data = docSnap.data();
-          if (data.id) ids.add(String(data.id));
-          if (data.user_id) ids.add(String(data.user_id));
-          if (data.userId) ids.add(String(data.userId));
-          if (data.owner_id) ids.add(String(data.owner_id));
-        });
-      } catch (err) {
-        console.warn("resolveAllUserIdsForEmail sync fetch error:", err);
+        console.warn("resolveAllUserIdsForEmail profile verification error:", err);
       }
     }
 
