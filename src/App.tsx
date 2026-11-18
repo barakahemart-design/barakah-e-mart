@@ -2120,6 +2120,23 @@ export default function App() {
 
     // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
     const pairedContact = contacts.find(c => c.id === posSelectedContactId);
+    if (activeUser && !activeUser.isGuest && cleanEmail === "barakahbillpro@gmail.com") {
+      auth.currentUser?.getIdToken().then(token => fetch("/api/delivery/queue/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          invoice_no: newTransaction.invoiceNo,
+          transaction_id: newTransaction.id,
+          customer_name: String((pairedContact as any)?.name || (pairedContact as any)?.fullName || "Customer"),
+          customer_phone: String((pairedContact as any)?.phone || (pairedContact as any)?.mobile || ""),
+          customer_address: String((pairedContact as any)?.address || ""),
+          items: newTransaction.items.map(item => ({ name: item.name, quantity: item.quantity })),
+          total_amount: newTransaction.total
+        })
+      })).then(async response => {
+        if (!response.ok) console.warn("Delivery queue update failed:", await response.text());
+      }).catch(error => console.warn("Delivery queue update failed:", error));
+    }
     try {
       generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
