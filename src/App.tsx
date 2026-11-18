@@ -4578,7 +4578,7 @@ _${businessInfo.name}_`;
     // Firebase UID/store; never use a shared/global PIN or another account's data.
     const unlockFromThisDeviceCache = () => {
       const cachedPin = String(panel === "admin" ? businessInfo.adminPasscode || "" : businessInfo.salesPasscode || "");
-      if (!/^\\d{4}$/.test(cachedPin) || cachedPin !== pin) return false;
+      if (!/^[0-9]{4}$/.test(cachedPin) || cachedPin !== pin) return false;
       setCurrentPanel(panel);
       setAdminActionPin(panel === "admin" ? pin : "");
       setActiveTab(panel === "sales" ? "pos" : "dashboard");
