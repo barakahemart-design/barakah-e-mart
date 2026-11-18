@@ -64,8 +64,9 @@ class RealtimeSyncManager {
     this.currentUid = cleanUid;
     this.lastSyncTime = Date.now() - 5000; // Look back 5s initially
 
-    this.setStatus('connecting');
-    this.connectSSE();
+    // Vercel Functions are stateless across invocations; durable 30-second polling
+    // replaces the process-local SSE channel in the hosted environment.
+    if (import.meta.env.DEV) this.connectSSE();
     this.startPolling();
 
     // Trigger immediate poll
