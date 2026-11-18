@@ -1,10 +1,10 @@
 import type { Request, Response } from "express";
+import { getServerlessApp } from "../server";
 
 export default async function handler(req: Request, res: Response) {
   try {
-    // Load the application lazily so startup/import failures can be reported as JSON
-    // instead of Vercel's opaque FUNCTION_INVOCATION_FAILED response.
-    const { getServerlessApp } = await import("../server");
+    // Keep this as a static import so Vercel bundles server.ts and its dependencies
+    // into the function instead of trying to resolve /var/task/server at runtime.
     const app = await getServerlessApp();
     app(req, res);
   } catch (error) {
