@@ -1062,7 +1062,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   // Secure Server-Side PIN Credential Services
   // ==========================================
 
-  app.post("/api/auth/pin-credentials/migrate", async (req: Request, res: Response) => {
+  app.post("/api/panel-security/pin/migrate", async (req: Request, res: Response) => {
     const { store_id, admin_pin, sales_pin } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
@@ -1079,7 +1079,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.post("/api/auth/pin-credentials/update", async (req: Request, res: Response) => {
+  app.post("/api/panel-security/pin/update", async (req: Request, res: Response) => {
     const { store_id, current_admin_pin, admin_pin, sales_pin } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
@@ -1119,7 +1119,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.get("/api/auth/pin-credentials/status", async (req: Request, res: Response) => {
+  app.get("/api/panel-security/pin/status", async (req: Request, res: Response) => {
     const { store_id } = req.query;
     try {
       const verified = await verifyFirebaseToken(req);
@@ -1142,7 +1142,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.post("/api/auth/pin-credentials/verify", async (req: Request, res: Response) => {
+  app.post("/api/panel-security/pin/verify", async (req: Request, res: Response) => {
     const { store_id, role, pin } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
