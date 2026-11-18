@@ -1209,6 +1209,254 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  // ==========================================
+  // Delivery operations — all privileged writes use Admin Firestore.
+  // Drivers can read only their own active assignments and submit their own expenses.
+  // ==========================================
+
+  async function getDeliveryStaff(uid: string) {
+    if (!adminDb) throw new Error("Firebase Admin Firestore is not configured.");
+    const snap = await adminDb.collection("delivery_staff").doc(uid).get();
+    return snap.exists ? snap.data() as any : null;
+  }
+
+  async function requireDeliveryAdmin(req: Request, storeIdInput: any, pinInput: any) {
+    const verified = await verifyFirebaseToken(req);
+    const storeId = String(storeIdInput || "").trim().toLowerCase();
+    const pin = String(pinInput || "");
+    if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL || storeId !== PRIMARY_ADMIN_EMAIL) return null;
+    const credentials = await getAdminPinCredentials(storeId);
+    if (!credentials?.admin_pin_hash || !verifyPinAgainstHash(pin, credentials.admin_pin_hash)) return null;
+    return verified;
+  }
+
+  app.get("/api/delivery/session", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      const staff = await getDeliveryStaff(verified.uid);
+      if (!staff || staff.status !== "active") {
+        return res.status(404).json({ isDeliveryStaff: false });
+      }
+      return res.json({
+        isDeliveryStaff: true,
+        role: "delivery",
+        staff: {
+          uid: verified.uid,
+          name: String(staff.name || ""),
+          email: verified.email,
+          phone: String(staff.phone || ""),
+          status: staff.status
+        }
+      });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Delivery session unavailable." });
+    }
+  });
+
+  app.post("/api/delivery/staff/create", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, name, email, phone, temporary_password } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+
+      const cleanName = String(name || "").trim();
+      const cleanEmail = String(email || "").trim().toLowerCase();
+      const cleanPhone = String(phone || "").trim();
+      const password = String(temporary_password || "");
+      if (cleanName.length < 2 || cleanName.length > 100) return res.status(400).json({ error: "Enter a valid staff name." });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail === PRIMARY_ADMIN_EMAIL) {
+        return res.status(400).json({ error: "Enter a valid, separate delivery staff email." });
+      }
+      if (password.length < 8 || password.length > 128) return res.status(400).json({ error: "Temporary password must be 8–128 characters." });
+      if (!firebaseConfig.apiKey) return res.status(503).json({ error: "Firebase Authentication is not configured." });
+
+      const createResponse = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: cleanEmail, password, returnSecureToken: true })
+        }
+      );
+      const authResult: any = await createResponse.json().catch(() => ({}));
+      if (!createResponse.ok || !authResult.localId) {
+        const code = String(authResult?.error?.message || "");
+        if (code.includes("EMAIL_EXISTS")) return res.status(409).json({ error: "This email already has a Firebase account. Use a new email address." });
+        return res.status(400).json({ error: "Firebase could not create this staff account. Check the email and password requirements." });
+      }
+
+      const staffRecord = {
+        uid: authResult.localId,
+        owner_store_id: PRIMARY_ADMIN_EMAIL,
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        role: "delivery",
+        status: "active",
+        created_at: new Date().toISOString(),
+        created_by: admin.uid,
+        updated_at: new Date().toISOString()
+      };
+      try {
+        await adminDb.collection("delivery_staff").doc(authResult.localId).set(staffRecord);
+      } catch (writeError) {
+        try {
+          await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${encodeURIComponent(firebaseConfig.apiKey)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken: authResult.idToken })
+          });
+        } catch (_) {}
+        throw writeError;
+      }
+      return res.status(201).json({
+        success: true,
+        staff: { uid: staffRecord.uid, name: staffRecord.name, email: staffRecord.email, phone: staffRecord.phone, status: staffRecord.status },
+        message: "Delivery staff account created."
+      });
+    } catch (error: any) {
+      console.warn("[delivery/staff/create] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not create delivery staff account." });
+    }
+  });
+
+  app.post("/api/delivery/staff/list", async (req: Request, res: Response) => {
+    const { store_id, admin_pin } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const snap = await adminDb.collection("delivery_staff").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+      const staff = snap.docs.map(d => {
+        const v = d.data();
+        return { uid: d.id, name: v.name || "", email: v.email || "", phone: v.phone || "", status: v.status || "inactive", created_at: v.created_at || "" };
+      });
+      return res.json({ staff });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not load delivery staff." });
+    }
+  });
+
+  app.post("/api/delivery/staff/status", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, staff_uid, status } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const uid = String(staff_uid || "").trim();
+      if (!uid || !["active", "inactive"].includes(String(status))) return res.status(400).json({ error: "Invalid staff status request." });
+      const ref = adminDb.collection("delivery_staff").doc(uid);
+      const staffSnap = await ref.get();
+      if (!staffSnap.exists || staffSnap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) return res.status(404).json({ error: "Delivery staff member not found." });
+      await ref.update({ status, updated_at: new Date().toISOString(), updated_by: admin.uid });
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not update delivery staff status." });
+    }
+  });
+
+  app.get("/api/delivery/assignments", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      const staff = await getDeliveryStaff(verified.uid);
+      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Active delivery staff account required." });
+      }
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const snap = await adminDb.collection("delivery_assignments")
+        .where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL)
+        .where("driver_uid", "==", verified.uid)
+        .get();
+      const assignments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return res.json({ assignments });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not load assigned deliveries." });
+    }
+  });
+
+  app.post("/api/delivery/expenses", async (req: Request, res: Response) => {
+    const { amount, reason, category, date, assignment_id } = req.body || {};
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      const staff = await getDeliveryStaff(verified.uid);
+      if (!staff || staff.status !== "active" || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Active delivery staff account required." });
+      }
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const cleanAmount = Number(amount);
+      const cleanReason = String(reason || "").trim();
+      const cleanCategory = String(category || "Other").trim().slice(0, 60);
+      const cleanDate = String(date || "");
+      if (!Number.isFinite(cleanAmount) || cleanAmount <= 0 || cleanAmount > 1000000) return res.status(400).json({ error: "Enter a valid expense amount." });
+      if (cleanReason.length < 2 || cleanReason.length > 500) return res.status(400).json({ error: "Enter an expense reason (2–500 characters)." });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate) || Number.isNaN(Date.parse(cleanDate))) return res.status(400).json({ error: "Enter a valid expense date." });
+
+      let assignmentId = "";
+      if (assignment_id) {
+        assignmentId = String(assignment_id);
+        const assignment = await adminDb.collection("delivery_assignments").doc(assignmentId).get();
+        if (!assignment.exists || assignment.data()?.driver_uid !== verified.uid || assignment.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+          return res.status(403).json({ error: "Expense must belong to one of your assigned deliveries." });
+        }
+      }
+      const ref = adminDb.collection("delivery_expenses").doc();
+      const record = {
+        id: ref.id,
+        owner_store_id: PRIMARY_ADMIN_EMAIL,
+        driver_uid: verified.uid,
+        driver_name: String(staff.name || ""),
+        amount: cleanAmount,
+        reason: cleanReason,
+        category: cleanCategory,
+        date: cleanDate,
+        assignment_id: assignmentId,
+        payment_status: "unpaid",
+        created_at: new Date().toISOString()
+      };
+      await ref.set(record);
+      return res.status(201).json({ success: true, expense: record });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not submit delivery expense." });
+    }
+  });
+
+  app.post("/api/delivery/expenses/admin-list", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, payment_status } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      let queryRef: any = adminDb.collection("delivery_expenses").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL);
+      if (payment_status === "paid" || payment_status === "unpaid") queryRef = queryRef.where("payment_status", "==", payment_status);
+      const snap = await queryRef.get();
+      return res.json({ expenses: snap.docs.map((d: any) => ({ id: d.id, ...d.data() })) });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not load delivery expenses." });
+    }
+  });
+
+  app.post("/api/delivery/expenses/payment-status", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, expense_id, payment_status } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const id = String(expense_id || "").trim();
+      if (!id || !["paid", "unpaid"].includes(String(payment_status))) return res.status(400).json({ error: "Invalid expense payment status." });
+      const ref = adminDb.collection("delivery_expenses").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) return res.status(404).json({ error: "Delivery expense not found." });
+      await ref.update({ payment_status, reviewed_at: new Date().toISOString(), reviewed_by: admin.uid });
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not update expense payment status." });
+    }
+  });
+
   app.get("/api/passcode_syncs/get", async (req: Request, res: Response) => {
     const { id, email } = req.query;
     try {
