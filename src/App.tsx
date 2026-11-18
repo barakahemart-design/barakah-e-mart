@@ -328,13 +328,9 @@ export default function App() {
  
 
    // Security Locking Roles state
-   const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => {
-    try {
-      const hasSavedUser = !!localStorage.getItem("barakah_local_active_user");
-      const savedPanel = sessionStorage.getItem("barakah_active_panel");
-      return hasSavedUser && (savedPanel === "admin" || savedPanel === "sales") ? savedPanel : "none";
-    } catch (_) { return "none"; }
-  });
+   // Never restore an unlocked role from browser storage. Require PIN verification
+  // again after a page reload so sessionStorage cannot bypass the panel gate.
+  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
   // Show Welcome once per app/browser session. sessionStorage survives a
   // normal refresh, but is cleared when the app tab/window is fully closed.
   // Keep the persistent login in localStorage untouched.
