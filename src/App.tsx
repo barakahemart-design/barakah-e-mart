@@ -2261,7 +2261,7 @@ export default function App() {
       const storeId = String(activeUser?.email || "").trim().toLowerCase();
       if (!firebaseUser || !storeId) throw new Error("Secure login session not available.");
       const idToken = await firebaseUser.getIdToken();
-      const response = await fetch("/api/auth/pin-credentials/update", {
+      const response = await fetch("/api/panel-security/pin/update", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4465,14 +4465,14 @@ _${businessInfo.name}_`;
       Authorization: `Bearer ${idToken}`
     };
 
-    const statusResponse = await fetch(`/api/auth/pin-credentials/status?store_id=${encodeURIComponent(storeId)}`, { headers });
+    const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
     const statusData = await statusResponse.json().catch(() => ({}));
     if (!statusResponse.ok) {
       throw new Error(statusData.error || "Could not check secure PIN settings.");
     }
 
     if (!statusData.configured) {
-      const migrationResponse = await fetch("/api/auth/pin-credentials/migrate", {
+      const migrationResponse = await fetch("/api/panel-security/pin/migrate", {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -4487,7 +4487,7 @@ _${businessInfo.name}_`;
       }
     }
 
-    const verifyResponse = await fetch("/api/auth/pin-credentials/verify", {
+    const verifyResponse = await fetch("/api/panel-security/pin/verify", {
       method: "POST",
       headers,
       body: JSON.stringify({ store_id: storeId, role: panel, pin })
