@@ -1,10 +1,15 @@
 import type { Request, Response } from "express";
-import { getServerlessApp } from "../server.ts";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 export default async function handler(req: Request, res: Response) {
   try {
-    // Keep this as a static import so Vercel bundles server.ts and its dependencies
-    // into the function instead of trying to resolve /var/task/server at runtime.
+    // The server bundle is built into dist/ and explicitly included in this function
+    // by vercel.json. This avoids runtime imports of source-only TypeScript files.
+    const { getServerlessApp } = require("../dist/server.cjs") as {
+      getServerlessApp: () => Promise<import("express").Express>;
+    };
     const app = await getServerlessApp();
     app(req, res);
   } catch (error) {
