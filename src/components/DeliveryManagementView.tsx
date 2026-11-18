@@ -16,13 +16,15 @@ type DeliveryExpense = {
 
 interface Props {
   adminPin: string;
+  salesPin?: string;
+  panelRole?: "admin" | "sales";
   storeId: string;
   currencySymbol?: string;
   triggerNotification: (message: string, type?: "success" | "error" | "info") => void;
 }
 
-export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§³", triggerNotification }: Props) {
-  const [tab, setTab] = useState<"staff" | "assignments" | "expenses">("staff");
+export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "à§³", triggerNotification }: Props) {
+  const [tab, setTab] = useState<"staff" | "assignments" | "expenses" | "payments">("staff");
   const [staff, setStaff] = useState<Driver[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [expenses, setExpenses] = useState<DeliveryExpense[]>([]);
@@ -45,12 +47,12 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
     const response = await fetch(path, {
       method: body ? "POST" : "GET",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      ...(body ? { body: JSON.stringify({ store_id: storeId, admin_pin: adminPin, ...body }) } : {})
+      ...(body ? { body: JSON.stringify({ store_id: storeId, panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminPin } : { sales_pin: salesPin }), ...body }) } : {})
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Delivery request failed.");
     return data;
-  }, [adminPin, storeId]);
+  }, [adminPin, salesPin, panelRole, storeId]);
 
   const loadAll = useCallback(async () => {
     if (!adminPin || !storeId) return;
@@ -59,7 +61,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
       const [staffData, assignmentData, expenseData] = await Promise.all([
         request("/api/delivery/staff/list", {}),
         request("/api/delivery/assignments/admin-list", {}),
-        request("/api/delivery/expenses/admin-list", { payment_status: expenseFilter === "all" ? "" : expenseFilter })
+        panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: expenseFilter === "all" ? "" : expenseFilter }) : Promise.resolve({ expenses: [] })
       ]);
       setStaff(staffData.staff || []);
       setAssignments(assignmentData.assignments || []);
@@ -70,7 +72,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
     } finally {
       setLoading(false);
     }
-  }, [adminPin, storeId, request, expenseFilter]);
+  }, [adminPin, storeId, request, expenseFilter, panelRole]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -118,11 +120,36 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
     } catch (error: any) { notifyRef.current(error?.message || "Could not update expense status.", "error"); }
   };
 
+  const updateAssignmentPayment = async (assignment: Assignment) => {
+    if (panelRole !== "admin") return;
+    const amountInput = window.prompt("Delivery payment amount:", String((assignment as any).delivery_fee || 0));
+    if (amountInput === null) return;
+    const fee = Number(amountInput);
+    if (!Number.isFinite(fee) || fee < 0) { notifyRef.current("Enter a valid payment amount.", "error"); return; }
+    const nextStatus = window.prompt("Payment status: type paid or unpaid", String((assignment as any).payment_status || "unpaid"));
+    if (nextStatus === null) return;
+    if (!["paid", "unpaid"].includes(nextStatus.toLowerCase())) { notifyRef.current("Status must be paid or unpaid.", "error"); return; }
+    const timing = window.prompt("Payment timing: type advance or after_delivery", String((assignment as any).payment_timing || "after_delivery"));
+    if (timing === null) return;
+    if (!["advance", "after_delivery"].includes(timing.toLowerCase())) { notifyRef.current("Timing must be advance or after_delivery.", "error"); return; }
+    try {
+      await request("/api/delivery/assignments/payment", {
+        assignment_id: assignment.id, delivery_fee: fee,
+        payment_status: nextStatus.toLowerCase(), payment_timing: timing.toLowerCase()
+      });
+      await loadAll();
+      notifyRef.current("Delivery payment updated.", "success");
+    } catch (error: any) { notifyRef.current(error?.message || "Could not update delivery payment.", "error"); }
+  };
+
   const activeDrivers = staff.filter(x => x.status === "active");
   const tabs = [
     { id: "staff" as const, label: "Delivery Staff", icon: UserRound },
     { id: "assignments" as const, label: "Invoice Assignments", icon: ClipboardList },
-    { id: "expenses" as const, label: "Staff Expenses", icon: Wallet }
+    ...(panelRole === "admin" ? [
+      { id: "expenses" as const, label: "Staff Expenses", icon: Wallet },
+      { id: "payments" as const, label: "Delivery Payments", icon: Wallet }
+    ] : [])
   ];
 
   return (
@@ -137,7 +164,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1.5">
+      <div className={`grid grid-cols-${tabs.length} gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1.5`}>
         {tabs.map(item => {
           const Icon = item.icon;
           return <button key={item.id} onClick={() => setTab(item.id)} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-[11px] font-bold transition-all ${tab === item.id ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20" : "text-slate-400 hover:bg-white/5"}`}><Icon className="h-4 w-4" /><span>{item.label}</span></button>;
@@ -170,6 +197,14 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
         </div>
       </div>}
 
+      {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
+        <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
+        {assignments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned deliveries yet.</p> : assignments.map(a => <div key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+          <div><p className="text-sm font-black text-white">Invoice {a.invoice_no} Â· {a.customer_name}</p><p className="mt-1 text-xs text-slate-300">{currencySymbol}{Number((a as any).delivery_fee || 0).toLocaleString("en-BD")} Â· {(a as any).payment_timing === "advance" ? "Advance" : "After delivery"}</p><p className="mt-1 text-[10px] text-slate-500">{a.driver_name} Â· Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "â€”"}</p>{(a as any).payment_updated_at && <p className="text-[10px] text-slate-500">Updated {new Date((a as any).payment_updated_at).toLocaleString("en-BD")}</p>}</div>
+          <button onClick={() => updateAssignmentPayment(a)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${(a as any).payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{(a as any).payment_status === "paid" ? "Paid Â· Edit" : "Unpaid Â· Set Payment"}</button>
+        </div>)}
+      </div>}
+
       {tab === "assignments" && <div className="space-y-4">
         <form onSubmit={assignInvoice} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Invoice Number<input required value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Enter invoice number" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" /></label>
@@ -183,7 +218,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
         </div>)}</div>
       </div>}
 
-      {tab === "expenses" && <div className="space-y-3">
+      {tab === "expenses" && panelRole === "admin" && <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black text-white">Staff Expense Requests</h3><select value={expenseFilter} onChange={e => setExpenseFilter(e.target.value as any)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option value="all">All expenses</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select></div>
         {expenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No expenses submitted yet.</p> : expenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div><p className="text-sm font-black text-white">{currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")} Â· {expense.reason}</p><p className="mt-1 text-[11px] text-slate-400">{expense.driver_name} Â· {expense.category} Â· {expense.date}</p></div>
@@ -191,7 +226,7 @@ export function DeliveryManagementView({ adminPin, storeId, currencySymbol = "à§
         </div>)}
       </div>}
 
-      <div className="flex items-center gap-2 rounded-xl border border-sky-500/15 bg-sky-500/5 p-3 text-[10px] leading-relaxed text-sky-200/80"><AlertCircle className="h-4 w-4 shrink-0" /> Driver records and expense approvals are handled by the secure server API. Delivery accounts do not receive access to Admin, Sales, Ledger or inventory collections.</div>
+      <div className="flex items-center gap-2 rounded-xl border border-sky-500/15 bg-sky-500/5 p-3 text-[10px] leading-relaxed text-sky-200/80"><AlertCircle className="h-4 w-4 shrink-0" /> Delivery assignments are available to Admin and Sales. Only Admin can manage staff expenses and delivery payment status. Delivery accounts cannot access Admin, Sales, Ledger or inventory collections.</div>
     </div>
   );
 }
