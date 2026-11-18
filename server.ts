@@ -25,9 +25,8 @@ import {
   setLogLevel
 } from "firebase/firestore";
 import {
-  migrateStorePinsServerSide,
-  verifyStorePin,
-  getStorePinCredentials,
+  hashPin,
+  verifyPinAgainstHash,
   getCredentialDocId
 } from "./src/server/pinAuthService";
 import firebaseConfig from "./firebase-applet-config.json";
@@ -48,7 +47,85 @@ const firebaseAuth = getAuth(firebaseApp);
 // ID tokens are verified through Firebase Identity Toolkit below to avoid loading
 // the Admin Auth dependency chain in the serverless CommonJS bundle.
 let adminDb: FirebaseAdminFirestore | null = null;
+
 let adminSdkInitError = "";
+
+// PIN credential operations use the privileged Admin Firestore instance only.
+// This prevents server routes from depending on an unauthenticated Firebase client SDK.
+type AdminPinCredentials = {
+  id: string;
+  store_id: string;
+  admin_pin_hash: string;
+  sales_pin_hash: string;
+  created_at: string;
+  updated_at: string;
+  version: number;
+};
+
+const pinAttemptMap = new Map<string, { attempts: number; windowStartedAt: number; lockedUntil: number }>();
+
+async function getAdminPinCredentials(storeId: string): Promise<AdminPinCredentials | null> {
+  if (!adminDb) throw new Error("Firebase Admin Firestore is not configured.");
+  const cleanStoreId = (storeId || "").trim().toLowerCase();
+  if (!cleanStoreId) return null;
+  const snap = await adminDb.collection("store_auth_credentials").doc(getCredentialDocId(cleanStoreId)).get();
+  return snap.exists ? (snap.data() as AdminPinCredentials) : null;
+}
+
+async function migrateAdminPinCredentials(
+  storeId: string,
+  providedAdminPin?: string,
+  providedSalesPin?: string
+): Promise<{ success: boolean; migrated: boolean; store_id: string; message: string }> {
+  if (!adminDb) throw new Error("Firebase Admin Firestore is not configured.");
+  const cleanStoreId = (storeId || "").trim().toLowerCase();
+  if (!cleanStoreId) throw new Error("Invalid store account.");
+
+  const existing = await getAdminPinCredentials(cleanStoreId);
+  if (existing?.admin_pin_hash && existing?.sales_pin_hash) {
+    return { success: true, migrated: false, store_id: cleanStoreId, message: "PIN credentials are already initialized." };
+  }
+
+  let legacyAdminPin = "";
+  let legacySalesPin = "";
+  try {
+    let legacySnap = await adminDb.collection("passcode_syncs")
+      .where("linked_email", "==", cleanStoreId).limit(1).get();
+    if (legacySnap.empty) {
+      legacySnap = await adminDb.collection("passcode_syncs")
+        .where("linkedEmail", "==", cleanStoreId).limit(1).get();
+    }
+    if (!legacySnap.empty) {
+      const legacy = legacySnap.docs[0].data();
+      const business = legacy.businessInfo || legacy.business_info || {};
+      legacyAdminPin = String(business.adminPasscode || "");
+      legacySalesPin = String(business.salesPasscode || "");
+    }
+  } catch (error) {
+    console.warn("[PIN migration] Legacy credential lookup failed; using authenticated settings values only.");
+  }
+
+  // Preserve legacy defaults for existing installations; the values are hashed before storage.
+  const adminPin = String(providedAdminPin || legacyAdminPin || (existing?.admin_pin_hash ? "" : "1234")).trim();
+  const salesPin = String(providedSalesPin || legacySalesPin || (existing?.sales_pin_hash ? "" : "5555")).trim();
+  const now = new Date().toISOString();
+  const record: AdminPinCredentials = {
+    id: getCredentialDocId(cleanStoreId),
+    store_id: cleanStoreId,
+    admin_pin_hash: adminPin ? hashPin(adminPin) : String(existing?.admin_pin_hash || ""),
+    sales_pin_hash: salesPin ? hashPin(salesPin) : String(existing?.sales_pin_hash || ""),
+    created_at: existing?.created_at || now,
+    updated_at: now,
+    version: 1
+  };
+  if (!record.admin_pin_hash || !record.sales_pin_hash) {
+    throw new Error("Both Admin and Sales PINs must be configured before access can be enabled.");
+  }
+
+  await adminDb.collection("store_auth_credentials").doc(record.id).set(record, { merge: true });
+  return { success: true, migrated: true, store_id: cleanStoreId, message: "PIN credentials securely initialized." };
+}
+
 try {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (serviceAccountJson) {
@@ -985,96 +1062,97 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   // Secure Server-Side PIN Credential Services
   // ==========================================
 
-  // Migration / Initialization Endpoint
   app.post("/api/auth/pin-credentials/migrate", async (req: Request, res: Response) => {
-    const { store_id, admin_pin, sales_pin } = req.body;
+    const { store_id, admin_pin, sales_pin } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
-      if (!store_id || String(store_id).trim().toLowerCase() !== verified.email) {
+      const cleanStoreId = String(store_id || "").trim().toLowerCase();
+      if (!cleanStoreId || cleanStoreId !== verified.email) {
         return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
       }
-      if (!store_id) {
-        return res.status(400).json({ error: "Missing store_id parameter." });
-      }
-      const cleanStoreId = String(store_id).trim().toLowerCase();
-      const result = await migrateStorePinsServerSide(db, cleanStoreId, admin_pin, sales_pin);
+      const result = await migrateAdminPinCredentials(cleanStoreId, admin_pin, sales_pin);
       return res.json(result);
     } catch (err: any) {
-      console.warn("[pin-credentials/migrate] Error:", err);
-      return res.status(500).json({ error: err.message || "Failed to initialize credentials" });
+      console.warn("[pin-credentials/migrate] Initialization failed:", err?.message || "Unknown error");
+      return res.status(500).json({ error: err?.message || "Failed to initialize credentials." });
     }
   });
 
-  // Status Check Endpoint (Checks if PIN credentials exist; NEVER returns hashes or PINs)
   app.get("/api/auth/pin-credentials/status", async (req: Request, res: Response) => {
     const { store_id } = req.query;
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
-      if (!store_id || String(store_id).trim().toLowerCase() !== verified.email) {
+      const cleanStoreId = String(store_id || "").trim().toLowerCase();
+      if (!cleanStoreId || cleanStoreId !== verified.email) {
         return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
       }
-      if (!store_id) {
-        return res.status(400).json({ error: "Missing store_id parameter." });
-      }
-      const cleanStoreId = String(store_id).trim().toLowerCase();
-      const creds = await getStorePinCredentials(db, cleanStoreId);
+      const creds = await getAdminPinCredentials(cleanStoreId);
       return res.json({
         store_id: cleanStoreId,
-        configured: !!creds,
+        configured: !!(creds?.admin_pin_hash && creds?.sales_pin_hash),
         has_admin_pin: !!creds?.admin_pin_hash,
         has_sales_pin: !!creds?.sales_pin_hash,
         version: creds?.version || null,
         updated_at: creds?.updated_at || null
       });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(503).json({ error: err?.message || "PIN status is temporarily unavailable." });
     }
   });
 
-  // Server-Side PIN Verification Endpoint
   app.post("/api/auth/pin-credentials/verify", async (req: Request, res: Response) => {
-    const { store_id, role, pin } = req.body;
+    const { store_id, role, pin } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
-      if (!store_id || String(store_id).trim().toLowerCase() !== verified.email) {
+      const cleanStoreId = String(store_id || "").trim().toLowerCase();
+      const cleanRole = String(role || "").trim().toLowerCase();
+      const enteredPin = String(pin || "");
+      if (!cleanStoreId || cleanStoreId !== verified.email) {
         return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
       }
-      if (!store_id || !role || !pin) {
-        return res.status(400).json({ error: "Missing store_id, role, or pin parameter." });
-      }
-      const cleanStoreId = String(store_id).trim().toLowerCase();
-      const cleanRole = String(role).trim().toLowerCase();
-
       if (cleanRole !== "admin" && cleanRole !== "sales") {
-        return res.status(400).json({ error: "Invalid role specified. Must be 'admin' or 'sales'." });
+        return res.status(400).json({ error: "Invalid panel role." });
+      }
+      if (!/^\\d{4}$/.test(enteredPin)) {
+        return res.status(400).json({ error: "Enter a valid 4-digit PIN." });
       }
 
-      const clientIp = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
-      const verifyResult = await verifyStorePin(db, cleanStoreId, cleanRole as "admin" | "sales", String(pin), clientIp);
-
-      if (verifyResult.rateLimited) {
-        return res.status(429).json({ error: verifyResult.error });
+      const creds = await getAdminPinCredentials(cleanStoreId);
+      const targetHash = cleanRole === "admin" ? creds?.admin_pin_hash : creds?.sales_pin_hash;
+      if (!targetHash) {
+        return res.status(409).json({ error: "PIN credentials are not initialized. Please refresh and try again." });
       }
 
-      if (!verifyResult.valid) {
-        return res.status(401).json({ 
-          valid: false, 
-          error: verifyResult.error || "Authentication failed: Incorrect PIN." 
+      const attemptKey = `${cleanStoreId}:${cleanRole}`;
+      const now = Date.now();
+      const attempt = pinAttemptMap.get(attemptKey) || { attempts: 0, windowStartedAt: now, lockedUntil: 0 };
+      if (attempt.lockedUntil > now) {
+        return res.status(429).json({ error: `Too many failed attempts. Please wait ${Math.ceil((attempt.lockedUntil - now) / 1000)} seconds.` });
+      }
+      if (now - attempt.windowStartedAt > 5 * 60 * 1000) {
+        attempt.attempts = 0;
+        attempt.windowStartedAt = now;
+        attempt.lockedUntil = 0;
+      }
+
+      if (!verifyPinAgainstHash(enteredPin, targetHash)) {
+        attempt.attempts += 1;
+        if (attempt.attempts >= 5) attempt.lockedUntil = now + 60 * 1000;
+        pinAttemptMap.set(attemptKey, attempt);
+        return res.status(attempt.lockedUntil > now ? 429 : 401).json({
+          valid: false,
+          error: attempt.lockedUntil > now ? "Too many failed attempts. Locked for 60 seconds." : "Incorrect PIN."
         });
       }
 
-      return res.json({
-        success: true,
-        valid: true,
-        store_id: cleanStoreId,
-        role: cleanRole
-      });
+      pinAttemptMap.delete(attemptKey);
+      return res.json({ success: true, valid: true, store_id: cleanStoreId, role: cleanRole });
     } catch (err: any) {
-      console.warn("[pin-credentials/verify] Error:", err);
-      return res.status(500).json({ error: err.message || "Internal server error during verification." });
+      console.warn("[pin-credentials/verify] Verification failed:", err?.message || "Unknown error");
+      return res.status(503).json({ error: err?.message || "PIN verification is temporarily unavailable." });
     }
   });
 
