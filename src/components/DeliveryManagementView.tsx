@@ -167,7 +167,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         </button>
       </div>
 
-      <div className={`grid grid-cols-${tabs.length} gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1.5`}>
+      <div className={`grid ${panelRole === "admin" ? "grid-cols-4" : "grid-cols-2"} gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1.5`}>
         {tabs.map(item => {
           const Icon = item.icon;
           return <button key={item.id} onClick={() => setTab(item.id)} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-[11px] font-bold transition-all ${tab === item.id ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20" : "text-slate-400 hover:bg-white/5"}`}><Icon className="h-4 w-4" /><span>{item.label}</span></button>;
