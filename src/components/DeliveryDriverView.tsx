@@ -4,7 +4,8 @@ import { Truck, MapPin, Phone, PackageCheck, Wallet, RefreshCw, LogOut, CheckCir
 
 type Assignment = {
   id: string; invoice_no: string; customer_name: string; customer_phone: string;
-  customer_address: string; delivery_status: string; assigned_at?: string; items?: Array<{name: string; quantity: number}>;
+  customer_address: string; delivery_status: string; delivery_fee?: number; payment_status?: string;
+  delivery_note?: string; assigned_at?: string; items?: Array<{name: string; quantity: number}>;
 };
 type Expense = { id: string; amount: number; reason: string; category: string; date: string; payment_status: string };
 type DriverProfile = { uid: string; name: string; email: string; phone?: string };
@@ -26,6 +27,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [assignmentId, setAssignmentId] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [editDrafts, setEditDrafts] = useState<Record<string, { status: string; fee: string }>>({});
 
   const request = useCallback(async (path: string, body?: any) => {
     const user = auth.currentUser;
@@ -57,13 +59,33 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
 
   useEffect(() => { load(); }, [load]);
 
-  const updateStatus = async (item: Assignment, status: "delivered" | "failed" | "returned") => {
+  const getEditDraft = (item: Assignment) => editDrafts[item.id] || {
+    status: item.delivery_status || "assigned",
+    fee: String(item.delivery_fee ?? 0)
+  };
+
+  const saveAssignmentEdits = async (item: Assignment) => {
+    const draft = getEditDraft(item);
+    const canEditAmount = item.payment_status !== "paid";
+    const fee = Number(draft.fee);
+    if (canEditAmount && (!Number.isFinite(fee) || fee < 0 || fee > 1000000)) {
+      alert("Enter a valid delivery amount.");
+      return;
+    }
     try {
-      await request("/api/delivery/assignments/update-mine", {
-        assignment_id: item.id, delivery_status: status, delivery_note: notes[item.id] || ""
-      });
-      setAssignments(prev => prev.map(x => x.id === item.id ? { ...x, delivery_status: status } : x));
-    } catch (error: any) { alert(error?.message || "Could not update delivery status."); }
+      const payload: any = {
+        assignment_id: item.id,
+        delivery_status: draft.status,
+        delivery_note: notes[item.id] ?? item.delivery_note ?? ""
+      };
+      if (canEditAmount) payload.delivery_fee = fee;
+      await request("/api/delivery/assignments/update-mine", payload);
+      setAssignments(prev => prev.map(x => x.id === item.id
+        ? { ...x, delivery_status: draft.status, delivery_note: payload.delivery_note, ...(canEditAmount ? { delivery_fee: fee } : {}) }
+        : x));
+      setEditDrafts(prev => { const next = { ...prev }; delete next[item.id]; return next; });
+      alert("Delivery details updated.");
+    } catch (error: any) { alert(error?.message || "Could not update delivery details."); }
   };
 
   const submitExpense = async (e: React.FormEvent) => {
@@ -99,7 +121,20 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
             <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-base font-black">Invoice {item.invoice_no}</h3><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status}</span></div>
             <div className="space-y-1 text-xs text-slate-300"><p className="font-bold">{item.customer_name}</p>{item.customer_phone && <a className="inline-flex items-center gap-1 text-sky-300" href={`tel:${item.customer_phone}`}><Phone className="h-3 w-3" /> {item.customer_phone}</a>}<p className="flex items-start gap-1 text-slate-400"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "Customer address not available"}</p></div>
             {item.items?.length ? <div className="rounded-xl bg-slate-950/70 p-3 text-[11px] text-slate-300">{item.items.map((x,i) => <p key={i}>{x.name} × {x.quantity}</p>)}</div> : null}
-            {item.delivery_status !== "delivered" && <div className="space-y-2"><input value={notes[item.id] || ""} onChange={e => setNotes(prev => ({...prev,[item.id]:e.target.value}))} placeholder="Delivery note (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-white" /><div className="grid grid-cols-3 gap-2"><button onClick={() => updateStatus(item,"delivered")} className="rounded-lg bg-emerald-500/15 px-2 py-2.5 text-[10px] font-black text-emerald-300">Delivered</button><button onClick={() => updateStatus(item,"failed")} className="rounded-lg bg-rose-500/15 px-2 py-2.5 text-[10px] font-black text-rose-300">Failed</button><button onClick={() => updateStatus(item,"returned")} className="rounded-lg bg-amber-500/15 px-2 py-2.5 text-[10px] font-black text-amber-300">Returned</button></div></div>}
+            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold text-slate-300">Edit delivery details</p><span className="text-[10px] text-slate-500">Status can be changed anytime</span></div>
+              <label className="block text-[10px] font-bold text-slate-400">Delivery status
+                <select value={getEditDraft(item).status} onChange={e => setEditDrafts(prev => ({ ...prev, [item.id]: { ...getEditDraft(item), status: e.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white">
+                  <option value="assigned">Assigned / In progress</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option><option value="returned">Returned</option>
+                </select>
+              </label>
+              <label className="block text-[10px] font-bold text-slate-400">Delivery amount ({currencySymbol})
+                <input type="number" min="0" max="1000000" step="0.01" disabled={item.payment_status === "paid"} value={getEditDraft(item).fee} onChange={e => setEditDrafts(prev => ({ ...prev, [item.id]: { ...getEditDraft(item), fee: e.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-50" />
+              </label>
+              {item.payment_status === "paid" && <p className="text-[10px] font-semibold text-emerald-300">Payment is Paid. Amount editing is locked; delivery status can still be changed.</p>}
+              <input value={notes[item.id] ?? item.delivery_note ?? ""} onChange={e => setNotes(prev => ({...prev,[item.id]:e.target.value}))} placeholder="Delivery note (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white" />
+              <button onClick={() => saveAssignmentEdits(item)} className="w-full rounded-lg bg-emerald-500 px-3 py-2.5 text-[10px] font-black text-slate-950">Save Changes</button>
+            </div>
           </article>)}
         </div>}
 
