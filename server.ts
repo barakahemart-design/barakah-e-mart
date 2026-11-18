@@ -117,8 +117,6 @@ type AdminPinCredentials = {
   version: number;
 };
 
-const pinAttemptMap = new Map<string, { attempts: number; windowStartedAt: number; lockedUntil: number }>();
-
 async function getAdminPinCredentials(storeId: string): Promise<AdminPinCredentials | null> {
   if (!adminDb) throw new Error("Firebase Admin Firestore is not configured.");
   const cleanStoreId = (storeId || "").trim().toLowerCase();
@@ -1165,8 +1163,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         version: 1
       };
       await adminDb!.collection("store_auth_credentials").doc(getCredentialDocId(cleanStoreId)).set(updated, { merge: true });
-      pinAttemptMap.delete(`${cleanStoreId}:admin`);
-      pinAttemptMap.delete(`${cleanStoreId}:sales`);
+      await Promise.all((["admin", "sales"] as const).map((role) => {
+        const rateLimitId = createHash("sha256").update(`${cleanStoreId}:panel-pin:${role}`).digest("hex");
+        return adminDb!.collection("security_rate_limits").doc(rateLimitId).delete();
+      }));
       return res.json({ success: true, message: "Admin and Sales PINs updated securely." });
     } catch (err: any) {
       console.warn("[pin-credentials/update] Update failed:", err?.message || "Unknown error");
