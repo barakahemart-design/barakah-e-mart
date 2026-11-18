@@ -155,7 +155,7 @@ class RealtimeSyncManager {
 
   private startPolling() {
     if (this.pollInterval) clearInterval(this.pollInterval);
-    // Safety reconciliation polling; SSE delivers normal changes immediately.
+    // Durable server-side polling reconciles changes across Vercel Function instances.
     this.pollInterval = setInterval(() => {
       if (this.isRunning) {
         this.pollChanges();
@@ -206,9 +206,8 @@ class RealtimeSyncManager {
             });
           });
         }
-        if (json.serverTime && json.serverTime > this.lastSyncTime) {
-          this.lastSyncTime = json.serverTime;
-        }
+        // Advance only to an actual event timestamp. Advancing to serverTime can
+        // skip an event committed just after the poll query completes.
         this.setStatus('connected');
       }
     } catch (err) {
