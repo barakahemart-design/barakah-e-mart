@@ -2244,30 +2244,52 @@ export default function App() {
   };
 
   // Save Security Passcodes settings change
-  const handleSaveSecurityPasscodes = () => {
-    const isNumeric = (str: string) => /^\d+$/.test(str);
-    
-    if (tempAdminPasscode.length < 4 || tempSalesPasscode.length < 4) {
-      triggerNotification("Password/Passcode must be at least 4 digits long!", "error");
-      return;
-    }
-    if (!isNumeric(tempAdminPasscode) || !isNumeric(tempSalesPasscode)) {
-      triggerNotification("Password/Passcode must only contain numeric digits (0-9)!", "error");
+  const handleSaveSecurityPasscodes = async () => {
+    const isFourDigits = (value: string) => /^\d{4}$/.test(value);
+
+    if (!isFourDigits(tempAdminPasscode) || !isFourDigits(tempSalesPasscode)) {
+      triggerNotification("Admin and Sales PINs must each contain exactly 4 digits.", "error");
       return;
     }
     if (tempAdminPasscode === tempSalesPasscode) {
-      triggerNotification("Admin passcode and Sales panel passcode must be distinct!", "error");
+      triggerNotification("Admin PIN and Sales PIN must be different.", "error");
       return;
     }
-    
-    const updated = {
-      ...businessInfo,
-      adminPasscode: tempAdminPasscode,
-      salesPasscode: tempSalesPasscode
-    };
-    persistBusinessInfoState(updated);
-    triggerNotification("Admin and Sales security passcodes updated successfully!", "success");
-    setActiveSettingsSection("overview");
+
+    try {
+      const firebaseUser = firebaseAuth.currentUser;
+      const storeId = String(activeUser?.email || "").trim().toLowerCase();
+      if (!firebaseUser || !storeId) throw new Error("Secure login session not available.");
+      const idToken = await firebaseUser.getIdToken();
+      const response = await fetch("/api/auth/pin-credentials/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          store_id: storeId,
+          current_admin_pin: String(businessInfo.adminPasscode || "1234"),
+          admin_pin: tempAdminPasscode,
+          sales_pin: tempSalesPasscode
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Could not update secure PINs.");
+      }
+
+      const updated = {
+        ...businessInfo,
+        adminPasscode: tempAdminPasscode,
+        salesPasscode: tempSalesPasscode
+      };
+      persistBusinessInfoState(updated);
+      triggerNotification("Admin and Sales PINs updated securely.", "success");
+      setActiveSettingsSection("overview");
+    } catch (error: any) {
+      triggerNotification(error?.message || "PIN update failed. Please try again.", "error");
+    }
   };
 
   // Logo upload processing inside App.tsx with Canvas-level compression and no size limits
