@@ -1599,6 +1599,25 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           if (contactDoc.exists) customer = contactDoc.data() || {};
         }
       }
+
+      // The delivery queue is a compact copy and may not contain the original
+      // customer note. Re-read the sale record so invoice/customer notes survive
+      // even when an assignment is created from the automatic queue.
+      let sourceTransaction: any = null;
+      if (transactionId) {
+        const sourceSnap = await adminDb.collection("transactions").doc(transactionId).get();
+        if (sourceSnap.exists) sourceTransaction = sourceSnap.data() || null;
+      }
+      if (!sourceTransaction) {
+        const sourceMatches = await adminDb.collection("transactions").where("invoiceNo", "==", invoiceNo).limit(5).get();
+        const sourceDoc = sourceMatches.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === PRIMARY_ADMIN_EMAIL);
+        if (sourceDoc) {
+          sourceTransaction = sourceDoc.data();
+          transactionId = sourceDoc.id;
+        }
+      }
+      if (sourceTransaction) transaction = { ...sourceTransaction, ...transaction };
+
       const assignmentId = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
       const assignmentRef = adminDb.collection("delivery_assignments").doc(assignmentId);
       const previousAssignmentSnap = await assignmentRef.get();
