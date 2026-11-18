@@ -1250,18 +1250,21 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const staff = await getDeliveryStaff(verified.uid);
-      if (!staff || staff.status !== "active") {
-        return res.status(404).json({ isDeliveryStaff: false });
+      if (!staff || staff.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+        return res.status(404).json({ isDeliveryStaff: false, isDeliveryAccount: false });
       }
+      // Keep disabled delivery accounts out of the normal Admin/Sales login flow.
+      // The account remains a delivery identity, but receives no delivery data.
       return res.json({
-        isDeliveryStaff: true,
+        isDeliveryStaff: staff.status === "active",
+        isDeliveryAccount: true,
         role: "delivery",
         staff: {
           uid: verified.uid,
           name: String(staff.name || ""),
           email: verified.email,
           phone: String(staff.phone || ""),
-          status: staff.status
+          status: staff.status === "active" ? "active" : "inactive"
         }
       });
     } catch (error: any) {
