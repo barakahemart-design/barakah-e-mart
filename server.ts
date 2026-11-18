@@ -1613,6 +1613,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         customer_name: String(customer.name || transaction.customer_name || transaction.customerName || "Customer"),
         customer_phone: String(customer.phone || transaction.customer_phone || transaction.customerPhone || ""),
         customer_address: String(customer.address || transaction.customer_address || transaction.customerAddress || ""),
+        customer_note: String(transaction.customer_note || transaction.customerNote || transaction.note || transaction.notes || transaction.remark || ""),
+        delivery_note: String(previousAssignment.delivery_note || transaction.delivery_note || transaction.deliveryNote || ""),
         items: Array.isArray(transaction.items) ? transaction.items.map((item: any) => ({
           name: String(item.name || item.productName || "Item"),
           quantity: Number(item.quantity) || 0
@@ -1714,22 +1716,94 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           !["advance", "after_delivery"].includes(String(payment_timing))) {
         return res.status(400).json({ error: "Invalid delivery payment details." });
       }
-      const ref = adminDb.collection("delivery_assignments").doc(id);
-      const snap = await ref.get();
-      if (!snap.exists || snap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+
+      const assignmentRef = adminDb.collection("delivery_assignments").doc(id);
+      // One stable expense document per delivery assignment prevents duplicate
+      // expense rows when an Admin saves the same Paid record more than once.
+      const expenseRef = adminDb.collection("expenses").doc(`delivery_payment_${id}`);
+      const now = new Date().toISOString();
+
+      const result = await adminDb.runTransaction(async (transaction) => {
+        const assignmentSnap = await transaction.get(assignmentRef);
+        if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== PRIMARY_ADMIN_EMAIL) {
+          throw new Error("DELIVERY_ASSIGNMENT_NOT_FOUND");
+        }
+        const assignment = assignmentSnap.data() || {};
+        const paymentWasAlreadyPaid = String(assignment.payment_status || "").toLowerCase() === "paid";
+        const paymentReceivedAt = payment_status === "paid"
+          ? (paymentWasAlreadyPaid && assignment.payment_received_at ? String(assignment.payment_received_at) : now)
+          : "";
+
+        transaction.update(assignmentRef, {
+          delivery_fee: fee,
+          payment_status,
+          payment_timing,
+          payment_updated_at: now,
+          payment_updated_by: admin.uid,
+          payment_received_at: paymentReceivedAt
+        });
+
+        if (payment_status === "paid") {
+          const invoiceNo = String(assignment.invoice_no || "");
+          const driverName = String(assignment.driver_name || "Delivery Staff");
+          const customerName = String(assignment.customer_name || "Customer");
+          const customerNote = String(assignment.customer_note || assignment.customerNote || assignment.note || "");
+          const deliveryNote = String(assignment.delivery_note || assignment.deliveryNote || "");
+          const noteParts = [
+            `Delivery payment to: ${driverName}`,
+            `Delivery Challan / Invoice: ${invoiceNo || id}`,
+            `Customer: ${customerName}`,
+            customerNote ? `Customer Note: ${customerNote}` : "",
+            deliveryNote ? `Delivery Note: ${deliveryNote}` : ""
+          ].filter(Boolean);
+          const expenseDate = paymentReceivedAt.slice(0, 10);
+
+          transaction.set(expenseRef, {
+            id: expenseRef.id,
+            category: "Delivery Payment",
+            amount: fee,
+            description: noteParts.join(" | "),
+            date: expenseDate,
+            source: "delivery_payment",
+            source_id: id,
+            assignment_id: id,
+            invoice_no: invoiceNo,
+            driver_uid: String(assignment.driver_uid || ""),
+            driver_name: driverName,
+            customer_name: customerName,
+            customer_phone: String(assignment.customer_phone || ""),
+            customer_address: String(assignment.customer_address || ""),
+            customer_note: customerNote,
+            delivery_note: deliveryNote,
+            payment_timing,
+            payment_status: "paid",
+            user_id: admin.uid,
+            userId: admin.uid,
+            owner_id: admin.uid,
+            store_id: PRIMARY_ADMIN_EMAIL,
+            storeId: PRIMARY_ADMIN_EMAIL,
+            email: PRIMARY_ADMIN_EMAIL,
+            linked_email: PRIMARY_ADMIN_EMAIL,
+            linkedEmail: PRIMARY_ADMIN_EMAIL,
+            deleted: false,
+            isDeleted: false,
+            created_at: paymentWasAlreadyPaid ? (assignment.payment_received_at || now) : now,
+            updated_at: now
+          }, { merge: true });
+        } else {
+          // Reversing Paid -> Unpaid removes the linked expense from Net Profit.
+          transaction.delete(expenseRef);
+        }
+
+        return { payment_received_at: paymentReceivedAt, expense_id: payment_status === "paid" ? expenseRef.id : "" };
+      });
+
+      return res.json({ success: true, payment_updated_at: now, ...result });
+    } catch (error: any) {
+      if (error?.message === "DELIVERY_ASSIGNMENT_NOT_FOUND") {
         return res.status(404).json({ error: "Delivery assignment not found." });
       }
-      const now = new Date().toISOString();
-      await ref.update({
-        delivery_fee: fee,
-        payment_status,
-        payment_timing,
-        payment_updated_at: now,
-        payment_updated_by: admin.uid,
-        payment_received_at: payment_status === "paid" ? now : ""
-      });
-      return res.json({ success: true, payment_updated_at: now });
-    } catch (error: any) {
+      console.warn("[delivery/assignments/payment] Failed:", error?.message || "Unknown error");
       return res.status(503).json({ error: error?.message || "Could not update delivery payment." });
     }
   });
