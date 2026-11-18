@@ -244,7 +244,8 @@ async function deleteFirebaseAuthUser(uid: string): Promise<void> {
     }
   );
   const result: any = await response.json().catch(() => ({}));
-  if (!response.ok || Number(result?.deleteResp?.[0]) !== 0) {
+  const deleteErrors = Array.isArray(result?.errors) ? result.errors : [];
+  if (!response.ok || deleteErrors.some((item: any) => String(item?.localId || "") === uid)) {
     throw new Error("Firebase could not delete this delivery login account. No staff records were removed.");
   }
 }
