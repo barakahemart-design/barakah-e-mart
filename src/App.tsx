@@ -4453,6 +4453,10 @@ _${businessInfo.name}_`;
       return;
     }
 
+    if (!settingsHydrated) {
+      throw new Error("Your store security settings are still loading. Please wait a few seconds and try again.");
+    }
+
     const firebaseUser = firebaseAuth.currentUser;
     const storeId = String(activeUser?.email || "").trim().toLowerCase();
     if (!firebaseUser || !storeId || firebaseUser.email?.trim().toLowerCase() !== storeId) {
