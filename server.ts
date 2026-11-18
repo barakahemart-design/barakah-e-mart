@@ -1423,6 +1423,51 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  app.post("/api/delivery/queue/add", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified || verified.email !== PRIMARY_ADMIN_EMAIL) return res.status(403).json({ error: "Primary store account required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const invoiceNo = String(req.body?.invoice_no || "").trim();
+      if (!invoiceNo) return res.status(400).json({ error: "Invoice number is required." });
+      const id = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
+      const ref = adminDb.collection("delivery_queue").doc(id);
+      const existing = await ref.get();
+      if (existing.exists && existing.data()?.assigned === true) return res.json({ success: true, queued: false, already_assigned: true });
+      const record = {
+        id, owner_store_id: PRIMARY_ADMIN_EMAIL, invoice_no: invoiceNo,
+        transaction_id: String(req.body?.transaction_id || ""),
+        customer_name: String(req.body?.customer_name || "Customer"),
+        customer_phone: String(req.body?.customer_phone || ""),
+        customer_address: String(req.body?.customer_address || ""),
+        items: Array.isArray(req.body?.items) ? req.body.items.slice(0, 100).map((item: any) => ({
+          name: String(item?.name || "Item").slice(0, 200), quantity: Math.max(0, Number(item?.quantity) || 0)
+        })) : [],
+        total_amount: Number(req.body?.total_amount) || 0,
+        created_at: existing.data()?.created_at || new Date().toISOString(),
+        queued_at: new Date().toISOString(),
+        assigned: false
+      };
+      await ref.set(record, { merge: true });
+      return res.status(201).json({ success: true, queued: true });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not add invoice to delivery queue." });
+    }
+  });
+
+  app.post("/api/delivery/queue/list", async (req: Request, res: Response) => {
+    try {
+      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
+      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const snap = await adminDb.collection("delivery_queue").where("owner_store_id", "==", PRIMARY_ADMIN_EMAIL).get();
+      const queue = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((item: any) => item.assigned !== true);
+      return res.json({ queue });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not load delivery queue." });
+    }
+  });
+
   app.post("/api/delivery/assignments/create", async (req: Request, res: Response) => {
     const { store_id, admin_pin, invoice_no, driver_uid } = req.body || {};
     try {
@@ -1438,16 +1483,23 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(404).json({ error: "Active delivery staff member not found." });
       }
 
-      const transactionSnap = await adminDb.collection("transactions")
-        .where("invoiceNo", "==", invoiceNo).limit(5).get();
-      const transactionDoc = transactionSnap.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === PRIMARY_ADMIN_EMAIL);
-      if (!transactionDoc) return res.status(404).json({ error: "Invoice not found in this store." });
-      const transaction = transactionDoc.data();
-      const contactId = String(transaction.contactId || transaction.contact_id || "");
+      const queueId = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
+      const queuedSnap = await adminDb.collection("delivery_queue").doc(queueId).get();
+      let transaction: any = queuedSnap.exists ? queuedSnap.data() : null;
+      let transactionId = String(transaction?.transaction_id || "");
       let customer: any = {};
-      if (contactId) {
-        const contactDoc = await adminDb.collection("customers").doc(contactId).get();
-        if (contactDoc.exists) customer = contactDoc.data() || {};
+      if (!transaction) {
+        const transactionSnap = await adminDb.collection("transactions")
+          .where("invoiceNo", "==", invoiceNo).limit(5).get();
+        const transactionDoc = transactionSnap.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === PRIMARY_ADMIN_EMAIL);
+        if (!transactionDoc) return res.status(404).json({ error: "Invoice not found in this store." });
+        transaction = transactionDoc.data();
+        transactionId = transactionDoc.id;
+        const contactId = String(transaction.contactId || transaction.contact_id || "");
+        if (contactId) {
+          const contactDoc = await adminDb.collection("customers").doc(contactId).get();
+          if (contactDoc.exists) customer = contactDoc.data() || {};
+        }
       }
       const assignmentId = createHash("sha256").update(`${PRIMARY_ADMIN_EMAIL}:${invoiceNo}`).digest("hex");
       const assignment = {
@@ -1456,10 +1508,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         driver_uid: driverUid,
         driver_name: String(driver.name || ""),
         invoice_no: invoiceNo,
-        transaction_id: transactionDoc.id,
-        customer_name: String(customer.name || transaction.customerName || transaction.customer_name || "Customer"),
-        customer_phone: String(customer.phone || transaction.customerPhone || transaction.customer_phone || ""),
-        customer_address: String(customer.address || transaction.customerAddress || transaction.customer_address || ""),
+        transaction_id: transactionId,
+        customer_name: String(customer.name || transaction.customer_name || transaction.customerName || "Customer"),
+        customer_phone: String(customer.phone || transaction.customer_phone || transaction.customerPhone || ""),
+        customer_address: String(customer.address || transaction.customer_address || transaction.customerAddress || ""),
         items: Array.isArray(transaction.items) ? transaction.items.map((item: any) => ({
           name: String(item.name || item.productName || "Item"),
           quantity: Number(item.quantity) || 0
@@ -1473,6 +1525,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         assigned_by: manager.uid
       };
       await adminDb.collection("delivery_assignments").doc(assignmentId).set(assignment, { merge: true });
+      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: new Date().toISOString() }, { merge: true });
       return res.status(201).json({ success: true, assignment });
     } catch (error: any) {
       console.warn("[delivery/assignments/create] Failed:", error?.message || "Unknown error");
