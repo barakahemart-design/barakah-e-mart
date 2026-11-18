@@ -1079,6 +1079,46 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  app.post("/api/auth/pin-credentials/update", async (req: Request, res: Response) => {
+    const { store_id, current_admin_pin, admin_pin, sales_pin } = req.body || {};
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      const cleanStoreId = String(store_id || "").trim().toLowerCase();
+      if (!cleanStoreId || cleanStoreId !== verified.email) {
+        return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      }
+      const newAdminPin = String(admin_pin || "");
+      const newSalesPin = String(sales_pin || "");
+      if (!/^\d{4}$/.test(newAdminPin) || !/^\d{4}$/.test(newSalesPin) || newAdminPin === newSalesPin) {
+        return res.status(400).json({ error: "Set two different 4-digit numeric PINs." });
+      }
+
+      const existing = await getAdminPinCredentials(cleanStoreId);
+      if (!existing?.admin_pin_hash || !verifyPinAgainstHash(String(current_admin_pin || ""), existing.admin_pin_hash)) {
+        return res.status(403).json({ error: "Current Admin PIN is incorrect." });
+      }
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...existing,
+        admin_pin_hash: hashPin(newAdminPin),
+        sales_pin_hash: hashPin(newSalesPin),
+        admin_pin_updated_at: now,
+        sales_pin_updated_at: now,
+        updated_at: now,
+        version: 1
+      };
+      await adminDb!.collection("store_auth_credentials").doc(getCredentialDocId(cleanStoreId)).set(updated, { merge: true });
+      pinAttemptMap.delete(`${cleanStoreId}:admin`);
+      pinAttemptMap.delete(`${cleanStoreId}:sales`);
+      return res.json({ success: true, message: "Admin and Sales PINs updated securely." });
+    } catch (err: any) {
+      console.warn("[pin-credentials/update] Update failed:", err?.message || "Unknown error");
+      return res.status(503).json({ error: err?.message || "PIN update is temporarily unavailable." });
+    }
+  });
+
   app.get("/api/auth/pin-credentials/status", async (req: Request, res: Response) => {
     const { store_id } = req.query;
     try {
