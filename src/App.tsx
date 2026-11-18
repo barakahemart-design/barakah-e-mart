@@ -8177,7 +8177,7 @@ _${businessInfo.name}_`;
             <DeliveryManagementView
               adminPin={currentPanel === "admin" ? adminActionPin : ""}
               salesPin={String(businessInfo.salesPasscode || "")}
-              panelRole={currentPanel}
+              panelRole={currentPanel === "admin" ? "admin" : "sales"}
               storeId={String(activeUser?.email || "").trim().toLowerCase()}
               currencySymbol={businessInfo.currencySymbol || "৳"}
               triggerNotification={triggerNotification}
