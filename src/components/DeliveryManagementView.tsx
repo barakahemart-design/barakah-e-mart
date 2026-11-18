@@ -6,6 +6,7 @@ type Driver = { uid: string; name: string; email: string; phone?: string; status
 type Assignment = {
   id: string; invoice_no: string; driver_uid: string; driver_name: string;
   customer_name: string; customer_phone: string; customer_address: string;
+  customer_note?: string; delivery_note?: string;
   delivery_status: string; assigned_at: string;
   delivery_fee?: number; payment_status?: "paid" | "unpaid"; payment_timing?: "advance" | "after_delivery"; payment_updated_at?: string; payment_received_at?: string;
   items?: Array<{ name: string; quantity: number }>;
