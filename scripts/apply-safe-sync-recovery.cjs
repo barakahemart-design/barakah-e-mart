@@ -14,14 +14,8 @@ serverSource = serverSource.replace(
   'if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid)) {',
   'if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid) || allowedIds.includes(docId)) {'
 );
-serverSource = serverSource.replace(
-  'if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid) {\n            return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });',
-  'if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid && String(resDoc.linked_email || "").trim().toLowerCase() !== String(verified.email || "").trim().toLowerCase()) {\n            return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });'
-);
-serverSource = serverSource.replace(
-  'if (syncData.user_id && syncData.user_id !== verified.uid && syncData.linked_email !== verified.email) {\n          return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });',
-  'if (syncData.user_id && syncData.user_id !== verified.uid && String(syncData.linked_email || "").trim().toLowerCase() !== String(verified.email || "").trim().toLowerCase()) {\n          return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });'
-);
+// Keep the server's strict verified-UID checks for passcode vault access.
+// A matching linked_email alone must never override a conflicting user_id.
 if (serverSource !== originalServer) fs.writeFileSync(serverFile, serverSource, 'utf8');
 
 const helperFile = path.join(process.cwd(), 'src', 'lib', 'firebase-helpers.ts');
@@ -38,17 +32,35 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
     const result: any = { linked_email: cleanEmail, email: cleanEmail, products: [], contacts: [], expenses: [], transactions: [], purchases: [] };
     let found = false;
 
-    // Recover the newest matching vault even when its linked_email field is legacy/missing.
+    // Only accept known legacy UIDs for their own store. Never infer account
+    // ownership from an arbitrary UID copied into a backup document.
+    const legacyAccountUids: Record<string, string[]> = {
+      'barakahemart@gmail.com': ['1d4ce803-cbf5-44f1-9ec5-56642de068a1', 'DGeDhFzjTDaYCeLZiMSvm8TY4sc2', 'vault_a2vflc', 'xrTguetUZqSbZOxUKRiUNJV3X1M2', 'C5eOR2R8WEMegF53NA5eItMWDrr2', 'Lzk64vTQcRPy0MWwQK6t0echMmq1', '1ys9dKJ3fKOKIVOl0GIbuIiHeB73'],
+      'barakahbillpro@gmail.com': ['xckXTyRn5AbsrU1paXbmj9dR6HX2'],
+      'tendabangladesh72@gmail.com': ['yVAiT3KAHnMYGX2D1hSxWGiZETw1', 'rb0SFawVFSTANoZhNwYokmJOFyP2']
+    };
+    const trustedUids = new Set([activeUid, cleanEmail, ...(legacyAccountUids[cleanEmail] || [])].filter(Boolean));
+    const recordBelongsToAccount = (row: any, allowUnstamped = false) => {
+      if (!row || typeof row !== 'object') return false;
+      const ownerIds = [row.user_id, row.userId, row.owner_id].map(v => String(v || '').trim()).filter(Boolean);
+      const storeIds = [row.store_id, row.storeId, row.linked_email, row.linkedEmail].map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+      const fallbackEmails = [row.email].map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+      if (ownerIds.length && !ownerIds.every(id => trustedUids.has(id))) return false;
+      if (storeIds.length && !storeIds.every(id => id === cleanEmail)) return false;
+      if (ownerIds.length) return true;
+      if (storeIds.length) return true;
+      if (fallbackEmails.length) return fallbackEmails.every(id => id === cleanEmail);
+      return allowUnstamped;
+    };
+
+    // Recover only a vault whose account identity matches the verified user.
     try {
       const vaultSnap = await getDocs(collection(db, 'passcode_syncs'));
       const candidates = vaultSnap.docs
         .map(d => ({ id: d.id, data: d.data() || {} }))
         .filter(c => {
           const d = c.data;
-          const identities = [d.linked_email, d.linkedEmail, d.email, d.store_id, d.storeId, d.user_id, d.userId, d.owner_id]
-            .map(v => String(v || '').trim().toLowerCase())
-            .filter(Boolean);
-          return identities.includes(cleanEmail) || (activeUid && identities.includes(String(activeUid).trim().toLowerCase()));
+          return recordBelongsToAccount(d, false);
         })
         .sort((a, b) => String(b.data.updated_at || '').localeCompare(String(a.data.updated_at || '')));
 
@@ -66,6 +78,13 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
       if (candidate) {
         Object.assign(result, candidate.data);
         result.linked_email = cleanEmail;
+        // A vault is an envelope, not proof that every row inside it belongs
+        // to this store. Reject rows carrying another account's ownership IDs.
+        for (const key of ['products', 'contacts', 'expenses', 'transactions', 'purchases']) {
+          if (Array.isArray(result[key])) {
+            result[key] = result[key].filter((row: any) => recordBelongsToAccount(row, true));
+          }
+        }
         found = true;
       }
     } catch (vaultErr) {
@@ -88,10 +107,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         const rows = snap.docs
           .map(d => ({ ...d.data(), id: d.data()?.id || d.id }))
           .filter(row => {
-            const identities = [row.store_id, row.storeId, row.email, row.linked_email, row.linkedEmail, row.user_id, row.userId, row.owner_id]
-              .map(v => String(v || '').trim().toLowerCase())
-              .filter(Boolean);
-            return identities.includes(cleanEmail) || (activeUid && identities.includes(String(activeUid).trim().toLowerCase()));
+            return recordBelongsToAccount(row, false);
           });
 
         if (rows.length > 0) {
@@ -122,10 +138,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         const matching = businessSnap.docs
           .map(d => ({ ...d.data(), id: d.data()?.id || d.id }))
           .filter(row => {
-            const identities = [row.email, row.linked_email, row.linkedEmail, row.store_id, row.storeId, row.owner_id, row.user_id]
-              .map(v => String(v || '').trim().toLowerCase())
-              .filter(Boolean);
-            return identities.includes(cleanEmail) || (activeUid && identities.includes(String(activeUid).trim().toLowerCase()));
+            return recordBelongsToAccount(row, false);
           })
           .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
         if (matching.length > 0) {

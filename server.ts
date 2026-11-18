@@ -577,32 +577,24 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const profilesQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
         const profilesSnap = await getDocs(profilesQ);
         profilesSnap.forEach(docSnap => {
-          ids.add(docSnap.id);
           const data = docSnap.data();
-          if (data.id) ids.add(String(data.id));
-          if (data.user_id) ids.add(String(data.user_id));
-          if (data.userId) ids.add(String(data.userId));
-          if (data.owner_id) ids.add(String(data.owner_id));
+          const profileEmail = String(data.email || "").trim().toLowerCase();
+          // The profile document ID is the only trusted legacy UID here.
+          // Ignore secondary ID fields, which may be stale or copied from another store.
+          if (profileEmail === cleanEmail) {
+            ids.add(docSnap.id);
+          }
         });
       } catch (err) {
         console.warn("resolveAllUserIdsForEmail profile fetch error:", err);
       }
 
-      // 2. Get passcode_syncs document IDs (the Passcode / PIN Vault Sync IDs)
-      try {
-        const syncsQ = query(collection(db, "passcode_syncs"), where("linked_email", "==", cleanEmail));
-        const syncsSnap = await getDocs(syncsQ);
-        syncsSnap.forEach(docSnap => {
-          ids.add(docSnap.id);
-          const data = docSnap.data();
-          if (data.id) ids.add(String(data.id));
-          if (data.user_id) ids.add(String(data.user_id));
-          if (data.userId) ids.add(String(data.userId));
-          if (data.owner_id) ids.add(String(data.owner_id));
-        });
-      } catch (err) {
-        console.warn("resolveAllUserIdsForEmail sync fetch error:", err);
-      }
+      // IMPORTANT: Do not derive account ownership from passcode_syncs.
+      // A legacy backup can contain stale or mixed user_id/owner_id values.
+      // Treating those values as trusted account UIDs can expose another store's
+      // records through /api/db/fetch and /api/sync/full. Legacy account UIDs
+      // must be explicitly mapped above; current UIDs come from verified auth
+      // and profile documents whose email matches this verified account.
     }
 
     const resolvedIds = Array.from(ids);
