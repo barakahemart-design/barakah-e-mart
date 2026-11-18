@@ -88,12 +88,10 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // PIN hashes are server-only. The Admin SDK bypasses client rules;
+    // browser clients must never be able to read or alter credential hashes.
     match /store_auth_credentials/{credentialId} {
-      allow read: if signedIn() && resource.data.store_id == signedInEmail();
-      allow create: if signedIn() && request.resource.data.store_id == signedInEmail();
-      allow update: if signedIn() && resource.data.store_id == signedInEmail()
-        && request.resource.data.store_id == signedInEmail();
-      allow delete: if false;
+      allow read, write: if false;
     }
 
     // Deny all collections not explicitly covered above.
