@@ -4659,7 +4659,9 @@ _${businessInfo.name}_`;
                   { id: "staff", label: "Staff Hub", Icon: UserCheck },
                   { id: "delivery", label: "Delivery Management", Icon: Truck },
                   { id: "settings", label: "Settings", Icon: Settings },
-                ] as const).map((item) => {
+                ] as const)
+                .filter((item) => item.id !== "delivery" || String(activeUser?.email || "").trim().toLowerCase() === "barakahbillpro@gmail.com")
+                .map((item) => {
                   const Icon = item.Icon;
                   const isActive = activeTab === item.id;
                   return (
