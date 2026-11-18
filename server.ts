@@ -4,6 +4,8 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
+import { cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
+import { getAuth as getAdminAuth, type Auth as FirebaseAdminAuth } from "firebase-admin/auth";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -40,6 +42,26 @@ try {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 const firebaseAuth = getAuth(firebaseApp);
+
+// Initialize privileged Firebase Admin Auth from the encrypted Vercel Secret.
+let adminAuth: FirebaseAdminAuth | null = null;
+let adminSdkInitError = "";
+try {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (serviceAccountJson) {
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    if (serviceAccount.project_id !== firebaseConfig.projectId) {
+      throw new Error("Firebase service account project does not match the app project.");
+    }
+    const adminApp = getAdminApps().find((app) => app.name === "[DEFAULT]") ||
+      initializeAdminApp({ credential: cert(serviceAccount), projectId: firebaseConfig.projectId });
+    adminAuth = getAdminAuth(adminApp);
+  }
+} catch (error) {
+  // Never log service-account contents or private keys.
+  adminSdkInitError = error instanceof Error ? error.message : "Unknown initialization error";
+  console.error("Firebase Admin SDK initialization failed:", adminSdkInitError);
+}
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -157,17 +179,27 @@ const ALLOWED_SYNC_TABLES = new Set([
 ]);
 
 async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: string } | null> {
-  // Only a Firebase-issued ID token is an identity proof. Client-supplied UID/email
-  // headers and query parameters are deliberately never trusted.
+  // Only a Firebase-issued ID token is an identity proof; caller-supplied UID/email
+  // headers and query parameters are never trusted.
   const authHeader = req.headers.authorization;
   const headerToken = authHeader && authHeader.startsWith("Bearer ")
     ? authHeader.slice(7).trim()
     : "";
   const queryToken = typeof req.query.idToken === "string" ? req.query.idToken : "";
   const idToken = headerToken || queryToken;
-  if (!idToken || idToken.length > 5000 || !firebaseConfig.apiKey) return null;
+  if (!idToken || idToken.length > 5000) return null;
 
   try {
+    if (adminAuth) {
+      const decoded = await adminAuth.verifyIdToken(idToken, true);
+      return {
+        uid: decoded.uid,
+        email: typeof decoded.email === "string" ? decoded.email.trim().toLowerCase() : ""
+      };
+    }
+
+    // Compatibility fallback for local development without the server secret.
+    if (!firebaseConfig.apiKey) return null;
     const response = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
       {
@@ -185,7 +217,7 @@ async function verifyFirebaseToken(req: Request): Promise<{ uid: string; email: 
       email: typeof account.email === "string" ? account.email.trim().toLowerCase() : ""
     };
   } catch (err) {
-    console.warn("Firebase ID token verification failed:", err);
+    console.warn("Firebase ID token verification failed:", err instanceof Error ? err.message : "Unknown error");
     return null;
   }
 }
@@ -201,6 +233,8 @@ async function startServer() {
     res.json({ 
       status: "ok", 
       firebaseConfigured: !!firebaseConfig.apiKey,
+      firebaseAdminConfigured: !!adminAuth,
+      firebaseAdminInitError: adminSdkInitError ? "initialization_failed" : null,
       isUsingFallback: false 
     });
   });
