@@ -3730,7 +3730,7 @@ export default function App() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Could not update delivery expense.");
-        setDeliveryExpenseRecords(prev => prev.map(item => String(item.id) === editingExpense.sourceId ? { ...item, amount: updatedExp.amount, reason: updatedExp.description, category: updatedExp.category, date: editExpenseRecordedAt.slice(0, 10) || editExpenseDate, recorded_at: selectedRecordedAt.toISOString() } : item));
+        setDeliveryExpenseRecords(prev => prev.map(item => String(item.id) === editingExpense.sourceId ? { ...item, amount: updatedExp.amount, reason: updatedExp.description, category: updatedExp.category, date: editExpenseRecordedAt.slice(0, 10) || editExpenseDate, dashboard_date: editExpenseRecordedAt.slice(0, 10) || editExpenseDate, recorded_at: selectedRecordedAt.toISOString() } : item));
       } catch (error: any) {
         triggerNotification(error?.message || "Could not update delivery expense.", "error");
         return;
@@ -4383,8 +4383,8 @@ _${businessInfo.name}_`;
       category: expense.category || "Delivery Staff Expense",
       amount: Number(expense.amount) || 0,
       description: expense.reason || expense.description || "Delivery staff expense",
-      // The date money was paid is authoritative; reviewed_at supports older paid records.
-      date: expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date
+      // An Admin edit in Expenses History overrides the Dashboard date; otherwise retain paid-date accounting.
+      date: expense.dashboard_date || expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date
     })), [deliveryExpenseRecords]);
 
   const dashboardMetrics = useMemo(() => {
