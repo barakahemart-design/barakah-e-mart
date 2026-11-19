@@ -4545,8 +4545,20 @@ _${businessInfo.name}_`;
     };
 
     let cloudTemporarilyUnavailable = false;
+    const verificationController = new AbortController();
+    const verificationTimeout = window.setTimeout(() => verificationController.abort(), 10000);
     try {
-      const idToken = await firebaseUser.getIdToken();
+      const tokenPromise = firebaseUser.getIdToken();
+      const idToken = await Promise.race([
+        tokenPromise,
+        new Promise<string>((_, reject) => {
+          verificationController.signal.addEventListener(
+            "abort",
+            () => reject(new DOMException("PIN verification timed out.", "AbortError")),
+            { once: true }
+          );
+        })
+      ]);
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${idToken}`
@@ -4557,12 +4569,13 @@ _${businessInfo.name}_`;
       let verifyResponse = await fetch("/api/panel-security/pin/verify", {
         method: "POST",
         headers,
-        body: JSON.stringify({ store_id: storeId, role: panel, pin })
+        body: JSON.stringify({ store_id: storeId, role: panel, pin }),
+        signal: verificationController.signal
       });
       let verifyData = await verifyResponse.json().catch(() => ({}));
 
       if (verifyResponse.status === 401) {
-        const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
+        const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers, signal: verificationController.signal });
         const statusData = await statusResponse.json().catch(() => ({}));
         if (!statusResponse.ok) {
           if (statusResponse.status >= 500) cloudTemporarilyUnavailable = true;
@@ -4578,7 +4591,8 @@ _${businessInfo.name}_`;
               store_id: storeId,
               admin_pin: String(businessInfo.adminPasscode || ""),
               sales_pin: String(businessInfo.salesPasscode || "")
-            })
+            }),
+            signal: verificationController.signal
           });
           const migrationData = await migrationResponse.json().catch(() => ({}));
           if (!migrationResponse.ok || !migrationData.success) {
@@ -4588,7 +4602,8 @@ _${businessInfo.name}_`;
             verifyResponse = await fetch("/api/panel-security/pin/verify", {
               method: "POST",
               headers,
-              body: JSON.stringify({ store_id: storeId, role: panel, pin })
+              body: JSON.stringify({ store_id: storeId, role: panel, pin }),
+              signal: verificationController.signal
             });
             verifyData = await verifyResponse.json().catch(() => ({}));
           }
@@ -4604,8 +4619,13 @@ _${businessInfo.name}_`;
     } catch (error: any) {
       // Network failures and service/Firestore outages may use the local cache.
       // Explicit 401/403/429 responses are thrown above and are not bypassed.
-      if (!cloudTemporarilyUnavailable && error?.name !== "TypeError") throw error;
+      if (!cloudTemporarilyUnavailable && error?.name !== "TypeError" && error?.name !== "AbortError") {
+        window.clearTimeout(verificationTimeout);
+        throw error;
+      }
       cloudTemporarilyUnavailable = true;
+    } finally {
+      window.clearTimeout(verificationTimeout);
     }
 
     if (cloudTemporarilyUnavailable) {
