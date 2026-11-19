@@ -123,7 +123,7 @@ export function PanelGateLock({
 
         {/* Master Input Wrapper for Keyboard / Soft Keyboard focus */}
         <div 
-          className="relative bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/60 p-4 rounded-xl cursor-text group hover:border-blue-400 dark:hover:border-blue-500 transition-all select-none"
+          className={`relative p-4 rounded-xl cursor-text group transition-all duration-200 select-none ${errorMessage ? "bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-400 dark:border-rose-500 ring-4 ring-rose-500/10" : pin.length > 0 ? isVerifying ? "bg-blue-50 dark:bg-blue-950/80 border-2 border-blue-500 dark:border-cyan-300 ring-4 ring-blue-500/20 shadow-[0_0_22px_rgba(59,130,246,0.18)]" : "bg-emerald-50 dark:bg-emerald-950/70 border-2 border-emerald-500 dark:border-emerald-400 ring-4 ring-emerald-500/15" : "bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/60 hover:border-blue-400 dark:hover:border-blue-500"}` }
           onClick={() => inputRef.current?.focus()}
         >
           <input
@@ -159,9 +159,9 @@ export function PanelGateLock({
                  key={val} 
                  className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                    pin.length > val
-                     ? "bg-emerald-400 border-emerald-300 scale-110 shadow-[0_0_0_3px_rgba(52,211,153,0.20),0_0_12px_rgba(52,211,153,0.55)]"
+                     ? "bg-emerald-400 border-emerald-200 scale-110 shadow-[0_0_0_4px_rgba(52,211,153,0.25),0_0_14px_rgba(52,211,153,0.65)]"
                      : pin.length === val
-                       ? "bg-blue-500/20 border-blue-400 dark:border-cyan-300 shadow-[0_0_0_3px_rgba(59,130,246,0.16)]"
+                       ? "bg-amber-300 dark:bg-amber-300 border-amber-500 dark:border-amber-200 scale-110 shadow-[0_0_0_4px_rgba(245,158,11,0.22),0_0_12px_rgba(245,158,11,0.45)]"
                        : "bg-white dark:bg-slate-800 border-slate-400 dark:border-slate-500"
                  }`}
               />
@@ -184,7 +184,7 @@ export function PanelGateLock({
               key={num}
               type="button"
               onClick={() => handleKeyPress(num)}
-              className="py-2.5 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-800/20 rounded-xl font-bold text-base transition-all text-slate-805 dark:text-slate-200 active:scale-95 cursor-pointer shadow-sm"
+              className="py-2.5 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-800/20 rounded-xl font-bold text-base transition-all text-slate-800 dark:text-slate-100 active:scale-95 cursor-pointer shadow-sm"
             >
               {num}
             </button>
@@ -192,7 +192,7 @@ export function PanelGateLock({
           <button
             type="button"
             onClick={handleClear}
-            className="py-2.5 bg-slate-100 dark:bg-slate-950/80 hover:bg-slate-200 dark:hover:bg-slate-900 border border-slate-200/50 dark:border-slate-800/20 rounded-xl text-[10px] font-bold text-slate-605 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer"
+            className="py-2.5 bg-slate-100 dark:bg-slate-950/80 hover:bg-slate-200 dark:hover:bg-slate-900 border border-slate-200/50 dark:border-slate-800/20 rounded-xl text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer"
           >
             Clear
           </button>
