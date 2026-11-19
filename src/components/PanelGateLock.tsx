@@ -157,10 +157,12 @@ export function PanelGateLock({
             {[0, 1, 2, 3].map((val) => (
               <div 
                  key={val} 
-                 className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-100 ${
-                   pin.length > val 
-                     ? "bg-blue-600 border-blue-600 scale-110 shadow-sm shadow-blue-500/30" 
-                     : "border-slate-300 dark:border-slate-700 bg-transparent"
+                 className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
+                   pin.length > val
+                     ? "bg-emerald-400 border-emerald-300 scale-110 shadow-[0_0_0_3px_rgba(52,211,153,0.20),0_0_12px_rgba(52,211,153,0.55)]"
+                     : pin.length === val
+                       ? "bg-blue-500/20 border-blue-400 dark:border-cyan-300 shadow-[0_0_0_3px_rgba(59,130,246,0.16)]"
+                       : "bg-white dark:bg-slate-800 border-slate-400 dark:border-slate-500"
                  }`}
               />
             ))}

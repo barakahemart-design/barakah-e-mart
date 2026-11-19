@@ -372,6 +372,33 @@ export default function App() {
     catch (_) { return true; }
   });
 
+  // Warm the authenticated PIN-verification connection while the user is viewing the PIN gate.
+  // This moves Firebase token acquisition and the first server connection off the PIN-submit path.
+  const pinWarmupRef = useRef<{ uid: string; token: string; warmedAt: number } | null>(null);
+  useEffect(() => {
+    if (!activeUser || activeUser.isGuest || currentPanel !== "none") return;
+    let cancelled = false;
+    const warmPinVerification = async () => {
+      try {
+        const user = firebaseAuth.currentUser;
+        const storeId = String(activeUser?.email || "").trim().toLowerCase();
+        if (!user || user.uid !== activeUser.uid || !storeId || user.email?.trim().toLowerCase() !== storeId) return;
+        const token = await user.getIdToken();
+        if (cancelled) return;
+        pinWarmupRef.current = { uid: user.uid, token, warmedAt: Date.now() };
+        // Warm the same serverless route in the background; PIN verification remains mandatory on submit.
+        void fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store"
+        }).catch(() => {});
+      } catch (_) {
+        // The normal submit flow will retrieve a fresh token if prewarming is unavailable.
+      }
+    };
+    warmPinVerification();
+    return () => { cancelled = true; };
+  }, [activeUser?.uid, activeUser?.email, activeUser?.isGuest, currentPanel]);
+
   // Current active workspace view tab
   const [activeTab, setActiveTab ] = useState<
     "dashboard" | "pos" | "contacts" | "products" | "negative-sales" | "purchases" | "inventory" | "duelist" | "ledger" | "expenses" | "reports" | "staff" | "delivery" | "settings"
@@ -4548,9 +4575,11 @@ _${businessInfo.name}_`;
     const verificationController = new AbortController();
     const verificationTimeout = window.setTimeout(() => verificationController.abort(), 10000);
     try {
-      const tokenPromise = firebaseUser.getIdToken();
-      const idToken = await Promise.race([
-        tokenPromise,
+      const warmToken = pinWarmupRef.current;
+      const idToken = warmToken && warmToken.uid === firebaseUser.uid && Date.now() - warmToken.warmedAt < 45 * 60 * 1000
+        ? warmToken.token
+        : await Promise.race([
+        firebaseUser.getIdToken(),
         new Promise<string>((_, reject) => {
           verificationController.signal.addEventListener(
             "abort",
