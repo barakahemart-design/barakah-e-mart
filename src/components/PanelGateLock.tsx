@@ -159,12 +159,7 @@ export function PanelGateLock({
                  key={val}
                  aria-label={pin.length > val ? `PIN digit ${val + 1} entered` : `PIN digit ${val + 1} empty`}
                  data-pin-filled={pin.length > val ? "true" : "false"}
-                 className="w-4 h-4 rounded-full border-2 border-slate-600 bg-black transition-all duration-150"
-                 style={pin.length > val ? {
-                   backgroundColor: "#ffffff",
-                   borderColor: "#ffffff",
-                   boxShadow: "0 0 12px rgba(255,255,255,0.95)",
-                 } : undefined}
+                 className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${pin.length > val ? "bg-blue-600 border-blue-500 shadow-[0_0_12px_rgba(37,99,235,0.9)]" : "bg-black border-slate-600"}`}
               />
             ))}
           </div>
