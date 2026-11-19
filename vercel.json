@@ -4,7 +4,10 @@
   "outputDirectory": "dist",
   "functions": {
     "api/**/*.ts": {
-      "includeFiles": "dist/server.cjs"
+      "includeFiles": "dist/server.cjs",
+      "regions": [
+        "sin1"
+      ]
     }
   },
   "rewrites": [
