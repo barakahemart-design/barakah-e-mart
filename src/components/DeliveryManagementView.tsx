@@ -39,7 +39,9 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [driverUid, setDriverUid] = useState("");
-  const [expenseFilter, setExpenseFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [assignmentView, setAssignmentView] = useState<"assigned" | "delivered">("assigned");
+  const [expenseView, setExpenseView] = useState<"unpaid" | "paid">("unpaid");
+  const [paymentView, setPaymentView] = useState<"unpaid" | "paid">("unpaid");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { fee: string; status: "paid" | "unpaid"; timing: "advance" | "after_delivery" }>>({});
   type DateRangeFilter = "all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom";
   const [expenseDateFilter, setExpenseDateFilter] = useState<DateRangeFilter>("all");
@@ -73,7 +75,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         request("/api/delivery/staff/list", {}),
         request("/api/delivery/assignments/admin-list", {}),
         request("/api/delivery/queue/list", {}),
-        panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: expenseFilter === "all" ? "" : expenseFilter }) : Promise.resolve({ expenses: [] })
+        panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
       ]);
       setStaff(staffData.staff || []);
       setAssignments(assignmentData.assignments || []);
@@ -85,7 +87,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } finally {
       setLoading(false);
     }
-  }, [adminPin, salesPin, storeId, request, expenseFilter, panelRole]);
+  }, [adminPin, salesPin, storeId, request, panelRole]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -235,12 +237,15 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   );
 
   const filteredStaffExpenses = expenses.filter(expense =>
-    (expenseFilter === "all" || expense.payment_status === expenseFilter) &&
+    expense.payment_status === expenseView &&
     isDateInRange(expense.date, expenseDateFilter, expenseCustomStart, expenseCustomEnd)
   );
   const filteredDeliveryPayments = assignments.filter(assignment =>
+    (assignment.payment_status === "paid" ? "paid" : "unpaid") === paymentView &&
     isDateInRange(
-      assignment.payment_received_at || assignment.payment_updated_at || assignment.assigned_at,
+      paymentView === "paid"
+        ? (assignment.payment_received_at || assignment.payment_updated_at || assignment.assigned_at)
+        : (assignment.payment_updated_at || assignment.assigned_at),
       paymentDateFilter,
       paymentCustomStart,
       paymentCustomEnd
@@ -306,8 +311,12 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
         <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+          <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length})</button>
+          <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length})</button>
+        </div>
         {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
-        {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
+        {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {paymentView} delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
           const draft = getPaymentDraft(a);
           return <div key={a.id} className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-black text-white">Invoice {a.invoice_no} · {a.customer_name}</p><p className="mt-1 text-[10px] text-slate-500">{a.driver_name} · Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "—"}</p>{a.payment_updated_at && <p className="text-[10px] text-slate-500">Last updated {new Date(a.payment_updated_at).toLocaleString("en-BD")}</p>}{a.customer_note && <p className="mt-1 text-[10px] text-slate-400">Customer Note: {a.customer_note}</p>}{a.delivery_note && <p className="mt-1 text-[10px] text-slate-400">Delivery Note: {a.delivery_note}</p>}</div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${a.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{a.payment_status === "paid" ? "Paid" : "Unpaid"}</span></div>
@@ -322,29 +331,45 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       </div>}
 
       {tab === "assignments" && <div className="space-y-4">
-        <form onSubmit={assignInvoice} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-          <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Invoice Number<input required value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Enter invoice number" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" /></label>
-          <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Assign to Driver<select required value={driverUid} onChange={e => setDriverUid(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500"><option value="">Select delivery staff</option>{activeDrivers.map(x => <option key={x.uid} value={x.uid}>{x.name} · {x.email}</option>)}</select></label>
-          <button disabled={!activeDrivers.length} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
-        </form>
-        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="text-sm font-black text-white">New Sales Delivery Queue <span className="text-emerald-300">({queueItems.length})</span></h3>
-          {queueItems.length === 0 ? <p className="text-xs text-slate-500">No new sales waiting for delivery assignment.</p> : queueItems.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-            <div><p className="text-xs font-black text-white">Invoice {item.invoice_no} · {item.customer_name}</p><p className="text-[10px] text-slate-400">{item.customer_phone} · {item.customer_address}</p><p className="text-[10px] text-slate-500">{item.items?.map(x => `${x.name} × ${x.quantity}`).join(", ")}</p></div>
-            <button type="button" onClick={() => setInvoiceNo(item.invoice_no)} className="rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black text-emerald-300">Select Invoice</button>
-          </div>)}
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+          <button type="button" onClick={() => setAssignmentView("assigned")} className={`rounded-xl px-3 py-3 text-xs font-black ${assignmentView === "assigned" ? "bg-amber-500/15 text-amber-300" : "text-slate-400"}`}>Assigned ({assignments.filter(x => x.delivery_status !== "delivered").length})</button>
+          <button type="button" onClick={() => setAssignmentView("delivered")} className={`rounded-xl px-3 py-3 text-xs font-black ${assignmentView === "delivered" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Delivered ({assignments.filter(x => x.delivery_status === "delivered").length})</button>
         </div>
-        <div className="space-y-2">{assignments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No invoice assignments yet.</p> : assignments.map(a => <div key={a.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {a.invoice_no}</p><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${a.delivery_status === "delivered" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{a.delivery_status}</span></div>
-          <p className="mt-1 text-xs text-slate-300">{a.customer_name} · {a.driver_name}</p>
-          <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{a.customer_address || "No customer address saved"}</p>
-        </div>)}</div>
+        {assignmentView === "assigned" ? <>
+          <form onSubmit={assignInvoice} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Invoice Number<input required value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Enter invoice number" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" /></label>
+            <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Assign to Driver<select required value={driverUid} onChange={e => setDriverUid(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500"><option value="">Select delivery staff</option>{activeDrivers.map(x => <option key={x.uid} value={x.uid}>{x.name} · {x.email}</option>)}</select></label>
+            <button disabled={!activeDrivers.length} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
+          </form>
+          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+            <h3 className="text-sm font-black text-white">New Sales Delivery Queue <span className="text-emerald-300">({queueItems.length})</span></h3>
+            {queueItems.length === 0 ? <p className="text-xs text-slate-500">No new sales waiting for delivery assignment.</p> : queueItems.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+              <div><p className="text-xs font-black text-white">Invoice {item.invoice_no} · {item.customer_name}</p><p className="text-[10px] text-slate-400">{item.customer_phone} · {item.customer_address}</p><p className="text-[10px] text-slate-500">{item.items?.map(x => `${x.name} × ${x.quantity}`).join(", ")}</p></div>
+              <button type="button" onClick={() => setInvoiceNo(item.invoice_no)} className="rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black text-emerald-300">Select Invoice</button>
+            </div>)}
+          </div>
+          <div className="space-y-2">{assignments.filter(x => x.delivery_status !== "delivered").length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned invoices right now.</p> : assignments.filter(x => x.delivery_status !== "delivered").map(item => <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status || "assigned"}</span></div>
+            <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
+            <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
+          </div>)}</div>
+        </> : <div className="space-y-2">
+          {assignments.filter(x => x.delivery_status === "delivered").length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivered invoices yet.</p> : assignments.filter(x => x.delivery_status === "delivered").map(item => <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-300">Delivered</span></div>
+            <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
+            <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
+          </div>)}
+        </div>}
       </div>}
 
       {tab === "expenses" && panelRole === "admin" && <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black text-white">Staff Expense Requests</h3><select value={expenseFilter} onChange={e => setExpenseFilter(e.target.value as any)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option value="all">All expenses</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select></div>
+        <h3 className="text-sm font-black text-white">Staff Expense Requests</h3>
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+          <button type="button" onClick={() => setExpenseView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${expenseView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({expenses.filter(x => x.payment_status !== "paid").length})</button>
+          <button type="button" onClick={() => setExpenseView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${expenseView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({expenses.filter(x => x.payment_status === "paid").length})</button>
+        </div>
         {renderDateRangeFilter("staff-expense-date-range", expenseDateFilter, setExpenseDateFilter, expenseCustomStart, setExpenseCustomStart, expenseCustomEnd, setExpenseCustomEnd)}
-        {filteredStaffExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No staff expenses found for this date range.</p> : filteredStaffExpenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        {filteredStaffExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {expenseView} staff expenses found for this date range.</p> : filteredStaffExpenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div><p className="text-sm font-black text-white">{currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")} · {expense.reason}</p><p className="mt-1 text-[11px] text-slate-400">{expense.driver_name} · {expense.category} · {expense.date}</p></div>
           <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Unpaid · Mark Paid"}</button>
         </div>)}
