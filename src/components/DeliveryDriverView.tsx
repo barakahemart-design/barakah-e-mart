@@ -18,6 +18,8 @@ interface Props {
 
 export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: Props) {
   const [tab, setTab] = useState<"deliveries" | "expenses" | "payments">("deliveries");
+  const [paymentView, setPaymentView] = useState<"pending" | "received">("pending");
+  const [expenseView, setExpenseView] = useState<"add" | "status">("add");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,12 +98,13 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
       });
       setAmount(""); setReason(""); setAssignmentId("");
       await load();
+      setExpenseView("status");
       setTab("expenses");
     } catch (error: any) { alert(error?.message || "Could not submit expense."); }
   };
 
   return (
-    <div className="min-h-screen bg-[#080d18] p-3 text-white sm:p-6" id="delivery-driver-panel">
+    <div className="h-[100dvh] overflow-y-auto overscroll-y-contain bg-[#080d18] p-3 pb-10 text-white sm:p-6" id="delivery-driver-panel">
       <div className="mx-auto max-w-3xl space-y-5">
         <header className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
           <div><p className="flex items-center gap-2 text-lg font-black"><Truck className="h-5 w-5 text-emerald-400" /> Delivery Panel</p><p className="mt-1 text-xs text-slate-400">{staff.name} · {staff.email}</p></div>
@@ -109,7 +112,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
         </header>
 
         <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
-          <button onClick={() => setTab("deliveries")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "deliveries" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Deliveries ({assignments.length})</button>
+          <button onClick={() => setTab("deliveries")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "deliveries" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Delivery ({assignments.length})</button>
           <button onClick={() => setTab("expenses")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "expenses" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Expenses ({expenses.length})</button>
           <button onClick={() => setTab("payments")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "payments" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Payments ({assignments.length})</button>
         </div>
@@ -138,8 +141,16 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           </article>)}
         </div>}
 
-        {tab === "payments" && <div className="space-y-3">
-          {assignments.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">No delivery payments yet.</div> : assignments.map(item => <article key={item.id} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+        {tab === "payments" && <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+            <button onClick={() => setPaymentView("pending")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "pending" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Pending Payment ({assignments.filter(x => x.payment_status !== "paid").length})</button>
+            <button onClick={() => setPaymentView("received")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "received" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Received Payment ({assignments.filter(x => x.payment_status === "paid").length})</button>
+          </div>
+          {(() => {
+            const visiblePayments = assignments.filter(item => paymentView === "received" ? item.payment_status === "paid" : item.payment_status !== "paid");
+            return visiblePayments.length === 0
+              ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">{paymentView === "received" ? "No received payments yet." : "No pending payments."}</div>
+              : visiblePayments.map(item => <article key={item.id} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black">Invoice {item.invoice_no}</h3><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${(item as any).payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{(item as any).payment_status === "paid" ? "Payment Received" : "Payment Pending"}</span></div>
             <div className="space-y-1 rounded-xl bg-slate-950/60 p-3">
               <p className="text-xs font-bold text-slate-200">{item.customer_name || "Customer name unavailable"}</p>
@@ -150,19 +161,26 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
             <p className="text-[11px] text-slate-400">{(item as any).payment_timing === "advance" ? "Advance payment" : "Payment after delivery"} · {item.assigned_at ? new Date(item.assigned_at).toLocaleString("en-BD") : "Date unavailable"}</p>
             {(item as any).payment_updated_at && <p className="text-[10px] text-slate-500">Last payment update: {new Date((item as any).payment_updated_at).toLocaleString("en-BD")}</p>}
             {(item as any).payment_received_at && <p className="text-[10px] text-emerald-300">Received: {new Date((item as any).payment_received_at).toLocaleString("en-BD")}</p>}
-          </article>)}
+          </article>);
+          })()}
         </div>}
 
         {tab === "expenses" && <div className="space-y-4">
-          <form onSubmit={submitExpense} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+            <button onClick={() => setExpenseView("add")} className={`rounded-xl px-3 py-3 text-xs font-black ${expenseView === "add" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Add Expenses</button>
+            <button onClick={() => setExpenseView("status")} className={`rounded-xl px-3 py-3 text-xs font-black ${expenseView === "status" ? "bg-sky-500/15 text-sky-300" : "text-slate-400"}`}>Payment Status ({expenses.length})</button>
+          </div>
+          {expenseView === "add" && <form onSubmit={submitExpense} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
             <h3 className="flex items-center gap-2 text-sm font-black"><Wallet className="h-4 w-4 text-emerald-400" /> Submit Expense</h3>
             <input required type="number" min="1" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder={`Amount (${currencySymbol})`} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
             <input required value={reason} onChange={e => setReason(e.target.value)} placeholder="Expense details / reason (what was this cost for?)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
             <div className="grid grid-cols-2 gap-2"><select value={category} onChange={e => setCategory(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-xs text-white"><option value="Delivery">Delivery Cost</option><option value="Transport">Transport Cost</option><option value="Pickup / Collection">Pickup / Collection</option><option value="Loading / Unloading">Loading / Unloading</option><option value="Fuel">Fuel</option><option value="Parking">Parking / Toll</option><option value="Food">Food / Refreshment</option><option value="Other">Other Expenses</option></select><input required type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-xs text-white" /></div>
             <select value={assignmentId} onChange={e => setAssignmentId(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-xs text-white"><option value="">General expense (not linked to an invoice)</option>{assignments.map(x => <option key={x.id} value={x.id}>Invoice {x.invoice_no}</option>)}</select>
             <button className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-xs font-black text-slate-950">Submit Expense</button>
-          </form>
-          <div className="space-y-2">{expenses.map(x => <div key={x.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3"><div><p className="text-sm font-bold">{currencySymbol}{Number(x.amount).toLocaleString("en-BD")} · {x.reason}</p><p className="text-[10px] text-slate-400">{x.category} · {x.date}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-black ${x.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{x.payment_status}</span></div>)}</div>
+          </form>}
+          {expenseView === "status" && <div className="space-y-2">
+            {expenses.length === 0 ? <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No expenses submitted yet.</div> : expenses.map(x => <div key={x.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3"><div className="min-w-0"><p className="text-sm font-bold">{currencySymbol}{Number(x.amount).toLocaleString("en-BD")} · {x.reason}</p><p className="text-[10px] text-slate-400">{x.category} · {x.date}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${x.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{x.payment_status === "paid" ? "Paid" : "Unpaid"}</span></div>)}
+          </div>}
         </div>}
       </div>
     </div>
