@@ -14,6 +14,7 @@ type Assignment = {
 type DeliveryExpense = {
   id: string; driver_name: string; amount: number; reason: string; category: string;
   date: string; payment_status: "paid" | "unpaid"; assignment_id?: string;
+  paid_at?: string; payment_date?: string; reviewed_at?: string;
 };
 
 interface Props {
@@ -142,8 +143,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const updateExpense = async (expense: DeliveryExpense) => {
     const next = expense.payment_status === "paid" ? "unpaid" : "paid";
     try {
-      await request("/api/delivery/expenses/payment-status", { expense_id: expense.id, payment_status: next });
-      setExpenses(prev => prev.map(x => x.id === expense.id ? { ...x, payment_status: next } : x));
+      const result = await request("/api/delivery/expenses/payment-status", { expense_id: expense.id, payment_status: next });
+      setExpenses(prev => prev.map(x => x.id === expense.id ? {
+        ...x,
+        payment_status: next,
+        paid_at: result.paid_at || undefined,
+        payment_date: result.payment_date || undefined
+      } : x));
       notifyRef.current(next === "paid" ? "Expense marked as Paid." : "Expense marked as Unpaid.", "success");
     } catch (error: any) { notifyRef.current(error?.message || "Could not update expense status.", "error"); }
   };
@@ -238,7 +244,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const filteredStaffExpenses = expenses.filter(expense =>
     expense.payment_status === expenseView &&
-    isDateInRange(expense.date, expenseDateFilter, expenseCustomStart, expenseCustomEnd)
+    isDateInRange(
+      expenseView === "paid"
+        ? (expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date)
+        : expense.date,
+      expenseDateFilter,
+      expenseCustomStart,
+      expenseCustomEnd
+    )
   );
   const filteredDeliveryPayments = assignments.filter(assignment =>
     (assignment.payment_status === "paid" ? "paid" : "unpaid") === paymentView &&
