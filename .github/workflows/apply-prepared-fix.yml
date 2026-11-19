@@ -1,0 +1,27 @@
+name: Apply prepared dashboard and invoice fix
+on:
+  push:
+    branches:
+      - fix/dashboard-date-invoice-search-delete
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/dashboard-date-invoice-search-delete
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply verified source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .agent-patch/part-* | base64 -d > /tmp/agent-fix.patch.gz
+          gzip -t /tmp/agent-fix.patch.gz
+          gzip -dc /tmp/agent-fix.patch.gz | git apply --index
+          rm -rf .agent-patch .github/workflows/apply-prepared-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Fix dashboard expense date and invoice assignment search"
+          git push origin HEAD:fix/dashboard-date-invoice-search-delete
