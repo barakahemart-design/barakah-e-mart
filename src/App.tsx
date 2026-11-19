@@ -9102,7 +9102,7 @@ _${businessInfo.name}_`;
                     autoComplete="current-password"
                     maxLength={4}
                     value={currentAdminPasscode}
-                    onChange={(e) => setCurrentAdminPasscode(e.target.value.replace(/\\D/g, ""))}
+                    onChange={(e) => setCurrentAdminPasscode(e.target.value.replace(/\D/g, ""))}
                     placeholder="Enter current 4-digit Admin PIN"
                     className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white font-mono font-bold"
                   />
@@ -9157,7 +9157,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveSecurityPasscodes}
-                    disabled={!/^\\d{4}$/.test(currentAdminPasscode) || !/^\\d{4}$/.test(tempAdminPasscode) || !/^\\d{4}$/.test(tempSalesPasscode)}
+                    disabled={!/^\d{4}$/.test(currentAdminPasscode) || !/^\d{4}$/.test(tempAdminPasscode) || !/^\d{4}$/.test(tempSalesPasscode)}
                     className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
