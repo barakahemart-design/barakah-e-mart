@@ -1579,7 +1579,7 @@ export default function App() {
   // Local temp states for Settings with individual block saves
   const [activeSettingsSection, setActiveSettingsSection] = useState<"overview" | "shop" | "font" | "invoice" | "sales" | "security" | "danger" | "cloud">("overview");
   const localCoreAvailable = (() => { try { window.localStorage.getItem("barakah_local_active_user"); return true; } catch { return false; } })();
-  const isFirestoreQuotaLimited = /daily usage limit|resource[_\\s-]?exhausted|quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota/i.test(syncErrorMessage);
+  const isFirestoreQuotaLimited = /daily usage limit|resource[_\s-]?exhausted|quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota/i.test(syncErrorMessage);
   const [tempShopName, setTempShopName] = useState("");
   const [tempShopAddress, setTempShopAddress] = useState("");
   const [tempShopPhone, setTempShopPhone] = useState("");
@@ -4576,7 +4576,7 @@ _${businessInfo.name}_`;
     // This is the previous offline-entry behavior; no cross-account/global PIN is used.
     if (isFirestoreQuotaLimited && unlockFromThisDeviceCache()) return;
 
-    const isQuotaExhaustion = (payload: any) => /resource[_\\s-]?exhausted|daily usage limit|quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota/i.test(JSON.stringify(payload ?? {}).toLowerCase());
+    const isQuotaExhaustion = (payload: any) => /resource[_\s-]?exhausted|daily usage limit|quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota/i.test(JSON.stringify(payload ?? {}).toLowerCase());
     let cloudTemporarilyUnavailable = false;
     const verificationController = new AbortController();
     const verificationTimeout = window.setTimeout(() => verificationController.abort(), 10000);
