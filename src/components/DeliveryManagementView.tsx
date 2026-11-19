@@ -39,6 +39,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [password, setPassword] = useState("");
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [invoiceNo, setInvoiceNo] = useState("");
+  const [invoiceLookup, setInvoiceLookup] = useState<{ status: "idle" | "loading" | "found" | "not_found" | "error"; invoice?: any; already_assigned?: boolean; assigned_driver?: string; message?: string }>({ status: "idle" });
   const [driverUid, setDriverUid] = useState("");
   const [assignmentView, setAssignmentView] = useState<"assigned" | "delivered">("assigned");
   const [expenseView, setExpenseView] = useState<"unpaid" | "paid">("unpaid");
@@ -92,6 +93,34 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Clean only orphan assignments after verifying that the invoice no longer exists in this store.
+  useEffect(() => {
+    if (panelRole !== "admin" || tab !== "assignments") return;
+    let cancelled = false;
+    request("/api/delivery/assignments/cleanup-orphans", {})
+      .then((result: any) => { if (!cancelled && Number(result.deleted || 0) > 0) loadAll(); })
+      .catch((error: any) => console.warn("[Delivery] Orphan assignment cleanup skipped:", error?.message || error));
+    return () => { cancelled = true; };
+  }, [panelRole, tab, request, loadAll]);
+
+  useEffect(() => {
+    const value = invoiceNo.trim();
+    if (!value) { setInvoiceLookup({ status: "idle" }); return; }
+    let cancelled = false;
+    setInvoiceLookup({ status: "loading" });
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await request("/api/delivery/invoices/lookup", { invoice_no: value });
+        if (!cancelled) setInvoiceLookup({ status: "found", invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "" });
+      } catch (error: any) {
+        if (cancelled) return;
+        const message = String(error?.message || "Could not search invoice.");
+        setInvoiceLookup(message.toLowerCase().includes("invoice not found") ? { status: "not_found", message } : { status: "error", message });
+      }
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [invoiceNo, request]);
+
   const createStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -109,10 +138,15 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const assignInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (invoiceLookup.status !== "found" || invoiceLookup.already_assigned) {
+      notifyRef.current(invoiceLookup.already_assigned ? "This invoice is already assigned." : "Please enter a valid invoice number first.", "error");
+      return;
+    }
     try {
       const result = await request("/api/delivery/assignments/create", { invoice_no: invoiceNo, driver_uid: driverUid });
       setAssignments(prev => [result.assignment, ...prev.filter(x => x.id !== result.assignment.id)]);
       setInvoiceNo("");
+      setInvoiceLookup({ status: "idle" });
       notifyRef.current("Invoice assigned to delivery staff.", "success");
     } catch (error: any) {
       notifyRef.current(error?.message || "Could not assign invoice.", "error");
@@ -350,9 +384,20 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         </div>
         {assignmentView === "assigned" ? <>
           <form onSubmit={assignInvoice} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-            <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Invoice Number<input required value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Enter invoice number" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" /></label>
+            <div className="space-y-1.5 text-[11px] font-bold text-slate-300">
+              <label htmlFor="delivery-invoice-number">Enter Invoice Number</label>
+              <input id="delivery-invoice-number" required value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Enter invoice number" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+              {invoiceLookup.status === "loading" && <p className="pt-1 text-[10px] text-slate-400">Searching this business account…</p>}
+              {invoiceLookup.status === "not_found" && <p role="status" className="pt-1 text-[10px] font-bold text-rose-400">Invoice not found in this business account.</p>}
+              {invoiceLookup.status === "error" && <p role="alert" className="pt-1 text-[10px] text-rose-300">{invoiceLookup.message}</p>}
+              {invoiceLookup.status === "found" && <div className="mt-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[10px] text-emerald-100">
+                <p className="font-black">Invoice #{invoiceLookup.invoice?.invoice_no} · {invoiceLookup.invoice?.customer_name}</p>
+                <p className="mt-1 text-emerald-100/75">{invoiceLookup.invoice?.customer_phone || "No phone number"} · {currencySymbol} {Number(invoiceLookup.invoice?.total_amount || 0).toLocaleString()}</p>
+                {invoiceLookup.already_assigned && <p className="mt-1 font-bold text-amber-300">Already assigned to {invoiceLookup.assigned_driver || "a delivery staff member"}.</p>}
+              </div>}
+            </div>
             <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Assign to Driver<select required value={driverUid} onChange={e => setDriverUid(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500"><option value="">Select delivery staff</option>{activeDrivers.map(x => <option key={x.uid} value={x.uid}>{x.name} · {x.email}</option>)}</select></label>
-            <button disabled={!activeDrivers.length} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
+            <button disabled={!activeDrivers.length || invoiceLookup.status !== "found" || Boolean(invoiceLookup.already_assigned)} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
           </form>
           <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
             <h3 className="text-sm font-black text-white">New Sales Delivery Queue <span className="text-emerald-300">({queueItems.length})</span></h3>

@@ -831,7 +831,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       for (const [docId, data] of memCache.entries()) {
         const docStore = (data.store_id || data.storeId || data.email || data.linked_email || "").trim().toLowerCase();
         const docUid = String(data.user_id || data.userId || data.owner_id || "");
-        if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid)) {
+        if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid) || allowedIds.includes(docId)) {
           recordsMap.set(docId, data);
         }
       }
@@ -1101,7 +1101,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         for (const [docId, data] of memCache.entries()) {
           const docStore = (data.store_id || data.storeId || data.email || data.linked_email || "").trim().toLowerCase();
           const docUid = String(data.user_id || data.userId || data.owner_id || "");
-          if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid)) {
+          if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid) || allowedIds.includes(docId)) {
             recordsMap.set(docId, data);
           }
         }
@@ -1684,6 +1684,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const assignmentRef = adminDb.collection("delivery_assignments").doc(assignmentId);
       const previousAssignmentSnap = await assignmentRef.get();
       const previousAssignment = previousAssignmentSnap.exists ? previousAssignmentSnap.data() || {} : {};
+      if (previousAssignmentSnap.exists && previousAssignment.owner_store_id === storeId) {
+        const existingDriver = String(previousAssignment.driver_name || "another delivery staff member");
+        return res.status(409).json({ error: `This invoice is already assigned to ${existingDriver}. Remove the existing assignment before assigning it again.`, already_assigned: true });
+      }
       const assignment = {
         id: assignmentId,
         owner_store_id: storeId,
@@ -1950,7 +1954,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         date: cleanDate,
         assignment_id: assignmentId,
         payment_status: "unpaid",
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        recorded_at: new Date().toISOString()
       };
       await ref.set(record);
       return res.status(201).json({ success: true, expense: record });
@@ -1993,6 +1998,162 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       return res.json({ expenses });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not load delivery expenses." });
+    }
+  });
+
+  // Admin-only edit/delete for delivery expenses, exposed in the main Expenses History.
+  app.post("/api/delivery/expenses/admin-update", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, expense_id, amount, reason, category, date, recorded_at } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const id = String(expense_id || "").trim();
+      const cleanAmount = Number(amount);
+      const cleanReason = String(reason || "").trim();
+      const cleanCategory = String(category || "Delivery Staff Expense").trim().slice(0, 60);
+      const cleanDate = String(date || "").slice(0, 10);
+      const recordedAt = String(recorded_at || "");
+      if (!id) return res.status(400).json({ error: "Delivery expense ID is required." });
+      if (!Number.isFinite(cleanAmount) || cleanAmount <= 0 || cleanAmount > 1000000) return res.status(400).json({ error: "Enter a valid expense amount." });
+      if (cleanReason.length < 2 || cleanReason.length > 500 || !cleanCategory) return res.status(400).json({ error: "Enter a valid description and category." });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate) || Number.isNaN(Date.parse(cleanDate))) return res.status(400).json({ error: "Enter a valid expense date." });
+      if (recordedAt && Number.isNaN(Date.parse(recordedAt))) return res.status(400).json({ error: "Enter a valid recorded date and time." });
+      const ref = adminDb.collection("delivery_expenses").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery expense not found in this business account." });
+      const patch: any = { amount: cleanAmount, reason: cleanReason, category: cleanCategory, date: cleanDate, updated_at: new Date().toISOString(), updated_by: admin.uid };
+      if (recordedAt) patch.recorded_at = new Date(recordedAt).toISOString();
+      await ref.update(patch);
+      return res.json({ success: true, expense: { id, ...(snap.data() || {}), ...patch } });
+    } catch (error: any) {
+      console.warn("[delivery/expenses/admin-update] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not update delivery expense." });
+    }
+  });
+
+  app.post("/api/delivery/expenses/admin-delete", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, expense_id } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const id = String(expense_id || "").trim();
+      if (!id) return res.status(400).json({ error: "Delivery expense ID is required." });
+      const ref = adminDb.collection("delivery_expenses").doc(id);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery expense not found in this business account." });
+      await ref.delete();
+      return res.json({ success: true, deleted: true });
+    } catch (error: any) {
+      console.warn("[delivery/expenses/admin-delete] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not delete delivery expense." });
+    }
+  });
+
+  // Search an invoice inside the signed-in business only; no cross-store invoice lookup.
+  app.post("/api/delivery/invoices/lookup", async (req: Request, res: Response) => {
+    const { store_id, invoice_no } = req.body || {};
+    try {
+      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
+      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const invoiceNo = String(invoice_no || "").trim();
+      if (!invoiceNo) return res.status(400).json({ error: "Enter an invoice number." });
+      const matches = await adminDb.collection("transactions").where("invoiceNo", "==", invoiceNo).limit(10).get();
+      const transactionDoc = matches.docs.find(d => String(d.data().store_id || d.data().storeId || "").trim().toLowerCase() === storeId);
+      let transaction: any = transactionDoc ? transactionDoc.data() || {} : null;
+      let transactionId = transactionDoc?.id || "";
+      if (!transaction) {
+        const queueId = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
+        const queueSnap = await adminDb.collection("delivery_queue").doc(queueId).get();
+        if (!queueSnap.exists || queueSnap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Invoice not found in this business account." });
+        transaction = queueSnap.data() || {};
+        transactionId = String(transaction.transaction_id || "");
+      }
+      const assignmentId = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
+      const assignmentSnap = await adminDb.collection("delivery_assignments").doc(assignmentId).get();
+      const assignment = assignmentSnap.exists && assignmentSnap.data()?.owner_store_id === storeId ? assignmentSnap.data() : null;
+      return res.json({
+        invoice: {
+          invoice_no: invoiceNo,
+          transaction_id: transactionId,
+          customer_name: String(transaction.customer_name || transaction.customerName || "Customer"),
+          customer_phone: String(transaction.customer_phone || transaction.customerPhone || ""),
+          total_amount: Number(transaction.total || transaction.totalAmount || transaction.total_amount || 0),
+          items: Array.isArray(transaction.items) ? transaction.items.map((item: any) => ({ name: String(item.name || item.productName || "Item"), quantity: Number(item.quantity) || 0 })) : []
+        },
+        already_assigned: Boolean(assignment),
+        assigned_driver: assignment ? String(assignment.driver_name || "") : ""
+      });
+    } catch (error: any) {
+      console.warn("[delivery/invoices/lookup] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not search invoice." });
+    }
+  });
+
+  // Remove only assignment rows tied to the exact transaction IDs being deleted from a ledger.
+  app.post("/api/delivery/assignments/remove-ledger", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, transaction_ids } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const ids = Array.from(new Set((Array.isArray(transaction_ids) ? transaction_ids : []).map((id: any) => String(id || "").trim()).filter(Boolean)));
+      if (!ids.length) return res.json({ success: true, deleted: 0 });
+      const snap = await adminDb.collection("delivery_assignments").where("owner_store_id", "==", storeId).get();
+      const toDelete = snap.docs.filter(d => ids.includes(String(d.data().transaction_id || "")));
+      const batch = adminDb.batch();
+      toDelete.forEach(d => batch.delete(d.ref));
+      if (toDelete.length) await batch.commit();
+      return res.json({ success: true, deleted: toDelete.length });
+    } catch (error: any) {
+      console.warn("[delivery/assignments/remove-ledger] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not remove linked invoice assignments." });
+    }
+  });
+
+  // On Admin load, remove stale assignment rows only when no matching invoice remains in this store.
+  app.post("/api/delivery/assignments/cleanup-orphans", async (req: Request, res: Response) => {
+    const { store_id, admin_pin } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const snap = await adminDb.collection("delivery_assignments").where("owner_store_id", "==", storeId).get();
+      const stale: any[] = [];
+      const repairs: Array<{ ref: any; transaction_id: string }> = [];
+      for (const doc of snap.docs) {
+        const row = doc.data() || {};
+        const transactionId = String(row.transaction_id || "").trim();
+        let valid = false;
+        if (transactionId) {
+          const transactionSnap = await adminDb.collection("transactions").doc(transactionId).get();
+          if (transactionSnap.exists) {
+            const tx = transactionSnap.data() || {};
+            valid = String(tx.store_id || tx.storeId || "").trim().toLowerCase() === storeId;
+          }
+        }
+        if (!valid && row.invoice_no) {
+          const candidates = await adminDb.collection("transactions").where("invoiceNo", "==", String(row.invoice_no)).limit(10).get();
+          const match = candidates.docs.find(d => String(d.data().store_id || d.data().storeId || "").trim().toLowerCase() === storeId);
+          if (match) { valid = true; repairs.push({ ref: doc.ref, transaction_id: match.id }); }
+        }
+        if (!valid) stale.push(doc);
+      }
+      const batch = adminDb.batch();
+      stale.forEach(doc => batch.delete(doc.ref));
+      repairs.forEach(item => batch.update(item.ref, { transaction_id: item.transaction_id, updated_at: new Date().toISOString() }));
+      if (stale.length || repairs.length) await batch.commit();
+      return res.json({ success: true, deleted: stale.length, repaired: repairs.length });
+    } catch (error: any) {
+      console.warn("[delivery/assignments/cleanup-orphans] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not clean orphan invoice assignments." });
     }
   });
 
@@ -2057,7 +2218,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           });
 
           const resDoc = docs[0];
-          if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid) {
+          if (resDoc && resDoc.user_id && resDoc.user_id !== verified.uid && String(resDoc.linked_email || "").trim().toLowerCase() !== String(verified.email || "").trim().toLowerCase()) {
             return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });
           }
           return res.json(resDoc);
@@ -2072,7 +2233,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const docSnap = await getDoc(doc(db, "passcode_syncs", String(id)));
       if (docSnap.exists()) {
         const syncData = docSnap.data();
-        if (syncData.user_id && syncData.user_id !== verified.uid && syncData.linked_email !== verified.email) {
+        if (syncData.user_id && syncData.user_id !== verified.uid && String(syncData.linked_email || "").trim().toLowerCase() !== String(verified.email || "").trim().toLowerCase()) {
           return res.status(403).json({ error: "Access Forbidden: Vault belongs to another user." });
         }
         return res.json(syncData);
