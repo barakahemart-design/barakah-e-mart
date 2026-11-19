@@ -387,7 +387,7 @@ export default function App() {
         if (cancelled) return;
         pinWarmupRef.current = { uid: user.uid, token, warmedAt: Date.now() };
         // Warm the same serverless route in the background; PIN verification remains mandatory on submit.
-        void fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, {
+        void fetch("/api/panel-security/pin/warmup", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store"
         }).catch(() => {});
