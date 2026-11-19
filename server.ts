@@ -1171,7 +1171,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   });
 
   app.post("/api/panel-security/pin/update", async (req: Request, res: Response) => {
-    const { store_id, current_admin_pin, admin_pin, sales_pin } = req.body || {};
+    const { store_id, current_admin_pin, current_sales_pin, admin_pin, sales_pin } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
@@ -1183,6 +1183,16 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const newSalesPin = String(sales_pin || "");
       if (!/^\d{4}$/.test(newAdminPin) || !/^\d{4}$/.test(newSalesPin) || newAdminPin === newSalesPin) {
         return res.status(400).json({ error: "Set two different 4-digit numeric PINs." });
+      }
+      if (newAdminPin === "1234" || newSalesPin === "5555") {
+        return res.status(400).json({ error: "Replace the known default PINs with private PINs." });
+      }
+
+      // First-time or incomplete credential setup is initialized from the current
+      // PINs already belonging to this authenticated store, then verified below.
+      const credentialBeforeUpdate = await getAdminPinCredentials(cleanStoreId);
+      if (!credentialBeforeUpdate?.admin_pin_hash || !credentialBeforeUpdate?.sales_pin_hash) {
+        await migrateAdminPinCredentials(cleanStoreId, String(current_admin_pin || ""), String(current_sales_pin || ""));
       }
 
       const currentPinResult = await verifyStorePanelPin(cleanStoreId, "admin", String(current_admin_pin || ""));
