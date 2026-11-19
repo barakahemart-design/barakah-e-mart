@@ -325,6 +325,8 @@ export default function App() {
    const [products, setProducts] = useState<Product[]>([]);
    const [contacts, setContacts] = useState<Contact[]>([]);
    const [expenses, setExpenses] = useState<Expense[]>([]);
+   // Paid delivery-staff expenses are stored in a separate, store-scoped collection.
+   const [deliveryExpenseRecords, setDeliveryExpenseRecords] = useState<any[]>([]);
    const [transactions, setTransactions] = useState<Transaction[]>([]);
    const [purchases, setPurchases] = useState<Purchase[]>([]);
    const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(INITIAL_BUSINESS_INFO);
@@ -1279,6 +1281,41 @@ export default function App() {
       setSyncStatus("offline");
     };
   }, [activeUser]);
+
+  // Load Admin-only paid delivery staff expenses for Dashboard profit calculations.
+  // This is fetched from the authenticated, store-scoped API and never shared across accounts.
+  useEffect(() => {
+    let cancelled = false;
+    const loadPaidDeliveryExpenses = async () => {
+      if (!activeUser || activeUser.isGuest || currentPanel !== "admin" || !adminActionPin) {
+        setDeliveryExpenseRecords([]);
+        return;
+      }
+      const storeId = String(activeUser.email || "").trim().toLowerCase();
+      const user = firebaseAuth.currentUser;
+      if (!storeId || !user || user.uid !== activeUser.uid) {
+        setDeliveryExpenseRecords([]);
+        return;
+      }
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/delivery/expenses/admin-list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ store_id: storeId, admin_pin: adminActionPin, payment_status: "paid" }),
+          cache: "no-store"
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Could not load paid delivery expenses.");
+        if (!cancelled) setDeliveryExpenseRecords(Array.isArray(result.expenses) ? result.expenses : []);
+      } catch (error) {
+        console.warn("[Dashboard] Paid delivery expenses could not be loaded:", error);
+        if (!cancelled) setDeliveryExpenseRecords([]);
+      }
+    };
+    loadPaidDeliveryExpenses();
+    return () => { cancelled = true; };
+  }, [activeUser?.uid, activeUser?.email, activeUser?.isGuest, currentPanel, adminActionPin, activeTab]);
 
   // Periodic PWA update check and network status monitoring
   useEffect(() => {
@@ -4233,9 +4270,21 @@ _${businessInfo.name}_`;
     }
   };
 
+  const paidDeliveryExpenses = deliveryExpenseRecords
+    .filter((expense: any) => String(expense.payment_status || "").toLowerCase() === "paid")
+    .map((expense: any) => ({
+      id: `delivery_staff_expense_${expense.id}`,
+      category: expense.category || "Delivery Staff Expense",
+      amount: Number(expense.amount) || 0,
+      description: expense.reason || expense.description || "Delivery staff expense",
+      // The date money was paid is authoritative; reviewed_at supports older paid records.
+      date: expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date
+    }));
+
   const dashboardMetrics = useMemo(() => {
     const filteredDashboardTx = transactions.filter(t => checkDateInFilter(t.date));
-    const filteredDashboardExpenses = expenses.filter(e => checkDateInFilter(e.date));
+    const allDashboardExpenses = [...expenses, ...paidDeliveryExpenses];
+    const filteredDashboardExpenses = allDashboardExpenses.filter(e => checkDateInFilter(e.date));
     const filteredDashboardPurchases = purchases.filter(p => checkDateInFilter(p.date));
 
     const totalSalesTk = filteredDashboardTx.reduce((sum, t) => sum + t.total, 0);
@@ -4278,7 +4327,7 @@ _${businessInfo.name}_`;
       totalUnitsSold,
       totalCostOfGoodsSold
     };
-  }, [transactions, expenses, purchases, products, dashboardFilter, customStart, customEnd]);
+  }, [transactions, expenses, paidDeliveryExpenses, purchases, products, dashboardFilter, customStart, customEnd]);
 
   const {
     filteredDashboardTx,
@@ -4417,11 +4466,11 @@ _${businessInfo.name}_`;
   }), [transactions]);
 
   const expenseCategoryPlotData = useMemo(() => Object.entries(
-    expenses.reduce((acc, curr) => {
-      acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+    [...expenses, ...paidDeliveryExpenses].reduce((acc, curr) => {
+      acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount || 0);
       return acc;
     }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value })), [expenses]);
+  ).map(([name, value]) => ({ name, value })), [expenses, paidDeliveryExpenses]);
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 
