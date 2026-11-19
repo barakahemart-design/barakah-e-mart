@@ -26,7 +26,7 @@ interface Props {
 }
 
 export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "৳", triggerNotification }: Props) {
-  const [tab, setTab] = useState<"staff" | "assignments" | "expenses" | "payments">("staff");
+  const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
   const [staff, setStaff] = useState<Driver[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [queueItems, setQueueItems] = useState<Array<{id:string; invoice_no:string; customer_name:string; customer_phone:string; customer_address:string; items?:Array<{name:string;quantity:number}>; total_amount?:number; queued_at:string}>>([]);
@@ -269,20 +269,22 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         </button>
       </div>
 
-      <div className={`grid ${panelRole === "admin" ? "grid-cols-4" : "grid-cols-2"} gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1.5`}>
-        {tabs.map(item => {
-          const Icon = item.icon;
-          return <button key={item.id} onClick={() => setTab(item.id)} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-[11px] font-bold transition-all ${tab === item.id ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20" : "text-slate-400 hover:bg-white/5"}`}><Icon className="h-4 w-4" /><span>{item.label}</span></button>;
-        })}
-      </div>
+      {tab === "home" ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {tabs.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id)} className="flex min-h-28 items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-5 text-left hover:border-sky-400/60">
+          <Icon className="h-7 w-7 text-sky-300" /><span className="flex-1 text-sm font-black text-white">{item.label}</span><span className="text-xs text-slate-400">Open →</span>
+        </button>; })}
+      </div> : <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+        <button type="button" onClick={() => setTab("home")} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white">← Delivery Management</button>
+        <span className="text-xs font-black text-sky-300">{tabs.find(item => item.id === tab)?.label}</span>
+      </div>}
 
       {tab === "staff" && <div className={`grid gap-4 ${panelRole === "admin" ? "lg:grid-cols-[minmax(280px,0.85fr)_1.15fr]" : "grid-cols-1"}`}>
-        {panelRole === "admin" && <form onSubmit={createStaff} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+        {panelRole === "admin" && <form onSubmit={createStaff} autoComplete="off" className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="flex items-center gap-2 text-sm font-black text-white"><UserPlus className="h-4 w-4 text-emerald-400" /> Create Delivery Account</h3>
-          <input required minLength={2} value={name} onChange={e => setName(e.target.value)} placeholder="Staff full name" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
-          <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Login email address" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
-          <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone number (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
-          <input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Temporary password (min. 8 characters)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+          <input autoComplete="off" name="delivery-staff-full-name" required minLength={2} value={name} onChange={e => setName(e.target.value)} placeholder="Staff full name" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+          <input autoComplete="new-password" name="delivery-staff-login-email" readOnly onFocus={e => { e.currentTarget.readOnly = false; }} required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Login email address" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+          <input autoComplete="off" name="delivery-staff-phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone number (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+          <input autoComplete="new-password" name="delivery-staff-temporary-password" required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Temporary password (min. 8 characters)" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
           <p className="text-[10px] leading-relaxed text-slate-500">Share the login email and temporary password privately with the driver. The password is not stored in the delivery profile.</p>
           {createdCredentials && <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3">
             <p className="text-[11px] font-black text-emerald-300">New account credentials — share privately</p>
