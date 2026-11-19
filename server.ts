@@ -1226,6 +1226,18 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  // Warm the authenticated API function without reading Firestore.
+  // This avoids spending a Firestore read merely to pre-connect the PIN screen.
+  app.get("/api/panel-security/pin/warmup", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
+      return res.json({ ready: true });
+    } catch (err: any) {
+      return res.status(503).json({ error: err?.message || "PIN service is temporarily unavailable." });
+    }
+  });
+
   app.get("/api/panel-security/pin/status", async (req: Request, res: Response) => {
     const { store_id } = req.query;
     try {
