@@ -18,6 +18,7 @@ interface Props {
 
 export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: Props) {
   const [tab, setTab] = useState<"deliveries" | "expenses" | "payments">("deliveries");
+  const [deliveryView, setDeliveryView] = useState<"assigned" | "delivered">("assigned");
   const [paymentView, setPaymentView] = useState<"pending" | "received">("pending");
   const [expenseView, setExpenseView] = useState<"add" | "status">("add");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -120,11 +121,19 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
         <div className="flex justify-end"><button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-[11px] font-bold text-slate-300"><RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> Refresh</button></div>
 
         {tab === "deliveries" && <div className="space-y-3">
-          {assignments.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">No deliveries assigned to you right now.</div> : assignments.map(item => <article key={item.id} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+            <button onClick={() => setDeliveryView("assigned")} className={`rounded-xl px-3 py-3 text-xs font-black ${deliveryView === "assigned" ? "bg-amber-500/15 text-amber-300" : "text-slate-400"}`}>Assigned ({assignments.filter(x => x.delivery_status !== "delivered").length})</button>
+            <button onClick={() => setDeliveryView("delivered")} className={`rounded-xl px-3 py-3 text-xs font-black ${deliveryView === "delivered" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Delivered ({assignments.filter(x => x.delivery_status === "delivered").length})</button>
+          </div>
+          {(() => {
+            const visibleAssignments = assignments.filter(item => deliveryView === "delivered" ? item.delivery_status === "delivered" : item.delivery_status !== "delivered");
+            return visibleAssignments.length === 0
+              ? <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">{deliveryView === "delivered" ? "No delivered parcels yet." : "No parcels assigned to you right now."}</div>
+              : visibleAssignments.map(item => <article key={item.id} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-base font-black">Invoice {item.invoice_no}</h3><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status}</span></div>
             <div className="space-y-1 text-xs text-slate-300"><p className="font-bold">{item.customer_name}</p>{item.customer_phone && <a className="inline-flex items-center gap-1 text-sky-300" href={`tel:${item.customer_phone}`}><Phone className="h-3 w-3" /> {item.customer_phone}</a>}<p className="flex items-start gap-1 text-slate-400"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "Customer address not available"}</p></div>
             {item.items?.length ? <div className="rounded-xl bg-slate-950/70 p-3 text-[11px] text-slate-300">{item.items.map((x,i) => <p key={i}>{x.name} × {x.quantity}</p>)}</div> : null}
-            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+            {deliveryView === "assigned" && <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
               <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold text-slate-300">Edit delivery details</p><span className="text-[10px] text-slate-500">Status can be changed anytime</span></div>
               <label className="block text-[10px] font-bold text-slate-400">Delivery status
                 <select value={getEditDraft(item).status} onChange={e => setEditDrafts(prev => ({ ...prev, [item.id]: { ...getEditDraft(item), status: e.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white">
@@ -137,8 +146,9 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
               {item.payment_status === "paid" && <p className="text-[10px] font-semibold text-emerald-300">Payment is Paid. Amount editing is locked; delivery status can still be changed.</p>}
               <input value={notes[item.id] ?? item.delivery_note ?? ""} onChange={e => setNotes(prev => ({...prev,[item.id]:e.target.value}))} placeholder="Delivery note (optional)" className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs text-white" />
               <button onClick={() => saveAssignmentEdits(item)} className="w-full rounded-lg bg-emerald-500 px-3 py-2.5 text-[10px] font-black text-slate-950">Save Changes</button>
-            </div>
-          </article>)}
+            </div>}
+          </article>);
+          })()}
         </div>}
 
         {tab === "payments" && <div className="space-y-4">
