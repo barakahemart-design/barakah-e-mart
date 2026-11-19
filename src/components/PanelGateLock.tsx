@@ -155,15 +155,16 @@ export function PanelGateLock({
           {/* Bullet Dots display */}
           <div className="flex justify-center gap-3 py-1.5 mt-3 pointer-events-none" id="bullets-container">
             {[0, 1, 2, 3].map((val) => (
-              <div 
-                 key={val} 
-                 className={`w-4 h-4 rounded-full border-2 transition-all duration-150 bg-black ${
-                   pin.length > val
-                     ? "border-white bg-white shadow-[0_0_12px_rgba(255,255,255,0.85)]"
-                     : pin.length === val && pin.length < 4
-                       ? "border-white bg-white scale-110 animate-pulse shadow-[0_0_0_4px_rgba(255,255,255,0.12),0_0_14px_rgba(255,255,255,0.95)]"
-                       : "border-slate-600"
-                 }`}
+              <div
+                 key={val}
+                 aria-label={pin.length > val ? `PIN digit ${val + 1} entered` : `PIN digit ${val + 1} empty`}
+                 data-pin-filled={pin.length > val ? "true" : "false"}
+                 className="w-4 h-4 rounded-full border-2 border-slate-600 bg-black transition-all duration-150"
+                 style={pin.length > val ? {
+                   backgroundColor: "#ffffff",
+                   borderColor: "#ffffff",
+                   boxShadow: "0 0 12px rgba(255,255,255,0.95)",
+                 } : undefined}
               />
             ))}
           </div>
