@@ -217,7 +217,7 @@ export function PanelGateLock({
             type="button"
             onClick={() => handleSubmit()}
             disabled={pin.length < 4 || isVerifying}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/15 cursor-pointer"
+            className={`w-full py-3 ${pin.length > 0 || isVerifying ? "bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/30" : "bg-slate-500 dark:bg-slate-700 shadow-md shadow-slate-500/10"} text-white font-bold text-xs rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer disabled:cursor-not-allowed`}
           >
             {isVerifying ? "Verifying..." : "Unlock Dashboard"} <ArrowRight className="w-3.5 h-3.5" />
           </button>
