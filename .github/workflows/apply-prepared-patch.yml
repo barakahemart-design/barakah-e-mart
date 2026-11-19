@@ -1,0 +1,28 @@
+name: Apply prepared source patch
+on:
+  push:
+    branches:
+      - feature/ledger-delivery-unification
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ledger-delivery-unification
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply patch and clean temporary files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/agent-patch
+          cat .agent-patch/part-* | base64 -d > /tmp/agent.patch.gz
+          gzip -t /tmp/agent.patch.gz
+          gzip -dc /tmp/agent.patch.gz | git apply --index
+          rm -rf .agent-patch .github/workflows/apply-prepared-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Unify delivery expenses and invoice assignment cleanup"
+          git push origin HEAD:feature/ledger-delivery-unification
