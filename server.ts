@@ -2008,8 +2008,24 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const ref = adminDb.collection("delivery_expenses").doc(id);
       const snap = await ref.get();
       if (!snap.exists || snap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery expense not found." });
-      await ref.update({ payment_status, reviewed_at: new Date().toISOString(), reviewed_by: admin.uid });
-      return res.json({ success: true });
+      const existing = snap.data() || {};
+      const now = new Date().toISOString();
+      // Preserve the first Paid timestamp on repeated saves. Older Paid rows use
+      // reviewed_at as a safe historical fallback instead of being dated today.
+      const paidAt = payment_status === "paid"
+        ? (String(existing.payment_status || "").toLowerCase() === "paid"
+            ? String(existing.paid_at || existing.reviewed_at || now)
+            : now)
+        : "";
+      const paymentDate = paidAt ? paidAt.slice(0, 10) : "";
+      await ref.update({
+        payment_status,
+        reviewed_at: now,
+        reviewed_by: admin.uid,
+        paid_at: paidAt || null,
+        payment_date: paymentDate || null
+      });
+      return res.json({ success: true, paid_at: paidAt || null, payment_date: paymentDate || null });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not update expense payment status." });
     }
