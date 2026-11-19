@@ -330,10 +330,20 @@ export default function App() {
    const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(INITIAL_BUSINESS_INFO);
  
 
-   // Security Locking Roles state
-   // Never restore an unlocked role from browser storage. Require PIN verification
-  // again after a page reload so sessionStorage cannot bypass the panel gate.
-  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+   // Keep the verified panel open for this browser/app tab session.
+   // sessionStorage survives refresh/reload but is cleared when the tab/session is closed.
+  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("barakah_active_panel") || "null");
+      const cachedUser = JSON.parse(localStorage.getItem("barakah_local_active_user") || "null");
+      if (
+        saved && (saved.panel === "admin" || saved.panel === "sales") &&
+        saved.uid && cachedUser?.uid && saved.uid === cachedUser.uid &&
+        !cachedUser?.isGuest
+      ) return saved.panel;
+    } catch (_) {}
+    return "none";
+  });
   // Keep the verified Admin PIN in memory only for privileged delivery actions.
   // It is never written to localStorage or sessionStorage.
   const [adminActionPin, setAdminActionPin] = useState("");
@@ -424,26 +434,31 @@ export default function App() {
     localStorage.setItem(getDbKey("barakah_billing_dark_theme"), String(isDarkMode));
   }, [isDarkMode]);
 
-  // Keep the unlocked workspace and selected page through a normal browser reload.
-  // Logout clears the panel state, so this never replaces authentication.
+  // Keep the PIN-verified panel unlocked across refreshes in this tab only.
+  // The Firebase UID binding prevents a different business account inheriting the session.
+  // Closing the tab/app session clears sessionStorage; explicit logout clears this key too.
   useEffect(() => {
     try {
-      if (currentPanel === "none") sessionStorage.removeItem("barakah_active_panel");
-      else sessionStorage.setItem("barakah_active_panel", currentPanel);
+      if (currentPanel === "none") {
+        sessionStorage.removeItem("barakah_active_panel");
+      } else if (activeUser?.uid && !activeUser.isGuest) {
+        sessionStorage.setItem("barakah_active_panel", JSON.stringify({
+          panel: currentPanel,
+          uid: activeUser.uid
+        }));
+      }
     } catch (_) {}
-  }, [currentPanel]);
+  }, [currentPanel, activeUser?.uid, activeUser?.isGuest]);
 
   useEffect(() => {
     try { sessionStorage.setItem("barakah_active_tab", activeTab); } catch (_) {}
   }, [activeTab]);
 
-  // Mobile pull-down refresh: block the browser's native short pull-to-refresh
-  // and reload only after a deliberate 200px (about 2-inch) downward gesture at the top.
-  // Firebase's persisted auth session and the saved workspace restore after reload.
+  // Disable mobile pull-down-to-refresh. Refresh is available only from the
+  // dedicated Dashboard button; normal vertical scrolling remains enabled.
   useEffect(() => {
     let startX = 0;
     let startY = 0;
-    let currentY = 0;
     let validStart = false;
     const previousOverscroll = document.documentElement.style.overscrollBehaviorY;
     const previousBodyOverscroll = document.body.style.overscrollBehaviorY;
@@ -464,42 +479,21 @@ export default function App() {
     };
 
     const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1) {
-        validStart = false;
-        return;
-      }
-      const touch = event.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
-      currentY = touch.clientY;
+      if (event.touches.length !== 1) { validStart = false; return; }
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
       validStart = true;
     };
-
     const handleTouchMove = (event: TouchEvent) => {
       if (!validStart || event.touches.length !== 1) return;
       const touch = event.touches[0];
-      currentY = touch.clientY;
-      const deltaY = currentY - startY;
+      const deltaY = touch.clientY - startY;
       const deltaX = Math.abs(touch.clientX - startX);
       if (deltaY > 0 && deltaX < 90 && !canScrollUpFromTarget(event.target)) {
         event.preventDefault();
       }
     };
-
-    const handleTouchEnd = (event: TouchEvent) => {
-      if (!validStart || event.changedTouches.length !== 1) {
-        validStart = false;
-        return;
-      }
-      const touch = event.changedTouches[0];
-      const deltaY = Math.max(currentY, touch.clientY) - startY;
-      const deltaX = Math.abs(touch.clientX - startX);
-      validStart = false;
-      if (deltaY >= 200 && deltaX <= 75) {
-        window.location.reload();
-      }
-    };
-
+    const handleTouchEnd = () => { validStart = false; };
     const handleTouchCancel = () => { validStart = false; };
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -4952,6 +4946,7 @@ _${businessInfo.name}_`;
               transactions={transactions}
               storeEmail={activeUser?.email || firebaseAuth.currentUser?.email || ""}
               businessInfo={businessInfo}
+              onRefresh={() => window.location.reload()}
               onDataImport={handleDataImport}
               onNavigate={(tab) => {
                 setActiveTab(tab);
