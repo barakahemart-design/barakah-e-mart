@@ -1176,8 +1176,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
       const cleanStoreId = String(store_id || "").trim().toLowerCase();
-      if (!cleanStoreId || cleanStoreId !== verified.email || verified.email !== PRIMARY_ADMIN_EMAIL) {
-        return res.status(403).json({ error: "Only the primary Admin account can change panel security settings." });
+      if (!cleanStoreId || cleanStoreId !== verified.email) {
+        return res.status(403).json({ error: "Access denied: account does not match the requested store." });
       }
       const newAdminPin = String(admin_pin || "");
       const newSalesPin = String(sales_pin || "");
@@ -1252,9 +1252,6 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (cleanRole !== "admin" && cleanRole !== "sales") {
         return res.status(400).json({ error: "Invalid panel role." });
-      }
-      if (cleanRole === "admin" && verified.email !== PRIMARY_ADMIN_EMAIL) {
-        return res.status(403).json({ error: "Admin Panel access is restricted to the primary Admin account." });
       }
       if (!/^\d{4}$/.test(enteredPin)) {
         return res.status(400).json({ error: "Enter a valid 4-digit PIN." });
