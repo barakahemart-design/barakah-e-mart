@@ -81,6 +81,27 @@ html:not(.light) #root #cloud-sync-status-indicator span.bg-rose-400{background:
  html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"]{background-color:rgba(24,26,31,.92)!important}
 }
 
+/* PIN indicator exception: this stylesheet loads after mobile-polish.css.
+   The global glass surface rule above adds an !important gradient image to every
+   rounded/bordered/backgrounded div, which visually masks the filled PIN dots.
+   Higher-specificity rules below explicitly remove that overlay. */
+#root #panel-gate-lock #bullets-container > div[data-pin-filled="true"][class*="rounded-"][class*="border-"][class*="bg-"] {
+  background: #2563eb !important;
+  background-color: #2563eb !important;
+  background-image: none !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 1px rgba(96,165,250,.45), 0 0 14px rgba(37,99,235,.85) !important;
+  opacity: 1 !important;
+}
+#root #panel-gate-lock #bullets-container > div[data-pin-filled="false"][class*="rounded-"][class*="border-"][class*="bg-"] {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+  border-color: #64748b !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
 /* Mobile bottom navigation: deep graphite glass with strong blur.
    High opacity keeps customer names/content below from competing with nav labels. */
 @media (max-width: 640px) {
