@@ -1631,6 +1631,7 @@ export default function App() {
   const [tempCanOverridePrices, setTempCanOverridePrices] = useState(true);
 
   // States for passcode configuration in Settings
+  const [currentAdminPasscode, setCurrentAdminPasscode] = useState("");
   const [tempAdminPasscode, setTempAdminPasscode] = useState("1234");
   const [tempSalesPasscode, setTempSalesPasscode] = useState("5555");
 
@@ -2305,8 +2306,16 @@ export default function App() {
   const handleSaveSecurityPasscodes = async () => {
     const isFourDigits = (value: string) => /^\d{4}$/.test(value);
 
+    if (!isFourDigits(currentAdminPasscode)) {
+      triggerNotification("Enter your current Admin PIN to authorize this change.", "error");
+      return;
+    }
     if (!isFourDigits(tempAdminPasscode) || !isFourDigits(tempSalesPasscode)) {
-      triggerNotification("Admin and Sales PINs must each contain exactly 4 digits.", "error");
+      triggerNotification("New Admin and Sales PINs must each contain exactly 4 digits.", "error");
+      return;
+    }
+    if (tempAdminPasscode === "1234" || tempSalesPasscode === "5555") {
+      triggerNotification("Please replace the known default PINs (Admin 1234 / Sales 5555) with private PINs.", "error");
       return;
     }
     if (tempAdminPasscode === tempSalesPasscode) {
@@ -2327,7 +2336,8 @@ export default function App() {
         },
         body: JSON.stringify({
           store_id: storeId,
-          current_admin_pin: String(businessInfo.adminPasscode || "1234"),
+          current_admin_pin: currentAdminPasscode,
+          current_sales_pin: String(businessInfo.salesPasscode || "5555"),
           admin_pin: tempAdminPasscode,
           sales_pin: tempSalesPasscode
         })
@@ -2343,8 +2353,9 @@ export default function App() {
         salesPasscode: tempSalesPasscode
       };
       persistBusinessInfoState(updated);
+      setCurrentAdminPasscode("");
       if (currentPanel === "admin") setAdminActionPin(tempAdminPasscode);
-      triggerNotification("Admin and Sales PINs updated securely.", "success");
+      triggerNotification("Admin and Sales PINs saved securely. Use the new PINs next time you open the panels.", "success");
       setActiveSettingsSection("overview");
     } catch (error: any) {
       triggerNotification(error?.message || "PIN update failed. Please try again.", "error");
@@ -9085,15 +9096,34 @@ _${businessInfo.name}_`;
                   </div>
                 </div>
 
+                <div className="space-y-2 pb-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-slate-400 pl-1 block">
+                    Current Admin PIN (authorization)
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="current-password"
+                    maxLength={4}
+                    value={currentAdminPasscode}
+                    onChange={(e) => setCurrentAdminPasscode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Enter current 4-digit Admin PIN"
+                    className="w-full px-4 py-2.5 bg-[#171A20] border border-slate-600 rounded-xl text-white text-xs outline-none focus:border-white font-mono font-bold"
+                  />
+                  <span className="text-[9px] text-slate-400 pl-1">Required to confirm that the account owner is changing security credentials.</span>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-slate-400 pl-1 block">
-                      Admin Panel Passcode (Owner Key)
+                      New Admin Panel PIN (Owner Key)
                     </label>
                     <div className="relative">
                       <input
-                        type="text"
-                        maxLength={8}
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="new-password"
+                        maxLength={4}
                         value={tempAdminPasscode}
                         onChange={(e) => setTempAdminPasscode(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 1234"
@@ -9107,12 +9137,14 @@ _${businessInfo.name}_`;
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-wider font-mono text-slate-400 pl-1 block">
-                      Sales Panel Passcode (Cashier Key)
+                      New Sales Panel PIN (Cashier Key)
                     </label>
                     <div className="relative">
                       <input
-                        type="text"
-                        maxLength={8}
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="new-password"
+                        maxLength={4}
                         value={tempSalesPasscode}
                         onChange={(e) => setTempSalesPasscode(e.target.value.replace(/\D/g, ''))}
                         placeholder="e.g. 5555"
@@ -9129,6 +9161,7 @@ _${businessInfo.name}_`;
                   <button
                     type="button"
                     onClick={handleSaveSecurityPasscodes}
+                    disabled={!/^\d{4}$/.test(currentAdminPasscode) || !/^\d{4}$/.test(tempAdminPasscode) || !/^\d{4}$/.test(tempSalesPasscode)}
                     className="min-h-11 px-5 py-2.5 bg-[#F4F4F5] text-[#111318] border border-white/80 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_4px_18px_rgba(255,255,255,0.16)] hover:bg-white hover:shadow-[0_6px_22px_rgba(255,255,255,0.24)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Check className="w-4 h-4" />
