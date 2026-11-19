@@ -330,82 +330,13 @@ export default function App() {
    const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(INITIAL_BUSINESS_INFO);
  
 
-   // Keep the verified panel open for this browser/app tab session.
-   // sessionStorage survives refresh/reload but is cleared when the tab/session is closed.
-  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem("barakah_active_panel") || "null");
-      const cachedUser = JSON.parse(localStorage.getItem("barakah_local_active_user") || "null");
-      if (
-        saved && (saved.panel === "admin" || saved.panel === "sales") &&
-        saved.uid && cachedUser?.uid && saved.uid === cachedUser.uid &&
-        !cachedUser?.isGuest
-      ) return saved.panel;
-    } catch (_) {}
-    return "none";
-  });
+   // Always show the PIN gate after the welcome screen; never restore an old unlocked panel.
+  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
   // Keep the verified Admin PIN in memory only for privileged delivery actions.
   // It is never written to localStorage or sessionStorage.
   const [adminActionPin, setAdminActionPin] = useState("");
   const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
   const [deliverySessionChecked, setDeliverySessionChecked] = useState(false);
-  const [panelSessionReady, setPanelSessionReady] = useState(false);
-
-  // A restored panel session is accepted only after re-verifying the account's
-  // saved PIN against the server (or the existing same-device offline fallback).
-  useEffect(() => {
-    if (currentPanel === "none") {
-      setPanelSessionReady(true);
-      return;
-    }
-    if (!activeUser || activeUser.isGuest || !settingsHydrated) return;
-    let cancelled = false;
-    const restoreVerifiedPanel = async () => {
-      const panel = currentPanel;
-      const cachedPin = String(panel === "admin" ? businessInfo.adminPasscode || "" : businessInfo.salesPasscode || "");
-      if (!/^[0-9]{4}$/.test(cachedPin)) {
-        setCurrentPanel("none");
-        setPanelSessionReady(true);
-        return;
-      }
-      try {
-        const user = firebaseAuth.currentUser;
-        const storeId = String(activeUser.email || "").trim().toLowerCase();
-        if (!user || user.uid !== activeUser.uid || user.email?.trim().toLowerCase() !== storeId) {
-          throw new Error("Account session changed.");
-        }
-        const token = await user.getIdToken();
-        const response = await fetch("/api/panel-security/pin/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ store_id: storeId, role: panel, pin: cachedPin })
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.valid) throw new Error(result.error || "Saved PIN verification failed.");
-        if (cancelled) return;
-        setAdminActionPin(panel === "admin" ? cachedPin : "");
-        setPanelSessionReady(true);
-      } catch (error: any) {
-        // Preserve the existing same-account offline access behavior only when
-        // the network is unavailable; never override a definite server rejection.
-        if (error?.name === "TypeError" && cachedPin.length === 4) {
-          if (!cancelled) {
-            setAdminActionPin(panel === "admin" ? cachedPin : "");
-            setPanelSessionReady(true);
-          }
-          return;
-        }
-        if (!cancelled) {
-          setCurrentPanel("none");
-          setAdminActionPin("");
-          setPanelSessionReady(true);
-        }
-      }
-    };
-    setPanelSessionReady(false);
-    restoreVerifiedPanel();
-    return () => { cancelled = true; };
-  }, [currentPanel, activeUser?.uid, activeUser?.email, activeUser?.isGuest, settingsHydrated, businessInfo.adminPasscode, businessInfo.salesPasscode]);
 
   // After Firebase login, check the server-owned delivery role before showing
   // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
@@ -490,22 +421,6 @@ export default function App() {
     }
     localStorage.setItem(getDbKey("barakah_billing_dark_theme"), String(isDarkMode));
   }, [isDarkMode]);
-
-  // Keep the PIN-verified panel unlocked across refreshes in this tab only.
-  // The Firebase UID binding prevents a different business account inheriting the session.
-  // Closing the tab/app session clears sessionStorage; explicit logout clears this key too.
-  useEffect(() => {
-    try {
-      if (currentPanel === "none") {
-        sessionStorage.removeItem("barakah_active_panel");
-      } else if (activeUser?.uid && !activeUser.isGuest) {
-        sessionStorage.setItem("barakah_active_panel", JSON.stringify({
-          panel: currentPanel,
-          uid: activeUser.uid
-        }));
-      }
-    } catch (_) {}
-  }, [currentPanel, activeUser?.uid, activeUser?.isGuest]);
 
   useEffect(() => {
     try { sessionStorage.setItem("barakah_active_tab", activeTab); } catch (_) {}
@@ -4565,14 +4480,6 @@ _${businessInfo.name}_`;
     );
   }
 
-  if (activeUser && !activeUser.isGuest && !deliverySessionChecked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
-        <div className="text-center"><Truck className="mx-auto mb-3 h-8 w-8 animate-pulse text-emerald-400" /><p className="text-sm font-semibold">Checking secure account access…</p></div>
-      </div>
-    );
-  }
-
   if (deliveryStaffProfile && deliveryStaffProfile.status !== "active") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#080d18] p-5 text-white">
@@ -4625,10 +4532,6 @@ _${businessInfo.name}_`;
       return;
     }
 
-    if (!settingsHydrated) {
-      throw new Error("Your store security settings are still loading. Please wait a few seconds and try again.");
-    }
-
     const firebaseUser = firebaseAuth.currentUser;
     const storeId = String(activeUser?.email || "").trim().toLowerCase();
     if (!firebaseUser || !storeId || firebaseUser.email?.trim().toLowerCase() !== storeId) {
@@ -4656,43 +4559,53 @@ _${businessInfo.name}_`;
         Authorization: `Bearer ${idToken}`
       };
 
-      const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
-      const statusData = await statusResponse.json().catch(() => ({}));
-      if (!statusResponse.ok) {
-        if (statusResponse.status >= 500) cloudTemporarilyUnavailable = true;
-        else throw new Error(statusData.error || "Could not check secure PIN settings.");
-      }
+      // Fast path: verify the entered PIN with one server request.
+      // Only run legacy migration when the server confirms credentials are not initialized.
+      let verifyResponse = await fetch("/api/panel-security/pin/verify", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ store_id: storeId, role: panel, pin })
+      });
+      let verifyData = await verifyResponse.json().catch(() => ({}));
 
-      if (!cloudTemporarilyUnavailable && !statusData.configured) {
-        const migrationResponse = await fetch("/api/panel-security/pin/migrate", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            store_id: storeId,
-            admin_pin: String(businessInfo.adminPasscode || ""),
-            sales_pin: String(businessInfo.salesPasscode || "")
-          })
-        });
-        const migrationData = await migrationResponse.json().catch(() => ({}));
-        if (!migrationResponse.ok || !migrationData.success) {
-          if (migrationResponse.status >= 500) cloudTemporarilyUnavailable = true;
-          else throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
+      if (verifyResponse.status === 401) {
+        const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers });
+        const statusData = await statusResponse.json().catch(() => ({}));
+        if (!statusResponse.ok) {
+          if (statusResponse.status >= 500) cloudTemporarilyUnavailable = true;
+          else throw new Error(statusData.error || "Could not check secure PIN settings.");
+        } else if (!statusData.configured) {
+          if (!settingsHydrated) {
+            throw new Error("PIN setup is still syncing. Please try again in a moment.");
+          }
+          const migrationResponse = await fetch("/api/panel-security/pin/migrate", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              store_id: storeId,
+              admin_pin: String(businessInfo.adminPasscode || ""),
+              sales_pin: String(businessInfo.salesPasscode || "")
+            })
+          });
+          const migrationData = await migrationResponse.json().catch(() => ({}));
+          if (!migrationResponse.ok || !migrationData.success) {
+            if (migrationResponse.status >= 500) cloudTemporarilyUnavailable = true;
+            else throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
+          } else {
+            verifyResponse = await fetch("/api/panel-security/pin/verify", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ store_id: storeId, role: panel, pin })
+            });
+            verifyData = await verifyResponse.json().catch(() => ({}));
+          }
         }
       }
 
       if (!cloudTemporarilyUnavailable) {
-        const verifyResponse = await fetch("/api/panel-security/pin/verify", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ store_id: storeId, role: panel, pin })
-        });
-        const verifyData = await verifyResponse.json().catch(() => ({}));
-        if (!verifyResponse.ok) {
+        if (!verifyResponse.ok || !verifyData.valid) {
           if (verifyResponse.status >= 500) cloudTemporarilyUnavailable = true;
           else throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
-        } else if (!verifyData.valid) {
-          // A definite server-side rejection must never be overridden by cache.
-          throw new Error(verifyData.error || "Incorrect PIN. Please try again.");
         }
       }
     } catch (error: any) {
@@ -4712,14 +4625,6 @@ _${businessInfo.name}_`;
     setActiveTab(panel === "sales" ? "pos" : "dashboard");
     triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} unlocked successfully.`, "success");
   };
-
-  if (currentPanel !== "none" && !panelSessionReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
-        <div className="text-center"><RefreshCw className="mx-auto mb-3 h-7 w-7 animate-spin text-cyan-400" /><p className="text-sm font-semibold">Restoring secure panel session…</p></div>
-      </div>
-    );
-  }
 
   if (currentPanel === "none") {
     return (
