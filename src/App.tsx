@@ -330,15 +330,82 @@ export default function App() {
    const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(INITIAL_BUSINESS_INFO);
  
 
-   // Security Locking Roles state
-   // Never restore an unlocked role from browser storage. Require PIN verification
-  // again after a page reload so sessionStorage cannot bypass the panel gate.
-  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">("none");
+   // Keep the verified panel open for this browser/app tab session.
+   // sessionStorage survives refresh/reload but is cleared when the tab/session is closed.
+  const [currentPanel, setCurrentPanel] = useState<"none" | "admin" | "sales">(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("barakah_active_panel") || "null");
+      const cachedUser = JSON.parse(localStorage.getItem("barakah_local_active_user") || "null");
+      if (
+        saved && (saved.panel === "admin" || saved.panel === "sales") &&
+        saved.uid && cachedUser?.uid && saved.uid === cachedUser.uid &&
+        !cachedUser?.isGuest
+      ) return saved.panel;
+    } catch (_) {}
+    return "none";
+  });
   // Keep the verified Admin PIN in memory only for privileged delivery actions.
   // It is never written to localStorage or sessionStorage.
   const [adminActionPin, setAdminActionPin] = useState("");
   const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
   const [deliverySessionChecked, setDeliverySessionChecked] = useState(false);
+  const [panelSessionReady, setPanelSessionReady] = useState(false);
+
+  // A restored panel session is accepted only after re-verifying the account's
+  // saved PIN against the server (or the existing same-device offline fallback).
+  useEffect(() => {
+    if (currentPanel === "none") {
+      setPanelSessionReady(true);
+      return;
+    }
+    if (!activeUser || activeUser.isGuest || !settingsHydrated) return;
+    let cancelled = false;
+    const restoreVerifiedPanel = async () => {
+      const panel = currentPanel;
+      const cachedPin = String(panel === "admin" ? businessInfo.adminPasscode || "" : businessInfo.salesPasscode || "");
+      if (!/^[0-9]{4}$/.test(cachedPin)) {
+        setCurrentPanel("none");
+        setPanelSessionReady(true);
+        return;
+      }
+      try {
+        const user = firebaseAuth.currentUser;
+        const storeId = String(activeUser.email || "").trim().toLowerCase();
+        if (!user || user.uid !== activeUser.uid || user.email?.trim().toLowerCase() !== storeId) {
+          throw new Error("Account session changed.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch("/api/panel-security/pin/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ store_id: storeId, role: panel, pin: cachedPin })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.valid) throw new Error(result.error || "Saved PIN verification failed.");
+        if (cancelled) return;
+        setAdminActionPin(panel === "admin" ? cachedPin : "");
+        setPanelSessionReady(true);
+      } catch (error: any) {
+        // Preserve the existing same-account offline access behavior only when
+        // the network is unavailable; never override a definite server rejection.
+        if (error?.name === "TypeError" && cachedPin.length === 4) {
+          if (!cancelled) {
+            setAdminActionPin(panel === "admin" ? cachedPin : "");
+            setPanelSessionReady(true);
+          }
+          return;
+        }
+        if (!cancelled) {
+          setCurrentPanel("none");
+          setAdminActionPin("");
+          setPanelSessionReady(true);
+        }
+      }
+    };
+    setPanelSessionReady(false);
+    restoreVerifiedPanel();
+    return () => { cancelled = true; };
+  }, [currentPanel, activeUser?.uid, activeUser?.email, activeUser?.isGuest, settingsHydrated, businessInfo.adminPasscode, businessInfo.salesPasscode]);
 
   // After Firebase login, check the server-owned delivery role before showing
   // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
@@ -424,26 +491,31 @@ export default function App() {
     localStorage.setItem(getDbKey("barakah_billing_dark_theme"), String(isDarkMode));
   }, [isDarkMode]);
 
-  // Keep the unlocked workspace and selected page through a normal browser reload.
-  // Logout clears the panel state, so this never replaces authentication.
+  // Keep the PIN-verified panel unlocked across refreshes in this tab only.
+  // The Firebase UID binding prevents a different business account inheriting the session.
+  // Closing the tab/app session clears sessionStorage; explicit logout clears this key too.
   useEffect(() => {
     try {
-      if (currentPanel === "none") sessionStorage.removeItem("barakah_active_panel");
-      else sessionStorage.setItem("barakah_active_panel", currentPanel);
+      if (currentPanel === "none") {
+        sessionStorage.removeItem("barakah_active_panel");
+      } else if (activeUser?.uid && !activeUser.isGuest) {
+        sessionStorage.setItem("barakah_active_panel", JSON.stringify({
+          panel: currentPanel,
+          uid: activeUser.uid
+        }));
+      }
     } catch (_) {}
-  }, [currentPanel]);
+  }, [currentPanel, activeUser?.uid, activeUser?.isGuest]);
 
   useEffect(() => {
     try { sessionStorage.setItem("barakah_active_tab", activeTab); } catch (_) {}
   }, [activeTab]);
 
-  // Mobile pull-down refresh: block the browser's native short pull-to-refresh
-  // and reload only after a deliberate 200px (about 2-inch) downward gesture at the top.
-  // Firebase's persisted auth session and the saved workspace restore after reload.
+  // Disable mobile pull-down-to-refresh. Refresh is available only from the
+  // dedicated Dashboard button; normal vertical scrolling remains enabled.
   useEffect(() => {
     let startX = 0;
     let startY = 0;
-    let currentY = 0;
     let validStart = false;
     const previousOverscroll = document.documentElement.style.overscrollBehaviorY;
     const previousBodyOverscroll = document.body.style.overscrollBehaviorY;
@@ -464,42 +536,21 @@ export default function App() {
     };
 
     const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1) {
-        validStart = false;
-        return;
-      }
-      const touch = event.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
-      currentY = touch.clientY;
+      if (event.touches.length !== 1) { validStart = false; return; }
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
       validStart = true;
     };
-
     const handleTouchMove = (event: TouchEvent) => {
       if (!validStart || event.touches.length !== 1) return;
       const touch = event.touches[0];
-      currentY = touch.clientY;
-      const deltaY = currentY - startY;
+      const deltaY = touch.clientY - startY;
       const deltaX = Math.abs(touch.clientX - startX);
       if (deltaY > 0 && deltaX < 90 && !canScrollUpFromTarget(event.target)) {
         event.preventDefault();
       }
     };
-
-    const handleTouchEnd = (event: TouchEvent) => {
-      if (!validStart || event.changedTouches.length !== 1) {
-        validStart = false;
-        return;
-      }
-      const touch = event.changedTouches[0];
-      const deltaY = Math.max(currentY, touch.clientY) - startY;
-      const deltaX = Math.abs(touch.clientX - startX);
-      validStart = false;
-      if (deltaY >= 200 && deltaX <= 75) {
-        window.location.reload();
-      }
-    };
-
+    const handleTouchEnd = () => { validStart = false; };
     const handleTouchCancel = () => { validStart = false; };
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -4662,6 +4713,14 @@ _${businessInfo.name}_`;
     triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} unlocked successfully.`, "success");
   };
 
+  if (currentPanel !== "none" && !panelSessionReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
+        <div className="text-center"><RefreshCw className="mx-auto mb-3 h-7 w-7 animate-spin text-cyan-400" /><p className="text-sm font-semibold">Restoring secure panel session…</p></div>
+      </div>
+    );
+  }
+
   if (currentPanel === "none") {
     return (
       <PanelGateLock
@@ -4952,6 +5011,7 @@ _${businessInfo.name}_`;
               transactions={transactions}
               storeEmail={activeUser?.email || firebaseAuth.currentUser?.email || ""}
               businessInfo={businessInfo}
+              onRefresh={() => window.location.reload()}
               onDataImport={handleDataImport}
               onNavigate={(tab) => {
                 setActiveTab(tab);
