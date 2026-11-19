@@ -1631,7 +1631,7 @@ export default function App() {
   const [tempCanOverridePrices, setTempCanOverridePrices] = useState(true);
 
   // States for passcode configuration in Settings
-  const [currentAdminPasscode, setCurrentAdminPasscode] = useState("1234");
+  const [currentAdminPasscode, setCurrentAdminPasscode] = useState("");
   const [tempAdminPasscode, setTempAdminPasscode] = useState("1234");
   const [tempSalesPasscode, setTempSalesPasscode] = useState("5555");
 
@@ -1650,7 +1650,6 @@ export default function App() {
       setTempVatRegNo(businessInfo.vatRegNo || "");
       setTempCurrency(businessInfo.currencySymbol || "৳");
 
-      setCurrentAdminPasscode(businessInfo.adminPasscode || "1234");
       setTempAdminPasscode(businessInfo.adminPasscode || "1234");
       setTempSalesPasscode(businessInfo.salesPasscode || "5555");
 
