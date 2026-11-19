@@ -42,7 +42,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [expenseFilter, setExpenseFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { fee: string; status: "paid" | "unpaid"; timing: "advance" | "after_delivery" }>>({});
   type DateRangeFilter = "all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom";
-  const [expenseDateFilter, setExpenseDateFilter] = useState<DateRangeFilter>("monthly");
+  const [expenseDateFilter, setExpenseDateFilter] = useState<DateRangeFilter>("all");
   const [paymentDateFilter, setPaymentDateFilter] = useState<DateRangeFilter>("monthly");
   const [expenseCustomStart, setExpenseCustomStart] = useState(new Date().toISOString().slice(0, 10));
   const [expenseCustomEnd, setExpenseCustomEnd] = useState(new Date().toISOString().slice(0, 10));
