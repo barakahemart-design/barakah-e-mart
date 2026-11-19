@@ -18,10 +18,12 @@ export function PanelGateLock({
   const [pin, setPin] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
+  const verificationInFlight = React.useRef(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   const triggerVerification = async (currentPin: string) => {
-    if (currentPin.length !== 4 || isVerifying) return;
+    if (currentPin.length !== 4 || verificationInFlight.current) return;
+    verificationInFlight.current = true;
     setIsVerifying(true);
     setErrorMessage("");
     try {
@@ -30,6 +32,7 @@ export function PanelGateLock({
       setErrorMessage(error?.message || "PIN verification failed. Please try again.");
       setPin("");
     } finally {
+      verificationInFlight.current = false;
       setIsVerifying(false);
     }
   };
