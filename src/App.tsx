@@ -345,10 +345,8 @@ export default function App() {
     const checkDeliveryRole = async () => {
       if (!activeUser || activeUser.isGuest) {
         setDeliveryStaffProfile(null);
-        setDeliverySessionChecked(true);
         return;
       }
-      setDeliverySessionChecked(false);
       try {
         const user = firebaseAuth.currentUser;
         if (!user) throw new Error("Firebase user session unavailable.");
@@ -362,7 +360,6 @@ export default function App() {
       } catch (error) {
         if (!cancelled) setDeliveryStaffProfile(null);
       } finally {
-        if (!cancelled) setDeliverySessionChecked(true);
       }
     };
     checkDeliveryRole();
@@ -4492,7 +4489,6 @@ _${businessInfo.name}_`;
               await signOut();
               setActiveUser(null);
               setDeliveryStaffProfile(null);
-              setDeliverySessionChecked(false);
               setCurrentPanel("none");
               setAdminActionPin("");
             }}
@@ -4514,7 +4510,6 @@ _${businessInfo.name}_`;
           await signOut();
           setActiveUser(null);
           setDeliveryStaffProfile(null);
-          setDeliverySessionChecked(false);
           setCurrentPanel("none");
           setAdminActionPin("");
         }}
