@@ -3576,8 +3576,18 @@ export default function App() {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
   };
-  const [expenseCustomStart, setExpenseCustomStart] = useState(() => localStorage.getItem(getDbKey("barakah_expense_custom_start")) || new Date().toISOString().slice(0, 10));
-  const [expenseCustomEnd, setExpenseCustomEnd] = useState(() => localStorage.getItem(getDbKey("barakah_expense_custom_end")) || new Date().toISOString().slice(0, 10));
+  const [expenseCustomStart, setExpenseCustomStart] = useState(() => {
+    const saved = localStorage.getItem(getDbKey("barakah_expense_custom_start"));
+    if (saved && saved.length >= 16) return saved.slice(0, 16);
+    const now = new Date();
+    return new Date(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
+  const [expenseCustomEnd, setExpenseCustomEnd] = useState(() => {
+    const saved = localStorage.getItem(getDbKey("barakah_expense_custom_end"));
+    if (saved && saved.length >= 16) return saved.slice(0, 16);
+    const now = new Date();
+    return new Date(Date.now() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
   const updateExpenseCustomStart = (value: string) => {
     setExpenseCustomStart(value);
     localStorage.setItem(getDbKey("barakah_expense_custom_start"), value);
