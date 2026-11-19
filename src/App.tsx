@@ -1579,7 +1579,7 @@ export default function App() {
   // Local temp states for Settings with individual block saves
   const [activeSettingsSection, setActiveSettingsSection] = useState<"overview" | "shop" | "font" | "invoice" | "sales" | "security" | "danger" | "cloud">("overview");
   const localCoreAvailable = (() => { try { window.localStorage.getItem("barakah_local_active_user"); return true; } catch { return false; } })();
-  const isFirestoreQuotaLimited = syncErrorMessage.toLowerCase().includes("daily usage limit");
+  const isFirestoreQuotaLimited = /daily usage limit|resource[_\\s-]?exhausted|quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota/i.test(syncErrorMessage);
   const [tempShopName, setTempShopName] = useState("");
   const [tempShopAddress, setTempShopAddress] = useState("");
   const [tempShopPhone, setTempShopPhone] = useState("");
@@ -4571,6 +4571,12 @@ _${businessInfo.name}_`;
       return true;
     };
 
+    // When the app has already detected Firestore daily quota exhaustion, use
+    // the matching PIN cached for this exact signed-in UID/store immediately.
+    // This is the previous offline-entry behavior; no cross-account/global PIN is used.
+    if (isFirestoreQuotaLimited && unlockFromThisDeviceCache()) return;
+
+    const isQuotaExhaustion = (payload: any) => /resource[_\\s-]?exhausted|daily usage limit|quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota/i.test(JSON.stringify(payload ?? {}).toLowerCase());
     let cloudTemporarilyUnavailable = false;
     const verificationController = new AbortController();
     const verificationTimeout = window.setTimeout(() => verificationController.abort(), 10000);
@@ -4602,12 +4608,13 @@ _${businessInfo.name}_`;
         signal: verificationController.signal
       });
       let verifyData = await verifyResponse.json().catch(() => ({}));
+      if (isQuotaExhaustion(verifyData)) cloudTemporarilyUnavailable = true;
 
-      if (verifyResponse.status === 401) {
+      if (!cloudTemporarilyUnavailable && verifyResponse.status === 401) {
         const statusResponse = await fetch(`/api/panel-security/pin/status?store_id=${encodeURIComponent(storeId)}`, { headers, signal: verificationController.signal });
         const statusData = await statusResponse.json().catch(() => ({}));
         if (!statusResponse.ok) {
-          if (statusResponse.status >= 500) cloudTemporarilyUnavailable = true;
+          if (statusResponse.status >= 500 || isQuotaExhaustion(statusData)) cloudTemporarilyUnavailable = true;
           else throw new Error(statusData.error || "Could not check secure PIN settings.");
         } else if (!statusData.configured) {
           if (!settingsHydrated) {
@@ -4625,7 +4632,7 @@ _${businessInfo.name}_`;
           });
           const migrationData = await migrationResponse.json().catch(() => ({}));
           if (!migrationResponse.ok || !migrationData.success) {
-            if (migrationResponse.status >= 500) cloudTemporarilyUnavailable = true;
+            if (migrationResponse.status >= 500 || isQuotaExhaustion(migrationData)) cloudTemporarilyUnavailable = true;
             else throw new Error(migrationData.error || "Could not initialize secure panel PINs.");
           } else {
             verifyResponse = await fetch("/api/panel-security/pin/verify", {
@@ -4635,6 +4642,7 @@ _${businessInfo.name}_`;
               signal: verificationController.signal
             });
             verifyData = await verifyResponse.json().catch(() => ({}));
+            if (isQuotaExhaustion(verifyData)) cloudTemporarilyUnavailable = true;
           }
         }
       }
