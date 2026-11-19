@@ -4228,49 +4228,49 @@ _${businessInfo.name}_`;
   const checkDateInFilter = (dateStr: string) => {
     try {
       if (!dateStr) return false;
-      const targetDate = new Date(dateStr);
-      const targetTime = targetDate.getTime();
-      
+      const parsedDate = new Date(dateStr);
+      if (Number.isNaN(parsedDate.getTime())) return false;
+
+      // Compare calendar days in the device's local timezone. This also handles
+      // date-only values and payment timestamps consistently across month/year edges.
+      const targetDate = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
       const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       if (dashboardFilter === "all") return true;
 
       if (dashboardFilter === "yearly") {
-        return targetDate.getFullYear() === today.getFullYear();
+        return targetDate.getFullYear() === todayStart.getFullYear();
       }
-
       if (dashboardFilter === "custom") {
-        const start = new Date(customStart + "T00:00:00");
-        const end = new Date(customEnd + "T23:59:59");
-        return targetTime >= start.getTime() && targetTime <= end.getTime();
+        if (!customStart || !customEnd || customStart > customEnd) return false;
+        const start = new Date(`${customStart}T00:00:00`);
+        const end = new Date(`${customEnd}T23:59:59.999`);
+        return targetDate >= start && targetDate <= end;
       }
-
-      // Restrict all preset date filters (today, yesterday, weekly, monthly) to the current month
-      const isCurrentMonth = targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
-      if (!isCurrentMonth) return false;
-
       if (dashboardFilter === "monthly") {
-        return true;
+        return targetDate.getMonth() === todayStart.getMonth() &&
+          targetDate.getFullYear() === todayStart.getFullYear();
       }
       if (dashboardFilter === "today") {
-        return targetDate.toDateString() === today.toDateString();
+        return targetDate.getTime() === todayStart.getTime();
       }
       if (dashboardFilter === "yesterday") {
-        const yesterday = new Date();
-        yesterday.setDate(today.getDate() - 1);
-        return targetDate.toDateString() === yesterday.toDateString();
+        const yesterday = new Date(todayStart);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return targetDate.getTime() === yesterday.getTime();
       }
       if (dashboardFilter === "weekly") {
-        const check7DaysAgo = new Date();
-        check7DaysAgo.setDate(today.getDate() - 7);
-        return targetTime >= check7DaysAgo.getTime() && targetTime <= today.getTime();
+        const sevenDayStart = new Date(todayStart);
+        sevenDayStart.setDate(sevenDayStart.getDate() - 6);
+        return targetDate >= sevenDayStart && targetDate <= todayStart;
       }
-      return true;
+      return false;
     } catch (e) {
       return false;
     }
   };
 
-  const paidDeliveryExpenses = deliveryExpenseRecords
+  const paidDeliveryExpenses = useMemo(() => deliveryExpenseRecords
     .filter((expense: any) => String(expense.payment_status || "").toLowerCase() === "paid")
     .map((expense: any) => ({
       id: `delivery_staff_expense_${expense.id}`,
@@ -4279,7 +4279,7 @@ _${businessInfo.name}_`;
       description: expense.reason || expense.description || "Delivery staff expense",
       // The date money was paid is authoritative; reviewed_at supports older paid records.
       date: expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date
-    }));
+    })), [deliveryExpenseRecords]);
 
   const dashboardMetrics = useMemo(() => {
     const filteredDashboardTx = transactions.filter(t => checkDateInFilter(t.date));
