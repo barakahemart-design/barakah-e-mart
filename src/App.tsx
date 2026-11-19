@@ -2315,6 +2315,10 @@ export default function App() {
       triggerNotification("New Admin and Sales PINs must each contain exactly 4 digits.", "error");
       return;
     }
+    if (tempAdminPasscode === "1234" || tempSalesPasscode === "5555") {
+      triggerNotification("Please replace the known default PINs (Admin 1234 / Sales 5555) with private PINs.", "error");
+      return;
+    }
     if (tempAdminPasscode === tempSalesPasscode) {
       triggerNotification("Admin PIN and Sales PIN must be different.", "error");
       return;
@@ -2334,6 +2338,7 @@ export default function App() {
         body: JSON.stringify({
           store_id: storeId,
           current_admin_pin: currentAdminPasscode,
+          current_sales_pin: String(businessInfo.salesPasscode || "5555"),
           admin_pin: tempAdminPasscode,
           sales_pin: tempSalesPasscode
         })
