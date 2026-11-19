@@ -7,7 +7,8 @@ import {
   ShoppingBag, 
   Bookmark,
   Package,
-  Clock
+  Clock,
+  RefreshCw
 } from "lucide-react";
 import { format } from "date-fns";
 import { 
@@ -28,6 +29,7 @@ interface DashboardViewProps {
   transactions: any[];
   storeEmail: string;
   businessInfo: any;
+  onRefresh: () => void;
   onDataImport: (importedData: any) => void;
   onNavigate: (tab: any) => void;
   
@@ -57,6 +59,7 @@ export function DashboardView({
   transactions,
   storeEmail,
   businessInfo,
+  onRefresh,
   onDataImport,
   onNavigate,
   
@@ -184,8 +187,17 @@ export function DashboardView({
             Real-time profit margins, revenue trackers and diagnostic charts.
           </p>
         </div>
-        
-
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-xs font-bold text-cyan-300 shadow-sm transition-colors hover:bg-cyan-500/20 active:scale-95"
+          aria-label="Refresh app"
+          title="Refresh app"
+          id="dashboard-manual-refresh"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </button>
       </div>
 
       {/* 2. DYNAMIC HORIZON FILTERS (Styled exactly like the pills in the screenshot) */}
