@@ -1183,13 +1183,13 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const currentSalesPin = String(current_sales_pin || "");
       const newAdminPin = String(admin_pin || "");
       const newSalesPin = String(sales_pin || "");
-      if (!/^\\d{4}$/.test(newAdminPin) || !/^\\d{4}$/.test(newSalesPin) || newAdminPin === newSalesPin) {
+      if (!/^\d{4}$/.test(newAdminPin) || !/^\d{4}$/.test(newSalesPin) || newAdminPin === newSalesPin) {
         return res.status(400).json({ error: "Set two different 4-digit numeric PINs." });
       }
       if (newAdminPin === "1234" || newSalesPin === "5555") {
         return res.status(400).json({ error: "Replace the known default PINs with private PINs." });
       }
-      if (!/^\\d{4}$/.test(currentAdminPin) || !/^\\d{4}$/.test(currentSalesPin)) {
+      if (!/^\d{4}$/.test(currentAdminPin) || !/^\d{4}$/.test(currentSalesPin)) {
         return res.status(400).json({ error: "Enter the current Admin and Sales PINs to authorize this change." });
       }
       if (!adminDb) return res.status(503).json({ error: "PIN security service is not configured." });
