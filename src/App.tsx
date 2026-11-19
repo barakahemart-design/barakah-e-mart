@@ -349,6 +349,63 @@ export default function App() {
   const [adminActionPin, setAdminActionPin] = useState("");
   const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
   const [deliverySessionChecked, setDeliverySessionChecked] = useState(false);
+  const [panelSessionReady, setPanelSessionReady] = useState(false);
+
+  // A restored panel session is accepted only after re-verifying the account's
+  // saved PIN against the server (or the existing same-device offline fallback).
+  useEffect(() => {
+    if (currentPanel === "none") {
+      setPanelSessionReady(true);
+      return;
+    }
+    if (!activeUser || activeUser.isGuest || !settingsHydrated) return;
+    let cancelled = false;
+    const restoreVerifiedPanel = async () => {
+      const panel = currentPanel;
+      const cachedPin = String(panel === "admin" ? businessInfo.adminPasscode || "" : businessInfo.salesPasscode || "");
+      if (!/^[0-9]{4}$/.test(cachedPin)) {
+        setCurrentPanel("none");
+        setPanelSessionReady(true);
+        return;
+      }
+      try {
+        const user = firebaseAuth.currentUser;
+        const storeId = String(activeUser.email || "").trim().toLowerCase();
+        if (!user || user.uid !== activeUser.uid || user.email?.trim().toLowerCase() !== storeId) {
+          throw new Error("Account session changed.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch("/api/panel-security/pin/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ store_id: storeId, role: panel, pin: cachedPin })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.valid) throw new Error(result.error || "Saved PIN verification failed.");
+        if (cancelled) return;
+        setAdminActionPin(panel === "admin" ? cachedPin : "");
+        setPanelSessionReady(true);
+      } catch (error: any) {
+        // Preserve the existing same-account offline access behavior only when
+        // the network is unavailable; never override a definite server rejection.
+        if (error?.name === "TypeError" && cachedPin.length === 4) {
+          if (!cancelled) {
+            setAdminActionPin(panel === "admin" ? cachedPin : "");
+            setPanelSessionReady(true);
+          }
+          return;
+        }
+        if (!cancelled) {
+          setCurrentPanel("none");
+          setAdminActionPin("");
+          setPanelSessionReady(true);
+        }
+      }
+    };
+    setPanelSessionReady(false);
+    restoreVerifiedPanel();
+    return () => { cancelled = true; };
+  }, [currentPanel, activeUser?.uid, activeUser?.email, activeUser?.isGuest, settingsHydrated, businessInfo.adminPasscode, businessInfo.salesPasscode]);
 
   // After Firebase login, check the server-owned delivery role before showing
   // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
@@ -4655,6 +4712,14 @@ _${businessInfo.name}_`;
     setActiveTab(panel === "sales" ? "pos" : "dashboard");
     triggerNotification(`${panel === "admin" ? "Admin Panel" : "Sales Panel"} unlocked successfully.`, "success");
   };
+
+  if (currentPanel !== "none" && !panelSessionReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080d18] text-slate-300">
+        <div className="text-center"><RefreshCw className="mx-auto mb-3 h-7 w-7 animate-spin text-cyan-400" /><p className="text-sm font-semibold">Restoring secure panel session…</p></div>
+      </div>
+    );
+  }
 
   if (currentPanel === "none") {
     return (
