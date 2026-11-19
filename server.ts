@@ -1179,50 +1179,102 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!cleanStoreId || cleanStoreId !== verified.email) {
         return res.status(403).json({ error: "Access denied: account does not match the requested store." });
       }
+      const currentAdminPin = String(current_admin_pin || "");
+      const currentSalesPin = String(current_sales_pin || "");
       const newAdminPin = String(admin_pin || "");
       const newSalesPin = String(sales_pin || "");
-      if (!/^\d{4}$/.test(newAdminPin) || !/^\d{4}$/.test(newSalesPin) || newAdminPin === newSalesPin) {
+      if (!/^\\d{4}$/.test(newAdminPin) || !/^\\d{4}$/.test(newSalesPin) || newAdminPin === newSalesPin) {
         return res.status(400).json({ error: "Set two different 4-digit numeric PINs." });
       }
       if (newAdminPin === "1234" || newSalesPin === "5555") {
         return res.status(400).json({ error: "Replace the known default PINs with private PINs." });
       }
-
-      // First-time or incomplete credential setup is initialized from the current
-      // PINs already belonging to this authenticated store, then verified below.
-      const credentialBeforeUpdate = await getAdminPinCredentials(cleanStoreId);
-      if (!credentialBeforeUpdate?.admin_pin_hash || !credentialBeforeUpdate?.sales_pin_hash) {
-        await migrateAdminPinCredentials(cleanStoreId, String(current_admin_pin || ""), String(current_sales_pin || ""));
+      if (!/^\\d{4}$/.test(currentAdminPin) || !/^\\d{4}$/.test(currentSalesPin)) {
+        return res.status(400).json({ error: "Enter the current Admin and Sales PINs to authorize this change." });
       }
+      if (!adminDb) return res.status(503).json({ error: "PIN security service is not configured." });
 
-      const currentPinResult = await verifyStorePanelPin(cleanStoreId, "admin", String(current_admin_pin || ""));
-      if (currentPinResult !== "valid") {
-        return res.status(currentPinResult === "locked" ? 429 : 403).json({
-          error: currentPinResult === "locked" ? "Too many failed attempts. Please wait 60 seconds." : "Current Admin PIN is incorrect."
-        });
+      // One atomic operation: read the credential and Admin lockout record once,
+      // validate the current Admin PIN, save both new hashes, and clear both lockouts.
+      // Avoid the previous sequence of multiple credential reads + legacy collection
+      // queries + a separate verification transaction, which wasted free read units.
+      const credentialRef = adminDb.collection("store_auth_credentials").doc(getCredentialDocId(cleanStoreId));
+      const adminRateId = createHash("sha256").update(`${cleanStoreId}:panel-pin:admin`).digest("hex");
+      const salesRateId = createHash("sha256").update(`${cleanStoreId}:panel-pin:sales`).digest("hex");
+      const adminRateRef = adminDb.collection("security_rate_limits").doc(adminRateId);
+      const salesRateRef = adminDb.collection("security_rate_limits").doc(salesRateId);
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+      const adminHash = hashPin(newAdminPin);
+      const salesHash = hashPin(newSalesPin);
+
+      const outcome = await adminDb.runTransaction(async (transaction) => {
+        const [credentialSnap, rateLimitSnap] = await Promise.all([
+          transaction.get(credentialRef),
+          transaction.get(adminRateRef)
+        ]);
+        const existing = credentialSnap.exists ? credentialSnap.data() as AdminPinCredentials : null;
+        const rate = rateLimitSnap.exists ? rateLimitSnap.data() as any : {};
+        const windowStartedAt = Number(rate.window_started_at) || now;
+        const lockedUntil = Number(rate.locked_until) || 0;
+        let attempts = Number(rate.attempts) || 0;
+        if (lockedUntil > now) return { status: "locked" as const };
+        if (now - windowStartedAt > 5 * 60 * 1000) attempts = 0;
+
+        // Existing credentials must be verified against the server-stored hash.
+        // Only a genuinely uninitialized store follows the same first-time bootstrap
+        // behavior as the previous migration flow, using its authenticated settings values.
+        if (existing?.admin_pin_hash) {
+          if (!verifyPinAgainstHash(currentAdminPin, existing.admin_pin_hash)) {
+            attempts += 1;
+            const expiredWindow = now - windowStartedAt > 5 * 60 * 1000;
+            transaction.set(adminRateRef, {
+              attempts,
+              window_started_at: attempts === 1 || expiredWindow ? now : windowStartedAt,
+              locked_until: attempts >= 5 ? now + 60 * 1000 : 0,
+              updated_at: nowIso
+            }, { merge: true });
+            return { status: attempts >= 5 ? "locked" as const : "invalid" as const };
+          }
+        } else if (credentialSnap.exists) {
+          // Do not silently replace a partially configured credential record.
+          return { status: "uninitialized" as const };
+        }
+
+        const updated: AdminPinCredentials = {
+          id: getCredentialDocId(cleanStoreId),
+          store_id: cleanStoreId,
+          admin_pin_hash: adminHash,
+          sales_pin_hash: salesHash,
+          created_at: existing?.created_at || nowIso,
+          updated_at: nowIso,
+          version: 1
+        };
+        transaction.set(credentialRef, updated, { merge: true });
+        transaction.delete(adminRateRef);
+        transaction.delete(salesRateRef);
+        return { status: "updated" as const };
+      });
+
+      if (outcome.status === "locked") {
+        return res.status(429).json({ error: "Too many failed attempts. Please wait 60 seconds." });
       }
-      const existing = await getAdminPinCredentials(cleanStoreId);
-      if (!existing?.admin_pin_hash) return res.status(409).json({ error: "Admin PIN credentials are not initialized." });
-
-      const now = new Date().toISOString();
-      const updated = {
-        ...existing,
-        admin_pin_hash: hashPin(newAdminPin),
-        sales_pin_hash: hashPin(newSalesPin),
-        admin_pin_updated_at: now,
-        sales_pin_updated_at: now,
-        updated_at: now,
-        version: 1
-      };
-      await adminDb!.collection("store_auth_credentials").doc(getCredentialDocId(cleanStoreId)).set(updated, { merge: true });
-      await Promise.all((["admin", "sales"] as const).map((role) => {
-        const rateLimitId = createHash("sha256").update(`${cleanStoreId}:panel-pin:${role}`).digest("hex");
-        return adminDb!.collection("security_rate_limits").doc(rateLimitId).delete();
-      }));
+      if (outcome.status === "invalid") {
+        return res.status(403).json({ error: "Current Admin PIN is incorrect." });
+      }
+      if (outcome.status === "uninitialized") {
+        return res.status(409).json({ error: "PIN credentials are partially configured. Contact support; no PINs were changed." });
+      }
       return res.json({ success: true, message: "Admin and Sales PINs updated securely." });
     } catch (err: any) {
-      console.warn("[pin-credentials/update] Update failed:", err?.message || "Unknown error");
-      return res.status(503).json({ error: err?.message || "PIN update is temporarily unavailable." });
+      const message = String(err?.message || "");
+      const quotaError = /RESOURCE_EXHAUSTED|quota.{0,60}(?:exceeded|exhausted)|free daily read units/i.test(message);
+      console.warn("[pin-credentials/update] Update failed:", quotaError ? "Firestore daily read quota exhausted." : message || "Unknown error");
+      return res.status(quotaError ? 429 : 503).json({
+        error: quotaError
+          ? "Firestore-এর দৈনিক Free read quota শেষ। PIN নিরাপদ রাখতে কোনো পরিবর্তন করা হয়নি। কোটা রিসেট হলে আবার PIN পরিবর্তন করুন।"
+          : "PIN update is temporarily unavailable."
+      });
     }
   });
 
