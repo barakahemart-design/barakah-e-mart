@@ -165,6 +165,11 @@ export interface Expense {
   amount: number;
   description: string;
   date: string;
+  source?: "delivery";
+  sourceId?: string;
+  recordedAt?: string;
+  driverName?: string;
+  paymentStatus?: "paid" | "unpaid";
 }
 
 export interface Contact {
@@ -1302,7 +1307,7 @@ export default function App() {
         const response = await fetch("/api/delivery/expenses/admin-list", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ store_id: storeId, admin_pin: adminActionPin, payment_status: "paid" }),
+          body: JSON.stringify({ store_id: storeId, admin_pin: adminActionPin, payment_status: "" }),
           cache: "no-store"
         });
         const result = await response.json().catch(() => ({}));
@@ -3103,6 +3108,20 @@ export default function App() {
     triggerNotification(`Invoice ${invoiceNo}: ${collectionAmt} BDT received & recorded.`);
   };
 
+  const removeDeliveryAssignmentsForTransactions = async (transactionIds: string[]) => {
+    const ids = Array.from(new Set(transactionIds.map(id => String(id || "").trim()).filter(Boolean)));
+    const user = firebaseAuth.currentUser;
+    if (!ids.length || !user || !activeUser || activeUser.isGuest || !adminActionPin) return;
+    const token = await user.getIdToken();
+    const response = await fetch("/api/delivery/assignments/remove-ledger", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ store_id: String(activeUser.email || "").trim().toLowerCase(), admin_pin: adminActionPin, transaction_ids: ids })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not remove linked invoice assignments.");
+    return result;
+  };
+
   const handleDeleteTransaction = async (id: string) => {
     if (currentPanel !== "admin") {
       triggerNotification("Security block: Only administrators are authorized to delete transactions / sales! 🛑", "error");
@@ -3112,6 +3131,8 @@ export default function App() {
     if (!t) return;
 
     await deleteCloudDocument("transactions", t.firestoreId ?? t.id);
+    try { await removeDeliveryAssignmentsForTransactions([t.firestoreId ?? t.id, t.id]); }
+    catch (error) { console.warn("[Ledger] Linked delivery assignment cleanup will retry on Delivery Management load:", error); }
 
     if (activeUser && !activeUser.isGuest) {
       deleteTransaction(id).catch(err => {});
@@ -3555,8 +3576,18 @@ export default function App() {
     _setExpenseDateFilter(val);
     localStorage.setItem(getDbKey("barakah_expense_date_filter"), val);
   };
-  const [expenseCustomStart, setExpenseCustomStart] = useState(() => localStorage.getItem(getDbKey("barakah_expense_custom_start")) || new Date().toISOString().slice(0, 10));
-  const [expenseCustomEnd, setExpenseCustomEnd] = useState(() => localStorage.getItem(getDbKey("barakah_expense_custom_end")) || new Date().toISOString().slice(0, 10));
+  const [expenseCustomStart, setExpenseCustomStart] = useState(() => {
+    const saved = localStorage.getItem(getDbKey("barakah_expense_custom_start"));
+    if (saved && saved.length >= 16) return saved.slice(0, 16);
+    const now = new Date();
+    return new Date(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
+  const [expenseCustomEnd, setExpenseCustomEnd] = useState(() => {
+    const saved = localStorage.getItem(getDbKey("barakah_expense_custom_end"));
+    if (saved && saved.length >= 16) return saved.slice(0, 16);
+    const now = new Date();
+    return new Date(Date.now() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
   const updateExpenseCustomStart = (value: string) => {
     setExpenseCustomStart(value);
     localStorage.setItem(getDbKey("barakah_expense_custom_start"), value);
@@ -3568,6 +3599,7 @@ export default function App() {
 
   // Edit Expense States
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editExpenseRecordedAt, setEditExpenseRecordedAt] = useState("");
   const [editExpenseDesc, setEditExpenseDesc] = useState("");
   const [editExpenseCategory, setEditExpenseCategory] = useState("Others");
   const [editExpenseAmount, setEditExpenseAmount] = useState("");
@@ -3580,73 +3612,74 @@ export default function App() {
   const [expandedExpenseIds, setExpandedExpenseIds] = useState<Record<string, boolean>>({});
   const [categoryToManage, setCategoryToManage] = useState<string | null>(null);
 
-  const checkExpenseDateInFilter = (dateStr: string) => {
+  const checkExpenseDateInFilter = (dateStr: string, includeRecordedTime = false) => {
     try {
       if (!dateStr) return false;
-      const targetDate = new Date(dateStr + "T12:00:00");
+      const rawDate = String(dateStr);
+      const targetDate = rawDate.includes("T") ? new Date(rawDate) : new Date(rawDate + "T12:00:00");
       if (Number.isNaN(targetDate.getTime())) return false;
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-
-      if (expenseDateFilter === "today") {
-        return targetDate >= startOfToday && targetDate <= endOfToday;
-      }
+      if (expenseDateFilter === "today") return targetDate >= startOfToday && targetDate <= endOfToday;
       if (expenseDateFilter === "yesterday") {
-        const yesterday = new Date(startOfToday);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const endOfYesterday = new Date(startOfToday.getTime() - 1);
-        return targetDate >= yesterday && targetDate <= endOfYesterday;
+        const yesterday = new Date(startOfToday); yesterday.setDate(yesterday.getDate() - 1);
+        return targetDate >= yesterday && targetDate <= new Date(startOfToday.getTime() - 1);
       }
       if (expenseDateFilter === "weekly") {
-        const sevenDaysAgo = new Date(startOfToday);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const sevenDaysAgo = new Date(startOfToday); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
         return targetDate >= sevenDaysAgo && targetDate <= endOfToday;
       }
-      if (expenseDateFilter === "monthly") {
-        return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
-      }
-      if (expenseDateFilter === "yearly") {
-        return targetDate.getFullYear() === today.getFullYear();
-      }
+      if (expenseDateFilter === "monthly") return targetDate.getMonth() === today.getMonth() && targetDate.getFullYear() === today.getFullYear();
+      if (expenseDateFilter === "yearly") return targetDate.getFullYear() === today.getFullYear();
       if (expenseDateFilter === "custom") {
-        const expenseDay = String(dateStr).slice(0, 10);
-        return Boolean(expenseCustomStart && expenseCustomEnd && expenseCustomStart <= expenseCustomEnd && expenseDay >= expenseCustomStart && expenseDay <= expenseCustomEnd);
+        if (!expenseCustomStart || !expenseCustomEnd || expenseCustomStart > expenseCustomEnd) return false;
+        if (includeRecordedTime && rawDate.includes("T")) return targetDate >= new Date(expenseCustomStart) && targetDate <= new Date(expenseCustomEnd);
+        const day = rawDate.slice(0, 10);
+        return day >= expenseCustomStart.slice(0, 10) && day <= expenseCustomEnd.slice(0, 10);
       }
       return false;
-    } catch (e) {
-      return false;
-    }
+    } catch { return false; }
   };
 
-  const handleUpdateExpenseSubmit = (e: React.FormEvent) => {
+  const toLocalDateTimeInput = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  const handleUpdateExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingExpense || !editExpenseDesc || !editExpenseAmount) return;
-
-    const updatedExp: Expense = {
-      ...editingExpense,
-      description: editExpenseDesc.trim(),
-      category: editExpenseCategory,
-      amount: Number(editExpenseAmount) || 0,
-      date: editExpenseDate
-    };
-
-    setExpenses(prev => prev.map(item => item.id === editingExpense.id ? updatedExp : item));
-    if (activeUser && !activeUser.isGuest) {
-      saveExpense(activeUser.uid, updatedExp).catch(err => {});
+    if (!editingExpense || !editExpenseDesc.trim() || !editExpenseAmount) return;
+    const updatedExp: Expense = { ...editingExpense, description: editExpenseDesc.trim(), category: editExpenseCategory, amount: Number(editExpenseAmount) || 0, date: editExpenseDate };
+    if (editingExpense.source === "delivery" && editingExpense.sourceId) {
+      try {
+        const user = firebaseAuth.currentUser;
+        if (!user || !activeUser || !adminActionPin) throw new Error("Admin session expired. Please unlock the Admin panel again.");
+        const selectedRecordedAt = editExpenseRecordedAt ? new Date(editExpenseRecordedAt) : new Date();
+        if (Number.isNaN(selectedRecordedAt.getTime())) throw new Error("Please select a valid date and time.");
+        const token = await user.getIdToken();
+        const response = await fetch("/api/delivery/expenses/admin-update", {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ store_id: String(activeUser.email || "").trim().toLowerCase(), admin_pin: adminActionPin, expense_id: editingExpense.sourceId, amount: updatedExp.amount, reason: updatedExp.description, category: updatedExp.category, date: editExpenseRecordedAt.slice(0, 10) || editExpenseDate, recorded_at: selectedRecordedAt.toISOString() })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Could not update delivery expense.");
+        setDeliveryExpenseRecords(prev => prev.map(item => String(item.id) === editingExpense.sourceId ? { ...item, amount: updatedExp.amount, reason: updatedExp.description, category: updatedExp.category, date: editExpenseRecordedAt.slice(0, 10) || editExpenseDate, recorded_at: selectedRecordedAt.toISOString() } : item));
+      } catch (error: any) { triggerNotification(error?.message || "Could not update delivery expense.", "error"); return; }
+    } else {
+      setExpenses(prev => prev.map(item => item.id === editingExpense.id ? updatedExp : item));
+      if (activeUser && !activeUser.isGuest) saveExpense(activeUser.uid, updatedExp).catch(err => {});
     }
-    setEditingExpense(null);
-    setEditExpenseDesc("");
-    setEditExpenseCategory("Others");
-    setEditExpenseAmount("");
-    setEditExpenseDate("");
-    triggerNotification("Business expense item successfully updated!");
+    setEditingExpense(null); setEditExpenseRecordedAt(""); setEditExpenseDesc(""); setEditExpenseCategory("Others"); setEditExpenseAmount(""); setEditExpenseDate("");
+    triggerNotification("Expense item successfully updated!");
   };
 
   // Combine standard default list alongside any category names extracted from already saved records
   const allCategories = Array.from(new Set([
     ...expenseCategories,
-    ...expenses.map(e => e.category).filter(Boolean)
+    ...expenses.map(e => e.category).filter(Boolean),
+    ...deliveryExpenseRecords.map((e: any) => e.category).filter(Boolean)
   ]));
 
   const getExpenseMonthKey = (dateStr: string) => {
@@ -7531,15 +7564,24 @@ _${businessInfo.name}_`;
               category,
               total: selectedPeriodExpenses.filter(e => e.category === category).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             })).filter(item => item.total > 0).sort((a, b) => b.total - a.total);
-            const sortedHistory = expenses
-              .filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.date))
+            const deliveryHistoryExpenses: Expense[] = deliveryExpenseRecords.map((expense: any) => ({
+              id: `delivery_staff_expense_${expense.id}`, source: "delivery", sourceId: String(expense.id),
+              category: expense.category || "Delivery Staff Expense", amount: Number(expense.amount) || 0,
+              description: expense.reason || expense.description || "Delivery staff expense",
+              date: String(expense.recorded_at || expense.created_at || expense.date || "").slice(0, 10),
+              recordedAt: expense.recorded_at || expense.created_at || expense.date || "",
+              driverName: expense.driver_name || "", paymentStatus: expense.payment_status === "paid" ? "paid" : "unpaid"
+            }));
+            const historyRecords = [...expenses, ...deliveryHistoryExpenses];
+            const sortedHistory = historyRecords
+              .filter(e => (expenseFilterCategory === "All" || e.category === expenseFilterCategory) && checkExpenseDateInFilter(e.source === "delivery" ? String(e.recordedAt || e.date) : e.date, e.source === "delivery"))
               .slice()
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              .sort((a, b) => new Date(b.recordedAt || b.date).getTime() - new Date(a.recordedAt || a.date).getTime());
             const money = (amount: number) => `${businessInfo.currencySymbol || "৳"} ${(Number(amount) || 0).toLocaleString()}`;
 
             const renderExpenseDateFilters = () => (
                 <div className="space-y-2">
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date Filter</div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date &amp; Time Filter</div>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2" id="expense-date-presets">
                     {[
                       { id: "today", label: "Today" },
@@ -7558,15 +7600,15 @@ _${businessInfo.name}_`;
                   {expenseDateFilter === "custom" && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-white/[0.10] bg-white/[0.045] p-3" id="expense-custom-date-range">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">From Date</label>
-                        <input type="date" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-black/25 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-white/40" />
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">From Date &amp; Time</label>
+                        <input type="datetime-local" value={expenseCustomStart} max={expenseCustomEnd || undefined} onChange={e => updateExpenseCustomStart(e.target.value)} className="w-full px-3 py-2.5 bg-black/25 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-white/40" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">To Date</label>
-                        <input type="date" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-black/25 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-white/40" />
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">To Date &amp; Time</label>
+                        <input type="datetime-local" value={expenseCustomEnd} min={expenseCustomStart || undefined} onChange={e => updateExpenseCustomEnd(e.target.value)} className="w-full px-3 py-2.5 bg-black/25 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-white/40" />
                       </div>
                       <p className="sm:col-span-2 text-[10px] text-slate-500">Select the same start and end date to view expenses for one specific day.</p>
-                      {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-white">From Date cannot be later than To Date.</p>}
+                      {expenseCustomStart && expenseCustomEnd && expenseCustomStart > expenseCustomEnd && <p className="sm:col-span-2 text-[10px] text-white">Start date/time cannot be later than end date/time.</p>}
                     </div>
                   )}
                 </div>
@@ -7828,13 +7870,13 @@ _${businessInfo.name}_`;
                       {sortedHistory.length ? sortedHistory.map(e => (
                         <article key={e.id} className="border-b border-white/[0.09] bg-transparent rounded-none p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3 last:border-b-0 hover:bg-white/[0.025] transition-colors">
                           <div className="min-w-0 flex-1 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2"><span className="px-2 py-1 rounded-lg bg-white/[0.06] border border-white/[0.12] text-white/85 text-[10px] font-bold">{e.category}</span><span className="text-[10px] text-slate-500">{e.date}</span></div>
-                            <p className="text-xs text-slate-200 whitespace-pre-line break-words">{e.description}</p>
+                            <div className="flex flex-wrap items-center gap-2"><span className="px-2 py-1 rounded-lg bg-white/[0.06] border border-white/[0.12] text-white/85 text-[10px] font-bold">{e.category}</span><span className="text-[10px] text-slate-500">{e.source === "delivery" && e.recordedAt ? new Date(e.recordedAt).toLocaleString() : e.date}</span>{e.source === "delivery" && <span className={`px-2 py-1 rounded-lg text-[9px] font-bold ${e.paymentStatus === "paid" ? "bg-emerald-500/10 text-emerald-300" : "bg-amber-500/10 text-amber-300"}`}>{e.paymentStatus === "paid" ? "Paid" : "Unpaid"} · Delivery</span>}</div>
+                            <p className="text-xs text-slate-200 whitespace-pre-line break-words">{e.description}{e.source === "delivery" && e.driverName ? ` · Driver: ${e.driverName}` : ""}</p>
                           </div>
                           <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 sm:shrink-0">
                             <strong className="text-sm text-white/85 font-mono">{money(e.amount)}</strong>
                             <div className="flex gap-2">
-                              <button type="button" onClick={() => { setEditingExpense(e); setEditExpenseDesc(e.description); setEditExpenseCategory(e.category); setEditExpenseAmount(String(e.amount)); setEditExpenseDate(e.date); }}
+                              <button type="button" onClick={() => { setEditingExpense(e); setEditExpenseDesc(e.description); setEditExpenseCategory(e.category); setEditExpenseAmount(String(e.amount)); setEditExpenseDate(e.date); setEditExpenseRecordedAt(e.source === "delivery" ? toLocalDateTimeInput(e.recordedAt || e.date) : ""); }}
                                 className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-slate-200 text-[10px] font-bold flex items-center gap-1"><Edit3 className="w-3 h-3" /> Edit</button>
                               <button type="button" onClick={() => setDeleteExpenseId(e.id)} className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/85 text-[10px] font-bold flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
                             </div>
@@ -7952,6 +7994,8 @@ _${businessInfo.name}_`;
                     const linkedTransactions = transactions.filter(tx => tx.contactId === contact.id);
                     try {
                       await Promise.all(linkedTransactions.map(tx => deleteCloudDocument("transactions", tx.firestoreId ?? tx.id)));
+                      try { await removeDeliveryAssignmentsForTransactions(linkedTransactions.flatMap(tx => [tx.firestoreId ?? tx.id, tx.id])); }
+                      catch (cleanupError) { console.warn("[Ledger] Linked delivery assignment cleanup will retry on Delivery Management load:", cleanupError); }
                       await deleteCloudDocument("customers", contact.id);
                       setTransactions(prev => prev.filter(tx => tx.contactId !== contact.id));
                       setContacts(prev => prev.filter(item => item.id !== contact.id));
@@ -9630,7 +9674,19 @@ _${businessInfo.name}_`;
       )}
 
       {(() => {
-        const expenseToDelete = deleteExpenseId ? expenses.find(e => e.id === deleteExpenseId) : null;
+        const deliveryExpenseIdToDelete = deleteExpenseId?.startsWith("delivery_staff_expense_") ? deleteExpenseId.slice("delivery_staff_expense_".length) : "";
+        const deliveryExpenseToDelete = deliveryExpenseIdToDelete ? deliveryExpenseRecords.find((item: any) => String(item.id) === deliveryExpenseIdToDelete) : null;
+        const expenseToDelete: Expense | null = deleteExpenseId
+          ? expenses.find(e => e.id === deleteExpenseId) || (deliveryExpenseToDelete ? {
+              id: deleteExpenseId, source: "delivery", sourceId: deliveryExpenseIdToDelete,
+              category: deliveryExpenseToDelete.category || "Delivery Staff Expense", amount: Number(deliveryExpenseToDelete.amount) || 0,
+              description: deliveryExpenseToDelete.reason || deliveryExpenseToDelete.description || "Delivery staff expense",
+              date: String(deliveryExpenseToDelete.recorded_at || deliveryExpenseToDelete.created_at || deliveryExpenseToDelete.date || "").slice(0, 10),
+              recordedAt: deliveryExpenseToDelete.recorded_at || deliveryExpenseToDelete.created_at || deliveryExpenseToDelete.date || "",
+              driverName: deliveryExpenseToDelete.driver_name || "",
+              paymentStatus: deliveryExpenseToDelete.payment_status === "paid" ? "paid" : "unpaid"
+            } : null)
+          : null;
         if (!expenseToDelete) return null;
         return (
           <div className="fixed inset-0 z-50 bg-[#0c0c0e]/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -9683,12 +9739,25 @@ _${businessInfo.name}_`;
                       setDeleteExpenseId(null);
                       return;
                     }
-                    await deleteCloudDocument("expenses", expenseToDelete.id);
-                    if (activeUser && !activeUser.isGuest) {
-                      deleteExpense(expenseToDelete.id).catch(err => {});
+                    if (expenseToDelete.source === "delivery" && expenseToDelete.sourceId) {
+                      try {
+                        const user = firebaseAuth.currentUser;
+                        if (!user || !activeUser || !adminActionPin) throw new Error("Admin session expired. Please unlock the Admin panel again.");
+                        const token = await user.getIdToken();
+                        const response = await fetch("/api/delivery/expenses/admin-delete", {
+                          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ store_id: String(activeUser.email || "").trim().toLowerCase(), admin_pin: adminActionPin, expense_id: expenseToDelete.sourceId })
+                        });
+                        const result = await response.json().catch(() => ({}));
+                        if (!response.ok) throw new Error(result.error || "Could not delete delivery expense.");
+                        setDeliveryExpenseRecords(prev => prev.filter((item: any) => String(item.id) !== expenseToDelete.sourceId));
+                      } catch (error: any) { triggerNotification(error?.message || "Could not delete delivery expense.", "error"); return; }
+                    } else {
+                      await deleteCloudDocument("expenses", expenseToDelete.id);
+                      if (activeUser && !activeUser.isGuest) deleteExpense(expenseToDelete.id).catch(err => {});
+                      setExpenses(prev => prev.filter(item => item.id !== expenseToDelete.id));
                     }
-                    setExpenses(expenses.filter(item => item.id !== expenseToDelete.id));
-                    triggerNotification("Expense voucher has been successfully deleted.", "success");
+                    triggerNotification("Expense entry has been successfully deleted.", "success");
                     setDeleteExpenseId(null);
                   }}
                   className="flex-1 py-1 px-4 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl h-10 transition-all cursor-pointer shadow-lg shadow-rose-600/10 text-center uppercase tracking-wider"
@@ -9776,15 +9845,16 @@ _${businessInfo.name}_`;
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-mono tracking-wide text-slate-400 font-bold block">
-                    Date *
+                    {editingExpense.source === "delivery" ? "Recorded Date & Time *" : "Date *"}
                   </label>
-                  <input
-                    type="date"
-                    required
-                    value={editExpenseDate}
-                    onChange={(e) => setEditExpenseDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono"
-                  />
+                  {editingExpense.source === "delivery" ? (
+                    <input type="datetime-local" required value={editExpenseRecordedAt}
+                      onChange={(e) => { setEditExpenseRecordedAt(e.target.value); setEditExpenseDate(e.target.value.slice(0, 10)); }}
+                      className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono" />
+                  ) : (
+                    <input type="date" required value={editExpenseDate} onChange={(e) => setEditExpenseDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#050912] border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 font-mono" />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
