@@ -47,6 +47,26 @@ const firebaseAuth = getAuth(firebaseApp);
 // ID tokens are verified through Firebase Identity Toolkit below to avoid loading
 // the Admin Auth dependency chain in the serverless CommonJS bundle.
 let adminDb: FirebaseAdminFirestore | null = null;
+
+// Invoice numbers may be stored as invoiceNo or invoice_no, and as strings or numbers.
+async function findStoreTransactionByInvoice(storeId: string, invoiceNo: string): Promise<any | null> {
+  if (!adminDb) return null;
+  const values: Array<string | number> = [invoiceNo];
+  if (/^\d+$/.test(invoiceNo)) {
+    const numeric = Number(invoiceNo);
+    if (Number.isSafeInteger(numeric)) values.push(numeric);
+  }
+  const queries = ["invoiceNo", "invoice_no"].flatMap(field =>
+    values.map(value => adminDb!.collection("transactions").where(field, "==", value).limit(10).get())
+  );
+  const snapshots = await Promise.all(queries);
+  const docs = new Map<string, any>();
+  snapshots.forEach(snapshot => snapshot.docs.forEach(doc => docs.set(doc.id, doc)));
+  return [...docs.values()].find(doc => {
+    const data = doc.data() || {};
+    return String(data.store_id || data.storeId || "").trim().toLowerCase() === storeId;
+  }) || null;
+}
 let serviceAccountForAuth: any = null;
 
 let adminSdkInitError = "";
@@ -1649,9 +1669,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       let transactionId = String(transaction?.transaction_id || "");
       let customer: any = {};
       if (!transaction) {
-        const transactionSnap = await adminDb.collection("transactions")
-          .where("invoiceNo", "==", invoiceNo).limit(5).get();
-        const transactionDoc = transactionSnap.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === storeId);
+        const transactionDoc = await findStoreTransactionByInvoice(storeId, invoiceNo);
         if (!transactionDoc) return res.status(404).json({ error: "Invoice not found in this store." });
         transaction = transactionDoc.data();
         transactionId = transactionDoc.id;
@@ -1671,8 +1689,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         if (sourceSnap.exists) sourceTransaction = sourceSnap.data() || null;
       }
       if (!sourceTransaction) {
-        const sourceMatches = await adminDb.collection("transactions").where("invoiceNo", "==", invoiceNo).limit(5).get();
-        const sourceDoc = sourceMatches.docs.find(d => String(d.data().store_id || d.data().storeId || "").toLowerCase() === storeId);
+        const sourceDoc = await findStoreTransactionByInvoice(storeId, invoiceNo);
         if (sourceDoc) {
           sourceTransaction = sourceDoc.data();
           transactionId = sourceDoc.id;
@@ -2023,7 +2040,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const ref = adminDb.collection("delivery_expenses").doc(id);
       const snap = await ref.get();
       if (!snap.exists || snap.data()?.owner_store_id !== storeId) return res.status(404).json({ error: "Delivery expense not found in this business account." });
-      const patch: any = { amount: cleanAmount, reason: cleanReason, category: cleanCategory, date: cleanDate, updated_at: new Date().toISOString(), updated_by: admin.uid };
+      // An Admin-edited history date must also drive the Dashboard; preserve payment audit timestamps.
+      const patch: any = { amount: cleanAmount, reason: cleanReason, category: cleanCategory, date: cleanDate, dashboard_date: cleanDate, updated_at: new Date().toISOString(), updated_by: admin.uid };
       if (recordedAt) patch.recorded_at = new Date(recordedAt).toISOString();
       await ref.update(patch);
       return res.json({ success: true, expense: { id, ...(snap.data() || {}), ...patch } });
@@ -2063,8 +2081,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const storeId = String(store_id || "").trim().toLowerCase();
       const invoiceNo = String(invoice_no || "").trim();
       if (!invoiceNo) return res.status(400).json({ error: "Enter an invoice number." });
-      const matches = await adminDb.collection("transactions").where("invoiceNo", "==", invoiceNo).limit(10).get();
-      const transactionDoc = matches.docs.find(d => String(d.data().store_id || d.data().storeId || "").trim().toLowerCase() === storeId);
+      const transactionDoc = await findStoreTransactionByInvoice(storeId, invoiceNo);
       let transaction: any = transactionDoc ? transactionDoc.data() || {} : null;
       let transactionId = transactionDoc?.id || "";
       if (!transaction) {
@@ -2092,6 +2109,38 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     } catch (error: any) {
       console.warn("[delivery/invoices/lookup] Failed:", error?.message || "Unknown error");
       return res.status(503).json({ error: error?.message || "Could not search invoice." });
+    }
+  });
+
+  // Admin-only removal of a delivery assignment. The sale transaction is never deleted.
+  app.post("/api/delivery/assignments/admin-delete", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, invoice_no } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const invoiceNo = String(invoice_no || "").trim();
+      if (!invoiceNo) return res.status(400).json({ error: "Invoice number is required." });
+      const assignmentId = createHash("sha256").update(storeId + ":" + invoiceNo).digest("hex");
+      const assignmentRef = adminDb.collection("delivery_assignments").doc(assignmentId);
+      const assignmentSnap = await assignmentRef.get();
+      const queueId = createHash("sha256").update(storeId + ":" + invoiceNo).digest("hex");
+      const queueRef = adminDb.collection("delivery_queue").doc(queueId);
+      const queueSnap = await queueRef.get();
+      const ownsAssignment = assignmentSnap.exists && assignmentSnap.data()?.owner_store_id === storeId;
+      const ownsQueueItem = queueSnap.exists && queueSnap.data()?.owner_store_id === storeId;
+      if (!ownsAssignment && !ownsQueueItem) {
+        return res.status(404).json({ error: "This invoice was not found in this business account's delivery assignment or queue." });
+      }
+      const batch = adminDb.batch();
+      if (ownsAssignment) batch.delete(assignmentRef);
+      if (ownsQueueItem) batch.delete(queueRef);
+      await batch.commit();
+      return res.json({ success: true, deleted: true, invoice_no: invoiceNo, assignment_removed: ownsAssignment, queue_removed: ownsQueueItem });
+    } catch (error: any) {
+      console.warn("[delivery/assignments/admin-delete] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not delete invoice assignment." });
     }
   });
 

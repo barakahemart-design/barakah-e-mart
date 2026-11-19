@@ -40,6 +40,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceLookup, setInvoiceLookup] = useState<{ status: "idle" | "loading" | "found" | "not_found" | "error"; invoice?: any; already_assigned?: boolean; assigned_driver?: string; message?: string }>({ status: "idle" });
+  const [invoiceSelected, setInvoiceSelected] = useState(false);
+  const [deletingAssignmentNo, setDeletingAssignmentNo] = useState("");
   const [driverUid, setDriverUid] = useState("");
   const [assignmentView, setAssignmentView] = useState<"assigned" | "delivered">("assigned");
   const [expenseView, setExpenseView] = useState<"unpaid" | "paid">("unpaid");
@@ -105,6 +107,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   useEffect(() => {
     const value = invoiceNo.trim();
+    setInvoiceSelected(false);
     if (!value) { setInvoiceLookup({ status: "idle" }); return; }
     let cancelled = false;
     setInvoiceLookup({ status: "loading" });
@@ -138,8 +141,12 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const assignInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (invoiceLookup.status !== "found" || invoiceLookup.already_assigned) {
-      notifyRef.current(invoiceLookup.already_assigned ? "This invoice is already assigned." : "Please enter a valid invoice number first.", "error");
+    if (invoiceLookup.status !== "found" || !invoiceSelected || invoiceLookup.already_assigned) {
+      notifyRef.current(invoiceLookup.already_assigned ? "This invoice is already assigned." : "Search and select a valid invoice number first.", "error");
+      return;
+    }
+    if (!driverUid) {
+      notifyRef.current("Select a delivery driver first.", "error");
       return;
     }
     try {
@@ -147,9 +154,27 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setAssignments(prev => [result.assignment, ...prev.filter(x => x.id !== result.assignment.id)]);
       setInvoiceNo("");
       setInvoiceLookup({ status: "idle" });
+      setInvoiceSelected(false);
       notifyRef.current("Invoice assigned to delivery staff.", "success");
     } catch (error: any) {
       notifyRef.current(error?.message || "Could not assign invoice.", "error");
+    }
+  };
+
+  const deleteInvoiceAssignment = async (invoiceNoToDelete: string) => {
+    const cleanInvoiceNo = String(invoiceNoToDelete || "").trim();
+    if (panelRole !== "admin" || !cleanInvoiceNo || deletingAssignmentNo) return;
+    if (!window.confirm("Remove invoice " + cleanInvoiceNo + " from Delivery Assignment and Delivery Queue? The original sales invoice and customer ledger will not be deleted.")) return;
+    setDeletingAssignmentNo(cleanInvoiceNo);
+    try {
+      await request("/api/delivery/assignments/admin-delete", { invoice_no: cleanInvoiceNo });
+      setAssignments(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
+      setQueueItems(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
+      notifyRef.current("Invoice " + cleanInvoiceNo + " removed from Delivery Assignment/Queue. The original invoice is safe.", "success");
+    } catch (error: any) {
+      notifyRef.current(error?.message || "Could not delete invoice assignment.", "error");
+    } finally {
+      setDeletingAssignmentNo("");
     }
   };
 
@@ -384,38 +409,40 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         </div>
         {assignmentView === "assigned" ? <>
           <form onSubmit={assignInvoice} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Assign to Driver<select required value={driverUid} onChange={e => setDriverUid(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500"><option value="">Select delivery staff</option>{activeDrivers.map(x => <option key={x.uid} value={x.uid}>{x.name} · {x.email}</option>)}</select></label>
             <div className="space-y-1.5 text-[11px] font-bold text-slate-300">
               <label htmlFor="delivery-invoice-number">Enter Invoice Number</label>
-              <input id="delivery-invoice-number" required value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Enter invoice number" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
-              {invoiceLookup.status === "loading" && <p className="pt-1 text-[10px] text-slate-400">Searching this business account…</p>}
+              <input id="delivery-invoice-number" required inputMode="numeric" autoComplete="off" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="Type invoice number to search" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+              {invoiceLookup.status === "loading" && <p className="pt-1 text-[10px] text-slate-400">Searching invoices in this business account…</p>}
               {invoiceLookup.status === "not_found" && <p role="status" className="pt-1 text-[10px] font-bold text-rose-400">Invoice not found in this business account.</p>}
               {invoiceLookup.status === "error" && <p role="alert" className="pt-1 text-[10px] text-rose-300">{invoiceLookup.message}</p>}
               {invoiceLookup.status === "found" && <div className="mt-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[10px] text-emerald-100">
                 <p className="font-black">Invoice #{invoiceLookup.invoice?.invoice_no} · {invoiceLookup.invoice?.customer_name}</p>
                 <p className="mt-1 text-emerald-100/75">{invoiceLookup.invoice?.customer_phone || "No phone number"} · {currencySymbol} {Number(invoiceLookup.invoice?.total_amount || 0).toLocaleString()}</p>
-                {invoiceLookup.already_assigned && <p className="mt-1 font-bold text-amber-300">Already assigned to {invoiceLookup.assigned_driver || "a delivery staff member"}.</p>}
+                {invoiceLookup.already_assigned ? <p className="mt-1 font-bold text-amber-300">Already assigned to {invoiceLookup.assigned_driver || "a delivery staff member"}.</p> : <button type="button" onClick={() => setInvoiceSelected(true)} className={invoiceSelected ? "mt-2 rounded-lg bg-emerald-500/20 px-3 py-2 font-black text-emerald-200" : "mt-2 rounded-lg bg-emerald-500 px-3 py-2 font-black text-slate-950"}>{invoiceSelected ? "Invoice Selected" : "Select Invoice"}</button>}
               </div>}
             </div>
-            <label className="space-y-1.5 text-[11px] font-bold text-slate-300">Assign to Driver<select required value={driverUid} onChange={e => setDriverUid(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-emerald-500"><option value="">Select delivery staff</option>{activeDrivers.map(x => <option key={x.uid} value={x.uid}>{x.name} · {x.email}</option>)}</select></label>
-            <button disabled={!activeDrivers.length || invoiceLookup.status !== "found" || Boolean(invoiceLookup.already_assigned)} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
+            <button disabled={!activeDrivers.length || !driverUid || invoiceLookup.status !== "found" || !invoiceSelected || Boolean(invoiceLookup.already_assigned)} className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Assign Invoice</button>
           </form>
           <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
             <h3 className="text-sm font-black text-white">New Sales Delivery Queue <span className="text-emerald-300">({queueItems.length})</span></h3>
             {queueItems.length === 0 ? <p className="text-xs text-slate-500">No new sales waiting for delivery assignment.</p> : queueItems.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
               <div><p className="text-xs font-black text-white">Invoice {item.invoice_no} · {item.customer_name}</p><p className="text-[10px] text-slate-400">{item.customer_phone} · {item.customer_address}</p><p className="text-[10px] text-slate-500">{item.items?.map(x => `${x.name} × ${x.quantity}`).join(", ")}</p></div>
-              <button type="button" onClick={() => setInvoiceNo(item.invoice_no)} className="rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black text-emerald-300">Select Invoice</button>
+              <div className="flex items-center gap-2"><button type="button" onClick={() => setInvoiceNo(item.invoice_no)} className="rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black text-emerald-300">Select Invoice</button>{panelRole === "admin" && <button type="button" disabled={deletingAssignmentNo === String(item.invoice_no)} onClick={() => deleteInvoiceAssignment(String(item.invoice_no))} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300 disabled:opacity-50"><Trash2 className="h-3 w-3" />Delete Invoice</button>}</div>
             </div>)}
           </div>
           <div className="space-y-2">{assignments.filter(x => x.delivery_status !== "delivered").length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned invoices right now.</p> : assignments.filter(x => x.delivery_status !== "delivered").map(item => <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status || "assigned"}</span></div>
             <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
             <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
+            {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" disabled={deletingAssignmentNo === String(item.invoice_no)} onClick={() => deleteInvoiceAssignment(String(item.invoice_no))} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300 disabled:opacity-50"><Trash2 className="h-3 w-3" />{deletingAssignmentNo === String(item.invoice_no) ? "Deleting…" : "Delete Invoice"}</button></div>}
           </div>)}</div>
         </> : <div className="space-y-2">
           {assignments.filter(x => x.delivery_status === "delivered").length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivered invoices yet.</p> : assignments.filter(x => x.delivery_status === "delivered").map(item => <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-300">Delivered</span></div>
             <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
             <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
+            {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" disabled={deletingAssignmentNo === String(item.invoice_no)} onClick={() => deleteInvoiceAssignment(String(item.invoice_no))} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300 disabled:opacity-50"><Trash2 className="h-3 w-3" />{deletingAssignmentNo === String(item.invoice_no) ? "Deleting…" : "Delete Invoice"}</button></div>}
           </div>)}
         </div>}
       </div>}
