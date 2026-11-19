@@ -336,14 +336,21 @@ export default function App() {
   // It is never written to localStorage or sessionStorage.
   const [adminActionPin, setAdminActionPin] = useState("");
   const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
+  const [deliveryRoleCheckedUid, setDeliveryRoleCheckedUid] = useState("");
 
-  // After Firebase login, check the server-owned delivery role before showing
-  // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
+  // Resolve the delivery role before rendering either the driver panel or the
+  // Admin/Sales PIN gate. This prevents even a one-frame flash of the POS gate.
   useEffect(() => {
     let cancelled = false;
     const checkDeliveryRole = async () => {
-      if (!activeUser || activeUser.isGuest) {
+      if (!activeUser) {
         setDeliveryStaffProfile(null);
+        setDeliveryRoleCheckedUid("");
+        return;
+      }
+      if (activeUser.isGuest) {
+        setDeliveryStaffProfile(null);
+        setDeliveryRoleCheckedUid(activeUser.uid);
         return;
       }
       try {
@@ -358,6 +365,8 @@ export default function App() {
         setDeliveryStaffProfile(response.ok && result.isDeliveryAccount ? result.staff : null);
       } catch (error) {
         if (!cancelled) setDeliveryStaffProfile(null);
+      } finally {
+        if (!cancelled) setDeliveryRoleCheckedUid(activeUser.uid);
       }
     };
     checkDeliveryRole();
@@ -4499,6 +4508,17 @@ _${businessInfo.name}_`;
         onGuestLogin={handleGuestLogin}
         isDarkMode={isDarkMode}
       />
+    );
+  }
+
+  // Wait for server-side role resolution so a Delivery Staff login never
+  // flashes the Admin/Sales PIN screen, even for a single frame.
+  if (deliveryRoleCheckedUid !== activeUser.uid) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[#080d18] text-white">
+        <RefreshCw className="h-7 w-7 animate-spin text-emerald-400" />
+        <p className="text-xs font-semibold text-slate-400">Opening your secure workspace…</p>
+      </div>
     );
   }
 
