@@ -336,7 +336,6 @@ export default function App() {
   // It is never written to localStorage or sessionStorage.
   const [adminActionPin, setAdminActionPin] = useState("");
   const [deliveryStaffProfile, setDeliveryStaffProfile] = useState<any>(null);
-  const [deliverySessionChecked, setDeliverySessionChecked] = useState(false);
 
   // After Firebase login, check the server-owned delivery role before showing
   // the normal Admin/Sales PIN gate. Driver accounts never enter the POS workspace.
@@ -359,7 +358,6 @@ export default function App() {
         setDeliveryStaffProfile(response.ok && result.isDeliveryAccount ? result.staff : null);
       } catch (error) {
         if (!cancelled) setDeliveryStaffProfile(null);
-      } finally {
       }
     };
     checkDeliveryRole();
