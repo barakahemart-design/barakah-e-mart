@@ -882,8 +882,11 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const snapshot = await adminDb!.collection(tableStr).where(field, "==", value).get();
         snapshot.forEach(docSnapshot => {
           const data = docSnapshot.data() || {};
-          if (isOwnedByVerifiedAccount(data, verified) ||
-              (allowedIds.includes(String(data.user_id || data.userId || data.owner_id || "")))) {
+          const hasStoreIdentity = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail]
+            .some(value => typeof value === "string" && value.trim() !== "");
+          const docUid = String(data.user_id || data.userId || data.owner_id || "");
+          const matchesLegacyUid = !hasStoreIdentity && allowedIds.includes(docUid);
+          if (isOwnedByVerifiedAccount(data, verified) || matchesLegacyUid) {
             recordsMap.set(String(data.id || docSnapshot.id), data);
           }
         });
@@ -1106,68 +1109,46 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     const verified = await verifyFirebaseToken(req);
     if (!verified) return res.status(401).json({ error: "Access Denied: Valid Firebase login required." });
     const cleanEmail = verified.email.trim().toLowerCase();
-    if (!cleanEmail) {
-      return res.status(400).json({ error: "Email is required for full sync" });
-    }
+    if (!cleanEmail) return res.status(400).json({ error: "Email is required for full sync" });
+    if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is not configured." });
 
     try {
-      const allowedIds = await resolveAllUserIdsForEmail(cleanEmail, verified?.uid || "");
+      const allowedIds = await resolveAllUserIdsForEmail(cleanEmail, verified.uid);
       const tables = ["products", "customers", "transactions", "transaction_items", "expenses", "purchases", "business_info"];
       const fullState: { [key: string]: any[] } = {};
 
       for (const table of tables) {
         const recordsMap = new Map<string, any>();
-        
-        // 1. In-memory cache
-        const memCache = getTableCache(table);
-        for (const [docId, data] of memCache.entries()) {
-          const docStore = (data.store_id || data.storeId || data.email || data.linked_email || "").trim().toLowerCase();
+        const addOwnedRecord = (docId: string, data: any) => {
+          const hasStoreIdentity = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail]
+            .some((value: any) => typeof value === "string" && value.trim() !== "");
           const docUid = String(data.user_id || data.userId || data.owner_id || "");
-          if (docStore === cleanEmail || docUid === cleanEmail || allowedIds.includes(docUid) || allowedIds.includes(docId)) {
-            recordsMap.set(docId, data);
+          const matchesLegacyUid = !hasStoreIdentity && allowedIds.includes(docUid);
+          if (isOwnedByVerifiedAccount(data, verified) || matchesLegacyUid) {
+            recordsMap.set(String(data.id || docId), data);
           }
+        };
+
+        const emailFields = ["store_id", "storeId", "email", "linked_email", "linkedEmail"];
+        for (const field of emailFields) {
+          const snapshot = await adminDb.collection(table).where(field, "==", cleanEmail).get();
+          snapshot.forEach(docSnapshot => addOwnedRecord(docSnapshot.id, docSnapshot.data() || {}));
         }
 
-        // 2. Firestore query
-        try {
-          const storeQ = query(collection(db, table), where("store_id", "==", cleanEmail));
-          const storeSnap = await getDocs(storeQ);
-          storeSnap.forEach(snap => {
-            const d = snap.data();
-            recordsMap.set(d.id || snap.id, d);
-          });
-        } catch (_) {}
-
-        try {
-          const emailQ = query(collection(db, table), where("email", "==", cleanEmail));
-          const emailSnap = await getDocs(emailQ);
-          emailSnap.forEach(snap => {
-            const d = snap.data();
-            recordsMap.set(d.id || snap.id, d);
-          });
-        } catch (_) {}
-
         for (const uid of allowedIds) {
-          try {
-            const uq = query(collection(db, table), where("user_id", "==", uid));
-            const uSnap = await getDocs(uq);
-            uSnap.forEach(snap => {
-              const d = snap.data();
-              recordsMap.set(d.id || snap.id, d);
-            });
-          } catch (_) {}
+          for (const field of ["user_id", "userId", "owner_id"]) {
+            const snapshot = await adminDb.collection(table).where(field, "==", uid).get();
+            snapshot.forEach(docSnapshot => addOwnedRecord(docSnapshot.id, docSnapshot.data() || {}));
+          }
         }
 
         fullState[table] = Array.from(recordsMap.values());
       }
 
-      res.json({
-        success: true,
-        data: fullState,
-        serverTime: Date.now()
-      });
+      return res.json({ success: true, data: fullState, serverTime: Date.now() });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error("[sync/full] Secure full sync failed:", err instanceof Error ? err.message : "unknown");
+      return res.status(503).json({ error: "Cloud sync is temporarily unavailable. Please retry." });
     }
   });
 
