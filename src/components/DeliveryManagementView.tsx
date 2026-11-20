@@ -141,6 +141,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           setAssignments(assignmentData.assignments || []);
           setQueueItems(queueData.queue || []);
           setExpenses(expenseData.expenses || []);
+          setOfflineNotice(false);
         } catch (_) {
           setOfflineNotice(true);
         }
