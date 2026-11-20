@@ -42,7 +42,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [pendingOperations, setPendingOperations] = useState<DeliveryOfflineOperation[]>(() => readDeliveryLocal(offlineQueueKey, []));
   const pendingOperationsRef = useRef<DeliveryOfflineOperation[]>(pendingOperations);
   const syncingOfflineQueueRef = useRef(false);
-  const [offlineNotice, setOfflineNotice] = useState(Boolean(cachedData) || pendingOperations.length > 0);
+  const [offlineNotice, setOfflineNotice] = useState(pendingOperations.length > 0);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
