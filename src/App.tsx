@@ -5253,7 +5253,7 @@ _${businessInfo.name}_`;
               <div className="col-span-1 lg:col-span-8 space-y-6" id="pos-billing-basket-column">
                 
                 {/* Product picker */}
-                <div className="bg-[#1E1E24] border border-[#2D2D35] p-6 rounded-2xl space-y-4 shadow-lg" id="pos-product-picker-pnl">
+                <div className="relative z-[1005] bg-[#1E1E24] border border-[#2D2D35] p-6 rounded-2xl space-y-4 shadow-lg" id="pos-product-picker-pnl">
                   <div className="flex items-center gap-2 border-b border-[#2D2D35] pb-3">
                     <span className="w-5 h-5 rounded-lg bg-[#00E676]/10 text-[#00E676] flex items-center justify-center font-bold text-xs">1</span>
                     <h3 className="text-sm font-bold text-white tracking-wide">Select Item & Add to Basket</h3>
@@ -5391,7 +5391,7 @@ _${businessInfo.name}_`;
                 </div>
 
                 {/* Checkout Basket Cart List - Styled as elegant modern card stacks */}
-                <div className="bg-[#1E1E24] border border-[#2D2D35] rounded-2xl overflow-hidden shadow-lg" id="pos-cart-list-pnl">
+                <div className="relative z-0 bg-[#1E1E24] border border-[#2D2D35] rounded-2xl overflow-hidden shadow-lg" id="pos-cart-list-pnl">
                   <div className="p-4 bg-[#121214]/50 border-b border-[#2D2D35] flex items-center justify-between" id="pos-cart-header">
                     <div className="flex items-center gap-2">
                       <span className="w-5 h-5 rounded-lg bg-[#00E676]/10 text-[#00E676] flex items-center justify-center font-bold text-xs">2</span>
