@@ -327,6 +327,15 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
             {(item as any).payment_received_at && <p className="text-[10px] text-emerald-300">Received: {new Date((item as any).payment_received_at).toLocaleString("en-BD")}</p>}
           </article>);
           })()}
+          <section className="space-y-2 pt-2">
+            <h3 className="text-sm font-black text-white">My Staff Expense Payments</h3>
+            {expenses.filter(x => paymentView === "received" ? x.payment_status === "paid" : x.payment_status !== "paid").length === 0
+              ? <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">No {paymentView} expense payments.</p>
+              : expenses.filter(x => paymentView === "received" ? x.payment_status === "paid" : x.payment_status !== "paid").map(x => <article key={`driver-expense-payment-${x.id}`} className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                <div className="flex items-center justify-between gap-2"><p className="text-sm font-black">Staff Expense · {currencySymbol}{Number(x.amount || 0).toLocaleString("en-BD")}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${x.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{x.payment_status === "paid" ? "Paid" : "Pending"}</span></div>
+                <p className="mt-1 text-[11px] text-slate-400">{x.reason} · {x.category} · {x.date}</p>
+              </article>)}
+          </section>
         </div>}
 
         {tab === "expenses" && <div className="space-y-4">
