@@ -1,7 +1,7 @@
 /* BARAKAH POS — cross-device Premium Black Liquid Glass. Visual only. */
 html:not(.light){
  --app-glass-bg:rgba(20,22,27,.56);--app-glass-border:rgba(242,246,255,.20);
- --app-glass-blur:30px;--app-glass-muted:#cbd3df;color:#fff;background:#050608!important
+ --app-glass-blur:44px;--app-glass-muted:#cbd3df;color:#fff;background:#050608!important
 }
 html:not(.light) body{
  color:#fff!important;min-height:100%;background:
@@ -57,11 +57,11 @@ html:not(.light) #root #mobile-bottom-navbar{
  background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.025) 58%,transparent),rgba(9,10,13,.62)!important;
  border-color:rgba(242,246,255,.14)!important;
  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 12px 34px rgba(0,0,0,.34)!important;
- -webkit-backdrop-filter:blur(32px) saturate(155%)!important;backdrop-filter:blur(32px) saturate(155%)!important
+ -webkit-backdrop-filter:blur(46px) saturate(165%)!important;backdrop-filter:blur(46px) saturate(165%)!important
 }
 html:not(.light) #root input:not([type="checkbox"]):not([type="radio"]),html:not(.light) #root select,html:not(.light) #root textarea{
  color:#fff!important;background:rgba(8,9,12,.48)!important;border-color:rgba(242,246,255,.20)!important;
- -webkit-backdrop-filter:blur(22px) saturate(145%)!important;backdrop-filter:blur(22px) saturate(145%)!important
+ -webkit-backdrop-filter:blur(34px) saturate(155%)!important;backdrop-filter:blur(34px) saturate(155%)!important
 }
 html:not(.light) #root input::placeholder,html:not(.light) #root textarea::placeholder{color:#b9c3d1!important;opacity:1}
 html:not(.light) #root input:focus,html:not(.light) #root select:focus,html:not(.light) #root textarea:focus{border-color:rgba(160,190,255,.66)!important;box-shadow:0 0 0 3px rgba(91,130,220,.16),0 0 20px rgba(91,130,220,.12)!important;outline:none!important}
@@ -75,8 +75,8 @@ html:not(.light) #root #cloud-sync-status-indicator span.bg-emerald-400{backgrou
 html:not(.light) #root #cloud-sync-status-indicator span.bg-amber-400{background:#fbbf24!important}
 html:not(.light) #root #cloud-sync-status-indicator span.bg-sky-400{background:#38bdf8!important}
 html:not(.light) #root #cloud-sync-status-indicator span.bg-rose-400{background:#fb7185!important}
-@media(max-width:640px){html:not(.light){--app-glass-blur:28px}}
-@media(min-width:641px){html:not(.light){--app-glass-blur:32px}}
+@media(max-width:640px){html:not(.light){--app-glass-blur:40px}}
+@media(min-width:641px){html:not(.light){--app-glass-blur:46px}}
 @supports not ((backdrop-filter:blur(1px))){
  html:not(.light) #root div[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root section[class*="rounded-"][class*="border"][class*="bg-"],html:not(.light) #root article[class*="rounded-"][class*="border"][class*="bg-"]{background-color:rgba(24,26,31,.92)!important}
 }
@@ -339,4 +339,17 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
   stroke: #22d3ee !important;
   opacity: 1 !important;
   filter: drop-shadow(0 0 4px rgba(34,211,238,.58)) !important;
+}
+
+
+/* Search controls: bright, high-contrast cyan with a visible glow across every workspace. */
+#root svg.lucide-search,
+#root svg[class~="lucide-search"],
+#root svg[class*="lucide-search"],
+#root [data-lucide="search"] {
+  color: #00e5ff !important;
+  stroke: #00e5ff !important;
+  stroke-width: 2.7 !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 3px rgba(0,229,255,.95)) drop-shadow(0 0 8px rgba(0,184,255,.62)) !important;
 }

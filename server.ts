@@ -1721,6 +1721,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const previousAssignmentSnap = await assignmentRef.get();
       const previousAssignment = previousAssignmentSnap.exists ? previousAssignmentSnap.data() || {} : {};
       if (previousAssignmentSnap.exists && previousAssignment.owner_store_id === storeId) {
+        // Replaying an offline assignment after a lost response must not create a
+        // duplicate or report a false conflict when the same driver already owns it.
+        if (String(previousAssignment.driver_uid || "") === driverUid) {
+          if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: String(previousAssignment.assigned_at || new Date().toISOString()) }, { merge: true });
+          return res.status(200).json({ success: true, assignment: { id: assignmentId, ...previousAssignment } });
+        }
         const existingDriver = String(previousAssignment.driver_name || "another delivery staff member");
         return res.status(409).json({ error: `This invoice is already assigned to ${existingDriver}. Remove the existing assignment before assigning it again.`, already_assigned: true });
       }
@@ -1749,9 +1755,26 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         assigned_at: new Date().toISOString(),
         assigned_by: manager.uid
       };
-      await assignmentRef.set(assignment, { merge: true });
-      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: new Date().toISOString() }, { merge: true });
-      return res.status(201).json({ success: true, assignment });
+      // Atomically create the assignment. Two devices may replay the same offline
+      // invoice at once; only one driver can win, and retries by that same driver
+      // return the existing record instead of overwriting it.
+      const assignmentResult = await adminDb.runTransaction(async (transaction) => {
+        const latestSnap = await transaction.get(assignmentRef);
+        if (latestSnap.exists) {
+          const latest = latestSnap.data() || {};
+          if (latest.owner_store_id === storeId && String(latest.driver_uid || "") === driverUid) {
+            return { kind: "existing" as const, assignment: { id: latestSnap.id, ...latest } };
+          }
+          return { kind: "conflict" as const, assignment: null };
+        }
+        transaction.create(assignmentRef, assignment);
+        return { kind: "created" as const, assignment };
+      });
+      if (assignmentResult.kind === "conflict") {
+        return res.status(409).json({ error: "This invoice was assigned on another device. Refresh Delivery Management before trying again.", already_assigned: true });
+      }
+      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: String(assignmentResult.assignment.assigned_at || new Date().toISOString()) }, { merge: true });
+      return res.status(assignmentResult.kind === "created" ? 201 : 200).json({ success: true, assignment: assignmentResult.assignment });
     } catch (error: any) {
       console.warn("[delivery/assignments/create] Failed:", error?.message || "Unknown error");
       return res.status(503).json({ error: error?.message || "Could not assign invoice." });
@@ -1953,7 +1976,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
   });
 
   app.post("/api/delivery/expenses", async (req: Request, res: Response) => {
-    const { amount, reason, category, date, assignment_id } = req.body || {};
+    const { amount, reason, category, date, assignment_id, client_request_id } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) return res.status(401).json({ error: "Valid Firebase login required." });
@@ -1966,6 +1989,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const cleanReason = String(reason || "").trim();
       const cleanCategory = String(category || "Other").trim().slice(0, 60);
       const cleanDate = String(date || "");
+      const clientRequestId = String(client_request_id || "").trim();
+      if (clientRequestId && !/^[A-Za-z0-9_-]{8,128}$/.test(clientRequestId)) return res.status(400).json({ error: "Invalid offline expense request ID." });
       if (!Number.isFinite(cleanAmount) || cleanAmount <= 0 || cleanAmount > 1000000) return res.status(400).json({ error: "Enter a valid expense amount." });
       if (cleanReason.length < 2 || cleanReason.length > 500) return res.status(400).json({ error: "Enter an expense reason (2–500 characters)." });
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate) || Number.isNaN(Date.parse(cleanDate))) return res.status(400).json({ error: "Enter a valid expense date." });
@@ -1978,7 +2003,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           return res.status(403).json({ error: "Expense must belong to one of your assigned deliveries." });
         }
       }
-      const ref = adminDb.collection("delivery_expenses").doc();
+      const collectionRef = adminDb.collection("delivery_expenses");
+      const ref = clientRequestId ? collectionRef.doc(clientRequestId) : collectionRef.doc();
+      const now = new Date().toISOString();
       const record = {
         id: ref.id,
         owner_store_id: staff.owner_store_id,
@@ -1990,11 +2017,25 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         date: cleanDate,
         assignment_id: assignmentId,
         payment_status: "unpaid",
-        created_at: new Date().toISOString(),
-        recorded_at: new Date().toISOString()
+        created_at: now,
+        recorded_at: now
       };
-      await ref.set(record);
-      return res.status(201).json({ success: true, expense: record });
+      // Offline retries reuse the same client-generated document ID. The transaction
+      // makes submission idempotent and prevents one driver from overwriting another
+      // store's expense if a malicious client guesses an existing document ID.
+      const savedExpense = await adminDb.runTransaction(async (transaction) => {
+        const existing = await transaction.get(ref);
+        if (existing.exists) {
+          const existingData = existing.data() || {};
+          if (existingData.driver_uid !== verified.uid || existingData.owner_store_id !== staff.owner_store_id) {
+            throw new Error("DELIVERY_EXPENSE_ID_CONFLICT");
+          }
+          return { id: existing.id, ...existingData };
+        }
+        transaction.create(ref, record);
+        return record;
+      });
+      return res.status(201).json({ success: true, expense: savedExpense });
     } catch (error: any) {
       return res.status(503).json({ error: error?.message || "Could not submit delivery expense." });
     }

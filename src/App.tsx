@@ -301,6 +301,7 @@ import {
 } from "./lib/firebase-helpers";
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
+import { deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
   generateInvoicePDF,
   generateDeliveryChallanPDF
@@ -369,9 +370,34 @@ export default function App() {
         });
         const result = await response.json().catch(() => ({}));
         if (cancelled) return;
-        setDeliveryStaffProfile(response.ok && result.isDeliveryAccount ? result.staff : null);
+        if (!response.ok) {
+          const failure: any = new Error(result.error || "Could not verify delivery account.");
+          failure.status = response.status;
+          throw failure;
+        }
+        if (result.isDeliveryAccount && result.staff?.uid === activeUser.uid && result.staff?.status === "active") {
+          // This cached identity is used only to reopen the driver's read-only local
+          // workspace during quota/network outages. Every server write still verifies
+          // the live Firebase identity and active staff record.
+          writeDeliveryLocal(deliveryStorageKey("cache", `driver-profile:${activeUser.uid}`), {
+            uid: activeUser.uid, staff: result.staff, verifiedAt: new Date().toISOString()
+          });
+          setDeliveryStaffProfile(result.staff);
+        } else {
+          try { localStorage.removeItem(deliveryStorageKey("cache", `driver-profile:${activeUser.uid}`)); } catch (_) {}
+          setDeliveryStaffProfile(null);
+        }
       } catch (error) {
-        if (!cancelled) setDeliveryStaffProfile(null);
+        if (!cancelled) {
+          if (isRetryableDeliveryError(error)) {
+            const cachedProfile = readDeliveryLocal<{ uid: string; staff: any } | null>(
+              deliveryStorageKey("cache", `driver-profile:${activeUser.uid}`), null
+            );
+            setDeliveryStaffProfile(cachedProfile?.uid === activeUser.uid && cachedProfile.staff?.uid === activeUser.uid ? cachedProfile.staff : null);
+          } else {
+            setDeliveryStaffProfile(null);
+          }
+        }
       } finally {
         if (!cancelled) setDeliveryRoleCheckedUid(activeUser.uid);
       }
@@ -4704,6 +4730,7 @@ _${businessInfo.name}_`;
   if (deliveryStaffProfile) {
     return (
       <DeliveryDriverView
+        key={String(activeUser?.uid || "delivery-driver")}
         staff={deliveryStaffProfile}
         currencySymbol={businessInfo.currencySymbol || "৳"}
         onLogout={async () => {
@@ -8429,10 +8456,13 @@ _${businessInfo.name}_`;
               ----------------------------------------------------------------- */}
           {activeTab === "delivery" && (
             <DeliveryManagementView
+              key={`${String(activeUser?.uid || "")}:${currentPanel}:${String(activeUser?.email || "").trim().toLowerCase()}`}
               adminPin={currentPanel === "admin" ? adminActionPin : ""}
               salesPin={String(businessInfo.salesPasscode || "")}
               panelRole={currentPanel === "admin" ? "admin" : "sales"}
               storeId={String(activeUser?.email || "").trim().toLowerCase()}
+              transactions={transactions}
+              contacts={contacts}
               currencySymbol={businessInfo.currencySymbol || "৳"}
               triggerNotification={triggerNotification}
             />
@@ -8499,8 +8529,8 @@ _${businessInfo.name}_`;
                       { id: "invoice" as const, title: "Invoice & PDF Layout", desc: "Invoice templates, logo, signatures and print details", Icon: FileText, meta: "Print customization" },
                       { id: "sales" as const, title: "Sales Panel & Assistant Restrictions", desc: "Control editing, deleting and price override permissions", Icon: SlidersHorizontal, meta: "Access permissions" },
                       { id: "security" as const, title: "Security & Panel Passcodes", desc: "Manage Admin and Sales panel access PINs", Icon: ShieldCheck, meta: "Account security" },
-                      { id: "danger" as const, title: "Danger Zone", desc: "Review high-risk reset and deletion actions", Icon: AlertTriangle, meta: "Advanced actions" },
-                      { id: "cloud" as const, title: "Data & Cloud Management", desc: "Cloud connection, local device status, backup and appearance controls", Icon: CloudLightning, meta: "System status" }
+                      { id: "cloud" as const, title: "Data & Cloud Management", desc: "Cloud connection, local device status, backup and appearance controls", Icon: CloudLightning, meta: "System status" },
+                      { id: "danger" as const, title: "Danger Zone", desc: "Review high-risk reset and deletion actions", Icon: AlertTriangle, meta: "Advanced actions" }
                     ].map((item) => {
                       const Icon = item.Icon;
                       const isDanger = item.id === "danger";
@@ -8553,7 +8583,7 @@ _${businessInfo.name}_`;
                 <div className="space-y-4 animate-fadeIn" id="settings-cloud-management">
                   <div className="rounded-2xl border border-white/10 bg-[#101319]/95 p-4 sm:p-5 space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"><CloudLightning className="w-5 h-5 text-slate-100" /></div>
+                      <div className="w-10 h-10 rounded-xl bg-sky-400/10 border border-sky-400/30 flex items-center justify-center shadow-[0_0_18px_rgba(56,189,248,0.16)]"><CloudLightning className="w-5 h-5 text-sky-300 drop-shadow-[0_0_5px_rgba(56,189,248,0.75)]" /></div>
                       <div>
                         <h4 className="text-sm font-bold text-white">Live Cloud Connection</h4>
                         <p className="text-[10px] text-slate-400">Status is based on the existing Firestore listeners; this panel does not run extra database checks.</p>
@@ -8563,7 +8593,7 @@ _${businessInfo.name}_`;
                       <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                         <p className="text-[9px] uppercase tracking-widest text-slate-400">Firestore</p>
                         <div className="mt-2 flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${syncStatus === "connected" ? "bg-emerald-400" : syncStatus === "error" ? "bg-rose-400" : syncStatus === "connecting" || syncStatus === "reconciling" ? "bg-amber-400 animate-pulse" : "bg-slate-400"}`} />
+                          <span aria-label={syncStatus === "connected" ? "Live Firestore connection active" : "Firestore connection status"} className={`w-2.5 h-2.5 rounded-full ${syncStatus === "connected" ? "bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.78)] animate-pulse" : syncStatus === "error" ? "bg-rose-400 shadow-[0_0_6px_2px_rgba(251,113,133,0.45)]" : syncStatus === "connecting" || syncStatus === "reconciling" ? "bg-amber-400 shadow-[0_0_6px_2px_rgba(251,191,36,0.4)] animate-pulse" : "bg-slate-400"}`} />
                           <span className="text-xs font-bold text-white">{syncStatus === "connected" ? "Connected — latest listener snapshot received" : syncStatus === "connecting" ? "Connecting…" : syncStatus === "reconciling" ? "Updating local data…" : syncStatus === "error" ? "Connection error" : "Offline / not connected"}</span>
                         </div>
                         {syncErrorMessage && <p className="mt-2 text-[10px] leading-relaxed text-rose-300">{syncErrorMessage}</p>}
