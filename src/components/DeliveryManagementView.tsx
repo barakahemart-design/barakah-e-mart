@@ -379,6 +379,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const updateAssignmentPayment = async (assignment: Assignment) => {
     if (panelRole !== "admin") return;
+    if (assignment.id.startsWith("local-")) {
+      notifyRef.current("This invoice assignment is still waiting for cloud sync. Payment can be saved after the assignment receives its cloud ID.", "info");
+      return;
+    }
     const draft = getPaymentDraft(assignment);
     const fee = Number(draft.fee);
     if (!Number.isFinite(fee) || fee < 0 || fee > 1000000) { notifyRef.current("Enter a valid payment amount.", "error"); return; }
