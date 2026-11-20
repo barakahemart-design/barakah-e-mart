@@ -8461,6 +8461,8 @@ _${businessInfo.name}_`;
               salesPin={String(businessInfo.salesPasscode || "")}
               panelRole={currentPanel === "admin" ? "admin" : "sales"}
               storeId={String(activeUser?.email || "").trim().toLowerCase()}
+              transactions={transactions}
+              contacts={contacts}
               currencySymbol={businessInfo.currencySymbol || "৳"}
               triggerNotification={triggerNotification}
             />
