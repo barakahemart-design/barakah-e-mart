@@ -391,12 +391,20 @@ function classifyExpenseLocally(description: string): string {
 
 function isOwnedByVerifiedAccount(data: any, verified: { uid: string; email: string }): boolean {
   if (!data || typeof data !== "object") return false;
-  const uidValues = [data.user_id, data.userId, data.owner_id].filter((v) => typeof v === "string");
   const email = (verified.email || "").trim().toLowerCase();
   const emailValues = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail]
-    .filter((v) => typeof v === "string")
-    .map((v) => v.trim().toLowerCase());
-  return uidValues.includes(verified.uid) || (!!email && emailValues.includes(email));
+    .filter((value) => typeof value === "string" && value.trim() !== "")
+    .map((value) => value.trim().toLowerCase());
+
+  // If a record carries any store-email identity, that identity is authoritative.
+  // Never fall back to a matching UID when its email points at another account.
+  if (emailValues.length > 0) {
+    return !!email && emailValues.every((value) => value === email);
+  }
+
+  const uidValues = [data.user_id, data.userId, data.owner_id]
+    .filter((value) => typeof value === "string" && value.trim() !== "");
+  return uidValues.length > 0 && uidValues.every((value) => value === verified.uid);
 }
 
 const ALLOWED_SYNC_TABLES = new Set([
