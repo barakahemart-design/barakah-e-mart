@@ -5261,7 +5261,7 @@ _${businessInfo.name}_`;
                   
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end" id="product-picker-inputs">
                     
-                     <div className="col-span-1 md:col-span-5 space-y-1.5 relative text-left" id="pos-select-wrap">
+                     <div className="col-span-1 md:col-span-5 space-y-1.5 relative z-[1001] text-left" id="pos-select-wrap">
                       <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Search & Select Product</label>
                       <div className="relative">
                         <input
@@ -5293,8 +5293,8 @@ _${businessInfo.name}_`;
                       {/* Floating suggestions dropdown with auto-filtering */}
                       {showSuggestions && (
                         <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowSuggestions(false)} />
-                          <div className="pos-product-suggestions absolute top-full left-0 right-0 z-[1000] mt-1.5 max-h-[min(65vh,520px)] overflow-y-auto overscroll-contain touch-pan-y bg-[#101722]/[0.98] border border-slate-600/70 rounded-xl shadow-[0_24px_70px_rgba(0,0,0,0.82)] p-1.5 divide-y divide-slate-600/30 scrollbar-thin scrollbar-thumb-slate-600 font-sans">
+                          <div className="fixed inset-0 z-0" onClick={() => setShowSuggestions(false)} />
+                          <div className="pos-product-suggestions absolute top-full left-0 right-0 z-10 mt-1.5 max-h-[min(65vh,520px)] overflow-y-auto overscroll-contain touch-pan-y bg-[#101722]/[0.98] border border-slate-600/70 rounded-xl shadow-[0_24px_70px_rgba(0,0,0,0.82)] p-1.5 divide-y divide-slate-600/30 scrollbar-thin scrollbar-thumb-slate-600 font-sans">
                             {(() => {
                               const term = posSearchQuery.toLowerCase().trim();
                               const filtered = products.filter(p => {
