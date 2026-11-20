@@ -375,7 +375,7 @@ export default function App() {
           failure.status = response.status;
           throw failure;
         }
-        if (result.isDeliveryAccount && result.staff?.uid === activeUser.uid) {
+        if (result.isDeliveryAccount && result.staff?.uid === activeUser.uid && result.staff?.status === "active") {
           // This cached identity is used only to reopen the driver's read-only local
           // workspace during quota/network outages. Every server write still verifies
           // the live Firebase identity and active staff record.
