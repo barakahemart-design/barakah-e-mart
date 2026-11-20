@@ -6,7 +6,7 @@ let source = fs.readFileSync(helperFile, 'utf8');
 const original = source;
 
 // Recovery must never resurrect records explicitly deleted by the user.
-const recoveryMarker = "    // Read the complete current collection once and filter by the authenticated account.";
+const recoveryMarker = "    // Read only records belonging to the authenticated account.";
 const recoveryGuard = `    // Permanent-delete guard: old vault/legacy copies must not resurrect deleted records.\n    const deletedKeys = new Set<string>();\n    try {\n      const deletedIdentityFilters: any[] = [
         where('store_id', '==', cleanEmail),
         where('storeId', '==', cleanEmail),
