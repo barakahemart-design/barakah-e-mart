@@ -33,7 +33,7 @@ helperSource = helperSource.replace(
 );
 
 // Vercel serves the Vite SPA, so cloud recovery must work directly against Firestore.
-const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async (email: string, pin: string, overwrite: boolean = false) => {
+const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async (email: string, pin: string, overwrite: boolean = false, includeCollectionSync: boolean = true) => {
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanEmail) return false;
 
@@ -88,8 +88,8 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
       console.warn('[Cloud Restore] Direct vault read warning:', vaultErr);
     }
 
-    // Read the complete current collection once and filter by the authenticated account.
-    // This catches legacy rows that have email/owner fields but no store_id index field.
+    if (includeCollectionSync) {
+    // Read only records belonging to the authenticated account.
     const collectionMap: Array<[string, string]> = [
       ['products', 'products'],
       ['customers', 'contacts'],
@@ -178,6 +178,8 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
       console.warn('[Cloud Restore] Business settings read warning:', settingsErr);
     }
 
+    }
+
     if (!found) return false;
 
     // Canonicalize recovered rows back into the current account identity. Merge only.
@@ -203,6 +205,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
       await setDoc(doc(db, collectionName, targetDocId), canonicalIdentity, { merge: true });
     };
 
+    if (includeCollectionSync) {
     const canonicalWrites: Promise<any>[] = [];
     (Array.isArray(result.products) ? result.products : []).forEach((row: any) => canonicalWrites.push(writeCanonical('products', row)));
     (Array.isArray(result.contacts) ? result.contacts : []).forEach((row: any) => canonicalWrites.push(writeCanonical('customers', row)));
@@ -228,6 +231,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
     }
 
     await Promise.allSettled(canonicalWrites);
+    }
     restoreLocalKeys(result, overwrite, activeUid || currentFirebaseUser?.uid);
     return true;
   } catch (err) {
