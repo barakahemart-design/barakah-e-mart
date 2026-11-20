@@ -152,6 +152,24 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
 
   useEffect(() => { load(); }, [load]);
 
+  // Retry cached data slowly while offline/quota-limited and refresh when the
+  // driver returns to this tab, so other devices' synced changes become visible.
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = window.setInterval(() => {
+      if (offlineNotice && pendingOperationsRef.current.length === 0) void load();
+    }, 120000);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(timer);
+    };
+  }, [load, offlineNotice]);
+
   const getEditDraft = (item: Assignment) => editDrafts[item.id] || {
     status: item.delivery_status || "assigned",
     fee: String(item.delivery_fee ?? 0)
