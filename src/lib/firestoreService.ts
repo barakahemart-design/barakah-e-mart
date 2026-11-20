@@ -7,7 +7,8 @@ import {
   getDocs,
   query,
   where,
-  or
+  or,
+  and
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -201,12 +202,21 @@ async function handleDelete(collName: string, id: string): Promise<void> {
 
   const physicalIds = new Set<string>([String(id)]);
   try {
-    const identityQueries = [
-      query(collection(db, collName), where('id', '==', String(id))),
-      query(collection(db, collName), where('store_id', '==', cleanEmail)),
-      query(collection(db, collName), where('user_id', '==', currentUser.uid))
+    const accountIdentityFilters = [
+      where('store_id', '==', cleanEmail),
+      where('storeId', '==', cleanEmail),
+      where('email', '==', cleanEmail),
+      where('linked_email', '==', cleanEmail),
+      where('linkedEmail', '==', cleanEmail),
+      where('user_id', '==', currentUser.uid),
+      where('userId', '==', currentUser.uid),
+      where('owner_id', '==', currentUser.uid)
     ];
-    const snapshots = await Promise.all(identityQueries.map((q) => getDocs(q)));
+    const identityQuery = query(
+      collection(db, collName),
+      and(where('id', '==', String(id)), or(...accountIdentityFilters))
+    );
+    const snapshots = [await getDocs(identityQuery)];
     for (const snap of snapshots) {
       snap.docs.forEach((d: any) => {
         const data = d.data() || {};
