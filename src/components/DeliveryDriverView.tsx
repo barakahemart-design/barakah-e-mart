@@ -136,10 +136,14 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
         request("/api/delivery/assignments"),
         request("/api/delivery/expenses/mine")
       ]);
-      setAssignments(a.assignments || []);
-      setExpenses(e.expenses || []);
-      setOfflineNotice(false);
-      void flushOfflineQueue();
+      if (pendingOperationsRef.current.length) {
+        // Preserve optimistic device-local edits until the pending queue is clear.
+        void flushOfflineQueue();
+      } else {
+        setAssignments(a.assignments || []);
+        setExpenses(e.expenses || []);
+        setOfflineNotice(false);
+      }
     } catch (error: any) {
       setOfflineNotice(true);
       if (!cachedData) console.error("[Delivery driver] Data load failed:", error);
