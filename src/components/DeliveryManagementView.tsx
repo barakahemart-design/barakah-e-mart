@@ -193,6 +193,25 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Devices that previously hit a quota/network limit retry the cached view at a
+  // low frequency. A focus/visibility refresh also picks up changes synced by
+  // another device without adding an always-on Firestore listener.
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void loadAll();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = window.setInterval(() => {
+      if (offlineNotice && pendingOperationsRef.current.length === 0) void loadAll();
+    }, 120000);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(timer);
+    };
+  }, [loadAll, offlineNotice]);
+
   // Clean only orphan assignments after verifying that the invoice no longer exists in this store.
   useEffect(() => {
     if (panelRole !== "admin" || tab !== "assignments") return;
