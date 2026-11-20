@@ -5294,14 +5294,16 @@ _${businessInfo.name}_`;
                       {showSuggestions && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowSuggestions(false)} />
-                          <div className="absolute top-full left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto bg-[#1E1E24] border border-[#2D2D35] rounded-xl shadow-2xl p-1.5 divide-y divide-[#2D2D35]/30 scrollbar-thin scrollbar-thumb-slate-700 font-sans">
+                          <div className="pos-product-suggestions absolute top-full left-0 right-0 z-[1000] mt-1.5 max-h-[min(65vh,520px)] overflow-y-auto overscroll-contain touch-pan-y bg-[#101722]/[0.98] border border-slate-600/70 rounded-xl shadow-[0_24px_70px_rgba(0,0,0,0.82)] p-1.5 divide-y divide-slate-600/30 scrollbar-thin scrollbar-thumb-slate-600 font-sans">
                             {(() => {
                               const term = posSearchQuery.toLowerCase().trim();
                               const filtered = products.filter(p => {
                                 if (!term) return true;
-                                const searchWords = term.split(/\s+/);
-                                const target = `${p.name} ${p.sku} ${p.category}`.toLowerCase();
-                                return searchWords.every(word => target.includes(word));
+                                const target = `${p.name || ""} ${p.sku || ""} ${p.category || ""}`.toLowerCase();
+                                // Match any typed substring anywhere in the product name, SKU, or category.
+                                // For multi-word searches, every word may match independently.
+                                const searchWords = term.split(/\s+/).filter(Boolean);
+                                return target.includes(term) || searchWords.every(word => target.includes(word));
                               });
 
                               if (filtered.length === 0) {
