@@ -80,6 +80,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (syncingOfflineQueueRef.current || !pendingOperationsRef.current.length) return;
     syncingOfflineQueueRef.current = true;
+    const hadPendingOperations = pendingOperationsRef.current.length > 0;
     try {
       while (pendingOperationsRef.current.length) {
         const current = pendingOperationsRef.current[0];
@@ -99,6 +100,19 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           }
           if (!isRetryableDeliveryError(error)) console.warn("[Delivery driver] A saved change needs review before sync:", (error as any)?.message || error);
           break;
+        }
+      }
+      if (hadPendingOperations && pendingOperationsRef.current.length === 0) {
+        try {
+          const [assignmentData, expenseData] = await Promise.all([
+            request("/api/delivery/assignments"),
+            request("/api/delivery/expenses/mine")
+          ]);
+          setAssignments(assignmentData.assignments || []);
+          setExpenses(expenseData.expenses || []);
+          setOfflineNotice(false);
+        } catch (_) {
+          setOfflineNotice(true);
         }
       }
     } finally {
