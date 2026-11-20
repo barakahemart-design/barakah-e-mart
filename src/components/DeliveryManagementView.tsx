@@ -30,6 +30,7 @@ interface Props {
 export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "৳", triggerNotification }: Props) {
   const cacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}`);
   const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
+  const invoiceLookupCacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}:invoice-lookups`);
   const [cachedData] = useState(() => readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null));
   const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
   const [staff, setStaff] = useState<Driver[]>(() => cachedData?.staff || []);
@@ -113,6 +114,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           pendingOperationsRef.current = next;
           setPendingOperations(next);
         } catch (error) {
+          const status = Number((error as any)?.status || 0);
+          if (status === 409 || status === 404) {
+            const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
+            pendingOperationsRef.current = next;
+            setPendingOperations(next);
+            notifyRef.current("A queued delivery change could not be applied because the cloud record changed or was removed: " + String((error as any)?.message || error), "error");
+            continue;
+          }
           // Keep the first failed operation and all later operations in order.
           // This prevents a later payment/status change overtaking an earlier change.
           if (!isRetryableDeliveryError(error)) notifyRef.current("A saved delivery change needs review before it can sync: " + String((error as any)?.message || error), "error");
@@ -180,10 +189,23 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     const timer = window.setTimeout(async () => {
       try {
         const result = await request("/api/delivery/invoices/lookup", { invoice_no: value });
-        if (!cancelled) setInvoiceLookup({ status: "found", invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "" });
+        if (!cancelled) {
+          const cachedLookups = readDeliveryLocal<Record<string, any>>(invoiceLookupCacheKey, {});
+          cachedLookups[value] = { invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "", savedAt: new Date().toISOString() };
+          writeDeliveryLocal(invoiceLookupCacheKey, cachedLookups);
+          setInvoiceLookup({ status: "found", invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "" });
+        }
       } catch (error: any) {
         if (cancelled) return;
         const message = String(error?.message || "Could not search invoice.");
+        if (isRetryableDeliveryError(error)) {
+          const cached = readDeliveryLocal<Record<string, any>>(invoiceLookupCacheKey, {})[value];
+          if (cached?.invoice) {
+            setOfflineNotice(true);
+            setInvoiceLookup({ status: "found", invoice: cached.invoice, already_assigned: Boolean(cached.already_assigned), assigned_driver: cached.assigned_driver || "" });
+            return;
+          }
+        }
         setInvoiceLookup(message.toLowerCase().includes("invoice not found") ? { status: "not_found", message } : { status: "error", message });
       }
     }, 350);
@@ -215,15 +237,44 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       notifyRef.current("Select a delivery driver first.", "error");
       return;
     }
+    const assignmentBody = { invoice_no: invoiceNo.trim(), driver_uid: driverUid };
     try {
-      const result = await request("/api/delivery/assignments/create", { invoice_no: invoiceNo, driver_uid: driverUid });
+      const result = await request("/api/delivery/assignments/create", assignmentBody);
       setAssignments(prev => [result.assignment, ...prev.filter(x => x.id !== result.assignment.id)]);
       setInvoiceNo("");
       setInvoiceLookup({ status: "idle" });
       setInvoiceSelected(false);
       notifyRef.current("Invoice assigned to delivery staff.", "success");
     } catch (error: any) {
-      notifyRef.current(error?.message || "Could not assign invoice.", "error");
+      if (isRetryableDeliveryError(error) && invoiceLookup.invoice) {
+        const selectedDriver = staff.find(x => x.uid === driverUid);
+        const localId = "local-" + createDeliveryOfflineOperation("local", {}).id;
+        const invoice = invoiceLookup.invoice;
+        queueOfflineOperation("/api/delivery/assignments/create", assignmentBody);
+        const localAssignment: Assignment = {
+          id: localId,
+          invoice_no: assignmentBody.invoice_no,
+          driver_uid: driverUid,
+          driver_name: selectedDriver?.name || "Delivery Staff",
+          customer_name: String(invoice.customer_name || "Customer"),
+          customer_phone: String(invoice.customer_phone || ""),
+          customer_address: String(invoice.customer_address || ""),
+          customer_note: String(invoice.customer_note || ""),
+          delivery_note: "",
+          delivery_status: "assigned",
+          assigned_at: new Date().toISOString(),
+          delivery_fee: 0,
+          payment_status: "unpaid",
+          payment_timing: "after_delivery",
+          items: Array.isArray(invoice.items) ? invoice.items : []
+        };
+        setAssignments(prev => [localAssignment, ...prev.filter(x => x.invoice_no !== assignmentBody.invoice_no)]);
+        setInvoiceNo("");
+        setInvoiceLookup({ status: "idle" });
+        setInvoiceSelected(false);
+        setOfflineNotice(true);
+        notifyRef.current("Invoice assignment saved on this device. It will sync when Firebase access returns.", "info");
+      } else notifyRef.current(error?.message || "Could not assign invoice.", "error");
     }
   };
 
