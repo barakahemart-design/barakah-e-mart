@@ -30,7 +30,7 @@ interface Props {
 export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "৳", triggerNotification }: Props) {
   const cacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}`);
   const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
-  const cachedData = readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null);
+  const [cachedData] = useState(() => readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null));
   const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
   const [staff, setStaff] = useState<Driver[]>(() => cachedData?.staff || []);
   const [assignments, setAssignments] = useState<Assignment[]>(() => cachedData?.assignments || []);
