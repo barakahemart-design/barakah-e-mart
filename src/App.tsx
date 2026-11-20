@@ -297,7 +297,6 @@ import {
   restoreLocalKeys,
   deleteCloudDocument,
   saveBusinessSettings,
-  getBusinessSettings
 } from "./lib/firebase-helpers";
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
@@ -699,7 +698,6 @@ export default function App() {
   const [selectedSupplierReceipt, setSelectedSupplierReceipt] = useState<Purchase | null>(null);
   const [dueSection, setDueSection] = useState<"home" | "creditor-entry" | "creditors" | "creditor-report" | "product-due">("home");
 
-  const hasSyncedOnMountRef = useRef(false);
   const hasHealedRef = useRef(false);
 
   const runAutoRecovery = async () => {
@@ -798,7 +796,6 @@ export default function App() {
       setSettingsHydrated(false);
 
       if (!user) {
-        hasSyncedOnMountRef.current = false; // Reset sync status so the next user can pull their own data on mount
         setIsAuthLoading(false);
         initialLoadedRef.current = true;
         // Cleanse memory state when user session is null to prevent carry-over data leak
@@ -1577,7 +1574,6 @@ export default function App() {
   // User Sign out
   const handleLogOut = async () => {
     initialLoadedRef.current = false;
-    hasSyncedOnMountRef.current = false; // Reset the cloud sync status completely to allow the next login session to sync fresh
     if (activeUser && !activeUser.isGuest) {
       const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
       // Perform immediate cloud backup before signing out so nothing is ever lost
