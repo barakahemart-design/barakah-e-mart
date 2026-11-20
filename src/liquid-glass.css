@@ -327,3 +327,16 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 #root #view-duelist-container svg.lucide-trash,
 #root #view-duelist-container svg.lucide-trash-2 { color: #fb7185 !important; }
 #root #view-duelist-container svg.lucide-check { color: #4ade80 !important; }
+
+
+/* Search icons: consistent high-contrast cyan highlight across Ledger, Products,
+   Product boxes, and every other search field in the app. */
+#root svg.lucide-search,
+#root svg[class~="lucide-search"],
+#root svg[class*="lucide-search"],
+#root [data-lucide="search"] {
+  color: #22d3ee !important;
+  stroke: #22d3ee !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 4px rgba(34,211,238,.58)) !important;
+}
