@@ -320,3 +320,10 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 
 /* One consistent, highlighted search glyph color across every app module and search field. */
 #root svg.lucide-search { color: #22d3ee !important; filter: drop-shadow(0 0 3px rgba(34,211,238,.38)); }
+
+/* Creditor Due subviews share the same Due Management semantic icon palette. */
+#root #view-duelist-container svg.lucide-pencil,
+#root #view-duelist-container svg.lucide-pen { color: #c084fc !important; }
+#root #view-duelist-container svg.lucide-trash,
+#root #view-duelist-container svg.lucide-trash-2 { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-check { color: #4ade80 !important; }
