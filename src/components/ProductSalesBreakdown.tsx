@@ -63,6 +63,7 @@ function isInsidePeriod(value: any, bounds: { start: Date; end: Date } | null) {
 
 function getCategoryIcon(categoryName: string) {
   const name = String(categoryName || "").toLowerCase();
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return Heater;
   if (/air.?condition|\bac\b|cooling/.test(name)) return AirVent;
   if (/television|\btv\b/.test(name)) return Tv;
   if (/wash/.test(name)) return WashingMachine;
@@ -80,7 +81,8 @@ function getCategoryIcon(categoryName: string) {
 
 function getProductIcon(productName: string, categoryName: string) {
   const name = String(productName || "").toLowerCase();
-  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return Heater;\n  if (/washing.?machine/.test(name)) return WashingMachine;
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return Heater;
+  if (/washing.?machine/.test(name)) return WashingMachine;
   if (/television|\btv\b/.test(name)) return Tv;
   if (/air.?condition|\bac\b/.test(name)) return AirVent;
   if (/microwave/.test(name)) return Microwave;
@@ -95,6 +97,7 @@ function getProductIcon(productName: string, categoryName: string) {
 
 function getCategoryIconColor(categoryName: string) {
   const name = String(categoryName || "").toLowerCase();
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return "text-orange-300";
   if (/air.?condition|\bac\b|cooling/.test(name)) return "text-cyan-300";
   if (/television|\btv\b/.test(name)) return "text-sky-300";
   if (/wash/.test(name)) return "text-violet-300";
@@ -111,7 +114,6 @@ function getCategoryIconColor(categoryName: string) {
 
 function getProductIconColor(productName: string, categoryName: string) {
   const name = String(productName || "").toLowerCase();
-  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return "text-orange-300";\n  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return "text-orange-300";
   if (/washing.?machine/.test(name)) return "text-violet-300";
   if (/television|\btv\b/.test(name)) return "text-sky-300";
   if (/air.?condition|\bac\b/.test(name)) return "text-cyan-300";
