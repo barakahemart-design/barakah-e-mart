@@ -54,7 +54,7 @@ async function findStoreTransactionByInvoice(storeId: string, invoiceNo: string)
   if (!adminDb) return null;
 
   const values: Array<string | number> = [invoiceNo];
-  if (/^\\d+$/.test(invoiceNo)) {
+  if (/^\d+$/.test(invoiceNo)) {
     const numeric = Number(invoiceNo);
     if (Number.isSafeInteger(numeric)) values.push(numeric);
   }
