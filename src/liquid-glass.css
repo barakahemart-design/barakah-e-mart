@@ -278,3 +278,45 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 #root svg.lucide-smartphone, #root svg.lucide-laptop, #root svg.lucide-monitor { color: #818cf8 !important; }
 #root svg.lucide-cooking-pot { color: #f59e0b !important; }
 #root svg.lucide-plug-zap { color: #facc15 !important; }
+
+
+/* Final icon pass: ensure every icon inside Due Management has a visible semantic color,
+   including the less common actions and the four Due Management entry cards. */
+#root #view-duelist-container svg.lucide-plus-circle,
+#root #view-duelist-container svg.lucide-circle-plus { color: #34d399 !important; }
+#root #view-duelist-container svg.lucide-users,
+#root #view-duelist-container svg.lucide-users-round { color: #f472b6 !important; }
+#root #view-duelist-container svg.lucide-chart-no-axes-column-increasing,
+#root #view-duelist-container svg.lucide-chart-column,
+#root #view-duelist-container svg.lucide-chart-bar,
+#root #view-duelist-container svg.lucide-bar-chart-3 { color: #60a5fa !important; }
+#root #view-duelist-container svg.lucide-package,
+#root #view-duelist-container svg.lucide-package-open,
+#root #view-duelist-container svg.lucide-box { color: #a78bfa !important; }
+#root #view-duelist-container svg.lucide-trending-up { color: #fbbf24 !important; }
+#root #view-duelist-container svg.lucide-trending-down { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-bookmark,
+#root #view-duelist-container svg.lucide-bookmark-plus { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-search,
+#root #view-duelist-container svg.lucide-filter { color: #22d3ee !important; }
+#root #view-duelist-container svg.lucide-history,
+#root #view-duelist-container svg.lucide-clock,
+#root #view-duelist-container svg.lucide-calendar,
+#root #view-duelist-container svg.lucide-calendar-days { color: #fbbf24 !important; }
+#root #view-duelist-container svg.lucide-file-text,
+#root #view-duelist-container svg.lucide-receipt-text { color: #818cf8 !important; }
+#root #view-duelist-container svg.lucide-printer,
+#root #view-duelist-container svg.lucide-share-2,
+#root #view-duelist-container svg.lucide-copy { color: #c084fc !important; }
+#root #view-duelist-container svg.lucide-phone,
+#root #view-duelist-container svg.lucide-message-circle { color: #2dd4bf !important; }
+#root #view-duelist-container svg.lucide-undo-2,
+#root #view-duelist-container svg.lucide-rotate-ccw { color: #fb923c !important; }
+#root #view-duelist-container svg.lucide-x,
+#root #view-duelist-container svg.lucide-circle-x { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-arrow-left,
+#root #view-duelist-container svg.lucide-chevron-left,
+#root #view-duelist-container svg.lucide-chevron-right { color: #93c5fd !important; }
+
+/* One consistent, highlighted search glyph color across every app module and search field. */
+#root svg.lucide-search { color: #22d3ee !important; filter: drop-shadow(0 0 3px rgba(34,211,238,.38)); }
