@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
 import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
@@ -27,11 +28,18 @@ interface Props {
 }
 
 export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "৳", triggerNotification }: Props) {
+  const cacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}`);
+  const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
+  const cachedData = readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null);
   const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
-  const [staff, setStaff] = useState<Driver[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [queueItems, setQueueItems] = useState<Array<{id:string; invoice_no:string; customer_name:string; customer_phone:string; customer_address:string; items?:Array<{name:string;quantity:number}>; total_amount?:number; queued_at:string}>>([]);
-  const [expenses, setExpenses] = useState<DeliveryExpense[]>([]);
+  const [staff, setStaff] = useState<Driver[]>(() => cachedData?.staff || []);
+  const [assignments, setAssignments] = useState<Assignment[]>(() => cachedData?.assignments || []);
+  const [queueItems, setQueueItems] = useState<Array<{id:string; invoice_no:string; customer_name:string; customer_phone:string; customer_address:string; items?:Array<{name:string;quantity:number}>; total_amount?:number; queued_at:string}>>(() => cachedData?.queueItems || []);
+  const [expenses, setExpenses] = useState<DeliveryExpense[]>(() => cachedData?.expenses || []);
+  const [pendingOperations, setPendingOperations] = useState<DeliveryOfflineOperation[]>(() => readDeliveryLocal(offlineQueueKey, []));
+  const pendingOperationsRef = useRef<DeliveryOfflineOperation[]>(pendingOperations);
+  const syncingOfflineQueueRef = useRef(false);
+  const [offlineNotice, setOfflineNotice] = useState(Boolean(cachedData) || pendingOperations.length > 0);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -67,9 +75,63 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       ...(body ? { body: JSON.stringify({ store_id: storeId, panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminPin } : { sales_pin: salesPin }), ...body }) } : {})
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Delivery request failed.");
+    if (!response.ok) {
+      const failure: any = new Error(data.error || "Delivery request failed.");
+      failure.status = response.status;
+      throw failure;
+    }
     return data;
   }, [adminPin, salesPin, panelRole, storeId]);
+
+  useEffect(() => {
+    pendingOperationsRef.current = pendingOperations;
+    writeDeliveryLocal(offlineQueueKey, pendingOperations);
+  }, [pendingOperations, offlineQueueKey]);
+
+  useEffect(() => {
+    writeDeliveryLocal(cacheKey, { staff, assignments, queueItems, expenses, savedAt: new Date().toISOString() });
+  }, [cacheKey, staff, assignments, queueItems, expenses]);
+
+  const queueOfflineOperation = useCallback((path: string, body: Record<string, any>) => {
+    const operation = createDeliveryOfflineOperation(path, body);
+    const next = [...pendingOperationsRef.current, operation];
+    pendingOperationsRef.current = next;
+    setPendingOperations(next);
+    setOfflineNotice(true);
+  }, []);
+
+  const flushOfflineQueue = useCallback(async () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (syncingOfflineQueueRef.current || !pendingOperationsRef.current.length) return;
+    syncingOfflineQueueRef.current = true;
+    try {
+      while (pendingOperationsRef.current.length) {
+        const current = pendingOperationsRef.current[0];
+        try {
+          await request(current.path, current.body);
+          const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
+          pendingOperationsRef.current = next;
+          setPendingOperations(next);
+        } catch (error) {
+          // Keep the first failed operation and all later operations in order.
+          // This prevents a later payment/status change overtaking an earlier change.
+          if (!isRetryableDeliveryError(error)) notifyRef.current("A saved delivery change needs review before it can sync: " + String((error as any)?.message || error), "error");
+          break;
+        }
+      }
+    } finally {
+      syncingOfflineQueueRef.current = false;
+    }
+  }, [request]);
+
+  useEffect(() => {
+    const retry = () => { void flushOfflineQueue(); };
+    window.addEventListener("online", retry);
+    const timer = window.setInterval(() => {
+      if (pendingOperationsRef.current.length) retry();
+    }, 30000);
+    return () => { window.removeEventListener("online", retry); window.clearInterval(timer); };
+  }, [flushOfflineQueue]);
 
   const loadAll = useCallback(async () => {
     if ((panelRole === "admin" && !adminPin) || (panelRole === "sales" && !salesPin) || !storeId) return;
@@ -86,12 +148,16 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setQueueItems(queueData.queue || []);
       setExpenses(expenseData.expenses || []);
       setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
+      setOfflineNotice(false);
+      void flushOfflineQueue();
     } catch (error: any) {
-      notifyRef.current(error?.message || "Could not load delivery management data.", "error");
+      setOfflineNotice(true);
+      if (!cachedData) notifyRef.current(error?.message || "Could not load delivery management data.", "error");
+      else notifyRef.current("Cloud limit/network unavailable. Showing the latest saved delivery data on this device.", "info");
     } finally {
       setLoading(false);
     }
-  }, [adminPin, salesPin, storeId, request, panelRole]);
+  }, [adminPin, salesPin, storeId, request, panelRole, flushOfflineQueue, cachedData]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -172,7 +238,12 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setQueueItems(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
       notifyRef.current("Invoice " + cleanInvoiceNo + " removed from Delivery Assignment/Queue. The original invoice is safe.", "success");
     } catch (error: any) {
-      notifyRef.current(error?.message || "Could not delete invoice assignment.", "error");
+      if (isRetryableDeliveryError(error)) {
+        queueOfflineOperation("/api/delivery/assignments/admin-delete", { invoice_no: cleanInvoiceNo });
+        setAssignments(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
+        setQueueItems(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
+        notifyRef.current("Removal saved on this device. It will sync when the cloud limit/connection returns.", "info");
+      } else notifyRef.current(error?.message || "Could not delete invoice assignment.", "error");
     } finally {
       setDeletingAssignmentNo("");
     }
@@ -184,7 +255,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       await request("/api/delivery/staff/status", { staff_uid: person.uid, status: nextStatus });
       setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: nextStatus } : x));
       notifyRef.current(nextStatus === "inactive" ? "Delivery account put on hold." : "Delivery account reactivated.", "success");
-    } catch (error: any) { notifyRef.current(error?.message || "Could not update staff status.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        queueOfflineOperation("/api/delivery/staff/status", { staff_uid: person.uid, status: nextStatus });
+        setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: nextStatus } : x));
+        notifyRef.current("Staff status saved on this device and queued for cloud sync.", "info");
+      } else notifyRef.current(error?.message || "Could not update staff status.", "error");
+    }
   };
 
   const deleteStaff = async (person: Driver) => {
@@ -210,7 +287,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         payment_date: result.payment_date || undefined
       } : x));
       notifyRef.current(next === "paid" ? "Expense marked as Paid." : "Expense marked as Unpaid.", "success");
-    } catch (error: any) { notifyRef.current(error?.message || "Could not update expense status.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const now = new Date().toISOString();
+        queueOfflineOperation("/api/delivery/expenses/payment-status", { expense_id: expense.id, payment_status: next });
+        setExpenses(prev => prev.map(x => x.id === expense.id ? { ...x, payment_status: next, paid_at: next === "paid" ? (x.paid_at || now) : undefined, payment_date: next === "paid" ? now.slice(0, 10) : undefined } : x));
+        notifyRef.current("Expense payment change saved on this device and queued for cloud sync.", "info");
+      } else notifyRef.current(error?.message || "Could not update expense status.", "error");
+    }
   };
 
   const getPaymentDraft = (assignment: Assignment) => paymentDrafts[assignment.id] || {
@@ -232,7 +316,16 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       await loadAll();
       setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
       notifyRef.current("Delivery payment updated.", "success");
-    } catch (error: any) { notifyRef.current(error?.message || "Could not update delivery payment.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const now = new Date().toISOString();
+        const body = { assignment_id: assignment.id, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing };
+        queueOfflineOperation("/api/delivery/assignments/payment", body);
+        setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing, payment_updated_at: now, payment_received_at: draft.status === "paid" ? (item.payment_received_at || now) : "" } : item));
+        setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
+        notifyRef.current("Delivery payment saved on this device. It will sync when cloud access returns.", "info");
+      } else notifyRef.current(error?.message || "Could not update delivery payment.", "error");
+    }
   };
 
   const isDateInRange = (value: any, filter: DateRangeFilter, customStart: string, customEnd: string) => {
@@ -345,6 +438,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
+
+      {(offlineNotice || pendingOperations.length > 0) && <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100">
+        <span className="font-black">Device-local delivery mode.</span> Showing the latest saved records on this device. {pendingOperations.length > 0 ? `${pendingOperations.length} change(s) waiting to sync.` : "Cloud data could not be refreshed."} Pending changes sync automatically when Firebase access is restored. Do not clear this browser's site data before sync completes.
+      </div>}
 
       {tab === "home" ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {tabs.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id)} className="flex min-h-28 items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-5 text-left hover:border-sky-400/60">
