@@ -48,24 +48,43 @@ const firebaseAuth = getAuth(firebaseApp);
 // the Admin Auth dependency chain in the serverless CommonJS bundle.
 let adminDb: FirebaseAdminFirestore | null = null;
 
-// Invoice numbers may be stored as invoiceNo or invoice_no, and as strings or numbers.
+// Invoice lookup is scoped by the active business before matching the invoice.
+// Canonical records use store_id. Legacy storeId records are checked only as a fallback.
 async function findStoreTransactionByInvoice(storeId: string, invoiceNo: string): Promise<any | null> {
   if (!adminDb) return null;
+
   const values: Array<string | number> = [invoiceNo];
   if (/^\d+$/.test(invoiceNo)) {
     const numeric = Number(invoiceNo);
     if (Number.isSafeInteger(numeric)) values.push(numeric);
   }
-  const queries = ["invoiceNo", "invoice_no"].flatMap(field =>
-    values.map(value => adminDb!.collection("transactions").where(field, "==", value).limit(10).get())
-  );
-  const snapshots = await Promise.all(queries);
-  const docs = new Map<string, any>();
-  snapshots.forEach(snapshot => snapshot.docs.forEach(doc => docs.set(doc.id, doc)));
-  return [...docs.values()].find(doc => {
-    const data = doc.data() || {};
-    return String(data.store_id || data.storeId || "").trim().toLowerCase() === storeId;
-  }) || null;
+
+  const invoiceFields = ["invoice_no", "invoiceNo"];
+  const findWithinIdentityField = async (identityField: "store_id" | "storeId") => {
+    for (const invoiceField of invoiceFields) {
+      const snapshots = await Promise.all(values.map(value =>
+        adminDb!.collection("transactions")
+          .where(identityField, "==", storeId)
+          .where(invoiceField, "==", value)
+          .limit(10)
+          .get()
+      ));
+      for (const snapshot of snapshots) {
+        const match = snapshot.docs.find(doc => {
+          const data = doc.data() || {};
+          return String(data.store_id || data.storeId || "").trim().toLowerCase() === storeId;
+        });
+        if (match) return match;
+      }
+    }
+    return null;
+  };
+
+  const canonicalMatch = await findWithinIdentityField("store_id");
+  if (canonicalMatch) return canonicalMatch;
+
+  // Compatibility path for older records that predate the canonical store_id field.
+  return findWithinIdentityField("storeId");
 }
 let serviceAccountForAuth: any = null;
 
