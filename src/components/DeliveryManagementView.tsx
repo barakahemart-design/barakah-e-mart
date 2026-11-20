@@ -13,7 +13,7 @@ type Assignment = {
   items?: Array<{ name: string; quantity: number }>;
 };
 type DeliveryExpense = {
-  id: string; driver_name: string; amount: number; reason: string; category: string;
+  id: string; driver_uid?: string; driver_name: string; amount: number; reason: string; category: string;
   date: string; payment_status: "paid" | "unpaid"; assignment_id?: string;
   paid_at?: string; payment_date?: string; reviewed_at?: string;
 };
@@ -603,14 +603,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="text-sm font-black text-white">Delivery Staff Accounts <span className="ml-1 text-emerald-300">({staff.length})</span></h3>
           {staff.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery staff accounts yet.</p> : staff.map(person => <div key={person.uid} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span><p className="mt-1 text-[10px] text-slate-400">Expense payment: <span className="text-rose-300">{expenses.filter(x => x.driver_name === person.name && x.payment_status !== "paid").length} Pending</span> · <span className="text-emerald-300">{expenses.filter(x => x.driver_name === person.name && x.payment_status === "paid").length} Paid</span></p></div>
+            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span><p className="mt-1 text-[10px] text-slate-400">Expense payment: <span className="text-rose-300">{expenses.filter(x => (x.driver_uid ? x.driver_uid === person.uid : x.driver_name === person.name) && x.payment_status !== "paid").length} Pending</span> · <span className="text-emerald-300">{expenses.filter(x => (x.driver_uid ? x.driver_uid === person.uid : x.driver_name === person.name) && x.payment_status === "paid").length} Paid</span></p></div>
             {panelRole === "admin" && <div className="flex flex-wrap gap-2"><button onClick={() => toggleStaff(person)} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300"}`}>{person.status === "active" ? <><PauseCircle className="h-3 w-3" /> Hold</> : <><PlayCircle className="h-3 w-3" /> Unhold</>}</button><button onClick={() => deleteStaff(person)} className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete</button></div>}
           </div>)}
         </div>
       </div>}
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
-        <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
+        <h3 className="text-sm font-black text-white">Delivery Payments · All Payment Records</h3>
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
           <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length + expenses.filter(e => e.payment_status !== "paid").length})</button>
           <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length + expenses.filter(e => e.payment_status === "paid").length})</button>
