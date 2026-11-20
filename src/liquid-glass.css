@@ -147,10 +147,14 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 
 
 /* POS product search: opaque, high-contrast dropdown that remains scrollable above page content. */
-#root #pos-select-wrap { overflow: visible !important; isolation: isolate !important; }
+#root #pos-select-wrap { position: relative !important; z-index: 1001 !important; overflow: visible !important; }
 #root .pos-product-suggestions {
   position: absolute !important;
-  z-index: 1000 !important;
+  z-index: 10 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  pointer-events: auto !important;
   max-height: min(65vh, 520px) !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
@@ -166,7 +170,11 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
   scrollbar-width: thin;
   scrollbar-color: rgba(148,163,184,.65) rgba(15,23,42,.9);
 }
-#root .pos-product-suggestions > button { flex-shrink: 0; }
+#root .pos-product-suggestions > button { flex: 0 0 auto !important; pointer-events: auto !important; }
+#root .pos-product-suggestions { scrollbar-gutter: stable; }
+#root svg.lucide-bookmark, #root svg.lucide-bookmark-plus, #root svg.lucide-clipboard-plus { color: #a78bfa !important; }
+#root svg.lucide-history, #root svg.lucide-list-clock, #root svg.lucide-wallet-cards { color: #fbbf24 !important; }
+#root svg.lucide-plus-circle, #root svg.lucide-circle-plus, #root svg.lucide-package-plus, #root svg.lucide-boxes { color: #34d399 !important; }
 
 /* App-wide semantic icon palette. SVG icons inherit these colors in every module,
    nested section, modal, form, tab, action row and navigation surface. */
