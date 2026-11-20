@@ -1773,7 +1773,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (assignmentResult.kind === "conflict") {
         return res.status(409).json({ error: "This invoice was assigned on another device. Refresh Delivery Management before trying again.", already_assigned: true });
       }
-      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: String(assignmentResult.assignment.assigned_at || new Date().toISOString()) }, { merge: true });
+      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: String((assignmentResult.assignment as any)?.assigned_at || new Date().toISOString()) }, { merge: true });
       return res.status(assignmentResult.kind === "created" ? 201 : 200).json({ success: true, assignment: assignmentResult.assignment });
     } catch (error: any) {
       console.warn("[delivery/assignments/create] Failed:", error?.message || "Unknown error");
