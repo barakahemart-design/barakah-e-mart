@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { toUUID } from "../lib/firebase-helpers";
-import { Boxes, Package, ShoppingBag, ChartColumn, Tv, WashingMachine, AirVent, Microwave, Router, Refrigerator, Fan, Monitor, Smartphone, Laptop, CookingPot, PlugZap } from "lucide-react";
+import { Boxes, Package, ShoppingBag, ChartColumn, Tv, WashingMachine, AirVent, Microwave, Router, Refrigerator, Fan, Monitor, Smartphone, Laptop, CookingPot, PlugZap, Heater } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
 
 interface ProductSalesBreakdownProps {
@@ -80,7 +80,7 @@ function getCategoryIcon(categoryName: string) {
 
 function getProductIcon(productName: string, categoryName: string) {
   const name = String(productName || "").toLowerCase();
-  if (/washing.?machine/.test(name)) return WashingMachine;
+  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return Heater;\n  if (/washing.?machine/.test(name)) return WashingMachine;
   if (/television|\btv\b/.test(name)) return Tv;
   if (/air.?condition|\bac\b/.test(name)) return AirVent;
   if (/microwave/.test(name)) return Microwave;
@@ -111,7 +111,7 @@ function getCategoryIconColor(categoryName: string) {
 
 function getProductIconColor(productName: string, categoryName: string) {
   const name = String(productName || "").toLowerCase();
-  if (/washing.?machine/.test(name)) return "text-violet-300";
+  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return "text-orange-300";\n  if (/washing.?machine/.test(name)) return "text-violet-300";
   if (/television|\btv\b/.test(name)) return "text-sky-300";
   if (/air.?condition|\bac\b/.test(name)) return "text-cyan-300";
   if (/microwave/.test(name)) return "text-orange-300";
