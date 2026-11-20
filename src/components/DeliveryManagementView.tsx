@@ -67,6 +67,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [paymentCustomEnd, setPaymentCustomEnd] = useState(new Date().toISOString().slice(0, 10));
   const notifyRef = React.useRef(triggerNotification);
   notifyRef.current = triggerNotification;
+  const transactionsRef = useRef(transactions);
+  transactionsRef.current = transactions;
+  const contactsRef = useRef(contacts);
+  contactsRef.current = contacts;
 
   const request = useCallback(async (path: string, body?: any) => {
     const user = auth.currentUser;
@@ -253,10 +257,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           // Sales invoices and customer profiles are already cached locally by the
           // core POS. Use that same business-scoped data to prepare an offline
           // assignment; the server still validates the invoice before syncing it.
-          const localTransaction = transactions.find((item: any) => String(item?.invoiceNo || item?.invoice_no || "").trim() === value);
+          const localTransaction = transactionsRef.current.find((item: any) => String(item?.invoiceNo || item?.invoice_no || "").trim() === value);
           if (localTransaction) {
             const contactId = String(localTransaction.contactId || localTransaction.contact_id || "");
-            const localCustomer = contacts.find((item: any) => String(item?.id || "") === contactId && item?.type === "customer");
+            const localCustomer = contactsRef.current.find((item: any) => String(item?.id || "") === contactId && item?.type === "customer");
             const localInvoice = {
               invoice_no: value,
               customer_name: String(localCustomer?.name || localTransaction.customer_name || localTransaction.customerName || "Customer"),
@@ -274,7 +278,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       }
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [invoiceNo, request, transactions, contacts]);
+  }, [invoiceNo, request]);
 
   const createStaff = async (e: React.FormEvent) => {
     e.preventDefault();
