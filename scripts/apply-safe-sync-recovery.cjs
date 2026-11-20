@@ -183,6 +183,7 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
     // Canonicalize recovered rows back into the current account identity. Merge only.
     const writeCanonical = async (collectionName: string, row: any) => {
       if (!row || !row.id) return;
+      const id = String(row.id);
       const targetDocId = String(row.firestoreId || id);
       const canonicalIdentity = {
         id: String(id),
