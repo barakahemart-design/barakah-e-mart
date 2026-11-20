@@ -30,7 +30,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
   const [pendingOperations, setPendingOperations] = useState<DeliveryOfflineOperation[]>(() => readDeliveryLocal(offlineQueueKey, []));
   const pendingOperationsRef = useRef<DeliveryOfflineOperation[]>(pendingOperations);
   const syncingOfflineQueueRef = useRef(false);
-  const [offlineNotice, setOfflineNotice] = useState(Boolean(cachedData) || pendingOperations.length > 0);
+  const [offlineNotice, setOfflineNotice] = useState(pendingOperations.length > 0);
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
