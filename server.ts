@@ -1755,9 +1755,26 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         assigned_at: new Date().toISOString(),
         assigned_by: manager.uid
       };
-      await assignmentRef.set(assignment, { merge: true });
-      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: new Date().toISOString() }, { merge: true });
-      return res.status(201).json({ success: true, assignment });
+      // Atomically create the assignment. Two devices may replay the same offline
+      // invoice at once; only one driver can win, and retries by that same driver
+      // return the existing record instead of overwriting it.
+      const assignmentResult = await adminDb.runTransaction(async (transaction) => {
+        const latestSnap = await transaction.get(assignmentRef);
+        if (latestSnap.exists) {
+          const latest = latestSnap.data() || {};
+          if (latest.owner_store_id === storeId && String(latest.driver_uid || "") === driverUid) {
+            return { kind: "existing" as const, assignment: { id: latestSnap.id, ...latest } };
+          }
+          return { kind: "conflict" as const, assignment: null };
+        }
+        transaction.create(assignmentRef, assignment);
+        return { kind: "created" as const, assignment };
+      });
+      if (assignmentResult.kind === "conflict") {
+        return res.status(409).json({ error: "This invoice was assigned on another device. Refresh Delivery Management before trying again.", already_assigned: true });
+      }
+      if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: String(assignmentResult.assignment.assigned_at || new Date().toISOString()) }, { merge: true });
+      return res.status(assignmentResult.kind === "created" ? 201 : 200).json({ success: true, assignment: assignmentResult.assignment });
     } catch (error: any) {
       console.warn("[delivery/assignments/create] Failed:", error?.message || "Unknown error");
       return res.status(503).json({ error: error?.message || "Could not assign invoice." });
