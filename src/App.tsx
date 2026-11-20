@@ -4730,6 +4730,7 @@ _${businessInfo.name}_`;
   if (deliveryStaffProfile) {
     return (
       <DeliveryDriverView
+        key={String(activeUser?.uid || "delivery-driver")}
         staff={deliveryStaffProfile}
         currencySymbol={businessInfo.currencySymbol || "৳"}
         onLogout={async () => {
@@ -8455,6 +8456,7 @@ _${businessInfo.name}_`;
               ----------------------------------------------------------------- */}
           {activeTab === "delivery" && (
             <DeliveryManagementView
+              key={`${String(activeUser?.uid || "")}:${currentPanel}:${String(activeUser?.email || "").trim().toLowerCase()}`}
               adminPin={currentPanel === "admin" ? adminActionPin : ""}
               salesPin={String(businessInfo.salesPasscode || "")}
               panelRole={currentPanel === "admin" ? "admin" : "sales"}
