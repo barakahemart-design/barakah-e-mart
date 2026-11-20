@@ -21,7 +21,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
   const cacheKey = deliveryStorageKey("cache", `driver:${staff.uid}`);
   const offlineQueueKey = deliveryStorageKey("queue", `driver:${staff.uid}`);
   const [cachedData] = useState(() => readDeliveryLocal<{ assignments: Assignment[]; expenses: Expense[] } | null>(cacheKey, null));
-  const [tab, setTab] = useState<"deliveries" | "expenses" | "payments">("deliveries");
+  const [tab, setTab] = useState<"staff" | "deliveries" | "expenses" | "payments">("staff");
   const [deliveryView, setDeliveryView] = useState<"assigned" | "delivered">("assigned");
   const [paymentView, setPaymentView] = useState<"pending" | "received">("pending");
   const [expenseView, setExpenseView] = useState<"add" | "status">("add");
@@ -253,14 +253,26 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           <button onClick={onLogout} className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300"><LogOut className="mr-1 inline h-3.5 w-3.5" /> Logout</button>
         </header>
 
-        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
-          <button onClick={() => setTab("deliveries")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "deliveries" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Delivery ({assignments.length})</button>
-          <button onClick={() => setTab("expenses")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "expenses" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>My Expenses ({expenses.length})</button>
-          <button onClick={() => setTab("payments")} className={`rounded-xl px-3 py-3 text-xs font-black ${tab === "payments" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Payments ({assignments.length})</button>
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5 sm:grid-cols-4">
+          <button onClick={() => setTab("staff")} className={`rounded-xl px-2 py-3 text-xs font-black ${tab === "staff" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Delivery Staff</button>
+          <button onClick={() => setTab("deliveries")} className={`rounded-xl px-2 py-3 text-xs font-black ${tab === "deliveries" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Invoice Assignment ({assignments.length})</button>
+          <button onClick={() => setTab("expenses")} className={`rounded-xl px-2 py-3 text-xs font-black ${tab === "expenses" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Staff Expenses ({expenses.length})</button>
+          <button onClick={() => setTab("payments")} className={`rounded-xl px-2 py-3 text-xs font-black ${tab === "payments" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Delivery Payments ({assignments.length + expenses.length})</button>
         </div>
 
         {(offlineNotice || pendingOperations.length > 0) && <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100"><span className="font-black">Device-local delivery mode.</span> Showing the latest saved deliveries and expenses. {pendingOperations.length > 0 ? `${pendingOperations.length} change(s) waiting to sync.` : "Cloud data could not be refreshed."} Changes will sync automatically when Firebase access returns. Do not clear this browser's site data before sync completes.</div>}
         <div className="flex justify-end"><button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-[11px] font-bold text-slate-300"><RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> Refresh</button></div>
+
+        {tab === "staff" && <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+          <h2 className="text-sm font-black text-white">Delivery Staff Profile</h2>
+          <div className="rounded-xl border border-slate-700 bg-slate-950/70 p-4">
+            <p className="text-base font-black text-white">{staff.name}</p>
+            <p className="mt-1 text-xs text-slate-400">{staff.email}</p>
+            {staff.phone && <p className="mt-1 text-xs text-slate-400">Phone: {staff.phone}</p>}
+            <p className="mt-3 inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-300">Your delivery account</p>
+            <p className="mt-3 text-[11px] text-slate-400">This page is for viewing your own staff profile. Staff account creation, hold/reactivation and deletion remain Admin-only.</p>
+          </div>
+        </section>}
 
         {tab === "deliveries" && <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
@@ -295,8 +307,8 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
 
         {tab === "payments" && <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
-            <button onClick={() => setPaymentView("pending")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "pending" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Pending Payment ({assignments.filter(x => x.payment_status !== "paid").length})</button>
-            <button onClick={() => setPaymentView("received")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "received" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Received Payment ({assignments.filter(x => x.payment_status === "paid").length})</button>
+            <button onClick={() => setPaymentView("pending")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "pending" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Pending Payment ({assignments.filter(x => x.payment_status !== "paid").length + expenses.filter(x => x.payment_status !== "paid").length})</button>
+            <button onClick={() => setPaymentView("received")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "received" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Received Payment ({assignments.filter(x => x.payment_status === "paid").length + expenses.filter(x => x.payment_status === "paid").length})</button>
           </div>
           {(() => {
             const visiblePayments = assignments.filter(item => paymentView === "received" ? item.payment_status === "paid" : item.payment_status !== "paid");
@@ -315,6 +327,15 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
             {(item as any).payment_received_at && <p className="text-[10px] text-emerald-300">Received: {new Date((item as any).payment_received_at).toLocaleString("en-BD")}</p>}
           </article>);
           })()}
+          <section className="space-y-2 pt-2">
+            <h3 className="text-sm font-black text-white">My Staff Expense Payments</h3>
+            {expenses.filter(x => paymentView === "received" ? x.payment_status === "paid" : x.payment_status !== "paid").length === 0
+              ? <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">No {paymentView} expense payments.</p>
+              : expenses.filter(x => paymentView === "received" ? x.payment_status === "paid" : x.payment_status !== "paid").map(x => <article key={`driver-expense-payment-${x.id}`} className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                <div className="flex items-center justify-between gap-2"><p className="text-sm font-black">Staff Expense · {currencySymbol}{Number(x.amount || 0).toLocaleString("en-BD")}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${x.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{x.payment_status === "paid" ? "Paid" : "Pending"}</span></div>
+                <p className="mt-1 text-[11px] text-slate-400">{x.reason} · {x.category} · {x.date}</p>
+              </article>)}
+          </section>
         </div>}
 
         {tab === "expenses" && <div className="space-y-4">

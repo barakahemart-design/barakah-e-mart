@@ -13,7 +13,7 @@ type Assignment = {
   items?: Array<{ name: string; quantity: number }>;
 };
 type DeliveryExpense = {
-  id: string; driver_name: string; amount: number; reason: string; category: string;
+  id: string; driver_uid?: string; driver_name: string; amount: number; reason: string; category: string;
   date: string; payment_status: "paid" | "unpaid"; assignment_id?: string;
   paid_at?: string; payment_date?: string; reviewed_at?: string;
 };
@@ -539,6 +539,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       paymentCustomEnd
     )
   );
+  // One central payment desk: invoice delivery fees and staff expense reimbursements.
+  const filteredPaymentExpenses = expenses.filter(expense =>
+    (expense.payment_status === "paid" ? "paid" : "unpaid") === paymentView &&
+    isDateInRange(
+      paymentView === "paid" ? (expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date) : expense.date,
+      paymentDateFilter, paymentCustomStart, paymentCustomEnd
+    )
+  );
 
   const activeDrivers = staff.filter(x => x.status === "active");
   const tabs = [
@@ -595,17 +603,17 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="text-sm font-black text-white">Delivery Staff Accounts <span className="ml-1 text-emerald-300">({staff.length})</span></h3>
           {staff.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery staff accounts yet.</p> : staff.map(person => <div key={person.uid} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span></div>
+            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span><p className="mt-1 text-[10px] text-slate-400">Expense payment: <span className="text-rose-300">{expenses.filter(x => (x.driver_uid ? x.driver_uid === person.uid : x.driver_name === person.name) && x.payment_status !== "paid").length} Pending</span> · <span className="text-emerald-300">{expenses.filter(x => (x.driver_uid ? x.driver_uid === person.uid : x.driver_name === person.name) && x.payment_status === "paid").length} Paid</span></p></div>
             {panelRole === "admin" && <div className="flex flex-wrap gap-2"><button onClick={() => toggleStaff(person)} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300"}`}>{person.status === "active" ? <><PauseCircle className="h-3 w-3" /> Hold</> : <><PlayCircle className="h-3 w-3" /> Unhold</>}</button><button onClick={() => deleteStaff(person)} className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete</button></div>}
           </div>)}
         </div>
       </div>}
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
-        <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
+        <h3 className="text-sm font-black text-white">Delivery Payments · All Payment Records</h3>
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
-          <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length})</button>
-          <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length})</button>
+          <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length + expenses.filter(e => e.payment_status !== "paid").length})</button>
+          <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length + expenses.filter(e => e.payment_status === "paid").length})</button>
         </div>
         {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
         {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {paymentView} delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
@@ -620,6 +628,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             <button onClick={() => updateAssignmentPayment(a)} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-[10px] font-black text-slate-950">Save Payment Details</button>
           </div>;
         })}
+        <div className="space-y-2 pt-2">
+          <h3 className="text-sm font-black text-white">Staff Expense Payments</h3>
+          {filteredPaymentExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">No {paymentView} staff expense payments for this date range.</p> : filteredPaymentExpenses.map(expense => <div key={`expense-${expense.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div><p className="text-sm font-black text-white">Staff Expense · {currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")}</p><p className="mt-1 text-[11px] text-slate-300">{expense.driver_name} · {expense.reason}</p><p className="mt-1 text-[10px] text-slate-500">{expense.category} · Submitted {expense.date}{expense.assignment_id ? " · Linked delivery" : " · General expense"}</p>{expense.paid_at && <p className="mt-1 text-[10px] text-emerald-300">Paid {new Date(expense.paid_at).toLocaleString("en-BD")}</p>}</div>
+            <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Pending · Mark Paid"}</button>
+          </div>)}
+        </div>
       </div>}
 
       {tab === "assignments" && <div className="space-y-4">
@@ -655,6 +670,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status || "assigned"}</span></div>
             <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
             <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
+            <p className="mt-2 text-[10px] text-slate-400">Delivery: <span className={item.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}>{item.delivery_status === "delivered" ? "Delivered" : "Not delivered"}</span> · Driver payment: <span className={item.payment_status === "paid" ? "text-emerald-300" : "text-rose-300"}>{item.payment_status === "paid" ? "Paid" : "Unpaid"}</span></p>
+            <p className="mt-2 text-[10px] text-slate-400">Delivery: <span className={item.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}>{item.delivery_status === "delivered" ? "Delivered" : "Not delivered"}</span> · Driver payment: <span className={item.payment_status === "paid" ? "text-emerald-300" : "text-rose-300"}>{item.payment_status === "paid" ? "Paid" : "Unpaid"}</span></p>
             {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" disabled={deletingAssignmentNo === String(item.invoice_no)} onClick={() => deleteInvoiceAssignment(String(item.invoice_no))} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300 disabled:opacity-50"><Trash2 className="h-3 w-3" />{deletingAssignmentNo === String(item.invoice_no) ? "Deleting…" : "Delete Invoice"}</button></div>}
           </div>)}</div>
         </> : <div className="space-y-2">
@@ -676,7 +693,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         {renderDateRangeFilter("staff-expense-date-range", expenseDateFilter, setExpenseDateFilter, expenseCustomStart, setExpenseCustomStart, expenseCustomEnd, setExpenseCustomEnd)}
         {filteredStaffExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {expenseView} staff expenses found for this date range.</p> : filteredStaffExpenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div><p className="text-sm font-black text-white">{currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")} · {expense.reason}</p><p className="mt-1 text-[11px] text-slate-400">{expense.driver_name} · {expense.category} · {expense.date}</p></div>
-          <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Unpaid · Mark Paid"}</button>
+          <span className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid" : "Pending · Pay in Delivery Payments"}</span>
         </div>)}
       </div>}
 
