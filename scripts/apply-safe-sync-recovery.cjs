@@ -27,6 +27,10 @@ if (serverSource !== originalServer) fs.writeFileSync(serverFile, serverSource, 
 const helperFile = path.join(process.cwd(), 'src', 'lib', 'firebase-helpers.ts');
 let helperSource = fs.readFileSync(helperFile, 'utf8');
 const originalHelper = helperSource;
+helperSource = helperSource.replace(
+  "  where \n} from 'firebase/firestore';",
+  "  where,\n  or\n} from 'firebase/firestore';"
+);
 
 // Vercel serves the Vite SPA, so cloud recovery must work directly against Firestore.
 const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async (email: string, pin: string, overwrite: boolean = false) => {
@@ -40,7 +44,19 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
 
     // Recover the newest matching vault even when its linked_email field is legacy/missing.
     try {
-      const vaultSnap = await getDocs(collection(db, 'passcode_syncs'));
+      const vaultIdentityFilters: any[] = [
+        where('linked_email', '==', cleanEmail),
+        where('linkedEmail', '==', cleanEmail),
+        where('email', '==', cleanEmail),
+        where('store_id', '==', cleanEmail),
+        where('storeId', '==', cleanEmail)
+      ];
+      if (activeUid) vaultIdentityFilters.push(
+        where('user_id', '==', activeUid),
+        where('userId', '==', activeUid),
+        where('owner_id', '==', activeUid)
+      );
+      const vaultSnap = await getDocs(query(collection(db, 'passcode_syncs'), or(...vaultIdentityFilters)));
       const candidates = vaultSnap.docs
         .map(d => ({ id: d.id, data: d.data() || {} }))
         .filter(c => {
@@ -84,9 +100,21 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
 
     for (const [collectionName, resultKey] of collectionMap) {
       try {
-        const snap = await getDocs(collection(db, collectionName));
+        const collectionIdentityFilters: any[] = [
+          where('store_id', '==', cleanEmail),
+          where('storeId', '==', cleanEmail),
+          where('email', '==', cleanEmail),
+          where('linked_email', '==', cleanEmail),
+          where('linkedEmail', '==', cleanEmail)
+        ];
+        if (activeUid) collectionIdentityFilters.push(
+          where('user_id', '==', activeUid),
+          where('userId', '==', activeUid),
+          where('owner_id', '==', activeUid)
+        );
+        const snap = await getDocs(query(collection(db, collectionName), or(...collectionIdentityFilters)));
         const rows = snap.docs
-          .map(d => ({ ...d.data(), id: d.data()?.id || d.id }))
+          .map(d => ({ ...d.data(), id: d.data()?.id || d.id, firestoreId: d.id }))
           .filter(row => {
             const identities = [row.store_id, row.storeId, row.email, row.linked_email, row.linkedEmail, row.user_id, row.userId, row.owner_id]
               .map(v => String(v || '').trim().toLowerCase())
@@ -118,7 +146,19 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         result.business_info = result.businessInfo;
         found = true;
       } else {
-        const businessSnap = await getDocs(collection(db, 'business_info'));
+        const businessIdentityFilters: any[] = [
+          where('email', '==', cleanEmail),
+          where('linked_email', '==', cleanEmail),
+          where('linkedEmail', '==', cleanEmail),
+          where('store_id', '==', cleanEmail),
+          where('storeId', '==', cleanEmail)
+        ];
+        if (activeUid) businessIdentityFilters.push(
+          where('owner_id', '==', activeUid),
+          where('user_id', '==', activeUid),
+          where('userId', '==', activeUid)
+        );
+        const businessSnap = await getDocs(query(collection(db, 'business_info'), or(...businessIdentityFilters)));
         const matching = businessSnap.docs
           .map(d => ({ ...d.data(), id: d.data()?.id || d.id }))
           .filter(row => {
@@ -143,9 +183,8 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
     // Canonicalize recovered rows back into the current account identity. Merge only.
     const writeCanonical = async (collectionName: string, row: any) => {
       if (!row || !row.id) return;
-      const { id, ...rest } = row;
-      await setDoc(doc(db, collectionName, String(id)), {
-        ...rest,
+      const targetDocId = String(row.firestoreId || id);
+      const canonicalIdentity = {
         id: String(id),
         user_id: activeUid || row.user_id || '',
         userId: activeUid || row.userId || '',
@@ -154,9 +193,13 @@ const directRecoveryFunction = `export const fetchAndRestoreCloudBackup = async 
         storeId: cleanEmail,
         email: cleanEmail,
         linked_email: cleanEmail,
-        linkedEmail: cleanEmail,
-        updated_at: row.updated_at || new Date().toISOString()
-      }, { merge: true });
+        linkedEmail: cleanEmail
+      };
+      const needsCanonicalization = Object.entries(canonicalIdentity).some(([key, value]) =>
+        String(row[key] ?? '') !== String(value ?? '')
+      );
+      if (!needsCanonicalization) return;
+      await setDoc(doc(db, collectionName, targetDocId), canonicalIdentity, { merge: true });
     };
 
     const canonicalWrites: Promise<any>[] = [];
