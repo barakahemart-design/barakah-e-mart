@@ -21,16 +21,28 @@ export function isDocMatchingStore(docData: any, cleanEmail: string, activeUid: 
   const targetUid = (activeUid || '').trim();
   if (!targetEmail && !targetUid) return false;
 
-  const docStore = String(
-    docData?.store_id || docData?.storeId || docData?.email ||
-    docData?.linked_email || docData?.linkedEmail || ''
-  ).trim().toLowerCase();
-  if (targetEmail && docStore === targetEmail) return true;
+  const storeIdentities = [
+    docData?.store_id,
+    docData?.storeId,
+    docData?.email,
+    docData?.linked_email,
+    docData?.linkedEmail
+  ].filter((value: any) => typeof value === 'string' && value.trim() !== '')
+    .map((value: string) => value.trim().toLowerCase());
 
-  const docUid = String(
-    docData?.user_id || docData?.userId || docData?.owner_id || ''
-  ).trim();
-  return !!targetUid && docUid === targetUid;
+  // A present store-email identity takes precedence. Do not fall back to a UID
+  // match if the record is explicitly assigned to a different business email.
+  if (storeIdentities.length > 0) {
+    return !!targetEmail && storeIdentities.every((value: string) => value === targetEmail);
+  }
+
+  const uidIdentities = [
+    docData?.user_id,
+    docData?.userId,
+    docData?.owner_id
+  ].filter((value: any) => typeof value === 'string' && value.trim() !== '');
+  return !!targetUid && uidIdentities.length > 0 &&
+    uidIdentities.every((value: string) => value === targetUid);
 }
 
 /**
