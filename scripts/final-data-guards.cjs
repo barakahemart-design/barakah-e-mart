@@ -6,8 +6,19 @@ let source = fs.readFileSync(helperFile, 'utf8');
 const original = source;
 
 // Recovery must never resurrect records explicitly deleted by the user.
-const recoveryMarker = "    // Read the complete current collection once and filter by the authenticated account.";
-const recoveryGuard = `    // Permanent-delete guard: old vault/legacy copies must not resurrect deleted records.\n    const deletedKeys = new Set<string>();\n    try {\n      const deletedSnap = await getDocs(collection(db, 'deleted_records'));\n      deletedSnap.docs.forEach(d => {\n        const x: any = d.data() || {};\n        const c = String(x.collection || '').trim();\n        const id = String(x.record_id || x.id || '').trim();\n        if (c && id) deletedKeys.add(c + '__' + id);\n      });\n    } catch (deletedErr) {\n      console.warn('[Cloud Restore] Deleted-record guard read warning:', deletedErr);\n    }\n\n    const isDeleted = (collectionName: string, row: any) => {\n      const id = String(row?.id || '').trim();\n      return !!id && deletedKeys.has(collectionName + '__' + id);\n    };\n\n    // Read the complete current collection once and filter by the authenticated account.`;
+const recoveryMarker = "    // Read only records belonging to the authenticated account.";
+const recoveryGuard = `    // Permanent-delete guard: old vault/legacy copies must not resurrect deleted records.\n    const deletedKeys = new Set<string>();\n    try {\n      const deletedIdentityFilters: any[] = [
+        where('store_id', '==', cleanEmail),
+        where('storeId', '==', cleanEmail),
+        where('email', '==', cleanEmail),
+        where('linked_email', '==', cleanEmail)
+      ];
+      if (activeUid) deletedIdentityFilters.push(
+        where('user_id', '==', activeUid),
+        where('userId', '==', activeUid),
+        where('owner_id', '==', activeUid)
+      );
+      const deletedSnap = await getDocs(query(collection(db, 'deleted_records'), or(...deletedIdentityFilters)));\n      deletedSnap.docs.forEach(d => {\n        const x: any = d.data() || {};\n        const c = String(x.collection || '').trim();\n        const id = String(x.record_id || x.id || '').trim();\n        if (c && id) deletedKeys.add(c + '__' + id);\n      });\n    } catch (deletedErr) {\n      console.warn('[Cloud Restore] Deleted-record guard read warning:', deletedErr);\n    }\n\n    const isDeleted = (collectionName: string, row: any) => {\n      const id = String(row?.id || '').trim();\n      return !!id && deletedKeys.has(collectionName + '__' + id);\n    };\n\n    // Read the complete current collection once and filter by the authenticated account.`;
 source = source.replace(recoveryMarker, recoveryGuard);
 
 // Filter collection rows before they can be canonicalized.

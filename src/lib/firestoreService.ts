@@ -201,12 +201,10 @@ async function handleDelete(collName: string, id: string): Promise<void> {
 
   const physicalIds = new Set<string>([String(id)]);
   try {
-    const identityQueries = [
-      query(collection(db, collName), where('id', '==', String(id))),
-      query(collection(db, collName), where('store_id', '==', cleanEmail)),
-      query(collection(db, collName), where('user_id', '==', currentUser.uid))
-    ];
-    const snapshots = await Promise.all(identityQueries.map((q) => getDocs(q)));
+    // The ID equality query is selective and was already part of the legacy
+    // delete path. Keep it as a single lookup; do not scan the store's documents.
+    const identityQuery = query(collection(db, collName), where('id', '==', String(id)));
+    const snapshots = [await getDocs(identityQuery)];
     for (const snap of snapshots) {
       snap.docs.forEach((d: any) => {
         const data = d.data() || {};
