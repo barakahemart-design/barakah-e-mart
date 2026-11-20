@@ -236,3 +236,17 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 #root svg.lucide-cpu, #root svg.lucide-plug, #root svg.lucide-zap { color: #67e8f9 !important; }
 #root svg.lucide-building, #root svg.lucide-building-2, #root svg.lucide-store,
 #root svg.lucide-landmark, #root svg.lucide-factory { color: #f9a8d4 !important; }
+
+
+/* Explicitly color the inventory and supplier-due sections that were missed by the first palette pass. */
+#root #tab-inventory-btn svg, #root #mobile-tab-inventory-btn svg,
+#root #view-inventory-container svg.lucide { color: #a78bfa !important; }
+#root #duelist-container svg.lucide, #root #tab-duelist-btn svg,
+#root #mobile-tab-duelist-btn svg { color: #fbbf24 !important; }
+#root #view-inventory-container svg.lucide-plus-circle,
+#root #view-inventory-container svg.lucide-circle-plus,
+#root #view-inventory-container svg.lucide-package-plus,
+#root #view-inventory-container svg.lucide-package-open { color: #34d399 !important; }
+#root #duelist-container svg.lucide-plus-circle,
+#root #duelist-container svg.lucide-circle-plus,
+#root #duelist-container svg.lucide-file-plus { color: #f59e0b !important; }
