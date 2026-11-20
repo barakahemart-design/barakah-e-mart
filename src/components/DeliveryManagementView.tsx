@@ -97,6 +97,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     const operation = createDeliveryOfflineOperation(path, body);
     const next = [...pendingOperationsRef.current, operation];
     pendingOperationsRef.current = next;
+    writeDeliveryLocal(offlineQueueKey, next);
     setPendingOperations(next);
     setOfflineNotice(true);
   }, []);
