@@ -5253,7 +5253,7 @@ _${businessInfo.name}_`;
               <div className="col-span-1 lg:col-span-8 space-y-6" id="pos-billing-basket-column">
                 
                 {/* Product picker */}
-                <div className="bg-[#1E1E24] border border-[#2D2D35] p-6 rounded-2xl space-y-4 shadow-lg" id="pos-product-picker-pnl">
+                <div className="relative z-[1005] bg-[#1E1E24] border border-[#2D2D35] p-6 rounded-2xl space-y-4 shadow-lg" id="pos-product-picker-pnl">
                   <div className="flex items-center gap-2 border-b border-[#2D2D35] pb-3">
                     <span className="w-5 h-5 rounded-lg bg-[#00E676]/10 text-[#00E676] flex items-center justify-center font-bold text-xs">1</span>
                     <h3 className="text-sm font-bold text-white tracking-wide">Select Item & Add to Basket</h3>
@@ -5261,7 +5261,7 @@ _${businessInfo.name}_`;
                   
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end" id="product-picker-inputs">
                     
-                     <div className="col-span-1 md:col-span-5 space-y-1.5 relative text-left" id="pos-select-wrap">
+                     <div className="col-span-1 md:col-span-5 space-y-1.5 relative z-[1001] text-left" id="pos-select-wrap">
                       <label className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#A0A0A5] pl-1">Search & Select Product</label>
                       <div className="relative">
                         <input
@@ -5293,15 +5293,17 @@ _${businessInfo.name}_`;
                       {/* Floating suggestions dropdown with auto-filtering */}
                       {showSuggestions && (
                         <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowSuggestions(false)} />
-                          <div className="absolute top-full left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto bg-[#1E1E24] border border-[#2D2D35] rounded-xl shadow-2xl p-1.5 divide-y divide-[#2D2D35]/30 scrollbar-thin scrollbar-thumb-slate-700 font-sans">
+                          <div className="fixed inset-0 z-0" onClick={() => setShowSuggestions(false)} />
+                          <div className="pos-product-suggestions absolute top-full left-0 right-0 z-10 mt-1.5 max-h-[min(65vh,520px)] overflow-y-auto overscroll-contain touch-pan-y bg-[#101722]/[0.98] border border-slate-600/70 rounded-xl shadow-[0_24px_70px_rgba(0,0,0,0.82)] p-1.5 divide-y divide-slate-600/30 scrollbar-thin scrollbar-thumb-slate-600 font-sans">
                             {(() => {
                               const term = posSearchQuery.toLowerCase().trim();
                               const filtered = products.filter(p => {
                                 if (!term) return true;
-                                const searchWords = term.split(/\s+/);
-                                const target = `${p.name} ${p.sku} ${p.category}`.toLowerCase();
-                                return searchWords.every(word => target.includes(word));
+                                const target = `${p.name || ""} ${p.sku || ""} ${p.category || ""}`.toLowerCase();
+                                // Match any typed substring anywhere in the product name, SKU, or category.
+                                // For multi-word searches, every word may match independently.
+                                const searchWords = term.split(/\s+/).filter(Boolean);
+                                return target.includes(term) || searchWords.every(word => target.includes(word));
                               });
 
                               if (filtered.length === 0) {
@@ -5389,7 +5391,7 @@ _${businessInfo.name}_`;
                 </div>
 
                 {/* Checkout Basket Cart List - Styled as elegant modern card stacks */}
-                <div className="bg-[#1E1E24] border border-[#2D2D35] rounded-2xl overflow-hidden shadow-lg" id="pos-cart-list-pnl">
+                <div className="relative z-0 bg-[#1E1E24] border border-[#2D2D35] rounded-2xl overflow-hidden shadow-lg" id="pos-cart-list-pnl">
                   <div className="p-4 bg-[#121214]/50 border-b border-[#2D2D35] flex items-center justify-between" id="pos-cart-header">
                     <div className="flex items-center gap-2">
                       <span className="w-5 h-5 rounded-lg bg-[#00E676]/10 text-[#00E676] flex items-center justify-center font-bold text-xs">2</span>

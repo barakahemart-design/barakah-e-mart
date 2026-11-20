@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { toUUID } from "../lib/firebase-helpers";
-import { Boxes, Package, ShoppingBag } from "lucide-react";
+import { Boxes, Package, ShoppingBag, ChartColumn, Tv, WashingMachine, AirVent, Microwave, Router, Refrigerator, Fan, Monitor, Smartphone, Laptop, CookingPot, PlugZap, Heater } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
 
 interface ProductSalesBreakdownProps {
@@ -58,6 +58,74 @@ function isInsidePeriod(value: any, bounds: { start: Date; end: Date } | null) {
   if (!bounds) return true;
   const date = safeDate(value);
   return !!date && date.getTime() >= bounds.start.getTime() && date.getTime() <= bounds.end.getTime();
+}
+
+
+function getCategoryIcon(categoryName: string) {
+  const name = String(categoryName || "").toLowerCase();
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return Heater;
+  if (/air.?condition|\bac\b|cooling/.test(name)) return AirVent;
+  if (/television|\btv\b/.test(name)) return Tv;
+  if (/wash/.test(name)) return WashingMachine;
+  if (/microwave/.test(name)) return Microwave;
+  if (/network|router|wifi|wi-fi/.test(name)) return Router;
+  if (/refrigerator|fridge/.test(name)) return Refrigerator;
+  if (/fan/.test(name)) return Fan;
+  if (/mobile|phone|smartphone/.test(name)) return Smartphone;
+  if (/laptop|computer|monitor/.test(name)) return Laptop;
+  if (/kitchen|cook|stove|oven/.test(name)) return CookingPot;
+  if (/power|ups|adapter|charger|electrical/.test(name)) return PlugZap;
+  if (/electronics|display|computer/.test(name)) return Monitor;
+  return Boxes;
+}
+
+function getProductIcon(productName: string, categoryName: string) {
+  const name = String(productName || "").toLowerCase();
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return Heater;
+  if (/washing.?machine/.test(name)) return WashingMachine;
+  if (/television|\btv\b/.test(name)) return Tv;
+  if (/air.?condition|\bac\b/.test(name)) return AirVent;
+  if (/microwave/.test(name)) return Microwave;
+  if (/router|network|wifi|wi-fi/.test(name)) return Router;
+  if (/refrigerator|fridge/.test(name)) return Refrigerator;
+  if (/fan/.test(name)) return Fan;
+  if (/smartphone|mobile|phone/.test(name)) return Smartphone;
+  if (/laptop|notebook/.test(name)) return Laptop;
+  if (/stove|oven|cooker|kettle|air fryer/.test(name)) return CookingPot;
+  return getCategoryIcon(categoryName);
+}
+
+function getCategoryIconColor(categoryName: string) {
+  const name = String(categoryName || "").toLowerCase();
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return "text-orange-300";
+  if (/air.?condition|\bac\b|cooling/.test(name)) return "text-cyan-300";
+  if (/television|\btv\b/.test(name)) return "text-sky-300";
+  if (/wash/.test(name)) return "text-violet-300";
+  if (/microwave/.test(name)) return "text-orange-300";
+  if (/network|router|wifi|wi-fi/.test(name)) return "text-emerald-300";
+  if (/refrigerator|fridge/.test(name)) return "text-blue-300";
+  if (/fan/.test(name)) return "text-pink-300";
+  if (/mobile|phone|smartphone/.test(name)) return "text-indigo-300";
+  if (/laptop|computer|monitor/.test(name)) return "text-fuchsia-300";
+  if (/kitchen|cook|stove|oven/.test(name)) return "text-amber-300";
+  if (/power|ups|adapter|charger|electrical/.test(name)) return "text-yellow-300";
+  return "text-purple-300";
+}
+
+function getProductIconColor(productName: string, categoryName: string) {
+  const name = String(productName || "").toLowerCase();
+  if (/water.?heater|geyser|\bheater\b/.test(name)) return "text-orange-300";
+  if (/washing.?machine/.test(name)) return "text-violet-300";
+  if (/television|\btv\b/.test(name)) return "text-sky-300";
+  if (/air.?condition|\bac\b/.test(name)) return "text-cyan-300";
+  if (/microwave/.test(name)) return "text-orange-300";
+  if (/router|network|wifi|wi-fi/.test(name)) return "text-emerald-300";
+  if (/refrigerator|fridge/.test(name)) return "text-blue-300";
+  if (/fan/.test(name)) return "text-pink-300";
+  if (/smartphone|mobile|phone/.test(name)) return "text-indigo-300";
+  if (/laptop|notebook/.test(name)) return "text-fuchsia-300";
+  if (/stove|oven|cooker|kettle|air fryer/.test(name)) return "text-amber-300";
+  return getCategoryIconColor(categoryName);
 }
 
 function formatQuantity(value: number) {
@@ -246,8 +314,8 @@ export function ProductSalesBreakdown({
                   className="grid w-full grid-cols-[minmax(0,1fr)_88px_12px] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400"
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-300">
-                      <Boxes className="h-4 w-4" />
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] ${getCategoryIconColor(category.name)}`}>
+                      {(() => { const CategoryIcon = getCategoryIcon(category.name); return <CategoryIcon className="h-4 w-4" />; })()}
                     </div>
                     <div className="min-w-0">
                       <h4 className="truncate text-xs font-extrabold text-white">{category.name}</h4>
@@ -265,7 +333,7 @@ export function ProductSalesBreakdown({
                   {category.products.map(product => (
                     <div key={product.productId || product.name} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 px-4 py-2.5">
                       <div className="flex min-w-0 items-center gap-2">
-                        <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                        {(() => { const ProductIcon = getProductIcon(product.name, category.name); return <ProductIcon className={`h-3.5 w-3.5 shrink-0 ${getProductIconColor(product.name, category.name)}`} />; })()}
                         <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
                       </div>
                       <span className="min-w-0 text-right text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>

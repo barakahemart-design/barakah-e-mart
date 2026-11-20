@@ -144,3 +144,199 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
   border-width: 1.5px !important;
   box-shadow: inset 0 0 0 1px rgba(0,230,118,.10), 0 0 8px rgba(0,230,118,.12) !important;
 }
+
+
+/* POS product search: opaque, high-contrast dropdown that remains scrollable above page content. */
+#root #pos-select-wrap { position: relative !important; z-index: 1001 !important; overflow: visible !important; }
+#root .pos-product-suggestions {
+  position: absolute !important;
+  z-index: 1007 !important;
+  display: block !important;
+  pointer-events: auto !important;
+  max-height: min(65vh, 520px) !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  background: rgba(12, 18, 29, .985) !important;
+  background-image: linear-gradient(145deg, rgba(30, 50, 78, .32), rgba(9, 14, 23, .96) 48%) !important;
+  -webkit-backdrop-filter: blur(38px) saturate(150%) !important;
+  backdrop-filter: blur(38px) saturate(150%) !important;
+  border: 1px solid rgba(148, 163, 184, .42) !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.08) !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,.65) rgba(15,23,42,.9);
+}
+#root .pos-product-suggestions > button { display: flex !important; width: 100% !important; min-height: 54px !important; pointer-events: auto !important; }
+#root #pos-product-picker-pnl { position: relative !important; z-index: 1005 !important; overflow: visible !important; }
+#root #pos-cart-list-pnl { position: relative !important; z-index: 0 !important; }
+#root #pos-select-wrap { z-index: 1006 !important; }
+#root .pos-product-suggestions { isolation: isolate !important; }
+#root .pos-product-suggestions { scrollbar-gutter: stable; }
+#root svg.lucide-bookmark, #root svg.lucide-bookmark-plus, #root svg.lucide-clipboard-plus { color: #a78bfa !important; }
+#root svg.lucide-history, #root svg.lucide-list-clock, #root svg.lucide-wallet-cards { color: #fbbf24 !important; }
+#root svg.lucide-plus-circle, #root svg.lucide-circle-plus, #root svg.lucide-package-plus, #root svg.lucide-boxes { color: #34d399 !important; }
+
+/* App-wide semantic icon palette. SVG icons inherit these colors in every module,
+   nested section, modal, form, tab, action row and navigation surface. */
+#root svg.lucide { color: #60a5fa; }
+#root svg.lucide-layout-dashboard, #root svg.lucide-house, #root svg.lucide-home,
+#root svg.lucide-chart-no-axes-combined, #root svg.lucide-chart-line, #root svg.lucide-chart-pie,
+#root svg.lucide-chart-bar, #root svg.lucide-bar-chart-3, #root svg.lucide-trending-up,
+#root svg.lucide-activity, #root svg.lucide-gauge { color: #60a5fa !important; }
+#root svg.lucide-shopping-cart, #root svg.lucide-shopping-bag, #root svg.lucide-receipt,
+#root svg.lucide-receipt-text, #root svg.lucide-banknote, #root svg.lucide-credit-card,
+#root svg.lucide-cash-register, #root svg.lucide-wallet { color: #34d399 !important; }
+#root svg.lucide-package, #root svg.lucide-box, #root svg.lucide-boxes,
+#root svg.lucide-layers, #root svg.lucide-warehouse, #root svg.lucide-tags,
+#root svg.lucide-tag, #root svg.lucide-barcode, #root svg.lucide-scan-barcode { color: #a78bfa !important; }
+#root svg.lucide-users, #root svg.lucide-user, #root svg.lucide-user-round,
+#root svg.lucide-user-plus, #root svg.lucide-user-check, #root svg.lucide-contact,
+#root svg.lucide-address-book, #root svg.lucide-users-round { color: #f472b6 !important; }
+#root svg.lucide-truck, #root svg.lucide-truck-icon, #root svg.lucide-map-pin,
+#root svg.lucide-route, #root svg.lucide-package-check, #root svg.lucide-navigation,
+#root svg.lucide-clipboard-list { color: #22d3ee !important; }
+#root svg.lucide-wallet-cards, #root svg.lucide-hand-coins, #root svg.lucide-coins,
+#root svg.lucide-piggy-bank, #root svg.lucide-circle-dollar-sign, #root svg.lucide-dollar-sign,
+#root svg.lucide-trending-down, #root svg.lucide-calculator { color: #fbbf24 !important; }
+#root svg.lucide-file-text, #root svg.lucide-files, #root svg.lucide-file-spreadsheet,
+#root svg.lucide-file-check, #root svg.lucide-clipboard, #root svg.lucide-notebook,
+#root svg.lucide-book-open, #root svg.lucide-history, #root svg.lucide-calendar,
+#root svg.lucide-calendar-days { color: #818cf8 !important; }
+#root svg.lucide-settings, #root svg.lucide-sliders-horizontal, #root svg.lucide-wrench,
+#root svg.lucide-cog, #root svg.lucide-tool, #root svg.lucide-hammer,
+#root svg.lucide-refresh-cw, #root svg.lucide-rotate-cw { color: #94a3b8 !important; }
+#root svg.lucide-shield, #root svg.lucide-shield-check, #root svg.lucide-lock,
+#root svg.lucide-lock-keyhole, #root svg.lucide-key-round, #root svg.lucide-fingerprint,
+#root svg.lucide-user-lock, #root svg.lucide-shield-alert { color: #2dd4bf !important; }
+#root svg.lucide-search, #root svg.lucide-filter, #root svg.lucide-list-filter,
+#root svg.lucide-scan-search, #root svg.lucide-eye, #root svg.lucide-eye-off,
+#root svg.lucide-zoom-in, #root svg.lucide-zoom-out { color: #38bdf8 !important; }
+#root svg.lucide-printer, #root svg.lucide-download, #root svg.lucide-upload,
+#root svg.lucide-cloud-upload, #root svg.lucide-cloud-download, #root svg.lucide-share-2,
+#root svg.lucide-copy, #root svg.lucide-external-link { color: #c084fc !important; }
+#root svg.lucide-check, #root svg.lucide-check-circle, #root svg.lucide-check-circle-2,
+#root svg.lucide-circle-check, #root svg.lucide-badge-check, #root svg.lucide-circle-check-big,
+#root svg.lucide-check-square { color: #4ade80 !important; }
+#root svg.lucide-x, #root svg.lucide-trash, #root svg.lucide-trash-2,
+#root svg.lucide-circle-x, #root svg.lucide-x-circle, #root svg.lucide-octagon-alert,
+#root svg.lucide-alert-circle, #root svg.lucide-alert-triangle, #root svg.lucide-ban { color: #fb7185 !important; }
+#root svg.lucide-info, #root svg.lucide-help-circle, #root svg.lucide-circle-help,
+#root svg.lucide-lightbulb, #root svg.lucide-sparkles, #root svg.lucide-sparkle { color: #f0abfc !important; }
+#root svg.lucide-phone, #root svg.lucide-mail, #root svg.lucide-message-circle,
+#root svg.lucide-message-square, #root svg.lucide-send, #root svg.lucide-whatsapp { color: #2dd4bf !important; }
+#root svg.lucide-clock, #root svg.lucide-timer, #root svg.lucide-hourglass,
+#root svg.lucide-calendar-clock { color: #fbbf24 !important; }
+#root svg.lucide-sun, #root svg.lucide-moon, #root svg.lucide-cloud,
+#root svg.lucide-cloud-lightning, #root svg.lucide-cloud-sun { color: #facc15 !important; }
+#root svg.lucide-menu, #root svg.lucide-more-horizontal, #root svg.lucide-ellipsis,
+#root svg.lucide-chevron-down, #root svg.lucide-chevron-up, #root svg.lucide-chevron-left,
+#root svg.lucide-chevron-right, #root svg.lucide-arrow-left, #root svg.lucide-arrow-right { color: #93c5fd !important; }
+#root svg.lucide-tv, #root svg.lucide-monitor, #root svg.lucide-smartphone,
+#root svg.lucide-laptop, #root svg.lucide-wifi, #root svg.lucide-router,
+#root svg.lucide-cpu, #root svg.lucide-plug, #root svg.lucide-zap { color: #67e8f9 !important; }
+#root svg.lucide-building, #root svg.lucide-building-2, #root svg.lucide-store,
+#root svg.lucide-landmark, #root svg.lucide-factory { color: #f9a8d4 !important; }
+
+
+/* Explicitly color the inventory and supplier-due sections that were missed by the first palette pass. */
+#root #tab-inventory-btn svg, #root #mobile-tab-inventory-btn svg,
+#root #view-inventory-container svg.lucide { color: #a78bfa !important; }
+#root #tab-duelist-btn svg, #root #mobile-tab-duelist-btn svg { color: #fbbf24 !important; }
+#root #view-inventory-container svg.lucide-plus-circle,
+#root #view-inventory-container svg.lucide-circle-plus,
+#root #view-inventory-container svg.lucide-package-plus,
+#root #view-inventory-container svg.lucide-package-open { color: #34d399 !important; }
+#root #view-duelist-container svg.lucide-plus-circle,
+#root #view-duelist-container svg.lucide-circle-plus,
+#root #view-duelist-container svg.lucide-file-plus { color: #f59e0b !important; }
+
+
+/* Native date inputs: make the browser calendar glyph visible and colorful on dark fields. */
+#root input[type="date"]::-webkit-calendar-picker-indicator,
+#root input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+#root input[type="month"]::-webkit-calendar-picker-indicator,
+#root input[type="week"]::-webkit-calendar-picker-indicator {
+  opacity: 1 !important;
+  cursor: pointer !important;
+  filter: invert(72%) sepia(67%) saturate(1250%) hue-rotate(155deg) brightness(112%) contrast(105%) !important;
+}
+#root input[type="date"], #root input[type="datetime-local"],
+#root input[type="month"], #root input[type="week"] { color-scheme: dark; }
+
+/* Product-specific category icons in Dashboard > Category & Product Details. */
+#root svg.lucide-air-vent { color: #22d3ee !important; }
+#root svg.lucide-tv { color: #60a5fa !important; }
+#root svg.lucide-washing-machine { color: #a78bfa !important; }
+#root svg.lucide-microwave { color: #fb923c !important; }
+#root svg.lucide-router { color: #34d399 !important; }
+#root svg.lucide-refrigerator { color: #38bdf8 !important; }
+#root svg.lucide-fan { color: #f472b6 !important; }
+#root svg.lucide-smartphone, #root svg.lucide-laptop, #root svg.lucide-monitor { color: #818cf8 !important; }
+#root svg.lucide-cooking-pot { color: #f59e0b !important; }
+#root svg.lucide-plug-zap { color: #facc15 !important; }
+
+
+/* Final icon pass: ensure every icon inside Due Management has a visible semantic color,
+   including the less common actions and the four Due Management entry cards. */
+#root #view-duelist-container svg.lucide-plus-circle,
+#root #view-duelist-container svg.lucide-circle-plus { color: #34d399 !important; }
+#root #view-duelist-container svg.lucide-users,
+#root #view-duelist-container svg.lucide-users-round { color: #f472b6 !important; }
+#root #view-duelist-container svg.lucide-chart-no-axes-column-increasing,
+#root #view-duelist-container svg.lucide-chart-column,
+#root #view-duelist-container svg.lucide-chart-bar,
+#root #view-duelist-container svg.lucide-bar-chart-3 { color: #60a5fa !important; }
+#root #view-duelist-container svg.lucide-package,
+#root #view-duelist-container svg.lucide-package-open,
+#root #view-duelist-container svg.lucide-box { color: #a78bfa !important; }
+#root #view-duelist-container svg.lucide-trending-up { color: #fbbf24 !important; }
+#root #view-duelist-container svg.lucide-trending-down { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-bookmark,
+#root #view-duelist-container svg.lucide-bookmark-plus { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-search,
+#root #view-duelist-container svg.lucide-filter { color: #22d3ee !important; }
+#root #view-duelist-container svg.lucide-history,
+#root #view-duelist-container svg.lucide-clock,
+#root #view-duelist-container svg.lucide-calendar,
+#root #view-duelist-container svg.lucide-calendar-days { color: #fbbf24 !important; }
+#root #view-duelist-container svg.lucide-file-text,
+#root #view-duelist-container svg.lucide-receipt-text { color: #818cf8 !important; }
+#root #view-duelist-container svg.lucide-printer,
+#root #view-duelist-container svg.lucide-share-2,
+#root #view-duelist-container svg.lucide-copy { color: #c084fc !important; }
+#root #view-duelist-container svg.lucide-phone,
+#root #view-duelist-container svg.lucide-message-circle { color: #2dd4bf !important; }
+#root #view-duelist-container svg.lucide-undo-2,
+#root #view-duelist-container svg.lucide-rotate-ccw { color: #fb923c !important; }
+#root #view-duelist-container svg.lucide-x,
+#root #view-duelist-container svg.lucide-circle-x { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-arrow-left,
+#root #view-duelist-container svg.lucide-chevron-left,
+#root #view-duelist-container svg.lucide-chevron-right { color: #93c5fd !important; }
+
+/* One consistent, highlighted search glyph color across every app module and search field. */
+#root svg.lucide-search { color: #22d3ee !important; filter: drop-shadow(0 0 3px rgba(34,211,238,.38)); }
+
+/* Creditor Due subviews share the same Due Management semantic icon palette. */
+#root #view-duelist-container svg.lucide-pencil,
+#root #view-duelist-container svg.lucide-pen { color: #c084fc !important; }
+#root #view-duelist-container svg.lucide-trash,
+#root #view-duelist-container svg.lucide-trash-2 { color: #fb7185 !important; }
+#root #view-duelist-container svg.lucide-check { color: #4ade80 !important; }
+
+
+/* Search icons: consistent high-contrast cyan highlight across Ledger, Products,
+   Product boxes, and every other search field in the app. */
+#root svg.lucide-search,
+#root svg[class~="lucide-search"],
+#root svg[class*="lucide-search"],
+#root [data-lucide="search"] {
+  color: #22d3ee !important;
+  stroke: #22d3ee !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 4px rgba(34,211,238,.58)) !important;
+}
