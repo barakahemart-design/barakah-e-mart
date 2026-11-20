@@ -301,6 +301,7 @@ import {
 } from "./lib/firebase-helpers";
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
+import { deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
   generateInvoicePDF,
   generateDeliveryChallanPDF
@@ -369,9 +370,34 @@ export default function App() {
         });
         const result = await response.json().catch(() => ({}));
         if (cancelled) return;
-        setDeliveryStaffProfile(response.ok && result.isDeliveryAccount ? result.staff : null);
+        if (!response.ok) {
+          const failure: any = new Error(result.error || "Could not verify delivery account.");
+          failure.status = response.status;
+          throw failure;
+        }
+        if (result.isDeliveryAccount && result.staff?.uid === activeUser.uid) {
+          // This cached identity is used only to reopen the driver's read-only local
+          // workspace during quota/network outages. Every server write still verifies
+          // the live Firebase identity and active staff record.
+          writeDeliveryLocal(deliveryStorageKey("cache", `driver-profile:${activeUser.uid}`), {
+            uid: activeUser.uid, staff: result.staff, verifiedAt: new Date().toISOString()
+          });
+          setDeliveryStaffProfile(result.staff);
+        } else {
+          try { localStorage.removeItem(deliveryStorageKey("cache", `driver-profile:${activeUser.uid}`)); } catch (_) {}
+          setDeliveryStaffProfile(null);
+        }
       } catch (error) {
-        if (!cancelled) setDeliveryStaffProfile(null);
+        if (!cancelled) {
+          if (isRetryableDeliveryError(error)) {
+            const cachedProfile = readDeliveryLocal<{ uid: string; staff: any } | null>(
+              deliveryStorageKey("cache", `driver-profile:${activeUser.uid}`), null
+            );
+            setDeliveryStaffProfile(cachedProfile?.uid === activeUser.uid && cachedProfile.staff?.uid === activeUser.uid ? cachedProfile.staff : null);
+          } else {
+            setDeliveryStaffProfile(null);
+          }
+        }
       } finally {
         if (!cancelled) setDeliveryRoleCheckedUid(activeUser.uid);
       }
