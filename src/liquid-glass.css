@@ -144,3 +144,87 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
   border-width: 1.5px !important;
   box-shadow: inset 0 0 0 1px rgba(0,230,118,.10), 0 0 8px rgba(0,230,118,.12) !important;
 }
+
+
+/* POS product search: opaque, high-contrast dropdown that remains scrollable above page content. */
+#root #pos-select-wrap { overflow: visible !important; isolation: isolate !important; }
+#root .pos-product-suggestions {
+  position: absolute !important;
+  z-index: 1000 !important;
+  max-height: min(65vh, 520px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  background: rgba(12, 18, 29, .985) !important;
+  background-image: linear-gradient(145deg, rgba(30, 50, 78, .32), rgba(9, 14, 23, .96) 48%) !important;
+  -webkit-backdrop-filter: blur(38px) saturate(150%) !important;
+  backdrop-filter: blur(38px) saturate(150%) !important;
+  border: 1px solid rgba(148, 163, 184, .42) !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.08) !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,.65) rgba(15,23,42,.9);
+}
+#root .pos-product-suggestions > button { flex-shrink: 0; }
+
+/* App-wide semantic icon palette. SVG icons inherit these colors in every module,
+   nested section, modal, form, tab, action row and navigation surface. */
+#root svg.lucide { color: #60a5fa; }
+#root svg.lucide-layout-dashboard, #root svg.lucide-house, #root svg.lucide-home,
+#root svg.lucide-chart-no-axes-combined, #root svg.lucide-chart-line, #root svg.lucide-chart-pie,
+#root svg.lucide-chart-bar, #root svg.lucide-bar-chart-3, #root svg.lucide-trending-up,
+#root svg.lucide-activity, #root svg.lucide-gauge { color: #60a5fa !important; }
+#root svg.lucide-shopping-cart, #root svg.lucide-shopping-bag, #root svg.lucide-receipt,
+#root svg.lucide-receipt-text, #root svg.lucide-banknote, #root svg.lucide-credit-card,
+#root svg.lucide-cash-register, #root svg.lucide-wallet { color: #34d399 !important; }
+#root svg.lucide-package, #root svg.lucide-box, #root svg.lucide-boxes,
+#root svg.lucide-layers, #root svg.lucide-warehouse, #root svg.lucide-tags,
+#root svg.lucide-tag, #root svg.lucide-barcode, #root svg.lucide-scan-barcode { color: #a78bfa !important; }
+#root svg.lucide-users, #root svg.lucide-user, #root svg.lucide-user-round,
+#root svg.lucide-user-plus, #root svg.lucide-user-check, #root svg.lucide-contact,
+#root svg.lucide-address-book, #root svg.lucide-users-round { color: #f472b6 !important; }
+#root svg.lucide-truck, #root svg.lucide-truck-icon, #root svg.lucide-map-pin,
+#root svg.lucide-route, #root svg.lucide-package-check, #root svg.lucide-navigation,
+#root svg.lucide-clipboard-list { color: #22d3ee !important; }
+#root svg.lucide-wallet-cards, #root svg.lucide-hand-coins, #root svg.lucide-coins,
+#root svg.lucide-piggy-bank, #root svg.lucide-circle-dollar-sign, #root svg.lucide-dollar-sign,
+#root svg.lucide-trending-down, #root svg.lucide-calculator { color: #fbbf24 !important; }
+#root svg.lucide-file-text, #root svg.lucide-files, #root svg.lucide-file-spreadsheet,
+#root svg.lucide-file-check, #root svg.lucide-clipboard, #root svg.lucide-notebook,
+#root svg.lucide-book-open, #root svg.lucide-history, #root svg.lucide-calendar,
+#root svg.lucide-calendar-days { color: #818cf8 !important; }
+#root svg.lucide-settings, #root svg.lucide-sliders-horizontal, #root svg.lucide-wrench,
+#root svg.lucide-cog, #root svg.lucide-tool, #root svg.lucide-hammer,
+#root svg.lucide-refresh-cw, #root svg.lucide-rotate-cw { color: #94a3b8 !important; }
+#root svg.lucide-shield, #root svg.lucide-shield-check, #root svg.lucide-lock,
+#root svg.lucide-lock-keyhole, #root svg.lucide-key-round, #root svg.lucide-fingerprint,
+#root svg.lucide-user-lock, #root svg.lucide-shield-alert { color: #2dd4bf !important; }
+#root svg.lucide-search, #root svg.lucide-filter, #root svg.lucide-list-filter,
+#root svg.lucide-scan-search, #root svg.lucide-eye, #root svg.lucide-eye-off,
+#root svg.lucide-zoom-in, #root svg.lucide-zoom-out { color: #38bdf8 !important; }
+#root svg.lucide-printer, #root svg.lucide-download, #root svg.lucide-upload,
+#root svg.lucide-cloud-upload, #root svg.lucide-cloud-download, #root svg.lucide-share-2,
+#root svg.lucide-copy, #root svg.lucide-external-link { color: #c084fc !important; }
+#root svg.lucide-check, #root svg.lucide-check-circle, #root svg.lucide-check-circle-2,
+#root svg.lucide-circle-check, #root svg.lucide-badge-check, #root svg.lucide-circle-check-big,
+#root svg.lucide-check-square { color: #4ade80 !important; }
+#root svg.lucide-x, #root svg.lucide-trash, #root svg.lucide-trash-2,
+#root svg.lucide-circle-x, #root svg.lucide-x-circle, #root svg.lucide-octagon-alert,
+#root svg.lucide-alert-circle, #root svg.lucide-alert-triangle, #root svg.lucide-ban { color: #fb7185 !important; }
+#root svg.lucide-info, #root svg.lucide-help-circle, #root svg.lucide-circle-help,
+#root svg.lucide-lightbulb, #root svg.lucide-sparkles, #root svg.lucide-sparkle { color: #f0abfc !important; }
+#root svg.lucide-phone, #root svg.lucide-mail, #root svg.lucide-message-circle,
+#root svg.lucide-message-square, #root svg.lucide-send, #root svg.lucide-whatsapp { color: #2dd4bf !important; }
+#root svg.lucide-clock, #root svg.lucide-timer, #root svg.lucide-hourglass,
+#root svg.lucide-calendar-clock { color: #fbbf24 !important; }
+#root svg.lucide-sun, #root svg.lucide-moon, #root svg.lucide-cloud,
+#root svg.lucide-cloud-lightning, #root svg.lucide-cloud-sun { color: #facc15 !important; }
+#root svg.lucide-menu, #root svg.lucide-more-horizontal, #root svg.lucide-ellipsis,
+#root svg.lucide-chevron-down, #root svg.lucide-chevron-up, #root svg.lucide-chevron-left,
+#root svg.lucide-chevron-right, #root svg.lucide-arrow-left, #root svg.lucide-arrow-right { color: #93c5fd !important; }
+#root svg.lucide-tv, #root svg.lucide-monitor, #root svg.lucide-smartphone,
+#root svg.lucide-laptop, #root svg.lucide-wifi, #root svg.lucide-router,
+#root svg.lucide-cpu, #root svg.lucide-plug, #root svg.lucide-zap { color: #67e8f9 !important; }
+#root svg.lucide-building, #root svg.lucide-building-2, #root svg.lucide-store,
+#root svg.lucide-landmark, #root svg.lucide-factory { color: #f9a8d4 !important; }
