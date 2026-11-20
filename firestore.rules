@@ -12,17 +12,27 @@ service cloud.firestore {
     }
 
     function owns(data) {
+      let hasStoreIdentity = data.keys().hasAny([
+        'store_id', 'storeId', 'email', 'linked_email', 'linkedEmail'
+      ]);
+      let hasUidIdentity = data.keys().hasAny([
+        'user_id', 'userId', 'owner_id'
+      ]);
+      let storeMatches = signedInEmail() != ""
+        && (!data.keys().hasAny(['store_id']) || data.store_id == signedInEmail())
+        && (!data.keys().hasAny(['storeId']) || data.storeId == signedInEmail())
+        && (!data.keys().hasAny(['email']) || data.email == signedInEmail())
+        && (!data.keys().hasAny(['linked_email']) || data.linked_email == signedInEmail())
+        && (!data.keys().hasAny(['linkedEmail']) || data.linkedEmail == signedInEmail());
+      let uidMatches = (!data.keys().hasAny(['user_id']) || data.user_id == request.auth.uid)
+        && (!data.keys().hasAny(['userId']) || data.userId == request.auth.uid)
+        && (!data.keys().hasAny(['owner_id']) || data.owner_id == request.auth.uid);
+
+      // Store email is authoritative when present. This prevents a stale or
+      // conflicting UID field from granting another account access to the record.
       return signedIn() && (
-        (data.keys().hasAny(['user_id']) && data.user_id == request.auth.uid) ||
-        (data.keys().hasAny(['userId']) && data.userId == request.auth.uid) ||
-        (data.keys().hasAny(['owner_id']) && data.owner_id == request.auth.uid) ||
-        (signedInEmail() != "" && (
-          (data.keys().hasAny(['store_id']) && data.store_id == signedInEmail()) ||
-          (data.keys().hasAny(['storeId']) && data.storeId == signedInEmail()) ||
-          (data.keys().hasAny(['email']) && data.email == signedInEmail()) ||
-          (data.keys().hasAny(['linked_email']) && data.linked_email == signedInEmail()) ||
-          (data.keys().hasAny(['linkedEmail']) && data.linkedEmail == signedInEmail())
-        ))
+        (hasStoreIdentity && storeMatches) ||
+        (!hasStoreIdentity && hasUidIdentity && uidMatches)
       );
     }
 

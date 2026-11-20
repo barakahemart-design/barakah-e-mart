@@ -1219,13 +1219,22 @@ export const upsertDocument = async (table: string, id: string, data: any) => {
   } catch (e) {
     try {
       const authHeaders = await getAuthHeaders();
-      await fetch("/api/db/upsert", {
+      const response = await fetch("/api/db/upsert", {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ table, id, data: enrichedData })
       });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || `Cloud save failed (${response.status}).`);
+      }
+      const result = await response.json().catch(() => ({}));
+      if (result?.success !== true || result?.persisted !== true) {
+        throw new Error("Cloud server did not confirm that the record was saved.");
+      }
     } catch (err) {
-      console.warn(`[firebase-helpers] upsertDocument fallback notice for ${table}/${id}:`, err);
+      console.warn(`[firebase-helpers] upsertDocument fallback failed for ${table}/${id}:`, err);
+      throw err;
     }
   }
 };
@@ -1236,13 +1245,22 @@ export const deleteDocument = async (table: string, id: string) => {
   } catch (e) {
     try {
       const authHeaders = await getAuthHeaders();
-      await fetch("/api/db/delete", {
+      const response = await fetch("/api/db/delete", {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ table, id })
       });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || `Cloud delete failed (${response.status}).`);
+      }
+      const result = await response.json().catch(() => ({}));
+      if (result?.success !== true || result?.persisted !== true) {
+        throw new Error("Cloud server did not confirm that the record was deleted.");
+      }
     } catch (err) {
-      handleFirestoreError(e, OperationType.DELETE, `${table}/${id}`);
+      console.warn(`[firebase-helpers] deleteDocument fallback failed for ${table}/${id}:`, err);
+      throw err;
     }
   }
 };
@@ -1286,6 +1304,10 @@ export const fetchUserCollection = async (table: string, ownerEmail: string) => 
     const response = await fetch(`/api/db/fetch?table=${encodeURIComponent(table)}&owner_email=${encodeURIComponent(ownerEmail)}`, {
       headers: authHeaders
     });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result?.error || `Cloud fetch failed (${response.status}).`);
+    }
     return await response.json();
   } catch (err) {
     return [];

@@ -269,12 +269,12 @@ const safeRestore = `export const restoreLocalKeys = (data: any, overwrite: bool
 };`;
 if (helperSource.includes(disabledRestore)) helperSource = helperSource.replace(disabledRestore, safeRestore);
 
-const loginMarker = '      // Legacy passcode restore disabled on login to prevent overwriting realtime Firestore state';
-if (helperSource.includes(loginMarker)) helperSource = helperSource.replace(loginMarker, '      await fetchAndRestoreCloudBackup(cleanEmail, "", false).catch(err => console.warn("[Cloud Restore] Email login restore warning:", err));');
-const signupMarker = '      // Legacy passcode restore disabled on signup to prevent overwriting realtime Firestore state';
-if (helperSource.includes(signupMarker)) helperSource = helperSource.replace(signupMarker, '      await fetchAndRestoreCloudBackup(cleanEmail, "", false).catch(err => console.warn("[Cloud Restore] Signup recovery warning:", err));');
-const passcodeMarker = '  // Legacy passcode restore disabled on passcode login to prevent overwriting realtime Firestore state';
-if (helperSource.includes(passcodeMarker)) helperSource = helperSource.replace(passcodeMarker, '  await fetchAndRestoreCloudBackup(cleanEmail, pin, false).catch(err => console.warn("[Cloud Restore] Passcode login restore warning:", err));');
+// Normal login/signup deliberately does not run legacy vault restore.
+// Firestore listeners load the latest account data and stream future changes.
+// Normal login/signup deliberately does not run legacy vault restore.
+// Firestore listeners load the latest account data and stream future changes.
+// Normal login/signup deliberately does not run legacy vault restore.
+// Firestore listeners load the latest account data and stream future changes.
 if (helperSource !== originalHelper) fs.writeFileSync(helperFile, helperSource, 'utf8');
 
 const appFile = path.join(process.cwd(), 'src', 'App.tsx');

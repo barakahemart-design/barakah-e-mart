@@ -297,7 +297,6 @@ import {
   restoreLocalKeys,
   deleteCloudDocument,
   saveBusinessSettings,
-  getBusinessSettings
 } from "./lib/firebase-helpers";
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
@@ -699,7 +698,6 @@ export default function App() {
   const [selectedSupplierReceipt, setSelectedSupplierReceipt] = useState<Purchase | null>(null);
   const [dueSection, setDueSection] = useState<"home" | "creditor-entry" | "creditors" | "creditor-report" | "product-due">("home");
 
-  const hasSyncedOnMountRef = useRef(false);
   const hasHealedRef = useRef(false);
 
   const runAutoRecovery = async () => {
@@ -798,7 +796,6 @@ export default function App() {
       setSettingsHydrated(false);
 
       if (!user) {
-        hasSyncedOnMountRef.current = false; // Reset sync status so the next user can pull their own data on mount
         setIsAuthLoading(false);
         initialLoadedRef.current = true;
         // Cleanse memory state when user session is null to prevent carry-over data leak
@@ -848,76 +845,10 @@ export default function App() {
       setIsAuthLoading(false);
       initialLoadedRef.current = true;
 
-      // Perform cloud pull on startup asynchronously in the background so slow connections do not block page loads
-      if (!user.isGuest && !hasSyncedOnMountRef.current) {
-        hasSyncedOnMountRef.current = true;
+      // The account-scoped Firestore listeners are the source of truth.
+      // Their first snapshots load the latest cloud state on every device.
+      // Normal login must not run a separate passcode-vault restore.
 
-        (async () => {
-          try {
-            const passcode = user.isPasscodeUser ? (user.passcode || "1234") : "classic_account_secure";
-            const wasRestored = await fetchAndRestoreCloudBackup(user.email, passcode, false, false);
-            if (wasRestored) {
-              console.log("[Sync on Mount] Successfully grabbed cloud backup on app mount in background.");
-              // Dynamically re-hydrate state with the restored values
-              const updatedProducts = getStored("barakah_products", INITIAL_PRODUCTS);
-              const updatedContacts = getStored("barakah_contacts", INITIAL_CONTACTS);
-              const updatedExpenses = getStored("barakah_expenses", INITIAL_EXPENSES);
-              const updatedTransactions = getStored("barakah_transactions", []);
-              const updatedPurchases = getStored("barakah_purchases", INITIAL_PURCHASES);
-              const updatedBusinessInfo = getStored("barakah_business_info", INITIAL_BUSINESS_INFO);
-
-              setProducts(updatedProducts);
-              setContacts(updatedContacts);
-              setExpenses(updatedExpenses);
-              setTransactions(updatedTransactions);
-              setBusinessInfo(updatedBusinessInfo);
-              setPurchases(updatedPurchases);
-
-              if (updatedBusinessInfo && (updatedBusinessInfo as any).staffList && Array.isArray((updatedBusinessInfo as any).staffList)) {
-                setStaffList((updatedBusinessInfo as any).staffList);
-              }
-            }
-
-            if (user.email) {
-              const bizSettings = await getBusinessSettings(user.email);
-              if (bizSettings) {
-                const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
-                if (Object.keys(cleanBiz).length > 0) {
-                  setBusinessInfo(prev => {
-                    const merged = { ...prev, ...cleanBiz };
-                    const userKey = getDbKey("barakah_business_info", user.email, user.uid);
-                    localStorage.setItem(userKey, JSON.stringify(merged));
-                    localStorage.setItem("barakah_business_info", JSON.stringify(merged));
-                    return merged;
-                  });
-                }
-              }
-              // Only allow automatic Settings writes after the cloud Settings
-              // record has been checked. This prevents demo/local defaults from
-              // overwriting the user's saved Settings during app startup.
-              setSettingsHydrated(true);
-            }
-          } catch (e) {
-            // Even if the broader cloud restore fails, still check Settings
-            // before enabling automatic Settings writes.
-            console.error("[Sync on Mount] Background cloud synchronization failed:", e);
-            try {
-              if (user.email) {
-                const bizSettings = await getBusinessSettings(user.email);
-                if (bizSettings) {
-                  const { id, user_id, userId, linkedEmail, ...cleanBiz } = bizSettings;
-                  if (Object.keys(cleanBiz).length > 0) {
-                    setBusinessInfo(prev => ({ ...prev, ...cleanBiz }));
-                  }
-                }
-              }
-            } catch (settingsErr) {
-              console.warn("[Sync on Mount] Dedicated Settings lookup failed:", settingsErr);
-            }
-            setSettingsHydrated(true);
-          }
-        })();
-      }
     });
     return () => unsub();
   }, []);
@@ -1321,7 +1252,10 @@ export default function App() {
             }
           }
         }
+        // Only enable settings autosave after Firestore confirms the initial state.
+        setSettingsHydrated(true);
       }, (err) => {
+        setSettingsHydrated(false);
         console.warn("[Realtime Sync] business_info listener error:", err);
       });
     }
@@ -1640,7 +1574,6 @@ export default function App() {
   // User Sign out
   const handleLogOut = async () => {
     initialLoadedRef.current = false;
-    hasSyncedOnMountRef.current = false; // Reset the cloud sync status completely to allow the next login session to sync fresh
     if (activeUser && !activeUser.isGuest) {
       const passcode = activeUser.isPasscodeUser ? (activeUser.passcode || "1234") : "classic_account_secure";
       // Perform immediate cloud backup before signing out so nothing is ever lost
