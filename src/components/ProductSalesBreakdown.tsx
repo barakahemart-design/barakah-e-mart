@@ -111,7 +111,8 @@ function getCategoryIconColor(categoryName: string) {
 
 function getProductIconColor(productName: string, categoryName: string) {
   const name = String(productName || "").toLowerCase();
-  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return "text-orange-300";\n  if (/washing.?machine/.test(name)) return "text-violet-300";
+  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return "text-orange-300";\n  if (/water.?heater|geyser|\\bheater\\b/.test(name)) return "text-orange-300";
+  if (/washing.?machine/.test(name)) return "text-violet-300";
   if (/television|\btv\b/.test(name)) return "text-sky-300";
   if (/air.?condition|\bac\b/.test(name)) return "text-cyan-300";
   if (/microwave/.test(name)) return "text-orange-300";
