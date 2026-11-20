@@ -7,8 +7,7 @@ import {
   getDocs,
   query,
   where,
-  or,
-  and
+  or
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -202,20 +201,9 @@ async function handleDelete(collName: string, id: string): Promise<void> {
 
   const physicalIds = new Set<string>([String(id)]);
   try {
-    const accountIdentityFilters = [
-      where('store_id', '==', cleanEmail),
-      where('storeId', '==', cleanEmail),
-      where('email', '==', cleanEmail),
-      where('linked_email', '==', cleanEmail),
-      where('linkedEmail', '==', cleanEmail),
-      where('user_id', '==', currentUser.uid),
-      where('userId', '==', currentUser.uid),
-      where('owner_id', '==', currentUser.uid)
-    ];
-    const identityQuery = query(
-      collection(db, collName),
-      and(where('id', '==', String(id)), or(...accountIdentityFilters))
-    );
+    // The ID equality query is selective and was already part of the legacy
+    // delete path. Keep it as a single lookup; do not scan the store's documents.
+    const identityQuery = query(collection(db, collName), where('id', '==', String(id)));
     const snapshots = [await getDocs(identityQuery)];
     for (const snap of snapshots) {
       snap.docs.forEach((d: any) => {
