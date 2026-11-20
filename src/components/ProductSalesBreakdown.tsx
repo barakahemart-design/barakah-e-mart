@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { toUUID } from "../lib/firebase-helpers";
-import { Boxes, Package, ShoppingBag } from "lucide-react";
+import { Boxes, Package, ShoppingBag, ChartColumn, Tv, WashingMachine, AirVent, Microwave, Router, Refrigerator, Fan, Monitor, Smartphone, Laptop, CookingPot, PlugZap } from "lucide-react";
 import { safeDate } from "../lib/dateUtils";
 
 interface ProductSalesBreakdownProps {
@@ -58,6 +58,39 @@ function isInsidePeriod(value: any, bounds: { start: Date; end: Date } | null) {
   if (!bounds) return true;
   const date = safeDate(value);
   return !!date && date.getTime() >= bounds.start.getTime() && date.getTime() <= bounds.end.getTime();
+}
+
+
+function getCategoryIcon(categoryName: string) {
+  const name = String(categoryName || "").toLowerCase();
+  if (/air.?condition|\bac\b|cooling/.test(name)) return AirVent;
+  if (/television|\btv\b/.test(name)) return Tv;
+  if (/wash/.test(name)) return WashingMachine;
+  if (/microwave/.test(name)) return Microwave;
+  if (/network|router|wifi|wi-fi/.test(name)) return Router;
+  if (/refrigerator|fridge/.test(name)) return Refrigerator;
+  if (/fan/.test(name)) return Fan;
+  if (/mobile|phone|smartphone/.test(name)) return Smartphone;
+  if (/laptop|computer|monitor/.test(name)) return Laptop;
+  if (/kitchen|cook|stove|oven/.test(name)) return CookingPot;
+  if (/power|ups|adapter|charger|electrical/.test(name)) return PlugZap;
+  if (/electronics|display|computer/.test(name)) return Monitor;
+  return Boxes;
+}
+
+function getProductIcon(productName: string, categoryName: string) {
+  const name = String(productName || "").toLowerCase();
+  if (/washing.?machine/.test(name)) return WashingMachine;
+  if (/television|\btv\b/.test(name)) return Tv;
+  if (/air.?condition|\bac\b/.test(name)) return AirVent;
+  if (/microwave/.test(name)) return Microwave;
+  if (/router|network|wifi|wi-fi/.test(name)) return Router;
+  if (/refrigerator|fridge/.test(name)) return Refrigerator;
+  if (/fan/.test(name)) return Fan;
+  if (/smartphone|mobile|phone/.test(name)) return Smartphone;
+  if (/laptop|notebook/.test(name)) return Laptop;
+  if (/stove|oven|cooker|kettle|air fryer/.test(name)) return CookingPot;
+  return getCategoryIcon(categoryName);
 }
 
 function formatQuantity(value: number) {
@@ -265,7 +298,7 @@ export function ProductSalesBreakdown({
                   {category.products.map(product => (
                     <div key={product.productId || product.name} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-3 px-4 py-2.5">
                       <div className="flex min-w-0 items-center gap-2">
-                        <Package className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                        {(() => { const ProductIcon = getProductIcon(product.name, category.name); return <ProductIcon className="h-3.5 w-3.5 shrink-0 text-violet-300" />; })()}
                         <span className="truncate text-[11px] font-medium text-slate-300">{product.name}</span>
                       </div>
                       <span className="min-w-0 text-right text-xs font-bold tabular-nums text-white">{formatQuantity(product.units)} units</span>
