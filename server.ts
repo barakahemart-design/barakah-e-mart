@@ -881,23 +881,17 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         });
       };
 
-      // Canonical fields are queried first. Legacy aliases are queried only when
-      // needed, avoiding the old unauthenticated client-SDK fallback on the server.
+      // Read all supported identity aliases so a mixed legacy/current store
+      // does not silently lose older records when only some canonical docs exist.
       await readQuery("store_id", cleanEmail);
-      if (recordsMap.size === 0) {
-        await readQuery("user_id", verified.uid);
-      }
-      if (recordsMap.size === 0) {
-        for (const field of ["storeId", "email", "linked_email", "linkedEmail"]) {
-          await readQuery(field, cleanEmail);
-          if (recordsMap.size > 0) break;
-        }
-      }
-      if (recordsMap.size === 0) {
-        for (const uid of allowedIds) {
-          await readQuery("user_id", uid);
-          if (recordsMap.size > 0) break;
-        }
+      await readQuery("storeId", cleanEmail);
+      await readQuery("email", cleanEmail);
+      await readQuery("linked_email", cleanEmail);
+      await readQuery("linkedEmail", cleanEmail);
+      for (const uid of allowedIds) {
+        await readQuery("user_id", uid);
+        await readQuery("userId", uid);
+        await readQuery("owner_id", uid);
       }
 
       return res.json(Array.from(recordsMap.values()));
@@ -997,10 +991,11 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
       }
 
-      // Write a store-scoped tombstone before deletion so stale recovery copies
-      // cannot resurrect the record on another device.
+      // Atomically write a store-scoped tombstone and delete the record so a
+      // failed delete cannot leave a tombstone that hides a still-existing item.
       const tombstoneId = `${tableStr}__${docId}`;
-      await adminDb.collection("deleted_records").doc(tombstoneId).set({
+      const batch = adminDb.batch();
+      batch.set(adminDb.collection("deleted_records").doc(tombstoneId), {
         id: docId,
         collection: tableStr,
         record_id: docId,
@@ -1013,7 +1008,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         linked_email: cleanEmail,
         deleted_at: new Date().toISOString()
       }, { merge: true });
-      await recordRef.delete();
+      batch.delete(recordRef);
+      await batch.commit();
 
       try {
         await broadcastSyncChange({
