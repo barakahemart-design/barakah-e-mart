@@ -105,6 +105,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (syncingOfflineQueueRef.current || !pendingOperationsRef.current.length) return;
     syncingOfflineQueueRef.current = true;
+    const hadPendingOperations = pendingOperationsRef.current.length > 0;
     try {
       while (pendingOperationsRef.current.length) {
         const current = pendingOperationsRef.current[0];
@@ -128,10 +129,26 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           break;
         }
       }
+      if (hadPendingOperations && pendingOperationsRef.current.length === 0) {
+        try {
+          const [staffData, assignmentData, queueData, expenseData] = await Promise.all([
+            request("/api/delivery/staff/list", {}),
+            request("/api/delivery/assignments/admin-list", {}),
+            request("/api/delivery/queue/list", {}),
+            panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
+          ]);
+          setStaff(staffData.staff || []);
+          setAssignments(assignmentData.assignments || []);
+          setQueueItems(queueData.queue || []);
+          setExpenses(expenseData.expenses || []);
+        } catch (_) {
+          setOfflineNotice(true);
+        }
+      }
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [request]);
+  }, [request, panelRole]);
 
   useEffect(() => {
     const retry = () => { void flushOfflineQueue(); };
