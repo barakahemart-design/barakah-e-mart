@@ -150,14 +150,14 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 #root #pos-select-wrap { position: relative !important; z-index: 1001 !important; overflow: visible !important; }
 #root .pos-product-suggestions {
   position: absolute !important;
-  z-index: 10 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
+  z-index: 1007 !important;
+  display: block !important;
   pointer-events: auto !important;
   max-height: min(65vh, 520px) !important;
-  overflow-y: auto !important;
+  overflow-y: scroll !important;
   overflow-x: hidden !important;
+  height: auto !important;
+  min-height: 0 !important;
   overscroll-behavior: contain !important;
   -webkit-overflow-scrolling: touch !important;
   touch-action: pan-y !important;
@@ -170,7 +170,11 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
   scrollbar-width: thin;
   scrollbar-color: rgba(148,163,184,.65) rgba(15,23,42,.9);
 }
-#root .pos-product-suggestions > button { flex: 0 0 auto !important; pointer-events: auto !important; }
+#root .pos-product-suggestions > button { display: flex !important; width: 100% !important; min-height: 54px !important; pointer-events: auto !important; }
+#root #pos-product-picker-pnl { position: relative !important; z-index: 1005 !important; overflow: visible !important; }
+#root #pos-cart-list-pnl { position: relative !important; z-index: 0 !important; }
+#root #pos-select-wrap { z-index: 1006 !important; }
+#root .pos-product-suggestions { isolation: isolate !important; }
 #root .pos-product-suggestions { scrollbar-gutter: stable; }
 #root svg.lucide-bookmark, #root svg.lucide-bookmark-plus, #root svg.lucide-clipboard-plus { color: #a78bfa !important; }
 #root svg.lucide-history, #root svg.lucide-list-clock, #root svg.lucide-wallet-cards { color: #fbbf24 !important; }
@@ -241,8 +245,7 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 /* Explicitly color the inventory and supplier-due sections that were missed by the first palette pass. */
 #root #tab-inventory-btn svg, #root #mobile-tab-inventory-btn svg,
 #root #view-inventory-container svg.lucide { color: #a78bfa !important; }
-#root #view-duelist-container svg.lucide, #root #tab-duelist-btn svg,
-#root #mobile-tab-duelist-btn svg { color: #fbbf24 !important; }
+#root #tab-duelist-btn svg, #root #mobile-tab-duelist-btn svg { color: #fbbf24 !important; }
 #root #view-inventory-container svg.lucide-plus-circle,
 #root #view-inventory-container svg.lucide-circle-plus,
 #root #view-inventory-container svg.lucide-package-plus,
@@ -250,3 +253,28 @@ html:not(.light) #root #ledger-timeline-feed > div[data-customer-payment-status=
 #root #view-duelist-container svg.lucide-plus-circle,
 #root #view-duelist-container svg.lucide-circle-plus,
 #root #view-duelist-container svg.lucide-file-plus { color: #f59e0b !important; }
+
+
+/* Native date inputs: make the browser calendar glyph visible and colorful on dark fields. */
+#root input[type="date"]::-webkit-calendar-picker-indicator,
+#root input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+#root input[type="month"]::-webkit-calendar-picker-indicator,
+#root input[type="week"]::-webkit-calendar-picker-indicator {
+  opacity: 1 !important;
+  cursor: pointer !important;
+  filter: invert(72%) sepia(67%) saturate(1250%) hue-rotate(155deg) brightness(112%) contrast(105%) !important;
+}
+#root input[type="date"], #root input[type="datetime-local"],
+#root input[type="month"], #root input[type="week"] { color-scheme: dark; }
+
+/* Product-specific category icons in Dashboard > Category & Product Details. */
+#root svg.lucide-air-vent { color: #22d3ee !important; }
+#root svg.lucide-tv { color: #60a5fa !important; }
+#root svg.lucide-washing-machine { color: #a78bfa !important; }
+#root svg.lucide-microwave { color: #fb923c !important; }
+#root svg.lucide-router { color: #34d399 !important; }
+#root svg.lucide-refrigerator { color: #38bdf8 !important; }
+#root svg.lucide-fan { color: #f472b6 !important; }
+#root svg.lucide-smartphone, #root svg.lucide-laptop, #root svg.lucide-monitor { color: #818cf8 !important; }
+#root svg.lucide-cooking-pot { color: #f59e0b !important; }
+#root svg.lucide-plug-zap { color: #facc15 !important; }
