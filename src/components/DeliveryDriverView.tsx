@@ -89,6 +89,14 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           pendingOperationsRef.current = next;
           setPendingOperations(next);
         } catch (error) {
+          const status = Number((error as any)?.status || 0);
+          if (status === 409 || status === 404) {
+            const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
+            pendingOperationsRef.current = next;
+            setPendingOperations(next);
+            console.warn("[Delivery driver] A queued change could not be applied because its cloud record changed or was removed:", (error as any)?.message || error);
+            continue;
+          }
           if (!isRetryableDeliveryError(error)) console.warn("[Delivery driver] A saved change needs review before sync:", (error as any)?.message || error);
           break;
         }
@@ -182,17 +190,15 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
         if (result.expense) setExpenses(prev => [result.expense, ...prev.filter(x => x.id !== result.expense.id)]);
       } catch (error: any) {
         if (!isRetryableDeliveryError(error)) throw error;
-        const localOperation = queueOfflineOperation("/api/delivery/expenses", {
+        const clientRequestId = createDeliveryOfflineOperation("local-id", {}).id;
+        queueOfflineOperation("/api/delivery/expenses", {
           ...expensePayload,
-          client_request_id: createDeliveryOfflineOperation("local-id", {}).id
+          client_request_id: clientRequestId
         });
-        const clientRequestId = localOperation.body.client_request_id;
         const localExpense: Expense = {
           id: clientRequestId, amount: Number(amount), reason, category, date,
           payment_status: "unpaid"
         };
-        // Keep the operation's id as the permanent server document ID for safe retries.
-        localOperation.body.client_request_id = clientRequestId;
         setExpenses(prev => [localExpense, ...prev.filter(x => x.id !== clientRequestId)]);
       }
       setAmount(""); setReason(""); setAssignmentId("");
