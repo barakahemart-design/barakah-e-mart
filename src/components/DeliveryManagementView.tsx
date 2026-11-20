@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
 import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
@@ -12,7 +13,7 @@ type Assignment = {
   items?: Array<{ name: string; quantity: number }>;
 };
 type DeliveryExpense = {
-  id: string; driver_name: string; amount: number; reason: string; category: string;
+  id: string; driver_uid?: string; driver_name: string; amount: number; reason: string; category: string;
   date: string; payment_status: "paid" | "unpaid"; assignment_id?: string;
   paid_at?: string; payment_date?: string; reviewed_at?: string;
 };
@@ -22,16 +23,26 @@ interface Props {
   salesPin?: string;
   panelRole?: "admin" | "sales";
   storeId: string;
+  transactions?: any[];
+  contacts?: any[];
   currencySymbol?: string;
   triggerNotification: (message: string, type?: "success" | "error" | "info") => void;
 }
 
-export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "৳", triggerNotification }: Props) {
+export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, transactions = [], contacts = [], currencySymbol = "৳", triggerNotification }: Props) {
+  const cacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}`);
+  const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
+  const invoiceLookupCacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}:invoice-lookups`);
+  const [cachedData] = useState(() => readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null));
   const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
-  const [staff, setStaff] = useState<Driver[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [queueItems, setQueueItems] = useState<Array<{id:string; invoice_no:string; customer_name:string; customer_phone:string; customer_address:string; items?:Array<{name:string;quantity:number}>; total_amount?:number; queued_at:string}>>([]);
-  const [expenses, setExpenses] = useState<DeliveryExpense[]>([]);
+  const [staff, setStaff] = useState<Driver[]>(() => cachedData?.staff || []);
+  const [assignments, setAssignments] = useState<Assignment[]>(() => cachedData?.assignments || []);
+  const [queueItems, setQueueItems] = useState<Array<{id:string; invoice_no:string; customer_name:string; customer_phone:string; customer_address:string; items?:Array<{name:string;quantity:number}>; total_amount?:number; queued_at:string}>>(() => cachedData?.queueItems || []);
+  const [expenses, setExpenses] = useState<DeliveryExpense[]>(() => cachedData?.expenses || []);
+  const [pendingOperations, setPendingOperations] = useState<DeliveryOfflineOperation[]>(() => readDeliveryLocal(offlineQueueKey, []));
+  const pendingOperationsRef = useRef<DeliveryOfflineOperation[]>(pendingOperations);
+  const syncingOfflineQueueRef = useRef(false);
+  const [offlineNotice, setOfflineNotice] = useState(pendingOperations.length > 0);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,6 +67,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [paymentCustomEnd, setPaymentCustomEnd] = useState(new Date().toISOString().slice(0, 10));
   const notifyRef = React.useRef(triggerNotification);
   notifyRef.current = triggerNotification;
+  const transactionsRef = useRef(transactions);
+  transactionsRef.current = transactions;
+  const contactsRef = useRef(contacts);
+  contactsRef.current = contacts;
 
   const request = useCallback(async (path: string, body?: any) => {
     const user = auth.currentUser;
@@ -67,9 +82,90 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       ...(body ? { body: JSON.stringify({ store_id: storeId, panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminPin } : { sales_pin: salesPin }), ...body }) } : {})
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Delivery request failed.");
+    if (!response.ok) {
+      const failure: any = new Error(data.error || "Delivery request failed.");
+      failure.status = response.status;
+      throw failure;
+    }
     return data;
   }, [adminPin, salesPin, panelRole, storeId]);
+
+  useEffect(() => {
+    pendingOperationsRef.current = pendingOperations;
+    writeDeliveryLocal(offlineQueueKey, pendingOperations);
+  }, [pendingOperations, offlineQueueKey]);
+
+  useEffect(() => {
+    writeDeliveryLocal(cacheKey, { staff, assignments, queueItems, expenses, savedAt: new Date().toISOString() });
+  }, [cacheKey, staff, assignments, queueItems, expenses]);
+
+  const queueOfflineOperation = useCallback((path: string, body: Record<string, any>) => {
+    const operation = createDeliveryOfflineOperation(path, body);
+    const next = [...pendingOperationsRef.current, operation];
+    pendingOperationsRef.current = next;
+    writeDeliveryLocal(offlineQueueKey, next);
+    setPendingOperations(next);
+    setOfflineNotice(true);
+  }, []);
+
+  const flushOfflineQueue = useCallback(async () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (syncingOfflineQueueRef.current || !pendingOperationsRef.current.length) return;
+    syncingOfflineQueueRef.current = true;
+    const hadPendingOperations = pendingOperationsRef.current.length > 0;
+    try {
+      while (pendingOperationsRef.current.length) {
+        const current = pendingOperationsRef.current[0];
+        try {
+          await request(current.path, current.body);
+          const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
+          pendingOperationsRef.current = next;
+          setPendingOperations(next);
+        } catch (error) {
+          const status = Number((error as any)?.status || 0);
+          if (status === 409 || status === 404) {
+            const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
+            pendingOperationsRef.current = next;
+            setPendingOperations(next);
+            notifyRef.current("A queued delivery change could not be applied because the cloud record changed or was removed: " + String((error as any)?.message || error), "error");
+            continue;
+          }
+          // Keep the first failed operation and all later operations in order.
+          // This prevents a later payment/status change overtaking an earlier change.
+          if (!isRetryableDeliveryError(error)) notifyRef.current("A saved delivery change needs review before it can sync: " + String((error as any)?.message || error), "error");
+          break;
+        }
+      }
+      if (hadPendingOperations && pendingOperationsRef.current.length === 0) {
+        try {
+          const [staffData, assignmentData, queueData, expenseData] = await Promise.all([
+            request("/api/delivery/staff/list", {}),
+            request("/api/delivery/assignments/admin-list", {}),
+            request("/api/delivery/queue/list", {}),
+            panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
+          ]);
+          setStaff(staffData.staff || []);
+          setAssignments(assignmentData.assignments || []);
+          setQueueItems(queueData.queue || []);
+          setExpenses(expenseData.expenses || []);
+          setOfflineNotice(false);
+        } catch (_) {
+          setOfflineNotice(true);
+        }
+      }
+    } finally {
+      syncingOfflineQueueRef.current = false;
+    }
+  }, [request, panelRole]);
+
+  useEffect(() => {
+    const retry = () => { void flushOfflineQueue(); };
+    window.addEventListener("online", retry);
+    const timer = window.setInterval(() => {
+      if (pendingOperationsRef.current.length) retry();
+    }, 30000);
+    return () => { window.removeEventListener("online", retry); window.clearInterval(timer); };
+  }, [flushOfflineQueue]);
 
   const loadAll = useCallback(async () => {
     if ((panelRole === "admin" && !adminPin) || (panelRole === "sales" && !salesPin) || !storeId) return;
@@ -81,19 +177,47 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         request("/api/delivery/queue/list", {}),
         panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
       ]);
-      setStaff(staffData.staff || []);
-      setAssignments(assignmentData.assignments || []);
-      setQueueItems(queueData.queue || []);
-      setExpenses(expenseData.expenses || []);
-      setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
+      if (pendingOperationsRef.current.length) {
+        // Keep the device's optimistic snapshot visible until every queued write
+        // has synced; replacing it with an older cloud snapshot would hide local work.
+        void flushOfflineQueue();
+      } else {
+        setStaff(staffData.staff || []);
+        setAssignments(assignmentData.assignments || []);
+        setQueueItems(queueData.queue || []);
+        setExpenses(expenseData.expenses || []);
+        setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
+        setOfflineNotice(false);
+      }
     } catch (error: any) {
-      notifyRef.current(error?.message || "Could not load delivery management data.", "error");
+      setOfflineNotice(true);
+      if (!cachedData) notifyRef.current(error?.message || "Could not load delivery management data.", "error");
+      else notifyRef.current("Cloud limit/network unavailable. Showing the latest saved delivery data on this device.", "info");
     } finally {
       setLoading(false);
     }
-  }, [adminPin, salesPin, storeId, request, panelRole]);
+  }, [adminPin, salesPin, storeId, request, panelRole, flushOfflineQueue, cachedData]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Devices that previously hit a quota/network limit retry the cached view at a
+  // low frequency. A focus/visibility refresh also picks up changes synced by
+  // another device without adding an always-on Firestore listener.
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void loadAll();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = window.setInterval(() => {
+      if (offlineNotice && pendingOperationsRef.current.length === 0) void loadAll();
+    }, 120000);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(timer);
+    };
+  }, [loadAll, offlineNotice]);
 
   // Clean only orphan assignments after verifying that the invoice no longer exists in this store.
   useEffect(() => {
@@ -114,10 +238,42 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     const timer = window.setTimeout(async () => {
       try {
         const result = await request("/api/delivery/invoices/lookup", { invoice_no: value });
-        if (!cancelled) setInvoiceLookup({ status: "found", invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "" });
+        if (!cancelled) {
+          const cachedLookups = readDeliveryLocal<Record<string, any>>(invoiceLookupCacheKey, {});
+          cachedLookups[value] = { invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "", savedAt: new Date().toISOString() };
+          writeDeliveryLocal(invoiceLookupCacheKey, cachedLookups);
+          setInvoiceLookup({ status: "found", invoice: result.invoice, already_assigned: Boolean(result.already_assigned), assigned_driver: result.assigned_driver || "" });
+        }
       } catch (error: any) {
         if (cancelled) return;
         const message = String(error?.message || "Could not search invoice.");
+        if (isRetryableDeliveryError(error)) {
+          const cached = readDeliveryLocal<Record<string, any>>(invoiceLookupCacheKey, {})[value];
+          if (cached?.invoice) {
+            setOfflineNotice(true);
+            setInvoiceLookup({ status: "found", invoice: cached.invoice, already_assigned: Boolean(cached.already_assigned), assigned_driver: cached.assigned_driver || "" });
+            return;
+          }
+          // Sales invoices and customer profiles are already cached locally by the
+          // core POS. Use that same business-scoped data to prepare an offline
+          // assignment; the server still validates the invoice before syncing it.
+          const localTransaction = transactionsRef.current.find((item: any) => String(item?.invoiceNo || item?.invoice_no || "").trim() === value);
+          if (localTransaction) {
+            const contactId = String(localTransaction.contactId || localTransaction.contact_id || "");
+            const localCustomer = contactsRef.current.find((item: any) => String(item?.id || "") === contactId && item?.type === "customer");
+            const localInvoice = {
+              invoice_no: value,
+              customer_name: String(localCustomer?.name || localTransaction.customer_name || localTransaction.customerName || "Customer"),
+              customer_phone: String(localCustomer?.phone || localTransaction.customer_phone || localTransaction.customerPhone || ""),
+              customer_address: String(localCustomer?.address || localTransaction.customer_address || localTransaction.customerAddress || ""),
+              total_amount: Number(localTransaction.total || localTransaction.totalAmount || 0),
+              items: Array.isArray(localTransaction.items) ? localTransaction.items.map((item: any) => ({ name: String(item?.name || item?.productName || "Item"), quantity: Number(item?.quantity) || 0 })) : []
+            };
+            setOfflineNotice(true);
+            setInvoiceLookup({ status: "found", invoice: localInvoice, already_assigned: false });
+            return;
+          }
+        }
         setInvoiceLookup(message.toLowerCase().includes("invoice not found") ? { status: "not_found", message } : { status: "error", message });
       }
     }, 350);
@@ -141,23 +297,52 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const assignInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (invoiceLookup.status !== "found" || !invoiceSelected || invoiceLookup.already_assigned) {
-      notifyRef.current(invoiceLookup.already_assigned ? "This invoice is already assigned." : "Search and select a valid invoice number first.", "error");
+    if (invoiceLookup.status !== "found" || !invoiceSelected || invoiceLookup.already_assigned || assignments.some(item => String(item.invoice_no) === invoiceNo.trim())) {
+      notifyRef.current(invoiceLookup.already_assigned || assignments.some(item => String(item.invoice_no) === invoiceNo.trim()) ? "This invoice is already assigned." : "Search and select a valid invoice number first.", "error");
       return;
     }
     if (!driverUid) {
       notifyRef.current("Select a delivery driver first.", "error");
       return;
     }
+    const assignmentBody = { invoice_no: invoiceNo.trim(), driver_uid: driverUid };
     try {
-      const result = await request("/api/delivery/assignments/create", { invoice_no: invoiceNo, driver_uid: driverUid });
+      const result = await request("/api/delivery/assignments/create", assignmentBody);
       setAssignments(prev => [result.assignment, ...prev.filter(x => x.id !== result.assignment.id)]);
       setInvoiceNo("");
       setInvoiceLookup({ status: "idle" });
       setInvoiceSelected(false);
       notifyRef.current("Invoice assigned to delivery staff.", "success");
     } catch (error: any) {
-      notifyRef.current(error?.message || "Could not assign invoice.", "error");
+      if (isRetryableDeliveryError(error) && invoiceLookup.invoice) {
+        const selectedDriver = staff.find(x => x.uid === driverUid);
+        const localId = "local-" + createDeliveryOfflineOperation("local", {}).id;
+        const invoice = invoiceLookup.invoice;
+        queueOfflineOperation("/api/delivery/assignments/create", assignmentBody);
+        const localAssignment: Assignment = {
+          id: localId,
+          invoice_no: assignmentBody.invoice_no,
+          driver_uid: driverUid,
+          driver_name: selectedDriver?.name || "Delivery Staff",
+          customer_name: String(invoice.customer_name || "Customer"),
+          customer_phone: String(invoice.customer_phone || ""),
+          customer_address: String(invoice.customer_address || ""),
+          customer_note: String(invoice.customer_note || ""),
+          delivery_note: "",
+          delivery_status: "assigned",
+          assigned_at: new Date().toISOString(),
+          delivery_fee: 0,
+          payment_status: "unpaid",
+          payment_timing: "after_delivery",
+          items: Array.isArray(invoice.items) ? invoice.items : []
+        };
+        setAssignments(prev => [localAssignment, ...prev.filter(x => x.invoice_no !== assignmentBody.invoice_no)]);
+        setInvoiceNo("");
+        setInvoiceLookup({ status: "idle" });
+        setInvoiceSelected(false);
+        setOfflineNotice(true);
+        notifyRef.current("Invoice assignment saved on this device. It will sync when Firebase access returns.", "info");
+      } else notifyRef.current(error?.message || "Could not assign invoice.", "error");
     }
   };
 
@@ -172,7 +357,12 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setQueueItems(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
       notifyRef.current("Invoice " + cleanInvoiceNo + " removed from Delivery Assignment/Queue. The original invoice is safe.", "success");
     } catch (error: any) {
-      notifyRef.current(error?.message || "Could not delete invoice assignment.", "error");
+      if (isRetryableDeliveryError(error)) {
+        queueOfflineOperation("/api/delivery/assignments/admin-delete", { invoice_no: cleanInvoiceNo });
+        setAssignments(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
+        setQueueItems(prev => prev.filter(item => String(item.invoice_no) !== cleanInvoiceNo));
+        notifyRef.current("Removal saved on this device. It will sync when the cloud limit/connection returns.", "info");
+      } else notifyRef.current(error?.message || "Could not delete invoice assignment.", "error");
     } finally {
       setDeletingAssignmentNo("");
     }
@@ -184,7 +374,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       await request("/api/delivery/staff/status", { staff_uid: person.uid, status: nextStatus });
       setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: nextStatus } : x));
       notifyRef.current(nextStatus === "inactive" ? "Delivery account put on hold." : "Delivery account reactivated.", "success");
-    } catch (error: any) { notifyRef.current(error?.message || "Could not update staff status.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        queueOfflineOperation("/api/delivery/staff/status", { staff_uid: person.uid, status: nextStatus });
+        setStaff(prev => prev.map(x => x.uid === person.uid ? { ...x, status: nextStatus } : x));
+        notifyRef.current("Staff status saved on this device and queued for cloud sync.", "info");
+      } else notifyRef.current(error?.message || "Could not update staff status.", "error");
+    }
   };
 
   const deleteStaff = async (person: Driver) => {
@@ -210,7 +406,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         payment_date: result.payment_date || undefined
       } : x));
       notifyRef.current(next === "paid" ? "Expense marked as Paid." : "Expense marked as Unpaid.", "success");
-    } catch (error: any) { notifyRef.current(error?.message || "Could not update expense status.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const now = new Date().toISOString();
+        queueOfflineOperation("/api/delivery/expenses/payment-status", { expense_id: expense.id, payment_status: next });
+        setExpenses(prev => prev.map(x => x.id === expense.id ? { ...x, payment_status: next, paid_at: next === "paid" ? (x.paid_at || now) : undefined, payment_date: next === "paid" ? now.slice(0, 10) : undefined } : x));
+        notifyRef.current("Expense payment change saved on this device and queued for cloud sync.", "info");
+      } else notifyRef.current(error?.message || "Could not update expense status.", "error");
+    }
   };
 
   const getPaymentDraft = (assignment: Assignment) => paymentDrafts[assignment.id] || {
@@ -221,6 +424,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const updateAssignmentPayment = async (assignment: Assignment) => {
     if (panelRole !== "admin") return;
+    if (assignment.id.startsWith("local-")) {
+      notifyRef.current("This invoice assignment is still waiting for cloud sync. Payment can be saved after the assignment receives its cloud ID.", "info");
+      return;
+    }
     const draft = getPaymentDraft(assignment);
     const fee = Number(draft.fee);
     if (!Number.isFinite(fee) || fee < 0 || fee > 1000000) { notifyRef.current("Enter a valid payment amount.", "error"); return; }
@@ -232,7 +439,16 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       await loadAll();
       setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
       notifyRef.current("Delivery payment updated.", "success");
-    } catch (error: any) { notifyRef.current(error?.message || "Could not update delivery payment.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const now = new Date().toISOString();
+        const body = { assignment_id: assignment.id, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing };
+        queueOfflineOperation("/api/delivery/assignments/payment", body);
+        setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing, payment_updated_at: now, payment_received_at: draft.status === "paid" ? (item.payment_received_at || now) : "" } : item));
+        setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
+        notifyRef.current("Delivery payment saved on this device. It will sync when cloud access returns.", "info");
+      } else notifyRef.current(error?.message || "Could not update delivery payment.", "error");
+    }
   };
 
   const isDateInRange = (value: any, filter: DateRangeFilter, customStart: string, customEnd: string) => {
@@ -323,6 +539,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       paymentCustomEnd
     )
   );
+  // One central payment desk: invoice delivery fees and staff expense reimbursements.
+  const filteredPaymentExpenses = expenses.filter(expense =>
+    (expense.payment_status === "paid" ? "paid" : "unpaid") === paymentView &&
+    isDateInRange(
+      paymentView === "paid" ? (expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date) : expense.date,
+      paymentDateFilter, paymentCustomStart, paymentCustomEnd
+    )
+  );
 
   const activeDrivers = staff.filter(x => x.status === "active");
   const tabs = [
@@ -345,6 +569,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
+
+      {(offlineNotice || pendingOperations.length > 0) && <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100">
+        <span className="font-black">Device-local delivery mode.</span> Showing the latest saved records on this device. {pendingOperations.length > 0 ? `${pendingOperations.length} change(s) waiting to sync.` : "Cloud data could not be refreshed."} Pending changes sync automatically when Firebase access is restored. Do not clear this browser's site data before sync completes.
+      </div>}
 
       {tab === "home" ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {tabs.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => setTab(item.id)} className="flex min-h-28 items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-5 text-left hover:border-sky-400/60">
@@ -375,17 +603,17 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="text-sm font-black text-white">Delivery Staff Accounts <span className="ml-1 text-emerald-300">({staff.length})</span></h3>
           {staff.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivery staff accounts yet.</p> : staff.map(person => <div key={person.uid} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span></div>
+            <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{person.name}</p><p className="truncate text-[11px] text-slate-400">{person.email} {person.phone ? "· " + person.phone : ""}</p><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-black ${person.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>{person.status === "active" ? "ACTIVE" : "ON HOLD"}</span><p className="mt-1 text-[10px] text-slate-400">Expense payment: <span className="text-rose-300">{expenses.filter(x => (x.driver_uid ? x.driver_uid === person.uid : x.driver_name === person.name) && x.payment_status !== "paid").length} Pending</span> · <span className="text-emerald-300">{expenses.filter(x => (x.driver_uid ? x.driver_uid === person.uid : x.driver_name === person.name) && x.payment_status === "paid").length} Paid</span></p></div>
             {panelRole === "admin" && <div className="flex flex-wrap gap-2"><button onClick={() => toggleStaff(person)} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black ${person.status === "active" ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300"}`}>{person.status === "active" ? <><PauseCircle className="h-3 w-3" /> Hold</> : <><PlayCircle className="h-3 w-3" /> Unhold</>}</button><button onClick={() => deleteStaff(person)} className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete</button></div>}
           </div>)}
         </div>
       </div>}
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
-        <h3 className="text-sm font-black text-white">Delivery Staff Payments</h3>
+        <h3 className="text-sm font-black text-white">Delivery Payments · All Payment Records</h3>
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
-          <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length})</button>
-          <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length})</button>
+          <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length + expenses.filter(e => e.payment_status !== "paid").length})</button>
+          <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length + expenses.filter(e => e.payment_status === "paid").length})</button>
         </div>
         {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
         {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {paymentView} delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
@@ -400,6 +628,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             <button onClick={() => updateAssignmentPayment(a)} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-[10px] font-black text-slate-950">Save Payment Details</button>
           </div>;
         })}
+        <div className="space-y-2 pt-2">
+          <h3 className="text-sm font-black text-white">Staff Expense Payments</h3>
+          {filteredPaymentExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">No {paymentView} staff expense payments for this date range.</p> : filteredPaymentExpenses.map(expense => <div key={`expense-${expense.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div><p className="text-sm font-black text-white">Staff Expense · {currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")}</p><p className="mt-1 text-[11px] text-slate-300">{expense.driver_name} · {expense.reason}</p><p className="mt-1 text-[10px] text-slate-500">{expense.category} · Submitted {expense.date}{expense.assignment_id ? " · Linked delivery" : " · General expense"}</p>{expense.paid_at && <p className="mt-1 text-[10px] text-emerald-300">Paid {new Date(expense.paid_at).toLocaleString("en-BD")}</p>}</div>
+            <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Pending · Mark Paid"}</button>
+          </div>)}
+        </div>
       </div>}
 
       {tab === "assignments" && <div className="space-y-4">
@@ -435,6 +670,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status || "assigned"}</span></div>
             <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
             <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
+            <p className="mt-2 text-[10px] text-slate-400">Delivery: <span className={item.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}>{item.delivery_status === "delivered" ? "Delivered" : "Not delivered"}</span> · Driver payment: <span className={item.payment_status === "paid" ? "text-emerald-300" : "text-rose-300"}>{item.payment_status === "paid" ? "Paid" : "Unpaid"}</span></p>
+            <p className="mt-2 text-[10px] text-slate-400">Delivery: <span className={item.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}>{item.delivery_status === "delivered" ? "Delivered" : "Not delivered"}</span> · Driver payment: <span className={item.payment_status === "paid" ? "text-emerald-300" : "text-rose-300"}>{item.payment_status === "paid" ? "Paid" : "Unpaid"}</span></p>
             {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" disabled={deletingAssignmentNo === String(item.invoice_no)} onClick={() => deleteInvoiceAssignment(String(item.invoice_no))} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300 disabled:opacity-50"><Trash2 className="h-3 w-3" />{deletingAssignmentNo === String(item.invoice_no) ? "Deleting…" : "Delete Invoice"}</button></div>}
           </div>)}</div>
         </> : <div className="space-y-2">
@@ -456,7 +693,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         {renderDateRangeFilter("staff-expense-date-range", expenseDateFilter, setExpenseDateFilter, expenseCustomStart, setExpenseCustomStart, expenseCustomEnd, setExpenseCustomEnd)}
         {filteredStaffExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {expenseView} staff expenses found for this date range.</p> : filteredStaffExpenses.map(expense => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div><p className="text-sm font-black text-white">{currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")} · {expense.reason}</p><p className="mt-1 text-[11px] text-slate-400">{expense.driver_name} · {expense.category} · {expense.date}</p></div>
-          <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Unpaid · Mark Paid"}</button>
+          <span className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid" : "Pending · Pay in Delivery Payments"}</span>
         </div>)}
       </div>}
 
