@@ -1721,6 +1721,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const previousAssignmentSnap = await assignmentRef.get();
       const previousAssignment = previousAssignmentSnap.exists ? previousAssignmentSnap.data() || {} : {};
       if (previousAssignmentSnap.exists && previousAssignment.owner_store_id === storeId) {
+        // Replaying an offline assignment after a lost response must not create a
+        // duplicate or report a false conflict when the same driver already owns it.
+        if (String(previousAssignment.driver_uid || "") === driverUid) {
+          if (queuedSnap.exists) await adminDb.collection("delivery_queue").doc(queueId).set({ assigned: true, assigned_to: driverUid, assigned_at: String(previousAssignment.assigned_at || new Date().toISOString()) }, { merge: true });
+          return res.status(200).json({ success: true, assignment: { id: assignmentId, ...previousAssignment } });
+        }
         const existingDriver = String(previousAssignment.driver_name || "another delivery staff member");
         return res.status(409).json({ error: `This invoice is already assigned to ${existingDriver}. Remove the existing assignment before assigning it again.`, already_assigned: true });
       }
