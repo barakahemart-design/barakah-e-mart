@@ -23,11 +23,13 @@ interface Props {
   salesPin?: string;
   panelRole?: "admin" | "sales";
   storeId: string;
+  transactions?: any[];
+  contacts?: any[];
   currencySymbol?: string;
   triggerNotification: (message: string, type?: "success" | "error" | "info") => void;
 }
 
-export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, currencySymbol = "৳", triggerNotification }: Props) {
+export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "admin", storeId, transactions = [], contacts = [], currencySymbol = "৳", triggerNotification }: Props) {
   const cacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}`);
   const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
   const invoiceLookupCacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}:invoice-lookups`);
@@ -248,12 +250,31 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             setInvoiceLookup({ status: "found", invoice: cached.invoice, already_assigned: Boolean(cached.already_assigned), assigned_driver: cached.assigned_driver || "" });
             return;
           }
+          // Sales invoices and customer profiles are already cached locally by the
+          // core POS. Use that same business-scoped data to prepare an offline
+          // assignment; the server still validates the invoice before syncing it.
+          const localTransaction = transactions.find((item: any) => String(item?.invoiceNo || item?.invoice_no || "").trim() === value);
+          if (localTransaction) {
+            const contactId = String(localTransaction.contactId || localTransaction.contact_id || "");
+            const localCustomer = contacts.find((item: any) => String(item?.id || "") === contactId && item?.type === "customer");
+            const localInvoice = {
+              invoice_no: value,
+              customer_name: String(localCustomer?.name || localTransaction.customer_name || localTransaction.customerName || "Customer"),
+              customer_phone: String(localCustomer?.phone || localTransaction.customer_phone || localTransaction.customerPhone || ""),
+              customer_address: String(localCustomer?.address || localTransaction.customer_address || localTransaction.customerAddress || ""),
+              total_amount: Number(localTransaction.total || localTransaction.totalAmount || 0),
+              items: Array.isArray(localTransaction.items) ? localTransaction.items.map((item: any) => ({ name: String(item?.name || item?.productName || "Item"), quantity: Number(item?.quantity) || 0 })) : []
+            };
+            setOfflineNotice(true);
+            setInvoiceLookup({ status: "found", invoice: localInvoice, already_assigned: false });
+            return;
+          }
         }
         setInvoiceLookup(message.toLowerCase().includes("invoice not found") ? { status: "not_found", message } : { status: "error", message });
       }
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [invoiceNo, request]);
+  }, [invoiceNo, request, transactions, contacts]);
 
   const createStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,8 +293,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const assignInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (invoiceLookup.status !== "found" || !invoiceSelected || invoiceLookup.already_assigned) {
-      notifyRef.current(invoiceLookup.already_assigned ? "This invoice is already assigned." : "Search and select a valid invoice number first.", "error");
+    if (invoiceLookup.status !== "found" || !invoiceSelected || invoiceLookup.already_assigned || assignments.some(item => String(item.invoice_no) === invoiceNo.trim())) {
+      notifyRef.current(invoiceLookup.already_assigned || assignments.some(item => String(item.invoice_no) === invoiceNo.trim()) ? "This invoice is already assigned." : "Search and select a valid invoice number first.", "error");
       return;
     }
     if (!driverUid) {
