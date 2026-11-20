@@ -616,13 +616,15 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       // Legacy account UIDs are kept only in the explicit per-email allowlist above.
       // This prevents a stale/mislinked vault from importing another business's records.
       try {
-        const profilesQ = query(collection(db, "profiles"), where("email", "==", cleanEmail));
-        const profilesSnap = await getDocs(profilesQ);
+        if (adminDb) {
+        const profilesSnap = await adminDb.collection("profiles")
+          .where("email", "==", cleanEmail).get();
         profilesSnap.forEach(docSnap => {
           // A profile document ID is a Firebase UID, but only trust it when it is
           // the UID presented by the verified Firebase ID token.
           if (docSnap.id === defaultUid) ids.add(docSnap.id);
         });
+      }
       } catch (err) {
         console.warn("resolveAllUserIdsForEmail profile verification error:", err);
       }
@@ -862,71 +864,51 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (typeof owner_email === "string" && owner_email.trim().toLowerCase() !== cleanEmail) {
         return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
       }
+      if (!adminDb) {
+        return res.status(503).json({ error: "Secure Firebase data service is not configured." });
+      }
+
       const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
       const recordsMap = new Map<string, any>();
+      const readQuery = async (field: string, value: string) => {
+        const snapshot = await adminDb!.collection(tableStr).where(field, "==", value).get();
+        snapshot.forEach(docSnapshot => {
+          const data = docSnapshot.data() || {};
+          if (isOwnedByVerifiedAccount(data, verified) ||
+              (allowedIds.includes(String(data.user_id || data.userId || data.owner_id || "")))) {
+            recordsMap.set(String(data.id || docSnapshot.id), data);
+          }
+        });
+      };
 
-      // 1. First populate from server in-memory real-time sync cache
-      const memCache = getTableCache(tableStr);
-      for (const [docId, data] of memCache.entries()) {
-        const docStore = (data.store_id || data.storeId || data.email || data.linked_email || "").trim().toLowerCase();
-        const docUid = String(data.user_id || data.userId || data.owner_id || "");
-        if ((cleanEmail && docStore === cleanEmail) || (cleanEmail && docUid === cleanEmail) || allowedIds.includes(docUid) || allowedIds.includes(docId)) {
-          recordsMap.set(docId, data);
+      // Canonical fields are queried first. Legacy aliases are queried only when
+      // needed, avoiding the old unauthenticated client-SDK fallback on the server.
+      await readQuery("store_id", cleanEmail);
+      if (recordsMap.size === 0) {
+        await readQuery("user_id", verified.uid);
+      }
+      if (recordsMap.size === 0) {
+        for (const field of ["storeId", "email", "linked_email", "linkedEmail"]) {
+          await readQuery(field, cleanEmail);
+          if (recordsMap.size > 0) break;
         }
       }
-
-      // 2. Query Firestore collection by allowed IDs and store email
-      try {
-        if (cleanEmail) {
-          try {
-            const storeQ = query(collection(db, tableStr), where("store_id", "==", cleanEmail));
-            const storeSnap = await getDocs(storeQ);
-            storeSnap.forEach(docSnapshot => {
-              const data = docSnapshot.data();
-              const docId = data.id || docSnapshot.id;
-              recordsMap.set(docId, data);
-              memCache.set(docId, data);
-            });
-          } catch (_) {}
-
-          try {
-            const emailQ = query(collection(db, tableStr), where("email", "==", cleanEmail));
-            const emailSnap = await getDocs(emailQ);
-            emailSnap.forEach(docSnapshot => {
-              const data = docSnapshot.data();
-              const docId = data.id || docSnapshot.id;
-              recordsMap.set(docId, data);
-              memCache.set(docId, data);
-            });
-          } catch (_) {}
-        }
-
-        // Query each allowed UID
+      if (recordsMap.size === 0) {
         for (const uid of allowedIds) {
-          try {
-            const q = query(collection(db, tableStr), where("user_id", "==", uid));
-            const docsSnap = await getDocs(q);
-            docsSnap.forEach(docSnapshot => {
-              const data = docSnapshot.data();
-              const docId = data.id || docSnapshot.id;
-              recordsMap.set(docId, data);
-              memCache.set(docId, data);
-            });
-          } catch (_) {}
+          await readQuery("user_id", uid);
+          if (recordsMap.size > 0) break;
         }
-      } catch (fErr) {
-        console.warn(`[server.ts] Firestore fetch for ${tableStr} notice:`, fErr);
       }
 
-      const records = Array.from(recordsMap.values());
-      res.json(records);
+      return res.json(Array.from(recordsMap.values()));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error("[server.ts] /api/db/fetch error:", err instanceof Error ? err.message : "unknown");
+      return res.status(503).json({ error: "Cloud data is temporarily unavailable. Please retry." });
     }
   });
 
   app.post("/api/db/upsert", async (req: Request, res: Response) => {
-    const { table, id, data } = req.body;
+    const { table, id, data } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) {
@@ -940,15 +922,18 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return res.status(400).json({ error: "Invalid collection or record ID." });
       }
       if (!cleanEmail) return res.status(403).json({ error: "A Firebase account email is required." });
+      if (!adminDb) {
+        return res.status(503).json({ error: "Secure Firebase data service is not configured. Nothing was saved." });
+      }
 
-      const existingRef = doc(db, tableStr, docId);
-      const existingSnap = await getDoc(existingRef);
-      if (existingSnap.exists() && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
+      const recordRef = adminDb.collection(tableStr).doc(docId);
+      const existingSnap = await recordRef.get();
+      if (existingSnap.exists && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
         return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
       }
 
       const enrichedData = {
-        ...data,
+        ...(data || {}),
         id: docId,
         user_id: verified.uid,
         userId: verified.uid,
@@ -958,50 +943,37 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         email: cleanEmail,
         linked_email: cleanEmail,
         linkedEmail: cleanEmail,
-        updated_at: data?.updated_at || new Date().toISOString()
+        updated_at: new Date().toISOString()
       };
 
-      // 1. Immediately store in server in-memory sync cache
-      getTableCache(tableStr).set(docId, enrichedData);
+      // Do not acknowledge a save until Firestore has durably confirmed it.
+      await recordRef.set(enrichedData, { merge: true });
 
-      // 2. Instantly broadcast change to all connected devices in realtime via SSE (< 10ms latency)
-      const allowedIds = [verified.uid, cleanEmail];
-      await broadcastSyncChange({
-        id: `${tableStr}_${docId}_${Date.now()}`,
-        table: tableStr,
-        docId: docId,
-        data: enrichedData,
-        isDelete: false,
-        storeEmail: cleanEmail,
-        userIds: allowedIds,
-        timestamp: Date.now()
-      });
+      try {
+        await broadcastSyncChange({
+          id: `${tableStr}_${docId}_${Date.now()}`,
+          table: tableStr,
+          docId,
+          data: enrichedData,
+          isDelete: false,
+          storeEmail: cleanEmail,
+          userIds: [verified.uid, cleanEmail],
+          timestamp: Date.now()
+        });
+      } catch (syncError) {
+        // The Firestore realtime listeners still receive the committed write.
+        console.warn("[server.ts] Durable sync event write failed after record save:", syncError instanceof Error ? syncError.message : "unknown");
+      }
 
-      // 3. Send instant success response to caller
-      res.json({ success: true, id: docId });
-
-      // 4. Asynchronously persist to Firestore & Passcode sync vault in background without blocking caller
-      (async () => {
-        try {
-          await setDoc(doc(db, tableStr, docId), enrichedData, { merge: true });
-        } catch (fErr) {
-          console.warn(`[server.ts] Firestore setDoc for ${tableStr}/${docId} notice:`, fErr);
-        }
-
-        try {
-          await syncCollectionAndPasscodeVault(verified, tableStr, docId, enrichedData, false);
-        } catch (pErr) {
-          console.warn(`[server.ts] syncCollectionAndPasscodeVault notice:`, pErr);
-        }
-      })().catch(() => {});
+      return res.json({ success: true, id: docId, persisted: true });
     } catch (err: any) {
-      console.error("[server.ts] /api/db/upsert error:", err);
-      res.status(500).json({ error: err.message });
+      console.error("[server.ts] /api/db/upsert error:", err instanceof Error ? err.message : "unknown");
+      return res.status(503).json({ error: "Cloud save failed. Your change was not confirmed; please retry." });
     }
   });
 
   app.post("/api/db/delete", async (req: Request, res: Response) => {
-    const { table, id } = req.body;
+    const { table, id } = req.body || {};
     try {
       const verified = await verifyFirebaseToken(req);
       if (!verified) {
@@ -1014,46 +986,53 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!ALLOWED_SYNC_TABLES.has(tableStr) || !docId || docId.length > 128) {
         return res.status(400).json({ error: "Invalid collection or record ID." });
       }
-      const existingSnap = await getDoc(doc(db, tableStr, docId));
-      if (existingSnap.exists() && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
+      if (!cleanEmail) return res.status(403).json({ error: "A Firebase account email is required." });
+      if (!adminDb) {
+        return res.status(503).json({ error: "Secure Firebase data service is not configured. Nothing was deleted." });
+      }
+
+      const recordRef = adminDb.collection(tableStr).doc(docId);
+      const existingSnap = await recordRef.get();
+      if (existingSnap.exists && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
         return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
       }
 
-      // 1. Remove from server cache
-      getTableCache(tableStr).delete(docId);
+      // Write a store-scoped tombstone before deletion so stale recovery copies
+      // cannot resurrect the record on another device.
+      const tombstoneId = `${tableStr}__${docId}`;
+      await adminDb.collection("deleted_records").doc(tombstoneId).set({
+        id: docId,
+        collection: tableStr,
+        record_id: docId,
+        user_id: verified.uid,
+        userId: verified.uid,
+        owner_id: verified.uid,
+        store_id: cleanEmail,
+        storeId: cleanEmail,
+        email: cleanEmail,
+        linked_email: cleanEmail,
+        deleted_at: new Date().toISOString()
+      }, { merge: true });
+      await recordRef.delete();
 
-      // 2. Instantly broadcast deletion to all connected devices in realtime via SSE
-      const allowedIds = [verified.uid, cleanEmail];
-      await broadcastSyncChange({
-        id: `${tableStr}_${docId}_del_${Date.now()}`,
-        table: tableStr,
-        docId: docId,
-        isDelete: true,
-        storeEmail: cleanEmail,
-        userIds: allowedIds,
-        timestamp: Date.now()
-      });
+      try {
+        await broadcastSyncChange({
+          id: `${tableStr}_${docId}_del_${Date.now()}`,
+          table: tableStr,
+          docId,
+          isDelete: true,
+          storeEmail: cleanEmail,
+          userIds: [verified.uid, cleanEmail],
+          timestamp: Date.now()
+        });
+      } catch (syncError) {
+        console.warn("[server.ts] Durable delete event write failed after record deletion:", syncError instanceof Error ? syncError.message : "unknown");
+      }
 
-      // 3. Send instant success response
-      res.json({ success: true });
-
-      // 4. Asynchronously persist deletion to Firestore & Passcode sync vault in background
-      (async () => {
-        try {
-          const docRef = doc(db, tableStr, docId);
-          await deleteDoc(docRef);
-        } catch (fErr) {
-          console.warn(`[server.ts] Firestore delete for ${tableStr}/${docId} notice:`, fErr);
-        }
-
-        try {
-          await syncCollectionAndPasscodeVault(verified, tableStr, docId, {}, true);
-        } catch (pErr) {
-          console.warn(`[server.ts] syncCollectionAndPasscodeVault delete notice:`, pErr);
-        }
-      })().catch(() => {});
+      return res.json({ success: true, persisted: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error("[server.ts] /api/db/delete error:", err instanceof Error ? err.message : "unknown");
+      return res.status(503).json({ error: "Cloud delete failed. The change was not confirmed; please retry." });
     }
   });
 
