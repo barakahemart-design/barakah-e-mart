@@ -169,13 +169,18 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         request("/api/delivery/queue/list", {}),
         panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
       ]);
-      setStaff(staffData.staff || []);
-      setAssignments(assignmentData.assignments || []);
-      setQueueItems(queueData.queue || []);
-      setExpenses(expenseData.expenses || []);
-      setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
-      setOfflineNotice(false);
-      void flushOfflineQueue();
+      if (pendingOperationsRef.current.length) {
+        // Keep the device's optimistic snapshot visible until every queued write
+        // has synced; replacing it with an older cloud snapshot would hide local work.
+        void flushOfflineQueue();
+      } else {
+        setStaff(staffData.staff || []);
+        setAssignments(assignmentData.assignments || []);
+        setQueueItems(queueData.queue || []);
+        setExpenses(expenseData.expenses || []);
+        setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
+        setOfflineNotice(false);
+      }
     } catch (error: any) {
       setOfflineNotice(true);
       if (!cachedData) notifyRef.current(error?.message || "Could not load delivery management data.", "error");
