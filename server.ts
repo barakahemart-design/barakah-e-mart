@@ -933,8 +933,18 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
       const recordRef = adminDb.collection(tableStr).doc(docId);
       const existingSnap = await recordRef.get();
-      if (existingSnap.exists && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
-        return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
+      if (existingSnap.exists) {
+        const existingData = existingSnap.data() || {};
+        const hasStoreIdentity = [existingData.store_id, existingData.storeId, existingData.email, existingData.linked_email, existingData.linkedEmail]
+          .some(value => typeof value === "string" && value.trim() !== "");
+        const legacyUidValues = [existingData.user_id, existingData.userId, existingData.owner_id]
+          .filter(value => typeof value === "string" && value.trim() !== "");
+        const allowedIds = hasStoreIdentity ? [] : await resolveAllUserIdsForEmail(cleanEmail, verified.uid);
+        const legacyOwned = !hasStoreIdentity && legacyUidValues.length > 0 &&
+          legacyUidValues.every(uid => allowedIds.includes(uid));
+        if (!isOwnedByVerifiedAccount(existingData, verified) && !legacyOwned) {
+          return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
+        }
       }
 
       const enrichedData = {
@@ -998,8 +1008,18 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
       const recordRef = adminDb.collection(tableStr).doc(docId);
       const existingSnap = await recordRef.get();
-      if (existingSnap.exists && !isOwnedByVerifiedAccount(existingSnap.data(), verified)) {
-        return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
+      if (existingSnap.exists) {
+        const existingData = existingSnap.data() || {};
+        const hasStoreIdentity = [existingData.store_id, existingData.storeId, existingData.email, existingData.linked_email, existingData.linkedEmail]
+          .some(value => typeof value === "string" && value.trim() !== "");
+        const legacyUidValues = [existingData.user_id, existingData.userId, existingData.owner_id]
+          .filter(value => typeof value === "string" && value.trim() !== "");
+        const allowedIds = hasStoreIdentity ? [] : await resolveAllUserIdsForEmail(cleanEmail, verified.uid);
+        const legacyOwned = !hasStoreIdentity && legacyUidValues.length > 0 &&
+          legacyUidValues.every(uid => allowedIds.includes(uid));
+        if (!isOwnedByVerifiedAccount(existingData, verified) && !legacyOwned) {
+          return res.status(403).json({ error: "Access Forbidden: This record belongs to another account." });
+        }
       }
 
       // Atomically write a store-scoped tombstone and delete the record so a
