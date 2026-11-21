@@ -91,27 +91,21 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           pendingOperationsRef.current = next;
           setPendingOperations(next);
         } catch (error) {
-          const status = Number((error as any)?.status || 0);
-          if (status === 409 || status === 404) {
-            const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
-            pendingOperationsRef.current = next;
-            setPendingOperations(next);
-            console.warn("[Delivery driver] A queued change could not be applied because its cloud record changed or was removed:", (error as any)?.message || error);
-            continue;
-          }
-          if (!isRetryableDeliveryError(error)) console.warn("[Delivery driver] A saved change needs review before sync:", (error as any)?.message || error);
+          // Keep failed operations locally. Never silently discard a delivery or
+          // expense update because a cloud record changed on another device.
+          if (!isRetryableDeliveryError(error)) console.warn("[Delivery driver] A saved change remains pending and needs review before sync:", (error as any)?.message || error);
           break;
         }
       }
       if (hadPendingOperations && pendingOperationsRef.current.length === 0) {
         try {
-          const [assignmentData, expenseData] = await Promise.all([
+          const results = await Promise.allSettled([
             request("/api/delivery/assignments"),
             request("/api/delivery/expenses/mine")
           ]);
-          setAssignments(assignmentData.assignments || []);
-          setExpenses(expenseData.expenses || []);
-          setOfflineNotice(false);
+          if (results[0].status === "fulfilled" && Array.isArray(results[0].value.assignments)) setAssignments(results[0].value.assignments);
+          if (results[1].status === "fulfilled" && Array.isArray(results[1].value.expenses)) setExpenses(results[1].value.expenses);
+          setOfflineNotice(results.some(result => result.status === "rejected"));
         } catch (_) {
           setOfflineNotice(true);
         }
@@ -133,7 +127,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [a, e] = await Promise.all([
+      const results = await Promise.allSettled([
         request("/api/delivery/assignments"),
         request("/api/delivery/expenses/mine")
       ]);
@@ -141,13 +135,15 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
         // Preserve optimistic device-local edits until the pending queue is clear.
         void flushOfflineQueue();
       } else {
-        setAssignments(a.assignments || []);
-        setExpenses(e.expenses || []);
-        setOfflineNotice(false);
+        // A failed expense request must not prevent the driver's assignments from
+        // refreshing, and vice versa. Keep the last cached data for failed panels.
+        if (results[0].status === "fulfilled" && Array.isArray(results[0].value.assignments)) setAssignments(results[0].value.assignments);
+        if (results[1].status === "fulfilled" && Array.isArray(results[1].value.expenses)) setExpenses(results[1].value.expenses);
+        setOfflineNotice(results.some(result => result.status === "rejected"));
       }
     } catch (error: any) {
       setOfflineNotice(true);
-      if (!cachedData) console.error("[Delivery driver] Data load failed:", error);
+      console.error("[Delivery driver] Data refresh failed; retaining device-local records:", error);
     } finally { setLoading(false); }
   }, [request, flushOfflineQueue, cachedData]);
 
