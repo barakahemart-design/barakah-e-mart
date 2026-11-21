@@ -75,7 +75,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
     setPendingOperations(next);
     setOfflineNotice(true);
     return operation;
-  }, []);
+  }, [offlineQueueKey]);
 
   const flushOfflineQueue = useCallback(async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
