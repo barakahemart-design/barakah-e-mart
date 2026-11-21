@@ -8320,128 +8320,52 @@ _${businessInfo.name}_`;
                               </div>
                             )}
 
-                            {/* Status and Action bar */}
-                            <div className="pt-3 border-t border-[#2D2D35]/50 flex items-center justify-between gap-2 md:gap-3 min-w-0">
-                              {/* Keep Direct Sale in its own matching-height cell beside the grouped actions. */}
-                              <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
-                                {!(totalOutstandingDue > 0) && status && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
-                                {c.type === "customer" && <button type="button" onClick={() => void openCustomerInvoiceAssign(c, clientTxs)} className="h-12 sm:h-16 md:h-10 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer" title="Assign a sales invoice directly to delivery staff"><Truck className="w-3.5 h-3.5" /> Invoice Assign</button>}
-                                {c.type === "customer" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      resetPosWorkspace(c.id);
-                                      setActiveTab("pos");
-                                      triggerNotification(`POS Cash Memo loaded. Customer context: ${c.name}`, "success");
-                                    }}
-                                    className="h-12 sm:h-16 md:h-10 shrink-0 whitespace-nowrap px-2 md:px-2 py-1.5 text-[9px] font-black text-[#00E676] bg-[#00E676]/10 hover:bg-[#00E676]/25 border border-[#00E676]/25 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer"
-                                    title="Direct Sale POS Checkout"
-                                  >
-                                    <ShoppingCart className="w-3.5 h-3.5 text-[#00E676]" />
-                                    Direct Sale
-                                  </button>
-                                )}
-
+                            {/* Three equal, responsive action cells: customer tools, invoice assignment, direct sale. */}
+                            <div className="mt-3 grid w-full min-w-0 grid-cols-3 items-stretch gap-1.5 border-t border-[#2D2D35]/50 pt-3">
+                              <div className="flex h-11 min-w-0 items-center justify-around rounded-lg border border-[#2D2D35] bg-[#121214] px-1">
+                                {c.type === "customer" && <>
+                                  <button type="button" onClick={() => handleCopyContactDetails(c)} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300" title="Copy Customer Details" aria-label={`Copy details for ${c.name}`}><Copy className="h-3.5 w-3.5" /></button>
+                                  <button type="button" onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300" title="Call Client" aria-label="Call Client"><Phone className="h-3.5 w-3.5" /></button>
+                                  <button type="button" onClick={() => { setActiveTab("ledger"); triggerNotification(`Ledger catalog loaded for filtering: ${c.name}`, "info"); }} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-sky-500/10 hover:text-sky-300" title="Ledger History" aria-label="Ledger History"><History className="h-3.5 w-3.5" /></button>
+                                  <button type="button" onClick={() => { setEditingContact(c); triggerNotification(`Editing profile for: ${c.name}`, "info"); }} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300" title="Edit Profile" aria-label="Edit Profile"><Edit3 className="h-3.5 w-3.5" /></button>
+                                  {deleteContactId === c.id ? <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5"><button onClick={async () => { if (currentPanel !== "admin") { triggerNotification("Security block: Only administrators are authorized to delete contact profiles! 🛑", "error"); setDeleteContactId(null); return; } await deleteCloudDocument("customers", c.firestoreId ?? c.id); if (activeUser && !activeUser.isGuest) deleteCustomer(c.id).catch(err => {}); setContacts(contacts.filter(item => item.id !== c.id)); triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success"); setDeleteContactId(null); }} className="rounded bg-rose-600 px-1 py-1 text-[8px] font-extrabold text-white">Yes</button><button onClick={() => setDeleteContactId(null)} className="rounded px-1 py-1 text-[8px] text-slate-300">No</button></div> : <button onClick={() => setDeleteContactId(c.id)} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-rose-500/10 hover:text-rose-300" title="Unregister Profile" aria-label="Delete Customer"><Trash2 className="h-3.5 w-3.5" /></button>}
+                                </>}
+                                {c.type !== "customer" && !(totalOutstandingDue > 0) && status && <span className={`truncate px-1 text-[9px] font-bold uppercase ${status.color}`}>{status.label}</span>}
                               </div>
-
-                              {/* Action buttons */}
-                              <div className="h-12 sm:h-16 md:h-10 shrink-0 flex items-center justify-center gap-0.5 sm:gap-1.5 md:gap-0.5 bg-[#121214] p-[3px] sm:p-[7px] md:p-1 rounded-xl border border-[#2D2D35] box-border">
-                                {c.type === "customer" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyContactDetails(c)}
-                                    className="order-4 h-10 w-10 sm:h-12 sm:w-12 md:h-8 md:w-8 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
-                                    title="Copy Customer Details"
-                                    aria-label={`Copy details for ${c.name}`}
-                                  >
-                                    <Copy className="w-4 h-4" />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")}
-                                  className="order-3 h-10 w-10 sm:h-12 sm:w-12 md:h-8 md:w-8 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
-                                  title="Call Client"
-                                >
-                                  <Phone className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveTab("ledger");
-                                    triggerNotification(`Ledger catalog loaded for filtering: ${c.name}`, "info");
-                                  }}
-                                  className="order-2 h-10 w-10 sm:h-12 sm:w-12 md:h-8 md:w-8 shrink-0 flex items-center justify-center hover:bg-[#00B0FF]/10 text-[#A0A0A5] hover:text-[#00B0FF] rounded-lg transition-colors cursor-pointer"
-                                  title="Ledger History"
-                                >
-                                  <History className="w-4 h-4" />
-                                </button>
-                                
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingContact(c);
-                                    triggerNotification(`Editing profile for: ${c.name}`, "info");
-                                  }}
-                                  className="order-1 h-10 w-10 sm:h-12 sm:w-12 md:h-8 md:w-8 shrink-0 flex items-center justify-center hover:bg-[#00E676]/10 text-[#A0A0A5] hover:text-[#00E676] rounded-lg transition-colors cursor-pointer"
-                                  title="Edit Profile"
-                                >
-                                  <Edit3 className="w-4 h-4" />
-                                </button>
-
-                                {deleteContactId === c.id ? (
-                                  <div className="flex items-center gap-1 bg-rose-500/10 p-0.5 rounded border border-rose-500/20">
-                                    <button
-                                      onClick={async () => {
-                                        if (currentPanel !== "admin") {
-                                          triggerNotification("Security block: Only administrators are authorized to delete contact profiles! 🛑", "error");
-                                          setDeleteContactId(null);
-                                          return;
-                                        }
-                                        await deleteCloudDocument("customers", c.firestoreId ?? c.id);
-                                        if (activeUser && !activeUser.isGuest) {
-                                          deleteCustomer(c.id).catch(err => {});
-                                        }
-                                        setContacts(contacts.filter(item => item.id !== c.id));
-                                        triggerNotification(`Partner profile '${c.name}' has been successfully deleted.`, "success");
-                                        setDeleteContactId(null);
-                                      }}
-                                      className="text-[8px] bg-rose-600 hover:bg-rose-500 text-white font-extrabold px-1.5 py-0.5 rounded transition-all cursor-pointer"
-                                    >
-                                      Yes
-                                    </button>
-                                    <button
-                                      onClick={() => setDeleteContactId(null)}
-                                      className="text-[8px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => setDeleteContactId(c.id)}
-                                    className="order-5 h-10 w-10 sm:h-12 sm:w-12 md:h-8 md:w-8 shrink-0 flex items-center justify-center hover:bg-rose-500/10 text-slate-500 hover:text-[#FF5252] rounded-lg transition-colors cursor-pointer"
-                                    title="Unregister Profile"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
+                              {c.type === "customer" ? <button type="button" onClick={() => void openCustomerInvoiceAssign(c, clientTxs)} className="flex h-11 min-w-0 items-center justify-center gap-1 rounded-lg border border-sky-400/35 bg-sky-500/10 px-1 text-center text-[9px] font-black uppercase leading-tight text-sky-200 transition-colors hover:border-sky-300/60 hover:bg-sky-500/20" title="Assign a sales invoice directly to delivery staff"><Truck className="h-3.5 w-3.5 shrink-0" /><span className="min-w-0">Invoice Assign</span></button> : <div className="flex h-11 min-w-0 items-center justify-center">{!(totalOutstandingDue > 0) && status && <span className={`truncate text-[9px] uppercase ${status.color}`}>{status.label}</span>}</div>}
+                              {c.type === "customer" ? <button type="button" onClick={() => { resetPosWorkspace(c.id); setActiveTab("pos"); triggerNotification(`POS Cash Memo loaded. Customer context: ${c.name}`, "success"); }} className="flex h-11 min-w-0 items-center justify-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-1 text-center text-[9px] font-black uppercase leading-tight text-emerald-300 transition-colors hover:bg-emerald-500/20" title="Direct Sale POS Checkout"><ShoppingCart className="h-3.5 w-3.5 shrink-0" /><span>Direct Sale</span></button> : <div />}
                             </div>
 
-                            {quickAssignContact?.id === c.id && (
-                              <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Assign customer invoice">
-                                <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-[#111827] p-5 shadow-2xl">
-                                  <div className="flex items-start justify-between gap-3"><div><h3 className="text-base font-black text-white">Invoice Assign</h3><p className="mt-1 text-xs text-slate-400">{quickAssignContact.name} · Select invoice and delivery staff</p></div><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button></div>
-                                  {quickAssignLoading ? <p className="rounded-xl bg-white/5 p-4 text-center text-xs text-slate-300">Loading active delivery staff…</p> : <>
-                                    <label className="block space-y-1.5 text-xs font-bold text-slate-300">Select Invoice<select value={quickAssignInvoiceNo} onChange={e => setQuickAssignInvoiceNo(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white">{quickAssignInvoices.map(tx => <option key={tx.id} value={tx.invoiceNo}>Invoice {tx.invoiceNo} · {businessInfo.currencySymbol || "৳"}{Number(tx.total || 0).toLocaleString("en-BD")}</option>)}</select></label>
-                                    <label className="block space-y-1.5 text-xs font-bold text-slate-300">Select Delivery Staff<select value={quickAssignDriverUid} onChange={e => setQuickAssignDriverUid(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white"><option value="">Select active delivery staff</option>{quickAssignStaff.map(person => <option key={person.uid} value={person.uid}>{person.name} · {person.phone || person.email}</option>)}</select></label>
-                                    {quickAssignStaff.length === 0 && <p className="text-[11px] text-amber-300">No active delivery staff available. Please activate a staff member first.</p>}
-                                    <div className="flex justify-end gap-2 pt-1"><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-lg border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-300">Cancel</button><button type="button" disabled={!quickAssignInvoiceNo || !quickAssignDriverUid || quickAssignSaving || quickAssignLoading} onClick={() => void submitCustomerInvoiceAssign()} className="rounded-lg bg-sky-500 px-4 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">{quickAssignSaving ? "Assigning…" : "Assign Invoice"}</button></div>
-                                  </>}
+                            {quickAssignContact?.id === c.id && (() => {
+                              const selectedInvoice = quickAssignInvoices.find(tx => String(tx.invoiceNo) === String(quickAssignInvoiceNo));
+                              const selectedDriver = quickAssignStaff.find(person => person.uid === quickAssignDriverUid);
+                              return <div className="fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto bg-slate-950/85 p-3 backdrop-blur-md sm:p-5" role="dialog" aria-modal="true" aria-label="Assign customer invoice">
+                                <div className="my-auto w-full max-w-lg overflow-hidden rounded-3xl border border-sky-300/20 bg-gradient-to-br from-slate-900 via-[#101827] to-slate-950 shadow-[0_24px_90px_rgba(0,0,0,0.65)]">
+                                  <div className="flex items-start justify-between gap-3 border-b border-white/10 bg-white/[0.035] px-5 py-4 sm:px-6">
+                                    <div className="flex min-w-0 items-center gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-sky-300/25 bg-sky-400/10 text-sky-200"><Truck className="h-5 w-5" /></div><div className="min-w-0"><h3 className="text-base font-black tracking-wide text-white sm:text-lg">Invoice Assignment</h3><p className="mt-1 truncate text-xs text-slate-400">Customer: {quickAssignContact.name}</p></div></div>
+                                    <button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+                                  </div>
+                                  <div className="space-y-4 p-5 sm:p-6">
+                                    {quickAssignLoading ? <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm text-slate-300">Loading active delivery staff…</div> : <>
+                                      <label className="block space-y-2 text-xs font-bold text-slate-300">Select Customer Invoice
+                                        <select value={quickAssignInvoiceNo} onChange={e => setQuickAssignInvoiceNo(e.target.value)} className="w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3.5 py-3 text-sm font-semibold text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20">{quickAssignInvoices.map(tx => <option key={tx.id} value={tx.invoiceNo}>Invoice #{tx.invoiceNo} · {businessInfo.currencySymbol || "৳"}{Number(tx.total || 0).toLocaleString("en-BD")}</option>)}</select>
+                                      </label>
+                                      {selectedInvoice && <div className="space-y-3 rounded-2xl border border-sky-300/20 bg-sky-400/[0.06] p-4">
+                                        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-200">Invoice Summary</span><span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-[10px] font-bold text-sky-100">#{selectedInvoice.invoiceNo}</span></div>
+                                        <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wider text-slate-500">Customer</p><p className="truncate text-sm font-bold text-white">{quickAssignContact.name}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-wider text-slate-500">Invoice Total</p><p className="text-sm font-black text-emerald-300">{businessInfo.currencySymbol || "৳"}{Number(selectedInvoice.total || 0).toLocaleString("en-BD")}</p></div></div>
+                                        <div className="border-t border-white/10 pt-2"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Purchased Products</p><div className="max-h-32 space-y-1.5 overflow-y-auto pr-1">{(Array.isArray(selectedInvoice.items) ? selectedInvoice.items : []).map((item: any, index: number) => <div key={item.id || index} className="flex items-start justify-between gap-3 text-xs"><span className="min-w-0 text-slate-200">{item.name || item.productName || "Product"}</span><span className="shrink-0 font-bold text-sky-200">× {Number(item.quantity) || 0}</span></div>)}{(!selectedInvoice.items || selectedInvoice.items.length === 0) && <p className="text-xs text-slate-500">No product details available for this invoice.</p>}</div></div>
+                                      </div>}
+                                      <label className="block space-y-2 text-xs font-bold text-slate-300">Assign Delivery Staff
+                                        <select value={quickAssignDriverUid} onChange={e => setQuickAssignDriverUid(e.target.value)} className="w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3.5 py-3 text-sm font-semibold text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"><option value="">Select active delivery staff</option>{quickAssignStaff.map(person => <option key={person.uid} value={person.uid}>{person.name} · {person.phone || person.email}</option>)}</select>
+                                      </label>
+                                      {selectedDriver && <div className="flex items-center gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.06] px-3 py-2.5"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300"><Truck className="h-4 w-4" /></div><div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Assigned Delivery Person</p><p className="truncate text-xs font-bold text-white">{selectedDriver.name}</p></div></div>}
+                                      {quickAssignStaff.length === 0 && <p className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3 text-[11px] text-amber-200">No active delivery staff available. Please activate a staff member first.</p>}
+                                      <div className="flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-xl border border-white/15 px-5 py-3 text-xs font-bold text-slate-300 transition-colors hover:bg-white/5">Cancel</button><button type="button" disabled={!quickAssignInvoiceNo || !quickAssignDriverUid || quickAssignSaving || quickAssignLoading} onClick={() => void submitCustomerInvoiceAssign()} className="rounded-xl border border-sky-300/30 bg-gradient-to-r from-sky-500 to-blue-500 px-5 py-3 text-xs font-black tracking-wide text-white shadow-lg shadow-sky-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{quickAssignSaving ? "Assigning…" : "Assign Invoice"}</button></div>
+                                    </>}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              </div>;
+                            })()}
                           </div>
                         );
                       })}
