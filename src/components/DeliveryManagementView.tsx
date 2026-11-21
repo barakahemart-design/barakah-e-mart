@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
 import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, writeDeliveryCacheSnapshot, isDeliveryCachePrimed, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
-import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
+import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle, Edit3 } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
 type Assignment = {
