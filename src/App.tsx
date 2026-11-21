@@ -300,6 +300,7 @@ import {
 } from "./lib/firebase-helpers";
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
   generateInvoicePDF,
@@ -636,7 +637,17 @@ export default function App() {
       const selectedStaff = quickAssignStaff.find(person => person.uid === quickAssignDriverUid);
       triggerNotification("Invoice " + quickAssignInvoiceNo + " assigned to " + (selectedStaff?.name || "delivery staff") + ".", "success");
       setQuickAssignContact(null); setQuickAssignInvoices([]); setQuickAssignStaff([]); setQuickAssignInvoiceNo(""); setQuickAssignDriverUid("");
-    } catch (error: any) { triggerNotification(error?.message || "Could not assign invoice.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const panelRole = currentPanel === "admin" ? "admin" : "sales";
+        const queueKey = deliveryStorageKey("queue", String(activeUser?.email || "").trim().toLowerCase() + ":" + panelRole);
+        const queued = readDeliveryLocal<any[]>(queueKey, []);
+        const operation = createDeliveryOfflineOperation("/api/delivery/assignments/create", { invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid });
+        writeDeliveryLocal(queueKey, [...queued, operation]);
+        triggerNotification("Invoice assignment saved on this device. It will sync when Firebase access returns and Delivery Management reconnects.", "info");
+        setQuickAssignContact(null);
+      } else triggerNotification(error?.message || "Could not assign invoice.", "error");
+    }
     finally { setQuickAssignSaving(false); }
   };
   // Build the CRM directory indexes only when the Customer workspace is opened.
