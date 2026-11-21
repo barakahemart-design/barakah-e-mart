@@ -34,8 +34,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
   const invoiceLookupCacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}:invoice-lookups`);
   const [cachedData] = useState(() => readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null));
-  const requiredCacheSections = panelRole === "admin" ? ["staff", "assignments", "queueItems", "expenses"] : ["staff", "assignments", "queueItems"];
-  const [cacheReady, setCacheReady] = useState(() => isDeliveryCachePrimed(cacheKey, requiredCacheSections));
+  const [cacheReady, setCacheReady] = useState(() => isDeliveryCachePrimed(cacheKey, panelRole === "admin" ? ["staff", "assignments", "queueItems", "expenses"] : ["staff", "assignments", "queueItems"]));
   const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
   const [staff, setStaff] = useState<Driver[]>(() => cachedData?.staff || []);
   const [assignments, setAssignments] = useState<Assignment[]>(() => cachedData?.assignments || []);
