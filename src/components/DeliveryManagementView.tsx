@@ -10,7 +10,7 @@ type Assignment = {
   customer_note?: string; delivery_note?: string;
   delivery_status: string; assigned_at: string;
   delivery_fee?: number; payment_status?: "paid" | "unpaid"; payment_timing?: "advance" | "after_delivery"; payment_updated_at?: string; payment_received_at?: string;
-  total_amount?: number; items?: Array<{ name: string; quantity: number; price?: number; total?: number }>;
+  total_amount?: number; delivery_charge_bearer?: "showroom" | "customer"; items?: Array<{ name: string; quantity: number; price?: number; total?: number }>;
 };
 type DeliveryExpense = {
   id: string; driver_uid?: string; driver_name: string; amount: number; reason: string; category: string;
@@ -671,12 +671,13 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       </div>}
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
-        <h3 className="text-sm font-black text-white">Delivery Payments · All Payment Records</h3>
+        {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
           <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length + expenses.filter(e => e.payment_status !== "paid").length})</button>
           <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length + expenses.filter(e => e.payment_status === "paid").length})</button>
         </div>
-        {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
+        <section className="space-y-3">
+          <h3 className="text-base font-black text-white">Invoice Delivery Payments</h3>
         {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {paymentView} delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
           const draft = getPaymentDraft(a);
           return <div key={a.id} className={`space-y-3 rounded-xl border p-4 transition-colors ${a.payment_status === "paid" ? "border-emerald-400/50 bg-emerald-500/[0.08] shadow-[inset_3px_0_0_rgba(52,211,153,0.85)]" : "border-rose-500/30 bg-rose-500/[0.045]"}`}>
@@ -686,7 +687,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
               <div className="grid gap-2 rounded-xl border border-emerald-400/20 bg-emerald-950/20 p-3 sm:grid-cols-3">
                 <div><p className="text-[10px] font-bold text-slate-500">Delivery Charge</p><p className="mt-1 text-sm font-black text-emerald-200">{currencySymbol}{Number(a.delivery_fee || 0).toLocaleString("en-BD")}</p></div>
                 <div><p className="text-[10px] font-bold text-slate-500">Payment Status</p><p className="mt-1 text-sm font-black text-emerald-300">Paid · Received</p></div>
-                <div><p className="text-[10px] font-bold text-slate-500">Paid</p><p className="mt-1 text-sm font-semibold text-slate-200">{a.payment_timing === "advance" ? "Advance" : "After delivery"}</p></div>
+                <div><p className="text-[10px] font-bold text-slate-500">Paid</p><p className="mt-1 text-sm font-semibold text-slate-200">{a.payment_timing === "advance" ? "Advance" : "After delivery"}</p></div><div><p className="text-[10px] font-bold text-slate-500">Delivery Charge Bearer</p><p className="mt-1 text-sm font-semibold text-slate-200">{a.delivery_charge_bearer === "customer" ? "Customer" : "Showroom"}</p></div>
               </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-3">
@@ -703,13 +704,16 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             </div>
           </div>;
         })}
-        <div className="space-y-2 pt-2">
-          <h3 className="text-sm font-black text-white">Staff Expense Payments</h3>
+        </section>
+        <section className="space-y-3 pt-2">
+          <h3 className="text-base font-black text-white">Staff Expenses Payments</h3>
+          <div className="space-y-2">
           {filteredPaymentExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">No {paymentView} staff expense payments for this date range.</p> : filteredPaymentExpenses.map(expense => <div key={`expense-${expense.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div><p className="text-sm font-black text-white">Staff Expense · {currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")}</p><p className="mt-1 text-[11px] text-slate-300">{expense.driver_name} · {expense.reason}</p><p className="mt-1 text-[10px] text-slate-500">{expense.category} · Submitted {expense.date}{expense.assignment_id ? " · Linked delivery" : " · General expense"}</p>{expense.paid_at && <p className="mt-1 text-[10px] text-emerald-300">Paid {new Date(expense.paid_at).toLocaleString("en-BD")}</p>}</div>
             <div className="flex flex-wrap gap-2"><button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Pending · Mark Paid"}</button><button type="button" onClick={() => deleteStaffExpensePayment(expense)} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete</button></div>
           </div>)}
-        </div>
+          </div>
+        </section>
       </div>}
 
       {tab === "assignments" && <div className="space-y-4">
