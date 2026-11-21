@@ -1795,9 +1795,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         if (!assignment || assignment.driver_uid !== verified.uid || assignment.owner_store_id !== staff.owner_store_id) {
           return "not_assigned";
         }
-        if (hasFeeUpdate && assignment.payment_status === "paid") return "already_paid";
+        if (hasFeeUpdate && assignment.payment_status === "paid" && delivery_status !== "delivered") return "already_paid";
         const autoMarkPaid = delivery_status === "delivered";
-        const expenseSnap = autoMarkPaid ? await transaction.get(expenseRef) : null;
         const paymentReceivedAt = autoMarkPaid ? (assignment.payment_status === "paid" && assignment.payment_received_at ? String(assignment.payment_received_at) : now) : "";
         const updates: Record<string, any> = {
           delivery_status,
@@ -1806,7 +1805,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           status_updated_by: verified.uid,
           ...(autoMarkPaid ? { payment_status: "paid", payment_timing: assignment.payment_timing === "advance" ? "advance" : "after_delivery", payment_updated_at: now, payment_updated_by: verified.uid, payment_received_at: paymentReceivedAt } : {})
         };
-        if (hasFeeUpdate) {
+        if (hasFeeUpdate && assignment.payment_status !== "paid") {
           updates.delivery_fee = fee;
           updates.amount_updated_at = now;
           updates.amount_updated_by = verified.uid;
@@ -1818,7 +1817,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           const customerName = String(assignment.customer_name || "Customer");
           const expenseDate = paymentReceivedAt.slice(0, 10);
           transaction.set(expenseRef, {
-            id: expenseRef.id, category: "Delivery Payment", amount: Number(assignment.delivery_fee) || 0,
+            id: expenseRef.id, category: "Delivery Payment", amount: Number(assignment.delivery_fee ?? (hasFeeUpdate ? fee : 0)) || 0,
             description: "Delivery payment to: " + driverName + " | Delivery Challan / Invoice: " + invoiceNo + " | Customer: " + customerName,
             date: expenseDate, source: "delivery_payment", source_id: id, assignment_id: id, invoice_no: invoiceNo,
             driver_uid: verified.uid, driver_name: driverName, customer_name: customerName,
@@ -1839,7 +1838,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {    const { store_id, admin_pin } = req.body || {};
+  app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {
+    const { store_id, admin_pin } = req.body || {};
     try {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
