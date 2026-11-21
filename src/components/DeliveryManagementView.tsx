@@ -122,33 +122,25 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           pendingOperationsRef.current = next;
           setPendingOperations(next);
         } catch (error) {
-          const status = Number((error as any)?.status || 0);
-          if (status === 409 || status === 404) {
-            const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
-            pendingOperationsRef.current = next;
-            setPendingOperations(next);
-            notifyRef.current("A queued delivery change could not be applied because the cloud record changed or was removed: " + String((error as any)?.message || error), "error");
-            continue;
-          }
-          // Keep the first failed operation and all later operations in order.
-          // This prevents a later payment/status change overtaking an earlier change.
-          if (!isRetryableDeliveryError(error)) notifyRef.current("A saved delivery change needs review before it can sync: " + String((error as any)?.message || error), "error");
+          // Never discard a queued operation automatically. A 404/409 can mean
+          // another device changed the record; keep it visible for safe review.
+          if (!isRetryableDeliveryError(error)) notifyRef.current("A saved delivery change is still pending and needs review before sync: " + String((error as any)?.message || error), "error");
           break;
         }
       }
       if (hadPendingOperations && pendingOperationsRef.current.length === 0) {
         try {
-          const [staffData, assignmentData, queueData, expenseData] = await Promise.all([
+          const results = await Promise.allSettled([
             request("/api/delivery/staff/list", {}),
             request("/api/delivery/assignments/admin-list", {}),
             request("/api/delivery/queue/list", {}),
             panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
           ]);
-          setStaff(staffData.staff || []);
-          setAssignments(assignmentData.assignments || []);
-          setQueueItems(queueData.queue || []);
-          setExpenses(expenseData.expenses || []);
-          setOfflineNotice(false);
+          if (results[0].status === "fulfilled" && Array.isArray(results[0].value.staff)) setStaff(results[0].value.staff);
+          if (results[1].status === "fulfilled" && Array.isArray(results[1].value.assignments)) setAssignments(results[1].value.assignments);
+          if (results[2].status === "fulfilled" && Array.isArray(results[2].value.queue)) setQueueItems(results[2].value.queue);
+          if (results[3].status === "fulfilled" && Array.isArray(results[3].value.expenses)) setExpenses(results[3].value.expenses);
+          setOfflineNotice(results.some(result => result.status === "rejected"));
         } catch (_) {
           setOfflineNotice(true);
         }
@@ -171,28 +163,39 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     if ((panelRole === "admin" && !adminPin) || (panelRole === "sales" && !salesPin) || !storeId) return;
     setLoading(true);
     try {
-      const [staffData, assignmentData, queueData, expenseData] = await Promise.all([
+      const results = await Promise.allSettled([
         request("/api/delivery/staff/list", {}),
         request("/api/delivery/assignments/admin-list", {}),
         request("/api/delivery/queue/list", {}),
         panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
       ]);
       if (pendingOperationsRef.current.length) {
-        // Keep the device's optimistic snapshot visible until every queued write
-        // has synced; replacing it with an older cloud snapshot would hide local work.
+        // Keep optimistic local records visible until queued changes are reconciled.
         void flushOfflineQueue();
       } else {
-        setStaff(staffData.staff || []);
-        setAssignments(assignmentData.assignments || []);
-        setQueueItems(queueData.queue || []);
-        setExpenses(expenseData.expenses || []);
-        setDriverUid(prev => prev || staffData.staff?.find((x: Driver) => x.status === "active")?.uid || "");
-        setOfflineNotice(false);
+        // Load each panel independently. One quota-limited endpoint must not hide
+        // successful staff/assignment data or blank out the last saved expense/payment data.
+        const staffResult = results[0];
+        const assignmentResult = results[1];
+        const queueResult = results[2];
+        const expenseResult = results[3];
+        if (staffResult.status === "fulfilled" && Array.isArray(staffResult.value.staff)) {
+          setStaff(staffResult.value.staff);
+          setDriverUid(prev => prev || staffResult.value.staff.find((x: Driver) => x.status === "active")?.uid || "");
+        }
+        if (assignmentResult.status === "fulfilled" && Array.isArray(assignmentResult.value.assignments)) setAssignments(assignmentResult.value.assignments);
+        if (queueResult.status === "fulfilled" && Array.isArray(queueResult.value.queue)) setQueueItems(queueResult.value.queue);
+        if (expenseResult.status === "fulfilled" && Array.isArray(expenseResult.value.expenses)) setExpenses(expenseResult.value.expenses);
+        const hasFailures = results.some(result => result.status === "rejected");
+        setOfflineNotice(hasFailures);
+        if (hasFailures && !cachedData) {
+          const failedNames = results.map((result, index) => result.status === "rejected" ? ["staff", "invoice assignments", "delivery queue", "expenses/payments"][index] : "").filter(Boolean);
+          notifyRef.current("Some Delivery Management data could not be refreshed (" + failedNames.join(", ") + "). Any previously saved local records remain visible.", "info");
+        }
       }
     } catch (error: any) {
       setOfflineNotice(true);
-      if (!cachedData) notifyRef.current(error?.message || "Could not load delivery management data.", "error");
-      else notifyRef.current("Cloud limit/network unavailable. Showing the latest saved delivery data on this device.", "info");
+      notifyRef.current(error?.message || "Could not load delivery management data. Previously saved local records are being kept.", "info");
     } finally {
       setLoading(false);
     }
