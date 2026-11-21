@@ -449,7 +449,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: 0, payment_status: "unpaid", payment_timing: "after_delivery", payment_updated_at: new Date().toISOString(), payment_received_at: "" } : item));
       setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
       notifyRef.current("Invoice delivery payment entry deleted.", "success");
-      void loadAll();
+      void loadAll(true);
     } catch (error: any) { notifyRef.current(error?.message || "Could not delete invoice payment entry.", "error"); }
   };
 
@@ -636,7 +636,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <h2 className="flex items-center gap-2 text-xl font-black text-white"><Truck className="h-5 w-5 text-emerald-400" /> Delivery Management</h2>
           <p className="mt-1 text-xs text-slate-400">Manage delivery accounts, invoice assignments and driver expenses.</p>
         </div>
-        <button onClick={loadAll} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+        <button onClick={() => loadAll(true)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
