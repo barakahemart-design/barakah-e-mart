@@ -300,6 +300,7 @@ import {
 } from "./lib/firebase-helpers";
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
   generateInvoicePDF,
@@ -587,6 +588,13 @@ export default function App() {
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [deleteExpenseId, setDeleteExpenseId] = useState<string | null>(null);
+  const [quickAssignContact, setQuickAssignContact] = useState<Contact | null>(null);
+  const [quickAssignInvoices, setQuickAssignInvoices] = useState<Transaction[]>([]);
+  const [quickAssignStaff, setQuickAssignStaff] = useState<any[]>([]);
+  const [quickAssignInvoiceNo, setQuickAssignInvoiceNo] = useState("");
+  const [quickAssignDriverUid, setQuickAssignDriverUid] = useState("");
+  const [quickAssignLoading, setQuickAssignLoading] = useState(false);
+  const [quickAssignSaving, setQuickAssignSaving] = useState(false);
   const [collectionTx, setCollectionTx] = useState<Transaction | null>(null);
   const [collectAmount, setCollectAmount] = useState("");
   const [showAdvancedPos, setShowAdvancedPos] = useState(false);
@@ -596,6 +604,61 @@ export default function App() {
     catch { return "all"; }
   });
 
+  const openCustomerInvoiceAssign = async (contact: Contact, clientInvoices: Transaction[]) => {
+    const eligibleInvoices = clientInvoices.filter(tx => String(tx.invoiceNo || "").trim());
+    if (!eligibleInvoices.length) { triggerNotification("No sales invoice is available for this customer yet.", "info"); return; }
+    setQuickAssignContact(contact); setQuickAssignInvoices(eligibleInvoices); setQuickAssignInvoiceNo(String(eligibleInvoices[0].invoiceNo)); setQuickAssignDriverUid(""); setQuickAssignLoading(true);
+    try {
+      const user = firebaseAuth.currentUser;
+      if (!user) throw new Error("Your secure login session has expired. Please log in again.");
+      const token = await user.getIdToken();
+      const panelRole = currentPanel === "admin" ? "admin" : "sales";
+      const response = await fetch("/api/delivery/staff/list", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ store_id: String(activeUser?.email || "").trim().toLowerCase(), panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminActionPin } : { sales_pin: String(businessInfo.salesPasscode || "") }) }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not load delivery staff.");
+      const active = (Array.isArray(data.staff) ? data.staff : []).filter((person: any) => person.status === "active");
+      setQuickAssignStaff(active); if (active.length) setQuickAssignDriverUid(active[0].uid);
+      else triggerNotification("No active delivery staff found. Add or activate staff in Delivery Management first.", "info");
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const panelRole = currentPanel === "admin" ? "admin" : "sales";
+        const cacheKey = deliveryStorageKey("cache", String(activeUser?.email || "").trim().toLowerCase() + ":" + panelRole);
+        const cached = readDeliveryLocal<any>(cacheKey, null);
+        const active = Array.isArray(cached?.staff) ? cached.staff.filter((person: any) => person.status === "active") : [];
+        if (active.length) { setQuickAssignStaff(active); setQuickAssignDriverUid(active[0].uid); triggerNotification("Using delivery staff saved on this device. Assignment will sync when the cloud is available.", "info"); }
+        else { setQuickAssignContact(null); triggerNotification("Delivery staff list is not cached on this device yet. Connect to Firebase once, then try again.", "error"); }
+      } else { setQuickAssignContact(null); triggerNotification(error?.message || "Could not open invoice assignment.", "error"); }
+    }
+    finally { setQuickAssignLoading(false); }
+  };
+
+  const submitCustomerInvoiceAssign = async () => {
+    if (!quickAssignContact || !quickAssignInvoiceNo || !quickAssignDriverUid || quickAssignSaving) return;
+    setQuickAssignSaving(true);
+    try {
+      const user = firebaseAuth.currentUser;
+      if (!user) throw new Error("Your secure login session has expired. Please log in again.");
+      const token = await user.getIdToken();
+      const panelRole = currentPanel === "admin" ? "admin" : "sales";
+      const response = await fetch("/api/delivery/assignments/create", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ store_id: String(activeUser?.email || "").trim().toLowerCase(), panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminActionPin } : { sales_pin: String(businessInfo.salesPasscode || "") }), invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not assign invoice.");
+      const selectedStaff = quickAssignStaff.find(person => person.uid === quickAssignDriverUid);
+      triggerNotification("Invoice " + quickAssignInvoiceNo + " assigned to " + (selectedStaff?.name || "delivery staff") + ".", "success");
+      setQuickAssignContact(null); setQuickAssignInvoices([]); setQuickAssignStaff([]); setQuickAssignInvoiceNo(""); setQuickAssignDriverUid("");
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const panelRole = currentPanel === "admin" ? "admin" : "sales";
+        const queueKey = deliveryStorageKey("queue", String(activeUser?.email || "").trim().toLowerCase() + ":" + panelRole);
+        const queued = readDeliveryLocal<any[]>(queueKey, []);
+        const operation = createDeliveryOfflineOperation("/api/delivery/assignments/create", { invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid });
+        writeDeliveryLocal(queueKey, [...queued, operation]);
+        triggerNotification("Invoice assignment saved on this device. It will sync when Firebase access returns and Delivery Management reconnects.", "info");
+        setQuickAssignContact(null);
+      } else triggerNotification(error?.message || "Could not assign invoice.", "error");
+    }
+    finally { setQuickAssignSaving(false); }
+  };
   // Build the CRM directory indexes only when the Customer workspace is opened.
   // This replaces repeated full transaction/contact/product scans inside every card.
   const customerDirectoryData = useMemo(() => {
@@ -2144,25 +2207,7 @@ export default function App() {
       console.warn("Failed to update flat items in localStorage during checkout:", err);
     }
 
-    // Export PDF on successful checkout (Only actual Customer Invoice is generated, not delivery challan)
-    const pairedContact = contacts.find(c => c.id === posSelectedContactId);
-    if (activeUser && !activeUser.isGuest) {
-      firebaseAuth.currentUser?.getIdToken().then(token => fetch("/api/delivery/queue/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          invoice_no: newTransaction.invoiceNo,
-          transaction_id: newTransaction.id,
-          customer_name: String((pairedContact as any)?.name || (pairedContact as any)?.fullName || "Customer"),
-          customer_phone: String((pairedContact as any)?.phone || (pairedContact as any)?.mobile || ""),
-          customer_address: String((pairedContact as any)?.address || ""),
-          items: newTransaction.items.map(item => ({ name: item.name, quantity: item.quantity })),
-          total_amount: newTransaction.total
-        })
-      })).then(async response => {
-        if (!response.ok) console.warn("Delivery queue update failed:", await response.text());
-      }).catch(error => console.warn("Delivery queue update failed:", error));
-    }
+    // Delivery assignment is now initiated directly from the Customer Card via Invoice Assign.
     try {
       generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
@@ -8280,6 +8325,7 @@ _${businessInfo.name}_`;
                               {/* Keep Direct Sale in its own matching-height cell beside the grouped actions. */}
                               <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                                 {!(totalOutstandingDue > 0) && status && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
+                                {c.type === "customer" && <button type="button" onClick={() => void openCustomerInvoiceAssign(c, clientTxs)} className="h-12 sm:h-16 md:h-10 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer" title="Assign a sales invoice directly to delivery staff"><Truck className="w-3.5 h-3.5" /> Invoice Assign</button>}
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
@@ -8295,6 +8341,7 @@ _${businessInfo.name}_`;
                                     Direct Sale
                                   </button>
                                 )}
+
                               </div>
 
                               {/* Action buttons */}
@@ -8382,6 +8429,19 @@ _${businessInfo.name}_`;
                               </div>
                             </div>
 
+                            {quickAssignContact?.id === c.id && (
+                              <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Assign customer invoice">
+                                <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-[#111827] p-5 shadow-2xl">
+                                  <div className="flex items-start justify-between gap-3"><div><h3 className="text-base font-black text-white">Invoice Assign</h3><p className="mt-1 text-xs text-slate-400">{quickAssignContact.name} · Select invoice and delivery staff</p></div><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button></div>
+                                  {quickAssignLoading ? <p className="rounded-xl bg-white/5 p-4 text-center text-xs text-slate-300">Loading active delivery staff…</p> : <>
+                                    <label className="block space-y-1.5 text-xs font-bold text-slate-300">Select Invoice<select value={quickAssignInvoiceNo} onChange={e => setQuickAssignInvoiceNo(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white">{quickAssignInvoices.map(tx => <option key={tx.id} value={tx.invoiceNo}>Invoice {tx.invoiceNo} · {businessInfo.currencySymbol || "৳"}{Number(tx.total || 0).toLocaleString("en-BD")}</option>)}</select></label>
+                                    <label className="block space-y-1.5 text-xs font-bold text-slate-300">Select Delivery Staff<select value={quickAssignDriverUid} onChange={e => setQuickAssignDriverUid(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white"><option value="">Select active delivery staff</option>{quickAssignStaff.map(person => <option key={person.uid} value={person.uid}>{person.name} · {person.phone || person.email}</option>)}</select></label>
+                                    {quickAssignStaff.length === 0 && <p className="text-[11px] text-amber-300">No active delivery staff available. Please activate a staff member first.</p>}
+                                    <div className="flex justify-end gap-2 pt-1"><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-lg border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-300">Cancel</button><button type="button" disabled={!quickAssignInvoiceNo || !quickAssignDriverUid || quickAssignSaving || quickAssignLoading} onClick={() => void submitCustomerInvoiceAssign()} className="rounded-lg bg-sky-500 px-4 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">{quickAssignSaving ? "Assigning…" : "Assign Invoice"}</button></div>
+                                  </>}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
