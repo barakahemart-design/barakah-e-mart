@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
-import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
 import { Truck, MapPin, Phone, PackageCheck, Wallet, RefreshCw, LogOut, CheckCircle2, AlertTriangle } from "lucide-react";
 
 type Assignment = {
@@ -89,6 +89,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           await request(current.path, current.body);
           const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
           pendingOperationsRef.current = next;
+          writeDeliveryLocal(offlineQueueKey, next);
           setPendingOperations(next);
         } catch (error) {
           // Keep failed operations locally. Never silently discard a delivery or
@@ -103,8 +104,14 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
             request("/api/delivery/assignments"),
             request("/api/delivery/expenses/mine")
           ]);
-          if (results[0].status === "fulfilled" && Array.isArray(results[0].value.assignments)) setAssignments(results[0].value.assignments);
-          if (results[1].status === "fulfilled" && Array.isArray(results[1].value.expenses)) setExpenses(results[1].value.expenses);
+          if (results[0].status === "fulfilled" && Array.isArray(results[0].value.assignments)) {
+          writeDeliveryCacheSection(cacheKey, "assignments", results[0].value.assignments);
+          setAssignments(results[0].value.assignments);
+        }
+          if (results[1].status === "fulfilled" && Array.isArray(results[1].value.expenses)) {
+          writeDeliveryCacheSection(cacheKey, "expenses", results[1].value.expenses);
+          setExpenses(results[1].value.expenses);
+        }
           setOfflineNotice(results.some(result => result.status === "rejected"));
         } catch (_) {
           setOfflineNotice(true);
@@ -113,7 +120,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [request]);
+  }, [request, offlineQueueKey]);
 
   useEffect(() => {
     const retry = () => { void flushOfflineQueue(); };
@@ -145,7 +152,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
       setOfflineNotice(true);
       console.error("[Delivery driver] Data refresh failed; retaining device-local records:", error);
     } finally { setLoading(false); }
-  }, [request, flushOfflineQueue, cachedData]);
+  }, [request, flushOfflineQueue, cachedData, cacheKey]);
 
   useEffect(() => { load(); }, [load]);
 
