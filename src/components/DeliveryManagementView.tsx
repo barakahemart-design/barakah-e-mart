@@ -106,7 +106,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     writeDeliveryLocal(offlineQueueKey, next);
     setPendingOperations(next);
     setOfflineNotice(true);
-  }, []);
+  }, [offlineQueueKey]);
 
   const flushOfflineQueue = useCallback(async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -137,10 +137,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
             request("/api/delivery/queue/list", {}),
             panelRole === "admin" ? request("/api/delivery/expenses/admin-list", { payment_status: "" }) : Promise.resolve({ expenses: [] })
           ]);
-          if (results[0].status === "fulfilled" && Array.isArray(results[0].value.staff)) setStaff(results[0].value.staff);
-          if (results[1].status === "fulfilled" && Array.isArray(results[1].value.assignments)) setAssignments(results[1].value.assignments);
-          if (results[2].status === "fulfilled" && Array.isArray(results[2].value.queue)) setQueueItems(results[2].value.queue);
-          if (results[3].status === "fulfilled" && Array.isArray(results[3].value.expenses)) setExpenses(results[3].value.expenses);
+          if (results[0].status === "fulfilled" && Array.isArray(results[0].value.staff)) { writeDeliveryCacheSection(cacheKey, "staff", results[0].value.staff); setStaff(results[0].value.staff); }
+          if (results[1].status === "fulfilled" && Array.isArray(results[1].value.assignments)) { writeDeliveryCacheSection(cacheKey, "assignments", results[1].value.assignments); setAssignments(results[1].value.assignments); }
+          if (results[2].status === "fulfilled" && Array.isArray(results[2].value.queue)) { writeDeliveryCacheSection(cacheKey, "queueItems", results[2].value.queue); setQueueItems(results[2].value.queue); }
+          if (results[3].status === "fulfilled" && Array.isArray(results[3].value.expenses)) { writeDeliveryCacheSection(cacheKey, "expenses", results[3].value.expenses); setExpenses(results[3].value.expenses); }
           setOfflineNotice(results.some(result => result.status === "rejected"));
         } catch (_) {
           setOfflineNotice(true);
