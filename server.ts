@@ -1699,6 +1699,13 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         }
       }
       if (sourceTransaction) transaction = { ...sourceTransaction, ...transaction };
+      if (!customer.name) {
+        const contactId = String(transaction.contactId || transaction.contact_id || transaction.customer_id || transaction.customerId || "");
+        if (contactId) {
+          const contactDoc = await adminDb.collection("customers").doc(contactId).get();
+          if (contactDoc.exists) customer = contactDoc.data() || {};
+        }
+      }
 
       // New POS sales store line items in transaction_items. Read only the
       // selected transaction's rows scoped to this store when the parent record
