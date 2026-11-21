@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
-import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, writeDeliveryCacheSnapshot, isDeliveryCachePrimed, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
 import { Truck, MapPin, Phone, PackageCheck, Wallet, RefreshCw, LogOut, CheckCircle2, AlertTriangle } from "lucide-react";
 
 type Assignment = {
@@ -21,6 +21,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
   const cacheKey = deliveryStorageKey("cache", `driver:${staff.uid}`);
   const offlineQueueKey = deliveryStorageKey("queue", `driver:${staff.uid}`);
   const [cachedData] = useState(() => readDeliveryLocal<{ assignments: Assignment[]; expenses: Expense[] } | null>(cacheKey, null));
+  const [cacheReady, setCacheReady] = useState(() => isDeliveryCachePrimed(cacheKey, ["assignments", "expenses"]));
   const [tab, setTab] = useState<"staff" | "deliveries" | "expenses" | "payments">("staff");
   const [deliveryView, setDeliveryView] = useState<"assigned" | "delivered">("assigned");
   const [paymentView, setPaymentView] = useState<"pending" | "received">("pending");
@@ -64,7 +65,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
   }, [pendingOperations, offlineQueueKey]);
 
   useEffect(() => {
-    writeDeliveryLocal(cacheKey, { assignments, expenses, savedAt: new Date().toISOString() });
+    writeDeliveryCacheSnapshot(cacheKey, { assignments, expenses });
   }, [cacheKey, assignments, expenses]);
 
   const queueOfflineOperation = useCallback((path: string, body: Record<string, any>) => {
@@ -113,6 +114,8 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           setExpenses(results[1].value.expenses);
         }
           setOfflineNotice(results.some(result => result.status === "rejected"));
+        setCacheReady(isDeliveryCachePrimed(cacheKey, ["assignments", "expenses"]));
+          setCacheReady(isDeliveryCachePrimed(cacheKey, ["assignments", "expenses"]));
         } catch (_) {
           setOfflineNotice(true);
         }
@@ -120,7 +123,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [request, offlineQueueKey]);
+  }, [request, offlineQueueKey, cacheKey]);
 
   useEffect(() => {
     const retry = () => { void flushOfflineQueue(); };
@@ -255,6 +258,7 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
           <div><p className="flex items-center gap-2 text-lg font-black"><Truck className="h-5 w-5 text-emerald-400" /> Delivery Panel</p><p className="mt-1 text-xs text-slate-400">{staff.name} · {staff.email}</p></div>
           <button onClick={onLogout} className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300"><LogOut className="mr-1 inline h-3.5 w-3.5" /> Logout</button>
         </header>
+        {cacheReady && <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" /> Device cache ready · Your assignments and expenses are saved</div>}
 
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5 sm:grid-cols-4">
           <button onClick={() => setTab("staff")} className={`rounded-xl px-2 py-3 text-xs font-black ${tab === "staff" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Delivery Staff</button>

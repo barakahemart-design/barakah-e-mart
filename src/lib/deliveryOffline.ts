@@ -46,17 +46,49 @@ export function createDeliveryOfflineOperation(path: string, body: Record<string
 
 /**
  * Persist one successfully loaded panel without replacing other panels' last
- * known-good local data. A failed endpoint must never erase another panel's cache.
+ * known-good local data. Track successful sections so each device can confirm
+ * that its complete delivery snapshot has been primed.
  */
 export function writeDeliveryCacheSection<T extends Record<string, any>>(
   key: string,
   section: string,
   value: unknown
 ): boolean {
-  const current = readDeliveryLocal<T>(key, {} as T);
+  const current = readDeliveryLocal<T & { _deliveryCacheMeta?: any }>(key, {} as T & { _deliveryCacheMeta?: any });
+  const now = new Date().toISOString();
+  const count = Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as object).length : 0;
+  const previousMeta = current._deliveryCacheMeta || {};
   return writeDeliveryLocal(key, {
     ...current,
     [section]: value,
+    savedAt: now,
+    _deliveryCacheMeta: {
+      ...previousMeta,
+      sections: {
+        ...(previousMeta.sections || {}),
+        [section]: { savedAt: now, recordCount: count }
+      },
+      lastSuccessfulLoadAt: now
+    }
+  });
+}
+
+/** Save current React state while preserving per-section cache readiness metadata. */
+export function writeDeliveryCacheSnapshot(key: string, snapshot: Record<string, any>): boolean {
+  const current = readDeliveryLocal<Record<string, any>>(key, {});
+  return writeDeliveryLocal(key, {
+    ...snapshot,
+    _deliveryCacheMeta: current._deliveryCacheMeta || {},
     savedAt: new Date().toISOString()
   });
+}
+
+/** True only after every required section has been successfully fetched and saved locally. */
+export function isDeliveryCachePrimed(key: string, requiredSections: string[]): boolean {
+  const current = readDeliveryLocal<Record<string, any>>(key, {});
+  const sections = current._deliveryCacheMeta?.sections || {};
+  return requiredSections.every(section =>
+    Object.prototype.hasOwnProperty.call(current, section) &&
+    Boolean(sections[section]?.savedAt)
+  );
 }
