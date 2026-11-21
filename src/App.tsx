@@ -8325,6 +8325,7 @@ _${businessInfo.name}_`;
                               {/* Keep Direct Sale in its own matching-height cell beside the grouped actions. */}
                               <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                                 {!(totalOutstandingDue > 0) && status && <span className={`px-2 py-1 rounded-full text-[9px] uppercase tracking-wider whitespace-nowrap ${status.color}`}>{status.label}</span>}
+                                {c.type === "customer" && <button type="button" onClick={() => void openCustomerInvoiceAssign(c, clientTxs)} className="h-12 sm:h-16 md:h-10 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer" title="Assign a sales invoice directly to delivery staff"><Truck className="w-3.5 h-3.5" /> Invoice Assign</button>}
                                 {c.type === "customer" && (
                                   <button
                                     type="button"
@@ -8340,7 +8341,7 @@ _${businessInfo.name}_`;
                                     Direct Sale
                                   </button>
                                 )}
-                                {c.type === "customer" && <button type="button" onClick={() => void openCustomerInvoiceAssign(c, clientTxs)} className="h-12 sm:h-16 md:h-10 shrink-0 whitespace-nowrap px-2 py-1.5 text-[9px] font-black text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 rounded-lg flex items-center justify-center gap-1 transition-all uppercase cursor-pointer" title="Assign a sales invoice directly to delivery staff"><Truck className="w-3.5 h-3.5" /> Invoice Assign</button>}
+
                               </div>
 
                               {/* Action buttons */}
