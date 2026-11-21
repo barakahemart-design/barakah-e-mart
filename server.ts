@@ -1714,9 +1714,22 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!invoiceItems.length && transactionId) {
         const itemSnapshot = await adminDb.collection("transaction_items")
           .where("transaction_id", "==", transactionId)
-          .where("store_id", "==", storeId)
           .get();
-        invoiceItems = itemSnapshot.docs.map((itemDoc: any) => itemDoc.data() || {});
+        const allowedStoreIds = new Set([
+          storeId,
+          transaction.store_id,
+          transaction.storeId,
+          transaction.owner_store_id,
+          transaction.linked_email,
+          transaction.linkedEmail,
+          transaction.email
+        ].map(value => String(value || "").trim().toLowerCase()).filter(Boolean));
+        invoiceItems = itemSnapshot.docs
+          .map((itemDoc: any) => itemDoc.data() || {})
+          .filter((item: any) => {
+            const itemStoreId = String(item.store_id || item.storeId || item.owner_store_id || item.linked_email || item.linkedEmail || item.email || "").trim().toLowerCase();
+            return Boolean(itemStoreId && allowedStoreIds.has(itemStoreId));
+          });
       }
 
       const assignmentId = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
