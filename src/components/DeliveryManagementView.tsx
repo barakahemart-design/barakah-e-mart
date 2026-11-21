@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
-import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
 import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
@@ -120,6 +120,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           await request(current.path, current.body);
           const next = pendingOperationsRef.current.filter(item => item.id !== current.id);
           pendingOperationsRef.current = next;
+          writeDeliveryLocal(offlineQueueKey, next);
           setPendingOperations(next);
         } catch (error) {
           // Never discard a queued operation automatically. A 404/409 can mean
@@ -148,7 +149,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [request, panelRole]);
+  }, [request, panelRole, offlineQueueKey]);
 
   useEffect(() => {
     const retry = () => { void flushOfflineQueue(); };
@@ -180,12 +181,22 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         const queueResult = results[2];
         const expenseResult = results[3];
         if (staffResult.status === "fulfilled" && Array.isArray(staffResult.value.staff)) {
+          writeDeliveryCacheSection(cacheKey, "staff", staffResult.value.staff);
           setStaff(staffResult.value.staff);
           setDriverUid(prev => prev || staffResult.value.staff.find((x: Driver) => x.status === "active")?.uid || "");
         }
-        if (assignmentResult.status === "fulfilled" && Array.isArray(assignmentResult.value.assignments)) setAssignments(assignmentResult.value.assignments);
-        if (queueResult.status === "fulfilled" && Array.isArray(queueResult.value.queue)) setQueueItems(queueResult.value.queue);
-        if (expenseResult.status === "fulfilled" && Array.isArray(expenseResult.value.expenses)) setExpenses(expenseResult.value.expenses);
+        if (assignmentResult.status === "fulfilled" && Array.isArray(assignmentResult.value.assignments)) {
+          writeDeliveryCacheSection(cacheKey, "assignments", assignmentResult.value.assignments);
+          setAssignments(assignmentResult.value.assignments);
+        }
+        if (queueResult.status === "fulfilled" && Array.isArray(queueResult.value.queue)) {
+          writeDeliveryCacheSection(cacheKey, "queueItems", queueResult.value.queue);
+          setQueueItems(queueResult.value.queue);
+        }
+        if (expenseResult.status === "fulfilled" && Array.isArray(expenseResult.value.expenses)) {
+          writeDeliveryCacheSection(cacheKey, "expenses", expenseResult.value.expenses);
+          setExpenses(expenseResult.value.expenses);
+        }
         const hasFailures = results.some(result => result.status === "rejected");
         setOfflineNotice(hasFailures);
         if (hasFailures && !cachedData) {
@@ -199,7 +210,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } finally {
       setLoading(false);
     }
-  }, [adminPin, salesPin, storeId, request, panelRole, flushOfflineQueue, cachedData]);
+  }, [adminPin, salesPin, storeId, request, panelRole, flushOfflineQueue, cachedData, cacheKey]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
