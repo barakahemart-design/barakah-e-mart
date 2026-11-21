@@ -144,8 +144,8 @@ export function DeliveryDriverView({ staff, currencySymbol = "৳", onLogout }: 
       } else {
         // A failed expense request must not prevent the driver's assignments from
         // refreshing, and vice versa. Keep the last cached data for failed panels.
-        if (results[0].status === "fulfilled" && Array.isArray(results[0].value.assignments)) setAssignments(results[0].value.assignments);
-        if (results[1].status === "fulfilled" && Array.isArray(results[1].value.expenses)) setExpenses(results[1].value.expenses);
+        if (results[0].status === "fulfilled" && Array.isArray(results[0].value.assignments)) { writeDeliveryCacheSection(cacheKey, "assignments", results[0].value.assignments); setAssignments(results[0].value.assignments); }
+        if (results[1].status === "fulfilled" && Array.isArray(results[1].value.expenses)) { writeDeliveryCacheSection(cacheKey, "expenses", results[1].value.expenses); setExpenses(results[1].value.expenses); }
         setOfflineNotice(results.some(result => result.status === "rejected"));
       }
     } catch (error: any) {
