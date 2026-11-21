@@ -1344,6 +1344,9 @@ export default function App() {
       const settingsDocId = `settings_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
       unsubBusinessInfo = onSnapshot(doc(db, "business_info", settingsDocId), (docSnap) => {
         if (docSnap.exists()) {
+          // Treat the settings snapshot as a remote update so it is not echoed
+          // back into Firestore by the settings-only autosave effect.
+          markRemoteUpdateActive();
           const cloudData = docSnap.data();
           if (cloudData && typeof cloudData === "object") {
             const { id, user_id, userId, linkedEmail, ...cleanInfo } = cloudData;
