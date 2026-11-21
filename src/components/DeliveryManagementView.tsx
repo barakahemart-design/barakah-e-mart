@@ -54,6 +54,9 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [invoiceLookup, setInvoiceLookup] = useState<{ status: "idle" | "loading" | "found" | "not_found" | "error"; invoice?: any; already_assigned?: boolean; assigned_driver?: string; message?: string }>({ status: "idle" });
   const [invoiceSelected, setInvoiceSelected] = useState(false);
   const [deletingAssignmentNo, setDeletingAssignmentNo] = useState("");
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [editDriverUid, setEditDriverUid] = useState("");
+  const [savingAssignmentEdit, setSavingAssignmentEdit] = useState(false);
   const [driverUid, setDriverUid] = useState("");
   const [assignmentView, setAssignmentView] = useState<"assigned" | "delivered">("assigned");
   const [expenseView, setExpenseView] = useState<"unpaid" | "paid">("unpaid");
@@ -412,6 +415,43 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } catch (error: any) { notifyRef.current(error?.message || "Could not delete delivery staff account.", "error"); }
   };
 
+  const saveAssignmentEdit = async () => {
+    if (panelRole !== "admin" || !editingAssignment || !editDriverUid || savingAssignmentEdit) return;
+    const driver = activeDrivers.find(item => item.uid === editDriverUid);
+    if (!driver) { notifyRef.current("Select an active delivery staff member.", "error"); return; }
+    setSavingAssignmentEdit(true);
+    try {
+      await request("/api/delivery/assignments/admin-update-driver", { assignment_id: editingAssignment.id, driver_uid: driver.uid });
+      setAssignments(prev => prev.map(item => item.id === editingAssignment.id ? { ...item, driver_uid: driver.uid, driver_name: driver.name } : item));
+      setEditingAssignment(null);
+      notifyRef.current("Invoice assignment updated to " + driver.name + ".", "success");
+      void loadAll();
+    } catch (error: any) { notifyRef.current(error?.message || "Could not update invoice assignment.", "error"); }
+    finally { setSavingAssignmentEdit(false); }
+  };
+
+  const deleteInvoicePayment = async (assignment: Assignment) => {
+    if (panelRole !== "admin" || assignment.id.startsWith("local-")) return;
+    if (!window.confirm("Delete this invoice delivery payment entry? The invoice assignment and delivery history will remain, but the payment will be reset to Unpaid and its linked expense will be removed from profit calculations.")) return;
+    try {
+      await request("/api/delivery/assignments/payment-delete", { assignment_id: assignment.id });
+      setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: 0, payment_status: "unpaid", payment_timing: "after_delivery", payment_updated_at: new Date().toISOString(), payment_received_at: "" } : item));
+      setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
+      notifyRef.current("Invoice delivery payment entry deleted.", "success");
+      void loadAll();
+    } catch (error: any) { notifyRef.current(error?.message || "Could not delete invoice payment entry.", "error"); }
+  };
+
+  const deleteStaffExpensePayment = async (expense: DeliveryExpense) => {
+    if (panelRole !== "admin") return;
+    if (!window.confirm("Delete this staff expense/payment record permanently? This removes the request from Delivery Payments and expense history.")) return;
+    try {
+      await request("/api/delivery/expenses/admin-delete", { expense_id: expense.id });
+      setExpenses(prev => prev.filter(item => item.id !== expense.id));
+      notifyRef.current("Staff expense/payment record deleted.", "success");
+    } catch (error: any) { notifyRef.current(error?.message || "Could not delete staff expense/payment record.", "error"); }
+  };
+
   const updateExpense = async (expense: DeliveryExpense) => {
     const next = expense.payment_status === "paid" ? "unpaid" : "paid";
     try {
@@ -643,14 +683,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
               <label className="text-[10px] font-bold text-slate-400">Payment status<select value={draft.status} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, status: e.target.value as "paid" | "unpaid" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="unpaid">Unpaid · Due</option><option value="paid">Paid · Received</option></select></label>
               <label className="text-[10px] font-bold text-slate-400">When paid?<select value={draft.timing} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, timing: e.target.value as "advance" | "after_delivery" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="advance">Advance payment</option><option value="after_delivery">After delivery</option></select></label>
             </div>
-            <button onClick={() => updateAssignmentPayment(a)} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-[10px] font-black text-slate-950">Save Payment Details</button>
+            <div className="flex flex-wrap gap-2"><button onClick={() => updateAssignmentPayment(a)} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-[10px] font-black text-slate-950">Save Payment Details</button><button type="button" onClick={() => deleteInvoicePayment(a)} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete Payment</button></div>
           </div>;
         })}
         <div className="space-y-2 pt-2">
           <h3 className="text-sm font-black text-white">Staff Expense Payments</h3>
           {filteredPaymentExpenses.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">No {paymentView} staff expense payments for this date range.</p> : filteredPaymentExpenses.map(expense => <div key={`expense-${expense.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div><p className="text-sm font-black text-white">Staff Expense · {currencySymbol}{Number(expense.amount || 0).toLocaleString("en-BD")}</p><p className="mt-1 text-[11px] text-slate-300">{expense.driver_name} · {expense.reason}</p><p className="mt-1 text-[10px] text-slate-500">{expense.category} · Submitted {expense.date}{expense.assignment_id ? " · Linked delivery" : " · General expense"}</p>{expense.paid_at && <p className="mt-1 text-[10px] text-emerald-300">Paid {new Date(expense.paid_at).toLocaleString("en-BD")}</p>}</div>
-            <button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Pending · Mark Paid"}</button>
+            <div className="flex flex-wrap gap-2"><button onClick={() => updateExpense(expense)} className={`rounded-lg px-3 py-2 text-[10px] font-black ${expense.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{expense.payment_status === "paid" ? "Paid · Mark Unpaid" : "Pending · Mark Paid"}</button><button type="button" onClick={() => deleteStaffExpensePayment(expense)} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete</button></div>
           </div>)}
         </div>
       </div>}
@@ -687,6 +727,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <div className="space-y-2">{assignments.filter(x => x.delivery_status !== "delivered").length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No assigned invoices right now.</p> : assignments.filter(x => x.delivery_status !== "delivered").map(item => <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black capitalize text-amber-300">{item.delivery_status || "assigned"}</span></div>
             <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
+            {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" onClick={() => { setEditingAssignment(item); setEditDriverUid(item.driver_uid); }} className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[10px] font-black text-sky-300">Edit Assignment</button></div>}
             <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
             <p className="mt-2 text-[10px] text-slate-400">Delivery: <span className={item.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}>{item.delivery_status === "delivered" ? "Delivered" : "Not delivered"}</span> · Driver payment: <span className={item.payment_status === "paid" ? "text-emerald-300" : "text-rose-300"}>{item.payment_status === "paid" ? "Paid" : "Unpaid"}</span></p>
             <p className="mt-2 text-[10px] text-slate-400">Delivery: <span className={item.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}>{item.delivery_status === "delivered" ? "Delivered" : "Not delivered"}</span> · Driver payment: <span className={item.payment_status === "paid" ? "text-emerald-300" : "text-rose-300"}>{item.payment_status === "paid" ? "Paid" : "Unpaid"}</span></p>
@@ -696,10 +737,22 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           {assignments.filter(x => x.delivery_status === "delivered").length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No delivered invoices yet.</p> : assignments.filter(x => x.delivery_status === "delivered").map(item => <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-black text-white">Invoice {item.invoice_no}</p><span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-300">Delivered</span></div>
             <p className="mt-1 text-xs text-slate-300">{item.customer_name} · {item.driver_name}</p>
+            {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" onClick={() => { setEditingAssignment(item); setEditDriverUid(item.driver_uid); }} className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[10px] font-black text-sky-300">Edit Assignment</button></div>}
             <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><MapPin className="mt-0.5 h-3 w-3 shrink-0" />{item.customer_address || "No customer address saved"}</p>
             {panelRole === "admin" && <div className="mt-3 flex justify-end"><button type="button" disabled={deletingAssignmentNo === String(item.invoice_no)} onClick={() => deleteInvoiceAssignment(String(item.invoice_no))} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-300 disabled:opacity-50"><Trash2 className="h-3 w-3" />{deletingAssignmentNo === String(item.invoice_no) ? "Deleting…" : "Delete Invoice"}</button></div>}
           </div>)}
         </div>}
+      </div>}
+
+      {editingAssignment && panelRole === "admin" && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label="Edit invoice assignment">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl">
+          <div><h3 className="text-base font-black text-white">Edit Invoice Assignment</h3><p className="mt-1 text-xs text-slate-400">Invoice {editingAssignment.invoice_no} · {editingAssignment.customer_name}</p></div>
+          <label className="block space-y-1.5 text-xs font-bold text-slate-300">Assign to Delivery Staff
+            <select value={editDriverUid} onChange={e => setEditDriverUid(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white"><option value="">Select active delivery staff</option>{activeDrivers.map(person => <option key={person.uid} value={person.uid}>{person.name} · {person.email}</option>)}</select>
+          </label>
+          <p className="text-[10px] leading-relaxed text-slate-500">The invoice, delivery progress and payment history will remain unchanged. Only the assigned delivery staff member will be changed.</p>
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingAssignment(null)} className="rounded-lg border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-300">Cancel</button><button type="button" disabled={!editDriverUid || savingAssignmentEdit} onClick={saveAssignmentEdit} className="rounded-lg bg-sky-500 px-4 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">{savingAssignmentEdit ? "Saving…" : "Save Changes"}</button></div>
+        </div>
       </div>}
 
       {tab === "expenses" && panelRole === "admin" && <div className="space-y-3">

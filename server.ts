@@ -1817,7 +1817,53 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {
+  app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {  // Admin-only reassignment. Keep the invoice and payment history intact while changing its driver.
+  app.post("/api/delivery/assignments/admin-update-driver", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, assignment_id, driver_uid } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Primary Admin login and current Admin PIN are required." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const id = String(assignment_id || "").trim();
+      const driverUid = String(driver_uid || "").trim();
+      if (!id || !driverUid) return res.status(400).json({ error: "Invoice assignment and delivery staff are required." });
+      const driver = await getDeliveryStaff(driverUid);
+      if (!driver || driver.owner_store_id !== storeId || driver.status !== "active") {
+        return res.status(404).json({ error: "Selected active delivery staff member was not found in this business." });
+      }
+      const assignmentRef = adminDb.collection("delivery_assignments").doc(id);
+      const linkedExpenseRef = adminDb.collection("expenses").doc(`delivery_payment_${id}`);
+      const now = new Date().toISOString();
+      const result = await adminDb.runTransaction(async (transaction) => {
+        const assignmentSnap = await transaction.get(assignmentRef);
+        if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== storeId) return null;
+        const assignment = assignmentSnap.data() || {};
+        const expenseSnap = String(assignment.payment_status || "") === "paid" ? await transaction.get(linkedExpenseRef) : null;
+        const patch = { driver_uid: driverUid, driver_name: String(driver.name || ""), reassigned_at: now, reassigned_by: admin.uid };
+        if (expenseSnap?.exists && expenseSnap.data()?.store_id === storeId) {
+          const oldDescription = String(expenseSnap.data()?.description || "");
+          const updatedDescription = oldDescription.replace(/^Delivery payment to: [^|]*/, `Delivery payment to: ${String(driver.name || "Delivery Staff")}`);
+          transaction.update(linkedExpenseRef, { driver_uid: driverUid, driver_name: String(driver.name || ""), description: updatedDescription, updated_at: now });
+        }
+        transaction.update(assignmentRef, patch);
+        return { id, ...assignment, ...patch };
+      });
+      if (!result) return res.status(404).json({ error: "Invoice assignment not found in this business account." });
+      const queueId = createHash("sha256").update(`${storeId}:${String(result.invoice_no || "")}`).digest("hex");
+      const queueRef = adminDb.collection("delivery_queue").doc(queueId);
+      const queueSnap = await queueRef.get();
+      if (queueSnap.exists && queueSnap.data()?.owner_store_id === storeId) {
+        await queueRef.set({ assigned: true, assigned_to: driverUid, assigned_at: String(result.assigned_at || now) }, { merge: true });
+      }
+      return res.json({ success: true, assignment: result });
+    } catch (error: any) {
+      console.warn("[delivery/assignments/admin-update-driver] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not update invoice assignment." });
+    }
+  });
+
+
     const { store_id, admin_pin } = req.body || {};
     try {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
@@ -1938,7 +1984,41 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.post("/api/delivery/assignments/status", async (req: Request, res: Response) => {
+  app.post("/api/delivery/assignments/status", async (req: Request, res: Response) => {  // Remove only the invoice delivery payment entry; preserve the delivery assignment itself.
+  app.post("/api/delivery/assignments/payment-delete", async (req: Request, res: Response) => {
+    const { store_id, admin_pin, assignment_id } = req.body || {};
+    try {
+      const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
+      if (!admin) return res.status(403).json({ error: "Only Admin can delete delivery payment entries." });
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const storeId = String(store_id || "").trim().toLowerCase();
+      const id = String(assignment_id || "").trim();
+      if (!id) return res.status(400).json({ error: "Invoice assignment ID is required." });
+      const assignmentRef = adminDb.collection("delivery_assignments").doc(id);
+      const expenseRef = adminDb.collection("expenses").doc(`delivery_payment_${id}`);
+      const now = new Date().toISOString();
+      const removed = await adminDb.runTransaction(async (transaction) => {
+        const assignmentSnap = await transaction.get(assignmentRef);
+        if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== storeId) return false;
+        const expenseSnap = await transaction.get(expenseRef);
+        transaction.update(assignmentRef, {
+          delivery_fee: 0, payment_status: "unpaid", payment_timing: "after_delivery",
+          payment_updated_at: now, payment_updated_by: admin.uid, payment_received_at: ""
+        });
+        if (expenseSnap.exists && expenseSnap.data()?.store_id === storeId && expenseSnap.data()?.source_id === id) {
+          transaction.delete(expenseRef);
+        }
+        return true;
+      });
+      if (!removed) return res.status(404).json({ error: "Invoice assignment not found in this business account." });
+      return res.json({ success: true, deleted: true, payment_status: "unpaid" });
+    } catch (error: any) {
+      console.warn("[delivery/assignments/payment-delete] Failed:", error?.message || "Unknown error");
+      return res.status(503).json({ error: error?.message || "Could not delete invoice payment entry." });
+    }
+  });
+
+
     const { store_id, admin_pin, assignment_id, delivery_status } = req.body || {};
     try {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
