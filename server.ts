@@ -1676,7 +1676,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         if (!transactionDoc) return res.status(404).json({ error: "Invoice not found in this store." });
         transaction = transactionDoc.data();
         transactionId = transactionDoc.id;
-        const contactId = String(transaction.contactId || transaction.contact_id || "");
+        const contactId = String(transaction.contactId || transaction.contact_id || transaction.customer_id || transaction.customerId || "");
         if (contactId) {
           const contactDoc = await adminDb.collection("customers").doc(contactId).get();
           if (contactDoc.exists) customer = contactDoc.data() || {};
@@ -1700,6 +1700,18 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
       if (sourceTransaction) transaction = { ...sourceTransaction, ...transaction };
 
+      // New POS sales store line items in transaction_items. Read only the
+      // selected transaction's rows scoped to this store when the parent record
+      // does not contain its nested item array.
+      let invoiceItems = Array.isArray(transaction.items) ? transaction.items : [];
+      if (!invoiceItems.length && transactionId) {
+        const itemSnapshot = await adminDb.collection("transaction_items")
+          .where("transaction_id", "==", transactionId)
+          .where("store_id", "==", storeId)
+          .get();
+        invoiceItems = itemSnapshot.docs.map((itemDoc: any) => itemDoc.data() || {});
+      }
+
       const assignmentId = createHash("sha256").update(`${storeId}:${invoiceNo}`).digest("hex");
       const assignmentRef = adminDb.collection("delivery_assignments").doc(assignmentId);
       const previousAssignmentSnap = await assignmentRef.get();
@@ -1721,15 +1733,18 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         driver_name: String(driver.name || ""),
         invoice_no: invoiceNo,
         transaction_id: transactionId,
-        customer_name: String(customer.name || transaction.customer_name || transaction.customerName || "Customer"),
+        customer_name: String(customer.name || customer.customer_name || transaction.customer_name || transaction.customerName || "Customer"),
         customer_phone: String(customer.phone || transaction.customer_phone || transaction.customerPhone || ""),
         customer_address: String(customer.address || transaction.customer_address || transaction.customerAddress || ""),
         customer_note: String(transaction.customer_note || transaction.customerNote || transaction.note || transaction.notes || transaction.remark || ""),
         delivery_note: String(previousAssignment.delivery_note || transaction.delivery_note || transaction.deliveryNote || ""),
-        items: Array.isArray(transaction.items) ? transaction.items.map((item: any) => ({
-          name: String(item.name || item.productName || "Item"),
-          quantity: Number(item.quantity) || 0
-        })) : [],
+        total_amount: Number(transaction.total || transaction.totalAmount || transaction.total_amount || 0),
+        items: invoiceItems.map((item: any) => ({
+          name: String(item.name || item.product_name || item.productName || "Item"),
+          quantity: Number(item.quantity) || 0,
+          price: Number(item.price ?? item.sell_price ?? item.sellPrice) || 0,
+          total: Number(item.total) || (Number(item.quantity) || 0) * (Number(item.price ?? item.sell_price ?? item.sellPrice) || 0)
+        })),
         delivery_status: "assigned",
         delivery_fee: Number(previousAssignment.delivery_fee) || 0,
         payment_status: previousAssignment.payment_status === "paid" ? "paid" : "unpaid",
