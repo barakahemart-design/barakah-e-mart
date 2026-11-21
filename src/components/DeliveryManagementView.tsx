@@ -166,8 +166,21 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     return () => { window.removeEventListener("online", retry); window.clearInterval(timer); };
   }, [flushOfflineQueue]);
 
-  const loadAll = useCallback(async () => {
+  const lastLoadStartedAtRef = useRef(0);
+  const loadAllInFlightRef = useRef(false);
+  const queuedForcedRefreshRef = useRef(false);
+  const loadAll = useCallback(async (force = false) => {
     if ((panelRole === "admin" && !adminPin) || (panelRole === "sales" && !salesPin) || !storeId) return;
+    const now = Date.now();
+    if (loadAllInFlightRef.current) {
+      if (force) queuedForcedRefreshRef.current = true;
+      return;
+    }
+    // Focus and visibility events often fire together on mobile. Avoid issuing
+    // the same four admin list queries twice during one foreground transition.
+    if (!force && now - lastLoadStartedAtRef.current < 5000) return;
+    loadAllInFlightRef.current = true;
+    lastLoadStartedAtRef.current = now;
     setLoading(true);
     try {
       const results = await Promise.allSettled([
@@ -215,7 +228,12 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setOfflineNotice(true);
       notifyRef.current(error?.message || "Could not load delivery management data. Previously saved local records are being kept.", "info");
     } finally {
+      loadAllInFlightRef.current = false;
       setLoading(false);
+      if (queuedForcedRefreshRef.current) {
+        queuedForcedRefreshRef.current = false;
+        void loadAll(true);
+      }
     }
   }, [adminPin, salesPin, storeId, request, panelRole, flushOfflineQueue, cachedData, cacheKey]);
 
@@ -245,7 +263,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     if (panelRole !== "admin" || tab !== "assignments") return;
     let cancelled = false;
     request("/api/delivery/assignments/cleanup-orphans", {})
-      .then((result: any) => { if (!cancelled && Number(result.deleted || 0) > 0) loadAll(); })
+      .then((result: any) => { if (!cancelled && Number(result.deleted || 0) > 0) loadAll(true); })
       .catch((error: any) => console.warn("[Delivery] Orphan assignment cleanup skipped:", error?.message || error));
     return () => { cancelled = true; };
   }, [panelRole, tab, request, loadAll]);
@@ -426,7 +444,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setAssignments(prev => prev.map(item => item.id === editingAssignment.id ? { ...item, driver_uid: driver.uid, driver_name: driver.name } : item));
       setEditingAssignment(null);
       notifyRef.current("Invoice assignment updated to " + driver.name + ".", "success");
-      void loadAll();
+      void loadAll(true);
     } catch (error: any) { notifyRef.current(error?.message || "Could not update invoice assignment.", "error"); }
     finally { setSavingAssignmentEdit(false); }
   };
@@ -439,7 +457,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: 0, payment_status: "unpaid", payment_timing: "after_delivery", payment_updated_at: new Date().toISOString(), payment_received_at: "" } : item));
       setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
       notifyRef.current("Invoice delivery payment entry deleted.", "success");
-      void loadAll();
+      void loadAll(true);
     } catch (error: any) { notifyRef.current(error?.message || "Could not delete invoice payment entry.", "error"); }
   };
 
@@ -495,7 +513,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         assignment_id: assignment.id, delivery_fee: fee,
         payment_status: draft.status, payment_timing: draft.timing, delivery_charge_bearer: draft.bearer
       });
-      await loadAll();
+      await loadAll(true);
       setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
       setEditingPaymentId(null);
       notifyRef.current("Delivery payment updated.", "success");
@@ -626,7 +644,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <h2 className="flex items-center gap-2 text-xl font-black text-white"><Truck className="h-5 w-5 text-emerald-400" /> Delivery Management</h2>
           <p className="mt-1 text-xs text-slate-400">Manage delivery accounts, invoice assignments and driver expenses.</p>
         </div>
-        <button onClick={loadAll} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+        <button onClick={() => loadAll(true)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>

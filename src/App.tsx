@@ -939,12 +939,6 @@ export default function App() {
       localStorage.setItem(userKey, JSON.stringify(compiledBusinessInfo));
       localStorage.setItem("barakah_business_info", JSON.stringify(compiledBusinessInfo));
 
-      if (settingsHydrated && activeUser && !activeUser.isGuest && activeUser.email) {
-        saveBusinessSettings(activeUser.email, compiledBusinessInfo).catch(err => {
-          console.warn("[Auto Save] Business info cloud save failed:", err);
-        });
-      }
-
       // Persist active core database state to local storage for instant offline & reload resilience
       const activeUserId = activeUser.uid;
       localStorage.setItem(getDbKey("barakah_products", undefined, activeUserId), JSON.stringify(products));
@@ -993,6 +987,53 @@ export default function App() {
       }
     }
   }, [products, contacts, expenses, transactions, businessInfo, purchases, expenseCategories, staffList, activeUser, settingsHydrated]);
+
+  // Save business settings only when settings themselves change.
+  // Product, customer, sale, expense and purchase state changes must not
+  // trigger an unrelated business_info write.
+  const lastBusinessSettingsSaveRef = useRef<string>("");
+  useEffect(() => {
+    if (!initialLoadedRef.current || !settingsHydrated || !activeUser || activeUser.isGuest || !activeUser.email) return;
+
+    const compiledBusinessInfo = {
+      ...businessInfo,
+      expenseCategories,
+      staffList
+    };
+    const fingerprint = JSON.stringify(compiledBusinessInfo);
+    const saveKey = String(activeUser.uid || activeUser.email) + "::" + fingerprint;
+    if (lastBusinessSettingsSaveRef.current === saveKey) return;
+
+    // A settings snapshot arriving from Firestore is already saved remotely.
+    // Do not echo it back as another write.
+    if (isRemoteUpdateActiveRef.current) {
+      lastBusinessSettingsSaveRef.current = saveKey;
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      if (isRemoteUpdateActiveRef.current) {
+        lastBusinessSettingsSaveRef.current = saveKey;
+        return;
+      }
+      try {
+        await saveBusinessSettings(activeUser.email, compiledBusinessInfo);
+        lastBusinessSettingsSaveRef.current = saveKey;
+      } catch (err) {
+        console.warn("[Auto Save] Business info cloud save failed:", err);
+      }
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    businessInfo,
+    expenseCategories,
+    staffList,
+    activeUser?.uid,
+    activeUser?.email,
+    activeUser?.isGuest,
+    settingsHydrated
+  ]);
 
   // Set up granular real-time multi-device cloud collection subscription
   useEffect(() => {
@@ -1303,6 +1344,9 @@ export default function App() {
       const settingsDocId = `settings_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
       unsubBusinessInfo = onSnapshot(doc(db, "business_info", settingsDocId), (docSnap) => {
         if (docSnap.exists()) {
+          // Treat the settings snapshot as a remote update so it is not echoed
+          // back into Firestore by the settings-only autosave effect.
+          markRemoteUpdateActive();
           const cloudData = docSnap.data();
           if (cloudData && typeof cloudData === "object") {
             const { id, user_id, userId, linkedEmail, ...cleanInfo } = cloudData;
@@ -1372,7 +1416,7 @@ export default function App() {
     };
     loadPaidDeliveryExpenses();
     return () => { cancelled = true; };
-  }, [activeUser?.uid, activeUser?.email, activeUser?.isGuest, currentPanel, adminActionPin, activeTab]);
+  }, [activeUser?.uid, activeUser?.email, activeUser?.isGuest, currentPanel, adminActionPin]);
 
   // Periodic PWA update check and network status monitoring
   useEffect(() => {
