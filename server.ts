@@ -1787,6 +1787,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       }
 
       const assignmentRef = adminDb.collection("delivery_assignments").doc(id);
+      const expenseRef = adminDb.collection("expenses").doc("delivery_payment_" + id);
       const now = new Date().toISOString();
       const result = await adminDb.runTransaction(async (transaction) => {
         const snap = await transaction.get(assignmentRef);
@@ -1795,11 +1796,15 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           return "not_assigned";
         }
         if (hasFeeUpdate && assignment.payment_status === "paid") return "already_paid";
+        const autoMarkPaid = delivery_status === "delivered";
+        const expenseSnap = autoMarkPaid ? await transaction.get(expenseRef) : null;
+        const paymentReceivedAt = autoMarkPaid ? (assignment.payment_status === "paid" && assignment.payment_received_at ? String(assignment.payment_received_at) : now) : "";
         const updates: Record<string, any> = {
           delivery_status,
           delivery_note: String(delivery_note || "").trim().slice(0, 500),
           status_updated_at: now,
-          status_updated_by: verified.uid
+          status_updated_by: verified.uid,
+          ...(autoMarkPaid ? { payment_status: "paid", payment_timing: assignment.payment_timing === "advance" ? "advance" : "after_delivery", payment_updated_at: now, payment_updated_by: verified.uid, payment_received_at: paymentReceivedAt } : {})
         };
         if (hasFeeUpdate) {
           updates.delivery_fee = fee;
@@ -1807,6 +1812,23 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           updates.amount_updated_by = verified.uid;
         }
         transaction.update(assignmentRef, updates);
+        if (autoMarkPaid) {
+          const invoiceNo = String(assignment.invoice_no || "");
+          const driverName = String(assignment.driver_name || "Delivery Staff");
+          const customerName = String(assignment.customer_name || "Customer");
+          const expenseDate = paymentReceivedAt.slice(0, 10);
+          transaction.set(expenseRef, {
+            id: expenseRef.id, category: "Delivery Payment", amount: Number(assignment.delivery_fee) || 0,
+            description: "Delivery payment to: " + driverName + " | Delivery Challan / Invoice: " + invoiceNo + " | Customer: " + customerName,
+            date: expenseDate, source: "delivery_payment", source_id: id, assignment_id: id, invoice_no: invoiceNo,
+            driver_uid: verified.uid, driver_name: driverName, customer_name: customerName,
+            customer_phone: String(assignment.customer_phone || ""), customer_address: String(assignment.customer_address || ""),
+            payment_timing: assignment.payment_timing === "advance" ? "advance" : "after_delivery", payment_status: "paid",
+            user_id: verified.uid, userId: verified.uid, owner_id: verified.uid, store_id: staff.owner_store_id, storeId: staff.owner_store_id,
+            email: staff.owner_store_id, linked_email: staff.owner_store_id, linkedEmail: staff.owner_store_id, deleted: false, isDeleted: false,
+            created_at: assignment.payment_status === "paid" ? (assignment.payment_received_at || now) : now, updated_at: now
+          }, { merge: true });
+        }
         return "updated";
       });
       if (result === "not_assigned") return res.status(403).json({ error: "This delivery is not assigned to your account." });
@@ -1817,7 +1839,20 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
-  app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {  // Admin-only reassignment. Keep the invoice and payment history intact while changing its driver.
+  app.post("/api/delivery/assignments/admin-list", async (req: Request, res: Response) => {    const { store_id, admin_pin } = req.body || {};
+    try {
+      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
+      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
+      const storeId = String(req.body?.store_id || "").trim().toLowerCase();
+      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
+      const snap = await adminDb.collection("delivery_assignments")
+        .where("owner_store_id", "==", storeId).get();
+      return res.json({ assignments: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    } catch (error: any) {
+      return res.status(503).json({ error: error?.message || "Could not load delivery assignments." });
+    }
+  });
+
   app.post("/api/delivery/assignments/admin-update-driver", async (req: Request, res: Response) => {
     const { store_id, admin_pin, assignment_id, driver_uid } = req.body || {};
     try {
@@ -1860,21 +1895,6 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     } catch (error: any) {
       console.warn("[delivery/assignments/admin-update-driver] Failed:", error?.message || "Unknown error");
       return res.status(503).json({ error: error?.message || "Could not update invoice assignment." });
-    }
-  });
-
-
-    const { store_id, admin_pin } = req.body || {};
-    try {
-      const manager = await requireDeliveryAssignmentManager(req, req.body || {});
-      if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
-      const storeId = String(req.body?.store_id || "").trim().toLowerCase();
-      if (!adminDb) return res.status(503).json({ error: "Delivery service is not configured." });
-      const snap = await adminDb.collection("delivery_assignments")
-        .where("owner_store_id", "==", storeId).get();
-      return res.json({ assignments: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-    } catch (error: any) {
-      return res.status(503).json({ error: error?.message || "Could not load delivery assignments." });
     }
   });
 
