@@ -1652,6 +1652,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
   app.post("/api/delivery/assignments/create", async (req: Request, res: Response) => {
     const { store_id, admin_pin, invoice_no, driver_uid } = req.body || {};
+    const deliveryChargeBearer = String(req.body?.delivery_charge_bearer || "showroom");
     try {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
@@ -1660,6 +1661,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const invoiceNo = String(invoice_no || "").trim();
       const driverUid = String(driver_uid || "").trim();
       if (!invoiceNo || !driverUid) return res.status(400).json({ error: "Invoice number and delivery staff are required." });
+      if (!["showroom", "customer"].includes(deliveryChargeBearer)) return res.status(400).json({ error: "Choose who will bear the delivery charge." });
 
       const driver = await getDeliveryStaff(driverUid);
       if (!driver || driver.owner_store_id !== storeId || driver.status !== "active") {
@@ -1759,6 +1761,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         customer_note: String(transaction.customer_note || transaction.customerNote || transaction.note || transaction.notes || transaction.remark || ""),
         delivery_note: String(previousAssignment.delivery_note || transaction.delivery_note || transaction.deliveryNote || ""),
         total_amount: Number(transaction.total || transaction.totalAmount || transaction.total_amount || 0),
+        delivery_charge_bearer: deliveryChargeBearer,
         items: invoiceItems.map((item: any) => ({
           name: String(item.name || item.product_name || item.productName || "Item"),
           quantity: Number(item.quantity) || 0,
@@ -1846,7 +1849,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           updates.amount_updated_by = verified.uid;
         }
         transaction.update(assignmentRef, updates);
-        if (autoMarkPaid) {
+        if (autoMarkPaid && String(assignment.delivery_charge_bearer || "showroom") !== "customer") {
           const invoiceNo = String(assignment.invoice_no || "");
           const driverName = String(assignment.driver_name || "Delivery Staff");
           const customerName = String(assignment.customer_name || "Customer");
@@ -1862,6 +1865,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             email: staff.owner_store_id, linked_email: staff.owner_store_id, linkedEmail: staff.owner_store_id, deleted: false, isDeleted: false,
             created_at: assignment.payment_status === "paid" ? (assignment.payment_received_at || now) : now, updated_at: now
           }, { merge: true });
+        } else if (autoMarkPaid) {
+          // Customer-borne delivery charges are not showroom expenses and must
+          // never reduce the store's Net Profit.
+          transaction.delete(expenseRef);
         }
         return "updated";
       });
@@ -1974,7 +1981,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           payment_received_at: paymentReceivedAt
         });
 
-        if (payment_status === "paid") {
+        const showroomBearsDelivery = String(assignment.delivery_charge_bearer || "showroom") !== "customer";
+        if (payment_status === "paid" && showroomBearsDelivery) {
           const invoiceNo = String(assignment.invoice_no || "");
           const driverName = String(assignment.driver_name || "Delivery Staff");
           const customerName = String(assignment.customer_name || "Customer");
@@ -2022,11 +2030,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             updated_at: now
           }, { merge: true });
         } else {
-          // Reversing Paid -> Unpaid removes the linked expense from Net Profit.
+          // Customer-borne delivery fees are excluded from showroom expenses.
+          // Reversing Paid -> Unpaid also removes any previously linked expense.
           transaction.delete(expenseRef);
         }
 
-        return { payment_received_at: paymentReceivedAt, expense_id: payment_status === "paid" ? expenseRef.id : "" };
+        return { payment_received_at: paymentReceivedAt, expense_id: payment_status === "paid" && showroomBearsDelivery ? expenseRef.id : "" };
       });
 
       return res.json({ success: true, payment_updated_at: now, ...result });
