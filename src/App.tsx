@@ -619,7 +619,16 @@ export default function App() {
       const active = (Array.isArray(data.staff) ? data.staff : []).filter((person: any) => person.status === "active");
       setQuickAssignStaff(active); if (active.length) setQuickAssignDriverUid(active[0].uid);
       else triggerNotification("No active delivery staff found. Add or activate staff in Delivery Management first.", "info");
-    } catch (error: any) { setQuickAssignContact(null); triggerNotification(error?.message || "Could not open invoice assignment.", "error"); }
+    } catch (error: any) {
+      if (isRetryableDeliveryError(error)) {
+        const panelRole = currentPanel === "admin" ? "admin" : "sales";
+        const cacheKey = deliveryStorageKey("cache", String(activeUser?.email || "").trim().toLowerCase() + ":" + panelRole);
+        const cached = readDeliveryLocal<any>(cacheKey, null);
+        const active = Array.isArray(cached?.staff) ? cached.staff.filter((person: any) => person.status === "active") : [];
+        if (active.length) { setQuickAssignStaff(active); setQuickAssignDriverUid(active[0].uid); triggerNotification("Using delivery staff saved on this device. Assignment will sync when the cloud is available.", "info"); }
+        else { setQuickAssignContact(null); triggerNotification("Delivery staff list is not cached on this device yet. Connect to Firebase once, then try again.", "error"); }
+      } else { setQuickAssignContact(null); triggerNotification(error?.message || "Could not open invoice assignment.", "error"); }
+    }
     finally { setQuickAssignLoading(false); }
   };
 
