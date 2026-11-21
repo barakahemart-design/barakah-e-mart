@@ -168,10 +168,14 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
 
   const lastLoadStartedAtRef = useRef(0);
   const loadAllInFlightRef = useRef(false);
+  const queuedForcedRefreshRef = useRef(false);
   const loadAll = useCallback(async (force = false) => {
     if ((panelRole === "admin" && !adminPin) || (panelRole === "sales" && !salesPin) || !storeId) return;
     const now = Date.now();
-    if (loadAllInFlightRef.current) return;
+    if (loadAllInFlightRef.current) {
+      if (force) queuedForcedRefreshRef.current = true;
+      return;
+    }
     // Focus and visibility events often fire together on mobile. Avoid issuing
     // the same four admin list queries twice during one foreground transition.
     if (!force && now - lastLoadStartedAtRef.current < 5000) return;
@@ -226,6 +230,10 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } finally {
       loadAllInFlightRef.current = false;
       setLoading(false);
+      if (queuedForcedRefreshRef.current) {
+        queuedForcedRefreshRef.current = false;
+        void loadAll(true);
+      }
     }
   }, [adminPin, salesPin, storeId, request, panelRole, flushOfflineQueue, cachedData, cacheKey]);
 
