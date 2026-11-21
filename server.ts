@@ -1839,16 +1839,14 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const assignmentSnap = await transaction.get(assignmentRef);
         if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== storeId) return null;
         const assignment = assignmentSnap.data() || {};
+        const expenseSnap = String(assignment.payment_status || "") === "paid" ? await transaction.get(linkedExpenseRef) : null;
         const patch = { driver_uid: driverUid, driver_name: String(driver.name || ""), reassigned_at: now, reassigned_by: admin.uid };
-        transaction.update(assignmentRef, patch);
-        if (String(assignment.payment_status || "") === "paid") {
-          const expenseSnap = await transaction.get(linkedExpenseRef);
-          if (expenseSnap.exists && expenseSnap.data()?.store_id === storeId) {
-            const oldDescription = String(expenseSnap.data()?.description || "");
-            const updatedDescription = oldDescription.replace(/^Delivery payment to: [^|]*/, `Delivery payment to: ${String(driver.name || "Delivery Staff")}`);
-            transaction.update(linkedExpenseRef, { driver_uid: driverUid, driver_name: String(driver.name || ""), description: updatedDescription, updated_at: now });
-          }
+        if (expenseSnap?.exists && expenseSnap.data()?.store_id === storeId) {
+          const oldDescription = String(expenseSnap.data()?.description || "");
+          const updatedDescription = oldDescription.replace(/^Delivery payment to: [^|]*/, `Delivery payment to: ${String(driver.name || "Delivery Staff")}`);
+          transaction.update(linkedExpenseRef, { driver_uid: driverUid, driver_name: String(driver.name || ""), description: updatedDescription, updated_at: now });
         }
+        transaction.update(assignmentRef, patch);
         return { id, ...assignment, ...patch };
       });
       if (!result) return res.status(404).json({ error: "Invoice assignment not found in this business account." });
