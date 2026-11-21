@@ -3485,6 +3485,16 @@ export default function App() {
         due_balance: Number(dueBalance) || 0,
         dueBalance: Number(dueBalance) || 0,
         status: status,
+        // The invoice date is edited from Ledger Box. Keep Firestore's
+        // canonical transaction timestamp aligned with the selected date,
+        // because realtime recovery reads created_at as Transaction.date.
+        created_at: (() => {
+          const selectedDate = updatedFields.date || originalTx.date || originalTx.created_at;
+          const parsedDate = selectedDate ? new Date(selectedDate as any) : null;
+          return parsedDate && !Number.isNaN(parsedDate.getTime())
+            ? parsedDate.toISOString()
+            : (originalTx.created_at || originalTx.date || new Date().toISOString());
+        })(),
         vat_rate: originalTx.tax && subtotal ? Number(((Number(originalTx.tax) / Number(subtotal)) * 100).toFixed(2)) : 0.0,
         updated_at: new Date().toISOString()
       }).catch((e) => {
