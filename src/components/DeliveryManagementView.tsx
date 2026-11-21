@@ -143,7 +143,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           if (results[2].status === "fulfilled" && Array.isArray(results[2].value.queue)) { writeDeliveryCacheSection(cacheKey, "queueItems", results[2].value.queue); setQueueItems(results[2].value.queue); }
           if (results[3].status === "fulfilled" && Array.isArray(results[3].value.expenses)) { writeDeliveryCacheSection(cacheKey, "expenses", results[3].value.expenses); setExpenses(results[3].value.expenses); }
           setOfflineNotice(results.some(result => result.status === "rejected"));
-          setCacheReady(isDeliveryCachePrimed(cacheKey, requiredCacheSections));
+          setCacheReady(isDeliveryCachePrimed(cacheKey, panelRole === "admin" ? ["staff", "assignments", "queueItems", "expenses"] : ["staff", "assignments", "queueItems"]));
         } catch (_) {
           setOfflineNotice(true);
         }
@@ -201,7 +201,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         }
         const hasFailures = results.some(result => result.status === "rejected");
         setOfflineNotice(hasFailures);
-        setCacheReady(isDeliveryCachePrimed(cacheKey, requiredCacheSections));
+        setCacheReady(isDeliveryCachePrimed(cacheKey, panelRole === "admin" ? ["staff", "assignments", "queueItems", "expenses"] : ["staff", "assignments", "queueItems"]));
         if (hasFailures && !cachedData) {
           const failedNames = results.map((result, index) => result.status === "rejected" ? ["staff", "invoice assignments", "delivery queue", "expenses/payments"][index] : "").filter(Boolean);
           notifyRef.current("Some Delivery Management data could not be refreshed (" + failedNames.join(", ") + "). Any previously saved local records remain visible.", "info");
