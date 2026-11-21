@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { 
   Building2, 
   ShoppingCart, 
@@ -593,6 +594,7 @@ export default function App() {
   const [quickAssignStaff, setQuickAssignStaff] = useState<any[]>([]);
   const [quickAssignInvoiceNo, setQuickAssignInvoiceNo] = useState("");
   const [quickAssignDriverUid, setQuickAssignDriverUid] = useState("");
+  const [quickAssignChargeBearer, setQuickAssignChargeBearer] = useState<"showroom" | "customer" | "">("");
   const [quickAssignLoading, setQuickAssignLoading] = useState(false);
   const [quickAssignSaving, setQuickAssignSaving] = useState(false);
   const [collectionTx, setCollectionTx] = useState<Transaction | null>(null);
@@ -607,7 +609,7 @@ export default function App() {
   const openCustomerInvoiceAssign = async (contact: Contact, clientInvoices: Transaction[]) => {
     const eligibleInvoices = clientInvoices.filter(tx => String(tx.invoiceNo || "").trim());
     if (!eligibleInvoices.length) { triggerNotification("No sales invoice is available for this customer yet.", "info"); return; }
-    setQuickAssignContact(contact); setQuickAssignInvoices(eligibleInvoices); setQuickAssignInvoiceNo(String(eligibleInvoices[0].invoiceNo)); setQuickAssignDriverUid(""); setQuickAssignLoading(true);
+    setQuickAssignContact(contact); setQuickAssignInvoices(eligibleInvoices); setQuickAssignInvoiceNo(String(eligibleInvoices[0].invoiceNo)); setQuickAssignDriverUid(""); setQuickAssignChargeBearer(""); setQuickAssignLoading(true);
     try {
       const user = firebaseAuth.currentUser;
       if (!user) throw new Error("Your secure login session has expired. Please log in again.");
@@ -633,14 +635,14 @@ export default function App() {
   };
 
   const submitCustomerInvoiceAssign = async () => {
-    if (!quickAssignContact || !quickAssignInvoiceNo || !quickAssignDriverUid || quickAssignSaving) return;
+    if (!quickAssignContact || !quickAssignInvoiceNo || !quickAssignDriverUid || !quickAssignChargeBearer || quickAssignSaving) return;
     setQuickAssignSaving(true);
     try {
       const user = firebaseAuth.currentUser;
       if (!user) throw new Error("Your secure login session has expired. Please log in again.");
       const token = await user.getIdToken();
       const panelRole = currentPanel === "admin" ? "admin" : "sales";
-      const response = await fetch("/api/delivery/assignments/create", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ store_id: String(activeUser?.email || "").trim().toLowerCase(), panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminActionPin } : { sales_pin: String(businessInfo.salesPasscode || "") }), invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid }) });
+      const response = await fetch("/api/delivery/assignments/create", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ store_id: String(activeUser?.email || "").trim().toLowerCase(), panel_role: panelRole, ...(panelRole === "admin" ? { admin_pin: adminActionPin } : { sales_pin: String(businessInfo.salesPasscode || "") }), invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid, delivery_charge_bearer: quickAssignChargeBearer }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Could not assign invoice.");
       const selectedStaff = quickAssignStaff.find(person => person.uid === quickAssignDriverUid);
@@ -651,7 +653,7 @@ export default function App() {
         const panelRole = currentPanel === "admin" ? "admin" : "sales";
         const queueKey = deliveryStorageKey("queue", String(activeUser?.email || "").trim().toLowerCase() + ":" + panelRole);
         const queued = readDeliveryLocal<any[]>(queueKey, []);
-        const operation = createDeliveryOfflineOperation("/api/delivery/assignments/create", { invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid });
+        const operation = createDeliveryOfflineOperation("/api/delivery/assignments/create", { invoice_no: quickAssignInvoiceNo, driver_uid: quickAssignDriverUid, delivery_charge_bearer: quickAssignChargeBearer });
         writeDeliveryLocal(queueKey, [...queued, operation]);
         triggerNotification("Invoice assignment saved on this device. It will sync when Firebase access returns and Delivery Management reconnects.", "info");
         setQuickAssignContact(null);
@@ -8339,17 +8341,17 @@ _${businessInfo.name}_`;
                             {quickAssignContact?.id === c.id && (() => {
                               const selectedInvoice = quickAssignInvoices.find(tx => String(tx.invoiceNo) === String(quickAssignInvoiceNo));
                               const selectedDriver = quickAssignStaff.find(person => person.uid === quickAssignDriverUid);
-                              return <div className="fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto bg-slate-950/85 p-3 backdrop-blur-md sm:p-5" role="dialog" aria-modal="true" aria-label="Assign customer invoice">
-                                <div className="my-auto w-full max-w-lg overflow-hidden rounded-3xl border border-sky-300/20 bg-gradient-to-br from-slate-900 via-[#101827] to-slate-950 shadow-[0_24px_90px_rgba(0,0,0,0.65)]">
-                                  <div className="flex items-start justify-between gap-3 border-b border-white/10 bg-white/[0.035] px-5 py-4 sm:px-6">
+                              return createPortal(<div className="fixed inset-0 z-[9999] h-[100dvh] w-screen overflow-y-auto overscroll-contain bg-slate-950 text-white" role="dialog" aria-modal="true" aria-label="Invoice assignment full page">
+                                <div className="min-h-full w-full bg-gradient-to-br from-slate-950 via-[#101827] to-slate-950">
+                                  <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-4 shadow-xl backdrop-blur-xl sm:px-8">
+                                    <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-3">
                                     <div className="flex min-w-0 items-center gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-sky-300/25 bg-sky-400/10 text-sky-200"><Truck className="h-5 w-5" /></div><div className="min-w-0"><h3 className="text-base font-black tracking-wide text-white sm:text-lg">Invoice Assignment</h3><p className="mt-1 truncate text-xs text-slate-400">Customer: {quickAssignContact.name}</p></div></div>
-                                    <button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+                                      <button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white" aria-label="Close invoice assignment"><X className="h-4 w-4" /></button>
+                                    </div>
                                   </div>
-                                  <div className="space-y-4 p-5 sm:p-6">
+                                  <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-8 sm:py-8">
                                     {quickAssignLoading ? <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm text-slate-300">Loading active delivery staff…</div> : <>
-                                      <label className="block space-y-2 text-xs font-bold text-slate-300">Select Customer Invoice
-                                        <select value={quickAssignInvoiceNo} onChange={e => setQuickAssignInvoiceNo(e.target.value)} className="w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3.5 py-3 text-sm font-semibold text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20">{quickAssignInvoices.map(tx => <option key={tx.id} value={tx.invoiceNo}>Invoice #{tx.invoiceNo} · {businessInfo.currencySymbol || "৳"}{Number(tx.total || 0).toLocaleString("en-BD")}</option>)}</select>
-                                      </label>
+                                      <div className="space-y-2 rounded-2xl border border-sky-300/25 bg-sky-400/[0.07] p-4 sm:p-5"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-200">Selected Customer Invoice</p><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xl font-black text-white">Invoice #{quickAssignInvoiceNo}</p><p className="mt-1 text-xs text-slate-400">Customer: {quickAssignContact.name}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-wider text-slate-500">Invoice Total</p><p className="text-lg font-black text-emerald-300">{businessInfo.currencySymbol || "৳"}{Number(selectedInvoice?.total || 0).toLocaleString("en-BD")}</p></div></div></div>
                                       {selectedInvoice && <div className="space-y-3 rounded-2xl border border-sky-300/20 bg-sky-400/[0.06] p-4">
                                         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-200">Invoice Summary</span><span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-[10px] font-bold text-sky-100">#{selectedInvoice.invoiceNo}</span></div>
                                         <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wider text-slate-500">Customer</p><p className="truncate text-sm font-bold text-white">{quickAssignContact.name}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-wider text-slate-500">Invoice Total</p><p className="text-sm font-black text-emerald-300">{businessInfo.currencySymbol || "৳"}{Number(selectedInvoice.total || 0).toLocaleString("en-BD")}</p></div></div>
@@ -8358,13 +8360,14 @@ _${businessInfo.name}_`;
                                       <label className="block space-y-2 text-xs font-bold text-slate-300">Assign Delivery Staff
                                         <select value={quickAssignDriverUid} onChange={e => setQuickAssignDriverUid(e.target.value)} className="w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3.5 py-3 text-sm font-semibold text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"><option value="">Select active delivery staff</option>{quickAssignStaff.map(person => <option key={person.uid} value={person.uid}>{person.name} · {person.phone || person.email}</option>)}</select>
                                       </label>
+                                      <div className="space-y-3 rounded-2xl border border-violet-300/20 bg-violet-400/[0.05] p-4 sm:p-5"><div><p className="text-sm font-black text-white">Who will bear the delivery charge?</p><p className="mt-1 text-xs text-slate-400">This choice controls whether delivery cost is included in showroom Net Profit expenses.</p></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setQuickAssignChargeBearer("showroom")} className={`rounded-xl border p-4 text-left transition ${quickAssignChargeBearer === "showroom" ? "border-amber-300 bg-amber-400/15 ring-2 ring-amber-300/20" : "border-white/10 bg-slate-950/50 hover:border-amber-300/50"}`}><span className="block text-sm font-black text-white">Showroom bears the cost</span><span className="mt-1 block text-xs text-slate-400">Count as showroom expense; Net Profit will decrease.</span></button><button type="button" onClick={() => setQuickAssignChargeBearer("customer")} className={`rounded-xl border p-4 text-left transition ${quickAssignChargeBearer === "customer" ? "border-emerald-300 bg-emerald-400/15 ring-2 ring-emerald-300/20" : "border-white/10 bg-slate-950/50 hover:border-emerald-300/50"}`}><span className="block text-sm font-black text-white">Customer bears the cost</span><span className="mt-1 block text-xs text-slate-400">Do not count as showroom expense; Net Profit stays unchanged.</span></button></div></div>
                                       {selectedDriver && <div className="flex items-center gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.06] px-3 py-2.5"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300"><Truck className="h-4 w-4" /></div><div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Assigned Delivery Person</p><p className="truncate text-xs font-bold text-white">{selectedDriver.name}</p></div></div>}
                                       {quickAssignStaff.length === 0 && <p className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3 text-[11px] text-amber-200">No active delivery staff available. Please activate a staff member first.</p>}
-                                      <div className="flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-xl border border-white/15 px-5 py-3 text-xs font-bold text-slate-300 transition-colors hover:bg-white/5">Cancel</button><button type="button" disabled={!quickAssignInvoiceNo || !quickAssignDriverUid || quickAssignSaving || quickAssignLoading} onClick={() => void submitCustomerInvoiceAssign()} className="rounded-xl border border-sky-300/30 bg-gradient-to-r from-sky-500 to-blue-500 px-5 py-3 text-xs font-black tracking-wide text-white shadow-lg shadow-sky-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{quickAssignSaving ? "Assigning…" : "Assign Invoice"}</button></div>
+                                      <div className="flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setQuickAssignContact(null)} className="rounded-xl border border-white/15 px-5 py-3 text-xs font-bold text-slate-300 transition-colors hover:bg-white/5">Cancel</button><button type="button" disabled={!quickAssignInvoiceNo || !quickAssignDriverUid || !quickAssignChargeBearer || quickAssignSaving || quickAssignLoading} onClick={() => void submitCustomerInvoiceAssign()} className="rounded-xl border border-sky-300/30 bg-gradient-to-r from-sky-500 to-blue-500 px-5 py-3 text-xs font-black tracking-wide text-white shadow-lg shadow-sky-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{quickAssignSaving ? "Assigning…" : "Assign Invoice"}</button></div>
                                     </>}
                                   </div>
                                 </div>
-                              </div>;
+                              </div>, document.body);
                             })()}
                           </div>
                         );

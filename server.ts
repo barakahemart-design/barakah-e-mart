@@ -1652,6 +1652,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
   app.post("/api/delivery/assignments/create", async (req: Request, res: Response) => {
     const { store_id, admin_pin, invoice_no, driver_uid } = req.body || {};
+    const requestedChargeBearer = String(req.body?.delivery_charge_bearer || "showroom");
     try {
       const manager = await requireDeliveryAssignmentManager(req, req.body || {});
       if (!manager) return res.status(403).json({ error: "Authorized Admin or Sales panel access is required." });
@@ -1660,6 +1661,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const invoiceNo = String(invoice_no || "").trim();
       const driverUid = String(driver_uid || "").trim();
       if (!invoiceNo || !driverUid) return res.status(400).json({ error: "Invoice number and delivery staff are required." });
+      if (!["showroom", "customer"].includes(requestedChargeBearer)) return res.status(400).json({ error: "Choose who will bear the delivery charge." });
 
       const driver = await getDeliveryStaff(driverUid);
       if (!driver || driver.owner_store_id !== storeId || driver.status !== "active") {
@@ -1766,6 +1768,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           total: Number(item.total) || (Number(item.quantity) || 0) * (Number(item.price ?? item.sell_price ?? item.sellPrice) || 0)
         })),
         delivery_status: "assigned",
+        delivery_charge_bearer: requestedChargeBearer,
         delivery_fee: Number(previousAssignment.delivery_fee) || 0,
         payment_status: previousAssignment.payment_status === "paid" ? "paid" : "unpaid",
         payment_timing: previousAssignment.payment_timing === "advance" ? "advance" : "after_delivery",
@@ -1832,6 +1835,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         }
         if (hasFeeUpdate && assignment.payment_status === "paid" && delivery_status !== "delivered") return "already_paid";
         const autoMarkPaid = delivery_status === "delivered";
+        const expenseSnap = autoMarkPaid ? await transaction.get(expenseRef) : null;
+        const showroomBearsDelivery = String(assignment.delivery_charge_bearer || "showroom") !== "customer";
         const paymentReceivedAt = autoMarkPaid ? (assignment.payment_status === "paid" && assignment.payment_received_at ? String(assignment.payment_received_at) : now) : "";
         const updates: Record<string, any> = {
           delivery_status,
@@ -1846,7 +1851,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           updates.amount_updated_by = verified.uid;
         }
         transaction.update(assignmentRef, updates);
-        if (autoMarkPaid) {
+        if (autoMarkPaid && showroomBearsDelivery) {
           const invoiceNo = String(assignment.invoice_no || "");
           const driverName = String(assignment.driver_name || "Delivery Staff");
           const customerName = String(assignment.customer_name || "Customer");
@@ -1862,6 +1867,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             email: staff.owner_store_id, linked_email: staff.owner_store_id, linkedEmail: staff.owner_store_id, deleted: false, isDeleted: false,
             created_at: assignment.payment_status === "paid" ? (assignment.payment_received_at || now) : now, updated_at: now
           }, { merge: true });
+        } else if (autoMarkPaid && expenseSnap?.exists && expenseSnap.data()?.store_id === staff.owner_store_id && expenseSnap.data()?.source_id === id) {
+          transaction.delete(expenseRef);
         }
         return "updated";
       });
@@ -1935,6 +1942,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
   app.post("/api/delivery/assignments/payment", async (req: Request, res: Response) => {
     const { store_id, admin_pin, assignment_id, delivery_fee, payment_status, payment_timing } = req.body || {};
+    const requestedChargeBearer = req.body?.delivery_charge_bearer;
     try {
       const admin = await requireDeliveryAdmin(req, store_id, admin_pin);
       if (!admin) return res.status(403).json({ error: "Only Admin can control delivery payments." });
@@ -1944,7 +1952,8 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const fee = Number(delivery_fee);
       if (!id || !Number.isFinite(fee) || fee < 0 || fee > 1000000 ||
           !["paid", "unpaid"].includes(String(payment_status)) ||
-          !["advance", "after_delivery"].includes(String(payment_timing))) {
+          !["advance", "after_delivery"].includes(String(payment_timing)) ||
+          (requestedChargeBearer !== undefined && !["showroom", "customer"].includes(String(requestedChargeBearer)))) {
         return res.status(400).json({ error: "Invalid delivery payment details." });
       }
 
@@ -1960,6 +1969,11 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           throw new Error("DELIVERY_ASSIGNMENT_NOT_FOUND");
         }
         const assignment = assignmentSnap.data() || {};
+        const chargeBearer = requestedChargeBearer === "customer" || requestedChargeBearer === "showroom"
+          ? String(requestedChargeBearer)
+          : (assignment.delivery_charge_bearer === "customer" ? "customer" : "showroom");
+        const showroomBearsDelivery = chargeBearer === "showroom";
+        const linkedExpenseSnap = await transaction.get(expenseRef);
         const paymentWasAlreadyPaid = String(assignment.payment_status || "").toLowerCase() === "paid";
         const paymentReceivedAt = payment_status === "paid"
           ? (paymentWasAlreadyPaid && assignment.payment_received_at ? String(assignment.payment_received_at) : now)
@@ -1967,6 +1981,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
 
         transaction.update(assignmentRef, {
           delivery_fee: fee,
+          delivery_charge_bearer: chargeBearer,
           payment_status,
           payment_timing,
           payment_updated_at: now,
@@ -1974,7 +1989,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           payment_received_at: paymentReceivedAt
         });
 
-        if (payment_status === "paid") {
+        if (payment_status === "paid" && showroomBearsDelivery) {
           const invoiceNo = String(assignment.invoice_no || "");
           const driverName = String(assignment.driver_name || "Delivery Staff");
           const customerName = String(assignment.customer_name || "Customer");
@@ -2021,12 +2036,12 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             created_at: paymentWasAlreadyPaid ? (assignment.payment_received_at || now) : now,
             updated_at: now
           }, { merge: true });
-        } else {
-          // Reversing Paid -> Unpaid removes the linked expense from Net Profit.
+        } else if (linkedExpenseSnap.exists && linkedExpenseSnap.data()?.store_id === storeId && linkedExpenseSnap.data()?.source_id === id) {
+          // Customer-borne deliveries and Unpaid records must not reduce showroom Net Profit.
           transaction.delete(expenseRef);
         }
 
-        return { payment_received_at: paymentReceivedAt, expense_id: payment_status === "paid" ? expenseRef.id : "" };
+        return { payment_received_at: paymentReceivedAt, delivery_charge_bearer: chargeBearer, expense_id: payment_status === "paid" && showroomBearsDelivery ? expenseRef.id : "" };
       });
 
       return res.json({ success: true, payment_updated_at: now, ...result });

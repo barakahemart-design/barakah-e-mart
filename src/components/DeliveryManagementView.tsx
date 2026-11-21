@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
 import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, writeDeliveryCacheSnapshot, isDeliveryCachePrimed, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
-import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
+import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle, Edit3 } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
 type Assignment = {
@@ -9,7 +9,7 @@ type Assignment = {
   customer_name: string; customer_phone: string; customer_address: string;
   customer_note?: string; delivery_note?: string;
   delivery_status: string; assigned_at: string;
-  delivery_fee?: number; payment_status?: "paid" | "unpaid"; payment_timing?: "advance" | "after_delivery"; payment_updated_at?: string; payment_received_at?: string;
+  delivery_fee?: number; delivery_charge_bearer?: "showroom" | "customer"; payment_status?: "paid" | "unpaid"; payment_timing?: "advance" | "after_delivery"; payment_updated_at?: string; payment_received_at?: string;
   total_amount?: number; items?: Array<{ name: string; quantity: number; price?: number; total?: number }>;
 };
 type DeliveryExpense = {
@@ -61,7 +61,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const [assignmentView, setAssignmentView] = useState<"assigned" | "delivered">("assigned");
   const [expenseView, setExpenseView] = useState<"unpaid" | "paid">("unpaid");
   const [paymentView, setPaymentView] = useState<"unpaid" | "paid">("unpaid");
-  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { fee: string; status: "paid" | "unpaid"; timing: "advance" | "after_delivery" }>>({});
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { fee: string; status: "paid" | "unpaid"; timing: "advance" | "after_delivery"; bearer: "showroom" | "customer" }>>({});
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   type DateRangeFilter = "all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom";
   const [expenseDateFilter, setExpenseDateFilter] = useState<DateRangeFilter>("all");
@@ -477,7 +477,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const getPaymentDraft = (assignment: Assignment) => paymentDrafts[assignment.id] || {
     fee: String(assignment.delivery_fee || 0),
     status: assignment.payment_status === "paid" ? "paid" as const : "unpaid" as const,
-    timing: assignment.payment_timing === "advance" ? "advance" as const : "after_delivery" as const
+    timing: assignment.payment_timing === "advance" ? "advance" as const : "after_delivery" as const,
+    bearer: assignment.delivery_charge_bearer === "customer" ? "customer" as const : "showroom" as const
   };
 
   const updateAssignmentPayment = async (assignment: Assignment) => {
@@ -492,7 +493,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     try {
       await request("/api/delivery/assignments/payment", {
         assignment_id: assignment.id, delivery_fee: fee,
-        payment_status: draft.status, payment_timing: draft.timing
+        payment_status: draft.status, payment_timing: draft.timing, delivery_charge_bearer: draft.bearer
       });
       await loadAll();
       setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
@@ -501,9 +502,9 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } catch (error: any) {
       if (isRetryableDeliveryError(error)) {
         const now = new Date().toISOString();
-        const body = { assignment_id: assignment.id, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing };
+        const body = { assignment_id: assignment.id, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing, delivery_charge_bearer: draft.bearer };
         queueOfflineOperation("/api/delivery/assignments/payment", body);
-        setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing, payment_updated_at: now, payment_received_at: draft.status === "paid" ? (item.payment_received_at || now) : "" } : item));
+        setAssignments(prev => prev.map(item => item.id === assignment.id ? { ...item, delivery_fee: fee, payment_status: draft.status, payment_timing: draft.timing, delivery_charge_bearer: draft.bearer, payment_updated_at: now, payment_received_at: draft.status === "paid" ? (item.payment_received_at || now) : "" } : item));
         setPaymentDrafts(prev => { const next = { ...prev }; delete next[assignment.id]; return next; });
         setEditingPaymentId(null);
         notifyRef.current("Delivery payment saved on this device. It will sync when cloud access returns.", "info");
@@ -671,33 +672,35 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
       </div>}
 
       {tab === "payments" && panelRole === "admin" && <div className="space-y-3">
-        <h3 className="text-sm font-black text-white">Delivery Payments · All Payment Records</h3>
+        {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
           <button type="button" onClick={() => setPaymentView("unpaid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "unpaid" ? "bg-rose-500/15 text-rose-300" : "text-slate-400"}`}>Unpaid ({assignments.filter(a => a.payment_status !== "paid").length + expenses.filter(e => e.payment_status !== "paid").length})</button>
           <button type="button" onClick={() => setPaymentView("paid")} className={`rounded-xl px-3 py-3 text-xs font-black ${paymentView === "paid" ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400"}`}>Paid ({assignments.filter(a => a.payment_status === "paid").length + expenses.filter(e => e.payment_status === "paid").length})</button>
         </div>
-        {renderDateRangeFilter("delivery-payment-date-range", paymentDateFilter, setPaymentDateFilter, paymentCustomStart, setPaymentCustomStart, paymentCustomEnd, setPaymentCustomEnd)}
+        <h3 className="pt-2 text-sm font-black text-white">Invoice Delivery Payments</h3>
         {filteredDeliveryPayments.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">No {paymentView} delivery payments found for this date range.</p> : filteredDeliveryPayments.map(a => {
           const draft = getPaymentDraft(a);
           return <div key={a.id} className={`space-y-3 rounded-xl border p-4 transition-colors ${a.payment_status === "paid" ? "border-emerald-400/50 bg-emerald-500/[0.08] shadow-[inset_3px_0_0_rgba(52,211,153,0.85)]" : "border-rose-500/30 bg-rose-500/[0.045]"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0 flex-1"><p className="text-sm font-black text-white">Invoice #{a.invoice_no}</p><p className="mt-1 text-xs text-slate-200"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Customer</span> · {a.customer_name || "Customer"}</p><p className="mt-1 text-xs text-sky-200"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Delivery Staff</span> · {a.driver_name || "—"}</p><p className={`mt-1 text-[10px] font-black ${a.delivery_status === "delivered" ? "text-emerald-300" : "text-amber-300"}`}>Delivery Status: {a.delivery_status === "delivered" ? "Delivered" : "Not delivered yet"}</p><p className="mt-1 text-[10px] text-slate-500">Invoice Total · {currencySymbol}{Number(a.total_amount || 0).toLocaleString("en-BD")} · Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleString("en-BD") : "—"}</p>{a.customer_note && <p className="mt-1 text-[10px] text-slate-400">Customer Note: {a.customer_note}</p>}{a.delivery_note && <p className="mt-1 text-[10px] text-slate-400">Delivery Note: {a.delivery_note}</p>}</div><span className={`rounded-full px-3 py-1.5 text-[10px] font-black ${a.payment_status === "paid" ? "bg-emerald-400 text-emerald-950" : "bg-rose-500 text-white"}`}>{a.payment_status === "paid" ? "Paid" : "Unpaid"}</span></div>
             {Array.isArray(a.items) && a.items.length > 0 && <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">Purchased Products</p><div className="space-y-1.5">{a.items.map((item, index) => <div key={index} className="flex items-start justify-between gap-3 text-xs"><span className="min-w-0 text-slate-200">{item.name}</span><span className="shrink-0 text-right font-bold text-sky-200">× {item.quantity}{item.total ? <span className="ml-2 text-slate-400">{currencySymbol}{Number(item.total).toLocaleString("en-BD")}</span> : null}</span></div>)}</div></div>}
             {a.payment_status === "paid" && editingPaymentId !== a.id ? (
-              <div className="grid gap-2 rounded-xl border border-emerald-400/20 bg-emerald-950/20 p-3 sm:grid-cols-3">
+              <div className="grid gap-2 rounded-xl border border-emerald-400/20 bg-emerald-950/20 p-3 sm:grid-cols-4">
                 <div><p className="text-[10px] font-bold text-slate-500">Delivery Charge</p><p className="mt-1 text-sm font-black text-emerald-200">{currencySymbol}{Number(a.delivery_fee || 0).toLocaleString("en-BD")}</p></div>
                 <div><p className="text-[10px] font-bold text-slate-500">Payment Status</p><p className="mt-1 text-sm font-black text-emerald-300">Paid · Received</p></div>
                 <div><p className="text-[10px] font-bold text-slate-500">Paid</p><p className="mt-1 text-sm font-semibold text-slate-200">{a.payment_timing === "advance" ? "Advance" : "After delivery"}</p></div>
+                <div><p className="text-[10px] font-bold text-slate-500">Charge Bearer</p><p className="mt-1 text-sm font-black text-emerald-200">{a.delivery_charge_bearer === "customer" ? "Customer" : "Showroom"}</p></div>
               </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-3">
                 <label className="text-[10px] font-bold text-slate-400">Delivery payment ({currencySymbol})<input type="number" min="0" step="0.01" value={draft.fee} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, fee: e.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white" /></label>
                 <label className="text-[10px] font-bold text-slate-400">Payment status<select value={draft.status} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, status: e.target.value as "paid" | "unpaid" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="unpaid">Unpaid · Due</option><option value="paid">Paid · Received</option></select></label>
                 <label className="text-[10px] font-bold text-slate-400">When paid?<select value={draft.timing} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, timing: e.target.value as "advance" | "after_delivery" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="advance">Advance payment</option><option value="after_delivery">After delivery</option></select></label>
+                <label className="text-[10px] font-bold text-slate-400">Who bears delivery charge?<select value={draft.bearer} onChange={e => setPaymentDrafts(prev => ({ ...prev, [a.id]: { ...draft, bearer: e.target.value as "showroom" | "customer" } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"><option value="showroom">Showroom</option><option value="customer">Customer</option></select></label>
               </div>
             )}
             <div className="flex flex-wrap gap-2">
               {(a.payment_status !== "paid" || editingPaymentId === a.id) && <button onClick={() => updateAssignmentPayment(a)} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-[10px] font-black text-slate-950">Save Payment Details</button>}
-              {a.payment_status === "paid" && editingPaymentId !== a.id && <button type="button" onClick={() => { setPaymentDrafts(prev => ({ ...prev, [a.id]: { fee: String(a.delivery_fee || 0), status: "paid", timing: a.payment_timing === "advance" ? "advance" : "after_delivery" } })); setEditingPaymentId(a.id); }} className="inline-flex items-center gap-1 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2.5 text-[10px] font-black text-sky-200"><Edit3 className="h-3 w-3" /> Edit</button>}
+              {a.payment_status === "paid" && editingPaymentId !== a.id && <button type="button" onClick={() => { setPaymentDrafts(prev => ({ ...prev, [a.id]: { fee: String(a.delivery_fee || 0), status: "paid", timing: a.payment_timing === "advance" ? "advance" : "after_delivery", bearer: a.delivery_charge_bearer === "customer" ? "customer" : "showroom" } })); setEditingPaymentId(a.id); }} className="inline-flex items-center gap-1 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2.5 text-[10px] font-black text-sky-200"><Edit3 className="h-3 w-3" /> Edit</button>}
               {a.payment_status === "paid" && editingPaymentId === a.id && <button type="button" onClick={() => { setEditingPaymentId(null); setPaymentDrafts(prev => { const next = { ...prev }; delete next[a.id]; return next; }); }} className="rounded-lg border border-slate-700 px-3 py-2.5 text-[10px] font-bold text-slate-300">Cancel Edit</button>}
               <button type="button" onClick={() => deleteInvoicePayment(a)} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-[10px] font-black text-rose-300"><Trash2 className="h-3 w-3" /> Delete Payment</button>
             </div>
