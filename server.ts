@@ -1905,7 +1905,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       const assignmentRef = adminDb.collection("delivery_assignments").doc(id);
       const linkedExpenseRef = adminDb.collection("expenses").doc(`delivery_payment_${id}`);
       const now = new Date().toISOString();
-      const result = await adminDb.runTransaction(async (transaction) => {
+      const result: any = await adminDb.runTransaction(async (transaction) => {
         const assignmentSnap = await transaction.get(assignmentRef);
         if (!assignmentSnap.exists || assignmentSnap.data()?.owner_store_id !== storeId) return null;
         const assignment = assignmentSnap.data() || {};
