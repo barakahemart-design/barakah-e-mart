@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "../lib/firebase";
-import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
+import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal, writeDeliveryCacheSection, writeDeliveryCacheSnapshot, isDeliveryCachePrimed, type DeliveryOfflineOperation } from "../lib/deliveryOffline";
 import { Truck, UserPlus, RefreshCw, ClipboardList, Wallet, CheckCircle2, AlertCircle, UserRound, MapPin, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 
 type Driver = { uid: string; name: string; email: string; phone?: string; status: "active" | "inactive" };
@@ -34,6 +34,8 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   const offlineQueueKey = deliveryStorageKey("queue", `${storeId}:${panelRole}`);
   const invoiceLookupCacheKey = deliveryStorageKey("cache", `${storeId}:${panelRole}:invoice-lookups`);
   const [cachedData] = useState(() => readDeliveryLocal<{ staff: Driver[]; assignments: Assignment[]; queueItems: any[]; expenses: DeliveryExpense[] } | null>(cacheKey, null));
+  const requiredCacheSections = panelRole === "admin" ? ["staff", "assignments", "queueItems", "expenses"] : ["staff", "assignments", "queueItems"];
+  const [cacheReady, setCacheReady] = useState(() => isDeliveryCachePrimed(cacheKey, requiredCacheSections));
   const [tab, setTab] = useState<"home" | "staff" | "assignments" | "expenses" | "payments">("home");
   const [staff, setStaff] = useState<Driver[]>(() => cachedData?.staff || []);
   const [assignments, setAssignments] = useState<Assignment[]>(() => cachedData?.assignments || []);
@@ -96,7 +98,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
   }, [pendingOperations, offlineQueueKey]);
 
   useEffect(() => {
-    writeDeliveryLocal(cacheKey, { staff, assignments, queueItems, expenses, savedAt: new Date().toISOString() });
+    writeDeliveryCacheSnapshot(cacheKey, { staff, assignments, queueItems, expenses });
   }, [cacheKey, staff, assignments, queueItems, expenses]);
 
   const queueOfflineOperation = useCallback((path: string, body: Record<string, any>) => {
@@ -142,6 +144,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           if (results[2].status === "fulfilled" && Array.isArray(results[2].value.queue)) { writeDeliveryCacheSection(cacheKey, "queueItems", results[2].value.queue); setQueueItems(results[2].value.queue); }
           if (results[3].status === "fulfilled" && Array.isArray(results[3].value.expenses)) { writeDeliveryCacheSection(cacheKey, "expenses", results[3].value.expenses); setExpenses(results[3].value.expenses); }
           setOfflineNotice(results.some(result => result.status === "rejected"));
+          setCacheReady(isDeliveryCachePrimed(cacheKey, requiredCacheSections));
         } catch (_) {
           setOfflineNotice(true);
         }
@@ -149,7 +152,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [request, panelRole, offlineQueueKey]);
+  }, [request, panelRole, offlineQueueKey, cacheKey]);
 
   useEffect(() => {
     const retry = () => { void flushOfflineQueue(); };
@@ -199,6 +202,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
         }
         const hasFailures = results.some(result => result.status === "rejected");
         setOfflineNotice(hasFailures);
+        setCacheReady(isDeliveryCachePrimed(cacheKey, requiredCacheSections));
         if (hasFailures && !cachedData) {
           const failedNames = results.map((result, index) => result.status === "rejected" ? ["staff", "invoice assignments", "delivery queue", "expenses/payments"][index] : "").filter(Boolean);
           notifyRef.current("Some Delivery Management data could not be refreshed (" + failedNames.join(", ") + "). Any previously saved local records remain visible.", "info");
@@ -583,6 +587,7 @@ export function DeliveryManagementView({ adminPin, salesPin = "", panelRole = "a
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
+      {cacheReady && <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" /> Device cache ready · {panelRole === "admin" ? "Staff, assignments, queue and expenses/payments saved" : "Staff, assignments and queue saved"}</div>}
 
       {(offlineNotice || pendingOperations.length > 0) && <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100">
         <span className="font-black">Device-local delivery mode.</span> Showing the latest saved records on this device. {pendingOperations.length > 0 ? `${pendingOperations.length} change(s) waiting to sync.` : "Cloud data could not be refreshed."} Pending changes sync automatically when Firebase access is restored. Do not clear this browser's site data before sync completes.
