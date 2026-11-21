@@ -42,3 +42,21 @@ export function createDeliveryOfflineOperation(path: string, body: Record<string
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return { id: random, path, body, createdAt: new Date().toISOString() };
 }
+
+
+/**
+ * Persist one successfully loaded panel without replacing other panels' last
+ * known-good local data. A failed endpoint must never erase another panel's cache.
+ */
+export function writeDeliveryCacheSection<T extends Record<string, any>>(
+  key: string,
+  section: string,
+  value: unknown
+): boolean {
+  const current = readDeliveryLocal<T>(key, {} as T);
+  return writeDeliveryLocal(key, {
+    ...current,
+    [section]: value,
+    savedAt: new Date().toISOString()
+  });
+}
