@@ -8321,8 +8321,8 @@ _${businessInfo.name}_`;
                             )}
 
                             {/* Three equal, responsive action cells: customer tools, invoice assignment, direct sale. */}
-                            <div className="mt-3 grid w-full min-w-0 grid-cols-3 items-stretch gap-1.5 border-t border-[#2D2D35]/50 pt-3">
-                              <div className="flex h-11 min-w-0 items-center justify-around rounded-lg border border-[#2D2D35] bg-[#121214] px-1">
+                            <div className="mt-3 grid w-full min-w-0 grid-cols-[1.7fr_0.65fr_0.65fr] items-stretch gap-1.5 border-t border-[#2D2D35]/50 pt-3">
+                              <div className="flex h-11 min-w-0 items-center justify-around gap-0.5 rounded-lg border border-[#2D2D35] bg-[#121214] px-1.5">
                                 {c.type === "customer" && <>
                                   <button type="button" onClick={() => handleCopyContactDetails(c)} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300" title="Copy Customer Details" aria-label={`Copy details for ${c.name}`}><Copy className="h-3.5 w-3.5" /></button>
                                   <button type="button" onClick={() => triggerNotification(`Showroom line connecting: ${c.name} (${c.phone})...`, "info")} className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300" title="Call Client" aria-label="Call Client"><Phone className="h-3.5 w-3.5" /></button>
