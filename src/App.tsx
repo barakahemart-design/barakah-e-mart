@@ -4753,8 +4753,7 @@ _${businessInfo.name}_`;
           category: "Salary",
           amount: Number(payment.amount) || 0,
           description: `Salary payment - ${staff.name}`,
-          date: String(payment.paymentDate).slice(0, 10),
-          staffName: staff.name
+          date: String(payment.paymentDate).slice(0, 10)
         }))
     );
     const manualSalaryRows = expenses.filter(expense =>
@@ -4781,28 +4780,18 @@ _${businessInfo.name}_`;
       const manualRows = manualByDay.get(day) || [];
       const salaryTotal = daySalaryRows.reduce((sum, row) => sum + row.amount, 0);
       const manualTotal = manualRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
-      // If the manual Salary ledger already records the exact payroll total
-      // for this date, keep that canonical expense and do not add derived rows.
-      if (manualRows.length > 0 && Math.abs(manualTotal - salaryTotal) < 0.01) return;
-
-      const usedManualIds = new Set<string>();
-      daySalaryRows.forEach(row => {
-        const match = manualRows.find(manual =>
-          !usedManualIds.has(String(manual.id)) &&
-          Math.abs((Number(manual.amount) || 0) - row.amount) < 0.01
-        );
-        if (match) {
-          usedManualIds.add(String(match.id));
-          return;
-        }
+      // Manual Salary expenses are the canonical record when present. Add only
+      // a positive unpaid-to-ledger difference, never the full payroll twice.
+      const unrecordedAmount = Math.max(0, Math.round((salaryTotal - manualTotal) * 100) / 100);
+      if (unrecordedAmount > 0.009) {
         result.push({
-          id: row.id,
-          category: row.category,
-          amount: row.amount,
-          description: row.description,
-          date: row.date
+          id: `salary_reconciliation_${day}`,
+          category: "Salary",
+          amount: unrecordedAmount,
+          description: "Paid staff salary not yet recorded in Expenses",
+          date: day
         });
-      });
+      }
     });
     return result;
   }, [staffList, expenses]);
