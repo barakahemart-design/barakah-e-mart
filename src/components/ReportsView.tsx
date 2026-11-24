@@ -42,36 +42,52 @@ import {
 import { getAverageCostFromAllocations } from "../lib/fifoCosting";
 import { auditAccountingRecords } from "../lib/accountingAudit";
 
-// Helper to accurately resolve item cost price preferring updated transaction item cost prices first
-function getItemBuyCost(item: any, dbProduct?: any): number {
-  if (!item || typeof item !== "object") return 0;
-  if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
-    return getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+// Resolve historical unit cost only from the sale snapshot. Never substitute the
+// current catalog cost or a percentage of the selling price for an old sale.
+function getItemBuyCost(item: any): number | null {
+  if (!item || typeof item !== "object") return null;
+  const allocations = Array.isArray(item.costAllocations) ? item.costAllocations :
+    (Array.isArray(item.cost_allocations) ? item.cost_allocations : []);
+  if (allocations.length > 0) {
+    let allocatedQty = 0;
+    let allocatedCost = 0;
+    for (const allocation of allocations) {
+      const qty = Number(allocation?.quantity);
+      const unitCost = Number(allocation?.unitCost ?? allocation?.unit_cost);
+      if (!Number.isFinite(qty) || qty < 0 || !Number.isFinite(unitCost) || unitCost < 0) return null;
+      allocatedQty += qty;
+      allocatedCost += qty * unitCost;
+    }
+    const soldQty = Number(item.quantity);
+    if (!Number.isFinite(soldQty) || soldQty <= 0 || Math.abs(allocatedQty - soldQty) > 0.000001) return null;
+    return allocatedCost / soldQty;
   }
-  
-  const itemBuyPrice = item.buyPrice !== undefined && item.buyPrice !== null && !isNaN(Number(item.buyPrice))
-    ? Number(item.buyPrice)
-    : item.cost_price !== undefined && item.cost_price !== null && !isNaN(Number(item.cost_price))
-    ? Number(item.cost_price)
-    : item.buy_price !== undefined && item.buy_price !== null && !isNaN(Number(item.buy_price))
-    ? Number(item.buy_price)
-    : undefined;
+  for (const key of ["buyPrice", "cost_price", "buy_price"]) {
+    const value = item[key];
+    if (value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value)) && Number(value) >= 0) {
+      return Number(value);
+    }
+  }
+  return null;
+}
 
-  // 1. If transaction item has an explicit cost price (e.g. set via Edit Cost)
-  if (itemBuyPrice !== undefined && itemBuyPrice >= 0) {
-    return itemBuyPrice;
+function getReturnedItemCost(returnedLines: any[]): number | null {
+  let total = 0;
+  for (const line of returnedLines) {
+    if (line?.returnedCost !== undefined && line?.returnedCost !== null && Number.isFinite(Number(line.returnedCost)) && Number(line.returnedCost) >= 0) {
+      total += Number(line.returnedCost);
+      continue;
+    }
+    const allocations = Array.isArray(line?.costAllocations) ? line.costAllocations : [];
+    if (!allocations.length) return null;
+    for (const allocation of allocations) {
+      const qty = Number(allocation?.quantity);
+      const unitCost = Number(allocation?.unitCost ?? allocation?.unit_cost);
+      if (!Number.isFinite(qty) || qty < 0 || !Number.isFinite(unitCost) || unitCost < 0) return null;
+      total += qty * unitCost;
+    }
   }
-  
-  // 2. Fallback to catalog product buy price if defined and valid
-  if (dbProduct && dbProduct.buyPrice !== undefined && dbProduct.buyPrice !== null && !isNaN(Number(dbProduct.buyPrice))) {
-    return Number(dbProduct.buyPrice);
-  }
-  
-  // 3. Fallback based on sell price
-  const priceVal = typeof item.price === "number" ? item.price : parseFloat(item.price);
-  const sellPriceVal = typeof item.sell_price === "number" ? item.sell_price : parseFloat(item.sell_price);
-  const effectivePrice = !isNaN(priceVal) ? priceVal : (!isNaN(sellPriceVal) ? sellPriceVal : 0);
-  return effectivePrice * 0.70;
+  return total;
 }
 
 interface ReportsViewProps {
@@ -263,35 +279,51 @@ export function ReportsView({
       purchaseVal += tot;
     });
 
-    // Estimate Profit Margins: 
-    // Sales value minus the cost of goods sold (COGS)
+    // COGS must come from the historical invoice snapshot/FIFO allocations.
+    // If any sold/returned line has no reliable cost, suppress profit/loss rather
+    // than manufacturing a number from today's catalog price or a 70% heuristic.
     let estimatedCOGS = 0;
+    let incompleteCostLines = 0;
     filteredTransactions.forEach(t => {
       if (!t) return;
+      const returnLines = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+        .flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
       let invoiceCogs = 0;
-      if (Array.isArray(t.items)) {
-        t.items.forEach((item: any) => {
-          if (!item) return;
-          const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
-          const buyCost = getItemBuyCost(item, dbProduct);
-          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
-          invoiceCogs += buyCost * qty;
-        });
-      }
-      const returnedCogs = (Array.isArray(t.returnHistory) ? t.returnHistory : []).reduce((sum: number, entry: any) =>
-        sum + (Array.isArray(entry.items) ? entry.items.reduce((lineSum: number, line: any) => {
-          if (Number.isFinite(Number(line.returnedCost))) return lineSum + Math.max(0, Number(line.returnedCost));
-          return lineSum + (Array.isArray(line.costAllocations) ? line.costAllocations.reduce((costSum: number, allocation: any) =>
-            costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) : 0);
-        }, 0) : 0), 0);
-      estimatedCOGS += Math.max(0, invoiceCogs - returnedCogs);
+      let invoiceCostComplete = true;
+      (Array.isArray(t.items) ? t.items : []).forEach((item: any, itemIndex: number) => {
+        if (!item) return;
+        const qty = Number(item.quantity) || 0;
+        const itemId = String(item.firestoreId || item.id || `${t.id}_item_${itemIndex}`);
+        const itemReturns = returnLines.filter((line: any) => String(line?.transactionItemId || line?.transaction_item_id || "") === itemId);
+        const returnedQty = itemReturns.reduce((sum: number, line: any) => sum + Math.max(0, Number(line?.quantity) || 0), 0);
+        if (returnedQty > qty + 0.000001) {
+          invoiceCostComplete = false;
+          incompleteCostLines += 1;
+          return;
+        }
+        const unitCost = getItemBuyCost(item);
+        if (unitCost === null) {
+          invoiceCostComplete = false;
+          incompleteCostLines += 1;
+          return;
+        }
+        const returnedCost = getReturnedItemCost(itemReturns);
+        if (returnedQty > 0 && returnedCost === null) {
+          invoiceCostComplete = false;
+          incompleteCostLines += 1;
+          return;
+        }
+        invoiceCogs += Math.max(0, qty * unitCost - (returnedCost || 0));
+      });
+      if (invoiceCostComplete) estimatedCOGS += invoiceCogs;
     });
 
     // POS adds VAT on top of the discounted subtotal. VAT collected is a
-    // payable, not business revenue, so exclude it from profit calculations.
+    // payable, not business revenue, so exclude it from business revenue.
     const netSalesExcludingVat = Math.max(0, salesVal - salesTax);
-    const grossProfit = netSalesExcludingVat - estimatedCOGS;
-    const netProfit = grossProfit - expenseVal;
+    const profitComplete = incompleteCostLines === 0;
+    const grossProfit = profitComplete ? netSalesExcludingVat - estimatedCOGS : 0;
+    const netProfit = profitComplete ? grossProfit - expenseVal : 0;
 
     return {
       salesVal,
@@ -303,7 +335,9 @@ export function ReportsView({
       purchaseVal,
       grossProfit,
       netProfit,
-      cogs: estimatedCOGS
+      cogs: estimatedCOGS,
+      profitComplete,
+      incompleteCostLines
     };
   }, [filteredTransactions, filteredExpenses, filteredPurchases, safeProducts, safeTransactions, filterType, startDate, endDate]);
 
@@ -550,7 +584,7 @@ export function ReportsView({
 
   const netProfitMarginPct = useMemo(() => {
     const netSales = Math.max(0, stats.salesVal - stats.salesTax);
-    if (netSales <= 0) return 0;
+    if (!stats.profitComplete || netSales <= 0) return null;
     return (stats.netProfit / netSales) * 100;
   }, [stats]);
 
@@ -574,11 +608,11 @@ export function ReportsView({
           </div>
         </div>
         {integrityIssues.length > 0 && <div className="mt-3 space-y-2">
-          {integrityIssues.slice(0, 5).map(issue => <div key={issue.id} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.06] px-3 py-2">
+          {integrityIssues.map(issue => <div key={issue.id} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.06] px-3 py-2">
             <p className="text-[10px] font-bold text-amber-200">{issue.invoiceNo}</p>
             <p className="mt-0.5 text-[10px] text-slate-300">{issue.message}</p>
           </div>)}
-          {integrityIssues.length > 5 && <p className="text-[10px] text-slate-400">Showing first 5 of {integrityIssues.length} findings.</p>}
+          <p className="text-[10px] text-slate-400">Showing all {integrityIssues.length} findings. No records were changed.</p>
         </div>}
       </div>
       
@@ -974,7 +1008,9 @@ export function ReportsView({
             <div className="w-full p-2 bg-[#121214] border border-[#2D2D35] rounded-xl text-center">
               <span className="text-[10px] font-extrabold uppercase tracking-wider font-mono">
                 SHOWROOM STATUS:{" "}
-                {netProfitMarginPct >= 25 ? (
+                {netProfitMarginPct === null ? (
+                  <span className="text-amber-300">Cost Data Incomplete — Review Required</span>
+                ) : netProfitMarginPct >= 25 ? (
                   <span className="text-[#00E676]">Highly Lucrative</span>
                 ) : netProfitMarginPct >= 12 ? (
                   <span className="text-[#00B0FF]">Stable Yield</span>
@@ -989,8 +1025,8 @@ export function ReportsView({
 
           <div className="pt-3 border-t border-[#2D2D35]/50 flex items-center justify-between text-[10px] font-mono">
             <span className="text-[#A0A0A5]">Net profit:</span>
-            <span className={`font-black ${stats.netProfit >= 0 ? "text-[#00E676]" : "text-rose-500"}`}>
-              {stats.netProfit >= 0 ? "+" : ""}{currencySymbol}{stats.netProfit.toLocaleString()}
+            <span className={`font-black ${!stats.profitComplete ? "text-amber-300" : stats.netProfit >= 0 ? "text-[#00E676]" : "text-rose-500"}`}>
+              {stats.profitComplete ? `${stats.netProfit >= 0 ? "+" : ""}${currencySymbol}${stats.netProfit.toLocaleString()}` : "Incomplete"}
             </span>
           </div>
         </div>
