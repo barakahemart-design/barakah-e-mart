@@ -3358,7 +3358,7 @@ export default function App() {
     triggerNotification(`Invoice ${t.invoiceNo} has been successfully deleted.`, "success");
   };
 
-  const handleDeleteTransactionItem = (transactionId: string, itemIndex: number) => {
+  const handleDeleteTransactionItem = async (transactionId: string, itemIndex: number) => {
     if (currentPanel !== "admin") {
       triggerNotification("Security block: Only administrators are authorized to delete individual sale items! 🛑", "error");
       return;
@@ -3381,17 +3381,17 @@ export default function App() {
     if (!item) return;
     if (!window.confirm("Remove \"" + item.name + "\" from Invoice " + targetTx.invoiceNo + "? Only this product line will be removed; the invoice and other items will remain.")) return;
     const updatedItems = normalizedItems.filter((_, idx) => idx !== itemIndex);
-    handleEditTransaction(transactionId, { items: updatedItems });
-    setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
+    const saved = await handleEditTransaction(transactionId, { items: updatedItems });
+    if (saved) setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
   };
 
   const handleEditTransaction = async (id: string, updatedFields: Partial<Transaction>) => {
     if (currentPanel !== "admin" && currentPanel !== "sales") {
       triggerNotification("Security block: Unauthorized action! 🛑", "error");
-      return;
+      return false;
     }
     const originalTx = transactions.find(t => t.id === id);
-    if (!originalTx) return;
+    if (!originalTx) return false;
 
     // Give each invoice line a stable identity independent of its product/model ID.
     const ensureUniqueLineIdentities = (sourceItems: any[]) => {
@@ -3611,7 +3611,7 @@ export default function App() {
         });
       } catch (error: any) {
         triggerNotification(error?.message || "Invoice changes could not be saved to the cloud. No stock or invoice changes were applied.", "error");
-        return;
+        return false;
       }
     }
 
@@ -3735,6 +3735,7 @@ export default function App() {
     }
 
     triggerNotification(`Invoice ${originalTx.invoiceNo} successfully updated and stock reconciled.`);
+    return true;
   };
 
   const handleProcessSalesReturn = async (request: {
