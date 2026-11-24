@@ -371,7 +371,7 @@ export function ReportsView({
             revenue: 0
           };
         }
-        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
         const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
         map[pid].quantity += qty;
         map[pid].revenue += price * qty;
@@ -434,7 +434,7 @@ export function ReportsView({
           const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
           const buyCost = getItemBuyCost(item, dbProduct);
 
-          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
           const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
           const totalRevenue = price * qty;
           const totalCogs = buyCost * qty;
