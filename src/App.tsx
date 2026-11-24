@@ -3458,6 +3458,8 @@ export default function App() {
             sell_price: Number(nestedIt.price) || 0,
             cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0,
             cost_allocations: nestedIt.costAllocations || [],
+            is_negative_sale: nestedIt.isNegativeSale === true,
+            is_negative_sale_approved: nestedIt.isNegativeSaleApproved === true || nestedIt.negativeSaleUpdated === true,
             warranty: nestedIt.warranty || "",
             warranty_details: nestedIt.warrantyDetails || ""
           };
@@ -3526,6 +3528,8 @@ export default function App() {
           product_id: item.productId || null,
           cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
           cost_allocations: item.costAllocations || [],
+          is_negative_sale: item.isNegativeSale === true,
+          is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true,
           warranty: item.warranty || "",
           warranty_details: item.warrantyDetails || ""
         }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
@@ -3546,14 +3550,14 @@ export default function App() {
       items.forEach(item => {
         const dbProduct = customerDirectoryData.productsById.get(item.productId || "") || customerDirectoryData.productsById.get(item.id || "") || customerDirectoryData.productsByName.get(item.name || "");
         let buyCost = 0;
-        if (item.buyPrice && item.buyPrice > 0) {
-          buyCost = item.buyPrice;
-        } else if (dbProduct && dbProduct.buyPrice > 0) {
-          buyCost = dbProduct.buyPrice;
-        } else if (item.buyPrice !== undefined) {
-          buyCost = item.buyPrice;
+        if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
+          buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+        } else if (item.buyPrice !== undefined && item.buyPrice !== null && Number.isFinite(Number(item.buyPrice))) {
+          buyCost = Number(item.buyPrice);
+        } else if (dbProduct?.buyPrice !== undefined && dbProduct?.buyPrice !== null && Number.isFinite(Number(dbProduct.buyPrice))) {
+          buyCost = Number(dbProduct.buyPrice);
         } else {
-          buyCost = item.price * 0.70;
+          buyCost = (Number(item.price) || 0) * 0.70;
         }
         costOfGoodsSold += buyCost * (Number(item.quantity) || 0);
       });
@@ -3571,7 +3575,9 @@ export default function App() {
         costAllocations: item.costAllocations || [],
         warranty: item.warranty || "",
         warrantyDetails: item.warrantyDetails || "",
-        isNegativeSale: item.isNegativeSale || false
+        isNegativeSale: item.isNegativeSale || false,
+        isNegativeSaleApproved: item.isNegativeSaleApproved === true,
+        negativeSaleUpdated: item.negativeSaleUpdated === true
       }));
 
       updateDoc(doc(db, "transactions", txDocId), {
