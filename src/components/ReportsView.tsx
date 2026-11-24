@@ -81,6 +81,7 @@ interface ReportsViewProps {
   additionalExpenses?: any[];
   purchases?: any[];
   contacts?: any[];
+  staffList?: any[];
   businessInfo?: any;
   currencySymbol?: string;
 }
@@ -92,12 +93,12 @@ export function ReportsView({
   additionalExpenses = [],
   purchases = [],
   contacts = [],
+  staffList = [],
   businessInfo,
   currencySymbol = "৳"
 }: ReportsViewProps) {
   const safeProducts = Array.isArray(products) ? products : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
-  const integrityIssues = useMemo(() => auditAccountingRecords(safeTransactions), [safeTransactions]);
   const baseExpenses = Array.isArray(expenses) ? expenses : [];
   const extraExpenses = Array.isArray(additionalExpenses) ? additionalExpenses : [];
   const knownExpenseIds = new Set(baseExpenses.map((expense: any) => expense?.id).filter(Boolean));
@@ -107,6 +108,10 @@ export function ReportsView({
   ];
   const safePurchases = Array.isArray(purchases) ? purchases : [];
   const safeContacts = Array.isArray(contacts) ? contacts : [];
+  const integrityIssues = useMemo(
+    () => auditAccountingRecords(safeTransactions, safeProducts, safePurchases, baseExpenses, staffList),
+    [safeTransactions, safeProducts, safePurchases, baseExpenses, staffList]
+  );
 
   const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
   const [startDate, setStartDate] = useState(() => {
