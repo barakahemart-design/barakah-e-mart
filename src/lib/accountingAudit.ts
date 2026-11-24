@@ -153,7 +153,6 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
     });
   });
 
-  const productIds = new Set((Array.isArray(products) ? products : []).map(product => String(product?.id || "")));
   (Array.isArray(products) ? products : []).forEach((product: any, index: number) => {
     const productName = String(product?.name || product?.id || `Product ${index + 1}`);
     const stock = asFiniteNumber(product?.stock);
