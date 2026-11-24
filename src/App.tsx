@@ -4815,13 +4815,16 @@ _${businessInfo.name}_`;
     const totalExpensesTk = filteredDashboardExpenses.reduce((sum, e) => sum + e.amount, 0);
     const totalPurchasesTk = filteredDashboardPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
     const totalUnitsSold = filteredDashboardTx.reduce((sum, t) => {
-      const itemQty = t.items ? t.items.reduce((innerSum, item) => innerSum + Number(item.quantity ?? 0), 0) : 0;
-      return sum + itemQty;
+      const soldQty = (t.items || []).reduce((innerSum, item) => innerSum + Math.max(0, Number(item.quantity ?? 0)), 0);
+      const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : []).reduce((returnSum: number, entry: any) =>
+        returnSum + (Array.isArray(entry.items) ? entry.items.reduce((lineSum: number, line: any) => lineSum + (Number(line.quantity) || 0), 0) : 0), 0);
+      return sum + Math.max(0, soldQty - returnedQty);
     }, 0);
 
     let totalCostOfGoodsSold = 0;
     filteredDashboardTx.forEach(t => {
-      t.items.forEach(item => {
+      let invoiceCogs = 0;
+      (t.items || []).forEach(item => {
         const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
         let buyCost = 0;
         if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
@@ -4834,8 +4837,15 @@ _${businessInfo.name}_`;
           buyCost = (Number(item.price) || 0) * 0.70;
         }
         const quantity = Number(item.quantity ?? 0);
-        totalCostOfGoodsSold += buyCost * (Number.isFinite(quantity) ? quantity : 0);
+        invoiceCogs += buyCost * (Number.isFinite(quantity) ? quantity : 0);
       });
+      const returnedCogs = (Array.isArray(t.returnHistory) ? t.returnHistory : []).reduce((sum: number, entry: any) =>
+        sum + (Array.isArray(entry.items) ? entry.items.reduce((lineSum: number, line: any) => {
+          if (Number.isFinite(Number(line.returnedCost))) return lineSum + Math.max(0, Number(line.returnedCost));
+          return lineSum + (Array.isArray(line.costAllocations) ? line.costAllocations.reduce((costSum: number, allocation: any) =>
+            costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) : 0);
+        }, 0) : 0), 0);
+      totalCostOfGoodsSold += Math.max(0, invoiceCogs - returnedCogs);
     });
 
     return {
