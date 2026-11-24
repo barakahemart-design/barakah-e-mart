@@ -996,26 +996,56 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const invoiceSnapshot = await cloudTx.get(transactionRef);
         if (invoiceSnapshot.exists) throw Object.assign(new Error("Invoice ID already exists."), { status: 409 });
         const productSnapshots = await Promise.all(productRefs.map(ref => cloudTx.get(ref)));
-        const productResults: Array<{ id: string; data: any }> = [];
+        const productDataById = new Map<string, any>();
         productSnapshots.forEach((snapshot, index) => {
           if (!snapshot.exists) throw Object.assign(new Error("A cart product no longer exists."), { status: 409 });
           const productData = snapshot.data() || {};
           if (!isOwnedByVerifiedAccount(productData, verified)) {
             throw Object.assign(new Error("A cart product belongs to another store."), { status: 403 });
           }
-          const productId = Array.from(quantityByProduct.keys())[index];
-          const nextStock = (Number(productData.stock) || 0) - (quantityByProduct.get(productId) || 0);
-          productResults.push({ id: productId, data: { ...productData, stock: nextStock, updated_at: new Date().toISOString() } });
+          productDataById.set(Array.from(quantityByProduct.keys())[index], productData);
+        });
+
+        const stockRemaining = new Map<string, number>();
+        const negativeProductIds = new Set<string>();
+        const enrichedItems = normalizedItems.map((entry: any) => {
+          const item = entry.data || {};
+          const productId = String(item.product_id || "");
+          const currentStock = stockRemaining.has(productId)
+            ? Number(stockRemaining.get(productId)) || 0
+            : Number(productDataById.get(productId)?.stock) || 0;
+          const quantity = Number(item.quantity) || 0;
+          const isNegativeSale = currentStock < quantity;
+          if (isNegativeSale) negativeProductIds.add(productId);
+          stockRemaining.set(productId, currentStock - quantity);
+          return {
+            ...entry,
+            data: { ...item, is_negative_sale: isNegativeSale, is_negative_sale_approved: false }
+          };
+        });
+        const productResults: Array<{ id: string; data: any }> = Array.from(stockRemaining.entries()).map(([productId, nextStock]) => {
+          const productData = productDataById.get(productId) || {};
+          return {
+            id: productId,
+            data: {
+              ...productData,
+              stock: nextStock,
+              hasNegativeSale: Boolean(productData.hasNegativeSale || negativeProductIds.has(productId)),
+              negativeSaleUpdated: negativeProductIds.has(productId) ? false : Boolean(productData.negativeSaleUpdated),
+              updated_at: new Date().toISOString()
+            }
+          };
         });
 
         const invoice = {
           ...transactionData,
           id: transactionId,
+          items: enrichedItems.map((entry: any) => ({ ...entry.data, id: entry.id })),
           ...identity,
           updated_at: new Date().toISOString()
         };
         cloudTx.create(transactionRef, invoice);
-        normalizedItems.forEach((entry: any) => {
+        enrichedItems.forEach((entry: any) => {
           const itemRef = adminDb!.collection("transaction_items").doc(entry.id);
           const item = { ...entry.data, id: entry.id, ...identity, updated_at: new Date().toISOString() };
           cloudTx.create(itemRef, item);
@@ -1026,7 +1056,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             updated_at: product.data.updated_at
           });
         });
-        return { invoice, items: normalizedItems, products: productResults };
+        return { invoice, items: enrichedItems, products: productResults };
       });
 
       const events = [
@@ -1080,6 +1110,9 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         });
 
         const productIds = Array.from(productQty.keys());
+        if (2 + itemIds.length * 2 + productIds.length > 500) {
+          throw Object.assign(new Error("Sale deletion exceeds the atomic Firestore write limit."), { status: 400 });
+        }
         const productRefs = productIds.map(id => adminDb!.collection("products").doc(id));
         const productSnapshots = await Promise.all(productRefs.map(ref => cloudTx.get(ref)));
         const productResults: Array<{ id: string; data: any }> = [];
