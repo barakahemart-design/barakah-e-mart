@@ -39,7 +39,6 @@ import {
   safeEndOfDay,
   safeSubDays
 } from "../lib/dateUtils";
-import { getAverageCostFromAllocations } from "../lib/fifoCosting";
 import { auditAccountingRecords } from "../lib/accountingAudit";
 
 // Resolve historical unit cost only from the sale snapshot. Never substitute the
@@ -538,7 +537,6 @@ export function ReportsView({
         t.items.forEach((item: any) => {
           if (!item) return;
           // Resolve standard item buy price preferring updated item cost price first
-          const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
           const buyCost = getItemBuyCost(item);
 
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
