@@ -228,6 +228,11 @@ export function ReportsView({
     filteredTransactions.forEach(t => {
       if (!t) return;
       if (Array.isArray(t.items)) {
+        const invoiceGrossItems = t.items.reduce((sum: number, line: any) =>
+          sum + (Number(line?.price) || 0) * (Number(line?.quantity) || 0), 0);
+        const invoiceTotal = Number(t.total) || 0;
+        const revenueAllocationFactor = invoiceGrossItems > 0 ? invoiceTotal / invoiceGrossItems : 1;
+
         t.items.forEach((item: any) => {
           if (!item) return;
           const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
@@ -436,7 +441,10 @@ export function ReportsView({
 
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
           const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
-          const totalRevenue = price * qty;
+          // Allocate the invoice's final total across its lines by gross line value.
+          // This makes item-level revenue include the invoice-level discount proportionally
+          // and reconcile to the invoice total used by the summary.
+          const totalRevenue = price * qty * revenueAllocationFactor;
           const totalCogs = buyCost * qty;
           const netProfit = totalRevenue - totalCogs;
           const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
