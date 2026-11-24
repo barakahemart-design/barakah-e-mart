@@ -1223,7 +1223,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
       if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is unavailable." });
       const cleanEmail = (verified.email || "").trim().toLowerCase();
       const transactionId = String(req.body?.transaction_id || "").trim();
-      const itemIds = Array.isArray(req.body?.item_ids) ? Array.from(new Set(req.body.item_ids.map((id: any) => String(id || "").trim()).filter(Boolean))) : [];
+      const itemIds: string[] = Array.isArray(req.body?.item_ids) ? Array.from(new Set<string>(req.body.item_ids.map((id: any) => String(id || "").trim()).filter((id: string) => Boolean(id)))) : [];
       if (!transactionId || transactionId.length > 128 || itemIds.length < 1 || itemIds.length > 300 || itemIds.some((id: string) => id.length > 128)) {
         return res.status(400).json({ error: "Invalid sale or line-item IDs." });
       }
@@ -1316,7 +1316,7 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           const productId = productIds[index];
           const stock = Number(productData.stock) || 0;
           const rawLots = Array.isArray(productData.costLots) ? productData.costLots : (Array.isArray(productData.cost_lots) ? productData.cost_lots : []);
-          const lots = rawLots.map((lot: any, lotIndex: number) => ({
+          const lots: any[] = rawLots.map((lot: any, lotIndex: number) => ({
             id: String(lot?.id || `legacy-lot-${lotIndex}`),
             purchaseId: lot?.purchaseId ? String(lot.purchaseId) : undefined,
             source: String(lot?.source || "purchase"),
