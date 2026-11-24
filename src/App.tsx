@@ -2182,6 +2182,8 @@ export default function App() {
           sell_price: Number(nestedIt.price) || 0,
           cost_price: Number(nestedIt.buyPrice) || 0,
           cost_allocations: nestedIt.costAllocations || [],
+          is_negative_sale: nestedIt.isNegativeSale === true,
+          is_negative_sale_approved: nestedIt.isNegativeSaleApproved === true || nestedIt.negativeSaleUpdated === true,
           warranty: nestedIt.warranty || "",
           warranty_details: nestedIt.warrantyDetails || ""
         };
@@ -2248,6 +2250,8 @@ export default function App() {
             sell_price: Number(nestedIt.price) || 0,
             cost_price: Number(nestedIt.buyPrice) || 0,
             cost_allocations: nestedIt.costAllocations || [],
+            is_negative_sale: nestedIt.isNegativeSale === true,
+            is_negative_sale_approved: nestedIt.isNegativeSaleApproved === true || nestedIt.negativeSaleUpdated === true,
             user_id: activeUserId,
             store_id: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
             storeId: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
