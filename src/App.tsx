@@ -125,7 +125,9 @@ import {
   deleteTransaction,
   deleteExpense,
   deletePurchase,
-  handleSave
+  handleSave,
+  commitInvoiceEditBatch,
+  deleteInvoiceAndRestoreBatch
 } from "./lib/firestoreService";
 
 export interface Product {
