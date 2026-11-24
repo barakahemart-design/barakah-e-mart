@@ -137,6 +137,9 @@ export function ReportsView({
     return safeFormat(new Date(), "yyyy-MM-dd", "");
   });
   const [productSearch, setProductSearch] = useState("");
+  const [monthlyArchiveOpen, setMonthlyArchiveOpen] = useState(false);
+  const [selectedArchiveMonth, setSelectedArchiveMonth] = useState<number | null>(null);
+  const [archiveYear, setArchiveYear] = useState(() => new Date().getFullYear());
 
   // Check if a date falls inside the current date filter
   const isDateInFilter = (dateStr: any) => {
@@ -579,6 +582,51 @@ export function ReportsView({
     return list;
   }, [filteredTransactions, safeProducts, safeContacts]);
 
+  // MONTHLY BUSINESS ARCHIVE — uses the records already loaded by the live account listeners.
+  const archiveMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const archiveMonthData = useMemo(() => archiveMonths.map((monthName, monthIndex) => {
+    const inMonth = (value: any) => { const d = safeDate(value); return !!d && d.getFullYear() === archiveYear && d.getMonth() === monthIndex; };
+    const sales = safeTransactions.filter(t => t && inMonth(t.date));
+    const monthExpenses = safeExpenses.filter(e => e && inMonth(e.date));
+    const monthPurchases = safePurchases.filter(p => p && inMonth(p.date));
+    const salesTotal = sales.reduce((n, t) => n + (Number(t.total) || 0), 0);
+    const taxTotal = sales.reduce((n, t) => n + (Number(t.tax) || 0), 0);
+    const expenseTotal = monthExpenses.reduce((n, e) => n + (Number(e.amount) || 0), 0);
+    const purchaseTotal = monthPurchases.reduce((n, p) => n + (Number(p.totalAmount) || 0), 0);
+    let cogs = 0, incompleteCostLines = 0;
+    const productRows: any[] = [];
+    sales.forEach(t => {
+      const returns = (Array.isArray(t.returnHistory) ? t.returnHistory : []).flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
+      (Array.isArray(t.items) ? t.items : []).forEach((item: any, index: number) => {
+        if (!item) return;
+        const qty = Math.max(0, Number(item.quantity) || 0);
+        const itemId = String(item.firestoreId || item.id || `${t.id}_item_${index}`);
+        const returnedLines = returns.filter((line: any) => String(line?.transactionItemId || line?.transaction_item_id || "") === itemId);
+        const returnedQty = returnedLines.reduce((n: number, line: any) => n + Math.max(0, Number(line?.quantity) || 0), 0);
+        const netQty = Math.max(0, qty - returnedQty);
+        const grossItems = (Array.isArray(t.items) ? t.items : []).reduce((n: number, line: any, lineIndex: number) => {
+          const lineId = String(line?.firestoreId || line?.id || `${t.id}_item_${lineIndex}`);
+          const lineReturns = returns.filter((ret: any) => String(ret?.transactionItemId || ret?.transaction_item_id || "") === lineId);
+          const remain = Math.max(0, (Number(line?.quantity) || 0) - lineReturns.reduce((s: number, ret: any) => s + (Number(ret?.quantity) || 0), 0));
+          return n + (Number(line?.price) || 0) * remain;
+        }, 0);
+        const netInvoice = Math.max(0, (Number(t.total) || 0) - (Number(t.tax) || 0));
+        const revenue = grossItems > 0 ? (Number(item.price) || 0) * netQty * netInvoice / grossItems : 0;
+        const unitCost = getItemBuyCost(item), returnedCost = getReturnedItemCost(returnedLines);
+        const lineCogs = unitCost === null || (returnedQty > 0 && returnedCost === null) ? null : Math.max(0, qty * unitCost - (returnedCost || 0));
+        const profit = lineCogs === null ? null : revenue - lineCogs;
+        if (lineCogs === null) incompleteCostLines += 1; else cogs += lineCogs;
+        productRows.push({ date: t.date, invoiceNo: t.invoiceNo || t.invoice_no || "N/A", productName: item.name || "Unknown Product", sku: item.sku || "", quantity: netQty, revenue, cogs: lineCogs, profit });
+      });
+    });
+    const profitComplete = incompleteCostLines === 0;
+    const netSales = Math.max(0, salesTotal - taxTotal);
+    const grossProfit = profitComplete ? netSales - cogs : null;
+    const netProfit = profitComplete ? (grossProfit as number) - expenseTotal : null;
+    const cashReceived = sales.reduce((n, t) => n + (Number(t.paidAmount ?? t.paid_amount) || 0), 0);
+    return { monthName, monthIndex, sales, expenses: monthExpenses, purchases: monthPurchases, salesTotal, expenseTotal, purchaseTotal, cogs, grossProfit, netProfit, profitComplete, incompleteCostLines, cashReceived, productRows };
+  }), [safeTransactions, safeExpenses, safePurchases, archiveYear]);
+
   const netProfitMarginPct = useMemo(() => {
     const netSales = Math.max(0, stats.salesVal - stats.salesTax);
     if (!stats.profitComplete || netSales <= 0) return null;
@@ -592,7 +640,32 @@ export function ReportsView({
     window.print();
   };
 
+  // Dedicated month picker and month-detail page.
+  if (monthlyArchiveOpen) {
+    const m = selectedArchiveMonth === null ? null : archiveMonthData[selectedArchiveMonth];
+    const money = (n: number) => `${currencySymbol}${Math.round(n || 0).toLocaleString()}`;
+    return (
+      <div className="space-y-5 text-slate-200 pb-8" id="monthly-business-archive">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><button onClick={() => { setMonthlyArchiveOpen(false); setSelectedArchiveMonth(null); }} className="text-xs font-bold text-sky-400 mb-2">← Back to Reports Dashboard</button><h2 className="text-xl font-black text-white">Monthly Business Archive</h2><p className="text-xs text-slate-400 mt-1">All sales, products, expenses, purchases and profit by month</p></div>
+          <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-[#1e1e24] p-2"><button onClick={() => { setArchiveYear(y => y - 1); setSelectedArchiveMonth(null); }} className="px-2">‹</button><b className="font-mono">{archiveYear}</b><button disabled={archiveYear >= new Date().getFullYear()} onClick={() => { setArchiveYear(y => y + 1); setSelectedArchiveMonth(null); }} className="px-2 disabled:opacity-30">›</button></div>
+        </div>
+        {!m ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{archiveMonthData.map(month => <button key={month.monthIndex} onClick={() => setSelectedArchiveMonth(month.monthIndex)} className="text-left rounded-2xl border border-slate-700 bg-[#1e1e24] hover:border-sky-500 p-4"><div className="flex justify-between"><b className="text-white">{month.monthName}</b><CalendarDays className="w-4 h-4 text-sky-400"/></div><p className="text-[10px] text-slate-400 mt-3">{month.sales.length} sales · {month.expenses.length} expenses · {month.purchases.length} purchases</p><p className="font-mono font-black mt-2">{money(month.salesTotal)}</p><p className={`text-[10px] font-bold mt-1 ${month.netProfit === null ? "text-amber-300" : month.netProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{month.netProfit === null ? "Profit: Cost data incomplete" : `Net Profit: ${money(month.netProfit)}`}</p></button>)}</div> :
+        <div className="space-y-5">
+          <div className="flex justify-between items-center"><h3 className="font-black text-lg text-white">{m.monthName} {archiveYear} — Monthly Details</h3><button onClick={() => setSelectedArchiveMonth(null)} className="text-xs text-sky-300 border border-slate-700 rounded-lg px-3 py-2">← All Months</button></div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[["Sales",money(m.salesTotal)],["Cash Received",money(m.cashReceived)],["Expenses",money(m.expenseTotal)],["Purchases",money(m.purchaseTotal)],["COGS",money(m.cogs)],["Gross Profit",m.grossProfit === null ? "Incomplete" : money(m.grossProfit)],["Net Profit",m.netProfit === null ? "Cost data incomplete" : money(m.netProfit)],["Invoices",String(m.sales.length)]].map(([label,value])=><div key={label} className="rounded-xl border border-slate-700 bg-[#1e1e24] p-3"><p className="text-[10px] uppercase text-slate-400">{label}</p><p className="font-mono font-black text-sm mt-2">{value}</p></div>)}</div>
+          {!m.profitComplete && <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">Profit cannot be verified: {m.incompleteCostLines} sold item line(s) are missing reliable historical cost. No estimated cost is substituted.</div>}
+          <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Products Sold & Item-wise Profit</h4><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date / Invoice","Product","Qty","Sales","COGS","Profit"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.productRows.length ? m.productRows.map((p:any,i:number)=><tr key={i}><td className="p-3">{p.date}<div className="text-slate-500">{p.invoiceNo}</div></td><td className="p-3 font-bold">{p.productName}{p.sku && <div className="text-slate-500">{p.sku}</div>}</td><td className="p-3 text-right">{p.quantity}</td><td className="p-3 text-right">{money(p.revenue)}</td><td className="p-3 text-right">{p.cogs === null ? "Missing cost" : money(p.cogs)}</td><td className="p-3 text-right">{p.profit === null ? "N/A" : money(p.profit)}</td></tr>):<tr><td colSpan={6} className="p-5 text-center text-slate-500">No products sold this month.</td></tr>}</tbody></table></div></section>
+          <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Sales Invoices</h4><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Invoice","Customer","Total","Paid","Due"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.sales.length ? m.sales.map((t:any,i:number)=>{const customer=safeContacts.find((ct:any)=>ct?.id===t.contactId);return <tr key={t.id||i}><td className="p-3">{t.date}</td><td className="p-3">{t.invoiceNo||t.invoice_no||"—"}</td><td className="p-3">{customer?.name||"Walk-In Customer"}</td><td className="p-3 text-right">{money(Number(t.total)||0)}</td><td className="p-3 text-right">{money(Number(t.paidAmount??t.paid_amount)||0)}</td><td className="p-3 text-right">{money(Number(t.dueBalance??t.due_balance)||0)}</td></tr>}):<tr><td colSpan={6} className="p-5 text-center text-slate-500">No sales invoices.</td></tr>}</tbody></table></div></section>
+          <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Expenses</h4><div className="overflow-x-auto"><table className="w-full min-w-[550px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Category","Description","Amount"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.expenses.length ? m.expenses.map((e:any,i:number)=><tr key={e.id||i}><td className="p-3">{e.date}</td><td className="p-3">{e.category||"Other"}</td><td className="p-3">{e.description||e.note||"—"}</td><td className="p-3 text-right">{money(Number(e.amount)||0)}</td></tr>):<tr><td colSpan={4} className="p-5 text-center text-slate-500">No expenses.</td></tr>}</tbody></table></div></section>
+          <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Purchases</h4><div className="overflow-x-auto"><table className="w-full min-w-[550px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Supplier","Reference","Total"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.purchases.length ? m.purchases.map((p:any,i:number)=><tr key={p.id||i}><td className="p-3">{p.date}</td><td className="p-3">{p.supplierName||p.supplier||"—"}</td><td className="p-3">{p.invoiceNo||p.reference||p.id||"—"}</td><td className="p-3 text-right">{money(Number(p.totalAmount)||0)}</td></tr>):<tr><td colSpan={4} className="p-5 text-center text-slate-500">No purchases.</td></tr>}</tbody></table></div></section>
+        </div>}
+      </div>
+    );
+  }
+
   return (
+      <button onClick={() => { setMonthlyArchiveOpen(true); setSelectedArchiveMonth(null); }} className="w-full text-left rounded-2xl border border-sky-500/30 bg-[#1e1e24] hover:border-sky-400 p-4 flex items-center justify-between gap-3" id="monthly-business-archive-entry"><div className="flex items-center gap-3"><CalendarDays className="w-6 h-6 text-sky-300"/><div><h3 className="font-black text-white text-sm">Monthly Business Archive</h3><p className="text-[10px] text-slate-400 mt-1">View each month's sales, products, profit, expenses and purchases separately.</p></div></div><span className="text-xs font-bold text-sky-300 whitespace-nowrap">Open →</span></button>
     <div className="space-y-6 text-slate-300 font-sans" id="reports-view">
       <div className="rounded-2xl border border-slate-700 bg-[#111827] p-4" id="accounting-integrity-audit">
         <div className="flex flex-wrap items-center justify-between gap-3">
