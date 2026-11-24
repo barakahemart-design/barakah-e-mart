@@ -460,7 +460,7 @@ export default function App() {
     try {
       if (localStorage.getItem("barakah_local_active_user")) {
         const savedTab = sessionStorage.getItem("barakah_active_tab");
-        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "delivery", "settings"];
+        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "returns", "staff", "delivery", "settings"];
         if (savedTab && validTabs.includes(savedTab)) return savedTab as any;
       }
     } catch (_) {}
@@ -5327,6 +5327,7 @@ _${businessInfo.name}_`;
                   { id: "inventory", label: "All Stock", Icon: Bookmark },
                   { id: "duelist", label: "All Due List", Icon: History },
                   { id: "reports", label: "Reports", Icon: BarChart3 },
+                  { id: "returns", label: "Sales Returns", Icon: Undo2 },
                   { id: "staff", label: "Staff Hub", Icon: UserCheck },
                   { id: "delivery", label: "Delivery Management", Icon: Truck },
                   { id: "settings", label: "Settings", Icon: Settings },
@@ -5582,6 +5583,14 @@ _${businessInfo.name}_`;
               netProfitAmt={netProfitAmt}
               ledgerTrendsPlotData={ledgerTrendsPlotData}
               expenseCategoryPlotData={expenseCategoryPlotData}
+            />
+          )}
+
+          {activeTab === "returns" && (
+            <SalesReturnsView
+              transactions={transactions}
+              onProcessReturn={handleProcessSalesReturn}
+              currencySymbol={businessInfo?.currencySymbol || "৳"}
             />
           )}
 
