@@ -406,7 +406,7 @@ export function ReportsView({
     const map: Record<string, { id: string; name: string; sku: string; category: string; quantity: number; revenue: number }> = {};
     filteredTransactions.forEach(t => {
       if (!t) return;
-      t.items?.forEach((item: any) => {
+      t.items?.forEach((item: any, index: number) => {
         if (!item) return;
         const pid = item.productId || item.name || "Unknown Product";
         if (!map[pid]) {
@@ -419,7 +419,13 @@ export function ReportsView({
             revenue: 0
           };
         }
-        const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
+        const soldQty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
+        const itemId = String(item.firestoreId || item.id || `${t.id}_item_${index}`);
+        const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+          .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
+          .filter((line: any) => String(line.transactionItemId) === itemId)
+          .reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
+        const qty = Math.max(0, soldQty - returnedQty);
         const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
         map[pid].quantity += qty;
         map[pid].revenue += price * qty;
