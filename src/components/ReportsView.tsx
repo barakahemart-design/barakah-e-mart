@@ -264,7 +264,10 @@ export function ReportsView({
       }
     });
 
-    const grossProfit = salesVal - estimatedCOGS;
+    // POS adds VAT on top of the discounted subtotal. VAT collected is a
+    // payable, not business revenue, so exclude it from profit calculations.
+    const netSalesExcludingVat = Math.max(0, salesVal - salesTax);
+    const grossProfit = netSalesExcludingVat - estimatedCOGS;
     const netProfit = grossProfit - expenseVal;
 
     return {
@@ -458,7 +461,9 @@ export function ReportsView({
         const invoiceGrossItems = t.items.reduce((sum: number, line: any) =>
           sum + (Number(line?.price) || 0) * (Number(line?.quantity) || 0), 0);
         const invoiceTotal = Number(t.total) || 0;
-        const revenueAllocationFactor = invoiceGrossItems > 0 ? invoiceTotal / invoiceGrossItems : 1;
+        const invoiceTax = Number(t.tax) || 0;
+        const invoiceNetSales = Math.max(0, invoiceTotal - invoiceTax);
+        const revenueAllocationFactor = invoiceGrossItems > 0 ? invoiceNetSales / invoiceGrossItems : 1;
 
         t.items.forEach((item: any) => {
           if (!item) return;
@@ -468,9 +473,8 @@ export function ReportsView({
 
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
           const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
-          // Allocate the invoice's final total across its lines by gross line value.
-          // This makes item-level revenue include the invoice-level discount proportionally
-          // and reconcile to the invoice total used by the summary.
+          // Allocate net sales (after invoice discount and excluding collected VAT)
+          // across lines by gross line value so item profits reconcile to the P&L.
           const totalRevenue = price * qty * revenueAllocationFactor;
           const totalCogs = buyCost * qty;
           const netProfit = totalRevenue - totalCogs;
@@ -498,8 +502,9 @@ export function ReportsView({
   }, [filteredTransactions, safeProducts, safeContacts]);
 
   const netProfitMarginPct = useMemo(() => {
-    if (stats.salesVal <= 0) return 0;
-    return (stats.netProfit / stats.salesVal) * 100;
+    const netSales = Math.max(0, stats.salesVal - stats.salesTax);
+    if (netSales <= 0) return 0;
+    return (stats.netProfit / netSales) * 100;
   }, [stats]);
 
   const COLORS = ["#00E676", "#00B0FF", "#FFC400", "#D500F9", "#FF9100", "#FF1744"];
