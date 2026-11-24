@@ -361,15 +361,24 @@ export async function deleteInvoiceAndRestoreBatch(input: {
   const identity = currentStoreWriteIdentity();
   const batch = writeBatch(db);
   let operationCount = 0;
-  const addDelete = (collectionName: string, physicalId: string) => {
-    if (!physicalId) return;
+  const addDelete = (collectionName: string, recordId: string, physicalId: string) => {
+    if (!recordId || !physicalId) return;
+    // Preserve the app's existing deletion tombstone contract so older backup
+    // restores cannot resurrect an invoice or one of its line items.
+    batch.set(doc(db, "deleted_records", `${collectionName}__${recordId}`), {
+      id: recordId,
+      collection: collectionName,
+      record_id: recordId,
+      ...identity,
+      deleted_at: new Date().toISOString()
+    }, { merge: true });
     batch.delete(doc(db, collectionName, physicalId));
-    operationCount += 1;
+    operationCount += 2;
   };
 
-  addDelete("transactions", input.transactionDocId);
+  addDelete("transactions", input.transactionId, input.transactionDocId);
   for (const itemId of new Set(input.itemIds || [])) {
-    addDelete("transaction_items", itemId);
+    addDelete("transaction_items", itemId, itemId);
   }
   for (const product of input.products || []) {
     if (!product.id) continue;
