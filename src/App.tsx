@@ -5067,7 +5067,7 @@ _${businessInfo.name}_`;
                 .map((item) => {
                   const Icon = item.Icon;
                   const isActive = activeTab === item.id;
-                  const hasAlert = "alert" in item && Boolean(hasAlert);
+                  const hasAlert = "alert" in item && Boolean((item as any).alert);
                   return (
                     <button
                       key={item.id}
