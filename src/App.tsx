@@ -5299,6 +5299,7 @@ _${businessInfo.name}_`;
               products={products}
               transactions={transactions}
               expenses={expenses}
+              additionalExpenses={paidDeliveryExpenses}
               purchases={purchases}
               contacts={contacts}
               businessInfo={businessInfo}
