@@ -5680,6 +5680,7 @@ _${businessInfo.name}_`;
               additionalExpenses={[...paidDeliveryExpenses, ...paidSalaryExpenses]}
               purchases={purchases}
               contacts={contacts}
+              staffList={staffList}
               businessInfo={businessInfo}
               currencySymbol={businessInfo?.currencySymbol || "৳"}
             />
