@@ -715,18 +715,28 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
                 productId: item.product_id || undefined,
                 buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
                 costAllocations: item.cost_allocations || item.costAllocations || undefined,
+                isNegativeSale: item.is_negative_sale === true || item.isNegativeSale === true,
+                isNegativeSaleApproved: item.is_negative_sale_approved === true || item.isNegativeSaleApproved === true,
+                negativeSaleUpdated: item.is_negative_sale_approved === true || item.negativeSaleUpdated === true,
                 warranty: item.warranty || "",
                 warrantyDetails: item.warrantyDetails || item.warranty_details || ""
               };
             });
+
+            const resolvedSubtotal = mappedItems.length > 0
+              ? mappedItems.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0)
+              : Number(t.subtotal ?? t.total_amount) || 0;
+            const resolvedTax = t.tax_amount !== undefined && t.tax_amount !== null
+              ? Number(t.tax_amount) || 0
+              : Math.round(resolvedSubtotal * (Number(t.vat_rate) || 0) / 100);
 
             return {
               id: t.id,
               invoiceNo: t.invoice_no,
               date: t.created_at || new Date().toISOString(),
               items: mappedItems,
-              subtotal: Number(t.total_amount) || 0,
-              tax: t.vat_rate ? Number(((t.total_amount * t.vat_rate) / 100).toFixed(2)) : 0,
+              subtotal: resolvedSubtotal,
+              tax: resolvedTax,
               discount: Number(t.discount) || 0,
               total: Number(t.total_amount) || 0,
               paymentMethod: t.payment_method || "Cash",
