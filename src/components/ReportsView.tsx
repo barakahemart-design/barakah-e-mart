@@ -474,8 +474,15 @@ export function ReportsView({
       }
 
       if (Array.isArray(t.items)) {
-        const invoiceGrossItems = t.items.reduce((sum: number, line: any) =>
-          sum + (Number(line?.price) || 0) * (Number(line?.quantity) || 0), 0);
+        const invoiceGrossItems = t.items.reduce((sum: number, line: any, index: number) => {
+          const itemId = String(line.firestoreId || line.id || `${t.id}_item_${index}`);
+          const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+            .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
+            .filter((returned: any) => String(returned.transactionItemId) === itemId)
+            .reduce((qty: number, returned: any) => qty + (Number(returned.quantity) || 0), 0);
+          const remainingQty = Math.max(0, (Number(line?.quantity) || 0) - returnedQty);
+          return sum + (Number(line?.price) || 0) * remainingQty;
+        }, 0);
         const invoiceTotal = Number(t.total) || 0;
         const invoiceTax = Number(t.tax) || 0;
         const invoiceNetSales = Math.max(0, invoiceTotal - invoiceTax);
