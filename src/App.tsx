@@ -3641,7 +3641,7 @@ export default function App() {
         discount: Number(discount) || 0,
         paid_amount: Number(paidAmount) || 0,
         paidAmount: Number(paidAmount) || 0,
-        payment_history: targetTx.paymentHistory || [],
+        payment_history: originalTx.paymentHistory || [],
         due_balance: Number(dueBalance) || 0,
         dueBalance: Number(dueBalance) || 0,
         status: status,
