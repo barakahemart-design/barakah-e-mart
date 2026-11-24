@@ -462,10 +462,26 @@ export async function commitSaleCreationTransaction(input: SaleCreationInput): P
     throw new Error("This cart is too large for one atomic checkout. No invoice or stock changes were made.");
   }
   const transactionRef = doc(db, "transactions", input.transactionId);
+  const normalizedInvoiceNo = String(input.invoiceNo || "").trim().toLowerCase();
+  if (!normalizedInvoiceNo) throw new Error("An invoice number is required before checkout.");
+  const invoiceNoQuery = query(collection(db, "transactions"), where("invoice_no_normalized", "==", normalizedInvoiceNo));
+  const legacyInvoiceNoQuery = query(collection(db, "transactions"), where("invoice_no", "==", String(input.invoiceNo).trim()));
+  const camelInvoiceNoQuery = query(collection(db, "transactions"), where("invoiceNo", "==", String(input.invoiceNo).trim()));
   const productIds = Array.from(new Set(input.items.map(item => item.productDocId)));
   return runTransaction(db, async cloudTransaction => {
     const existingInvoice = await cloudTransaction.get(transactionRef);
     if (existingInvoice.exists()) throw new Error("This invoice ID already exists. Please generate the invoice again.");
+    const [normalizedMatches, legacyMatches, camelMatches] = await Promise.all([
+      cloudTransaction.get(invoiceNoQuery),
+      cloudTransaction.get(legacyInvoiceNoQuery),
+      cloudTransaction.get(camelInvoiceNoQuery)
+    ]);
+    const invoiceMatches = [...normalizedMatches.docs, ...legacyMatches.docs, ...camelMatches.docs];
+    const duplicateForThisStore = invoiceMatches.some(snapshot => {
+      const data = snapshot.data() || {};
+      return snapshot.id !== input.transactionId && isDocMatchingStore(data, identity.store_id, identity.user_id);
+    });
+    if (duplicateForThisStore) throw new Error("This invoice number already exists in this store. Please generate a new invoice number.");
     const productRefs = productIds.map(productId => doc(db, "products", productId));
     const snapshots = await Promise.all(productRefs.map(ref => cloudTransaction.get(ref)));
     const liveProducts = new Map<string, any>();
@@ -521,6 +537,8 @@ export async function commitSaleCreationTransaction(input: SaleCreationInput): P
     cloudTransaction.set(transactionRef, {
       id: input.transactionId,
       invoice_no: input.invoiceNo,
+      invoiceNo: input.invoiceNo,
+      invoice_no_normalized: normalizedInvoiceNo,
       customer_id: input.customerId || null,
       items: nestedItems,
       subtotal: Number(input.subtotal) || 0,
