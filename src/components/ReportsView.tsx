@@ -40,6 +40,7 @@ import {
   safeSubDays
 } from "../lib/dateUtils";
 import { getAverageCostFromAllocations } from "../lib/fifoCosting";
+import { auditAccountingRecords } from "../lib/accountingAudit";
 
 // Helper to accurately resolve item cost price preferring updated transaction item cost prices first
 function getItemBuyCost(item: any, dbProduct?: any): number {
@@ -96,6 +97,7 @@ export function ReportsView({
 }: ReportsViewProps) {
   const safeProducts = Array.isArray(products) ? products : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const integrityIssues = useMemo(() => auditAccountingRecords(safeTransactions), [safeTransactions]);
   const baseExpenses = Array.isArray(expenses) ? expenses : [];
   const extraExpenses = Array.isArray(additionalExpenses) ? additionalExpenses : [];
   const knownExpenseIds = new Set(baseExpenses.map((expense: any) => expense?.id).filter(Boolean));
@@ -550,6 +552,24 @@ export function ReportsView({
 
   return (
     <div className="space-y-6 text-slate-300 font-sans" id="reports-view">
+      <div className="rounded-2xl border border-slate-700 bg-[#111827] p-4" id="accounting-integrity-audit">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">Read-only Accounting Integrity Check</h3>
+            <p className="mt-1 text-[10px] text-slate-400">Checks invoice totals, paid/due balances, product line values and return quantities using data already loaded by the existing live listeners. No extra Firestore reads or writes.</p>
+          </div>
+          <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${integrityIssues.length === 0 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>
+            {integrityIssues.length === 0 ? "No mismatches detected" : `${integrityIssues.length} item(s) need review`}
+          </div>
+        </div>
+        {integrityIssues.length > 0 && <div className="mt-3 space-y-2">
+          {integrityIssues.slice(0, 5).map(issue => <div key={issue.id} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.06] px-3 py-2">
+            <p className="text-[10px] font-bold text-amber-200">{issue.invoiceNo}</p>
+            <p className="mt-0.5 text-[10px] text-slate-300">{issue.message}</p>
+          </div>)}
+          {integrityIssues.length > 5 && <p className="text-[10px] text-slate-400">Showing first 5 of {integrityIssues.length} findings.</p>}
+        </div>}
+      </div>
       
       {/* Dynamic Selector Header Panel */}
       <div className="bg-[#1E1E24] p-5 rounded-2xl border border-[#2D2D35] flex flex-col lg:flex-row items-center justify-between gap-5 shadow-lg relative overflow-hidden" id="reports-period-selector-bar">
