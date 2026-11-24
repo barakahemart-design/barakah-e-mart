@@ -986,7 +986,7 @@ export function ReportsView({
                   strokeWidth="8"
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 40}`}
-                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - Math.max(0, Math.min(netProfitMarginPct, 100)) / 100)}`}
+                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - Math.max(0, Math.min(netProfitMarginPct ?? 0, 100)) / 100)}`}
                   className="transition-all duration-1000 stroke-linecap-round"
                 />
               </svg>
