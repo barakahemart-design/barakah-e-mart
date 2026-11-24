@@ -202,10 +202,25 @@ export function ReportsView({
       const disc = typeof t.discount === "number" ? t.discount : parseFloat(t.discount) || 0;
 
       salesVal += tot;
-      cashReceived += paid;
       dueBalance += due;
       salesTax += tx;
       salesDiscount += disc;
+    });
+
+    // Cash collections belong to the date they were received, not necessarily
+    // the original invoice date. Legacy paid amounts without a history remain
+    // attributed to the invoice date until they can be reconciled.
+    safeTransactions.forEach(t => {
+      if (!t) return;
+      const paid = typeof t.paidAmount === "number" ? t.paidAmount : parseFloat(t.paidAmount) || 0;
+      const history = Array.isArray(t.paymentHistory) ? t.paymentHistory : [];
+      const historyTotal = history.reduce((sum: number, payment: any) => sum + (Number(payment?.amount) || 0), 0);
+      if (isDateInFilter(t.date)) cashReceived += Math.max(0, paid - historyTotal);
+      history.forEach((payment: any) => {
+        if (payment?.date && isDateInFilter(payment.date)) {
+          cashReceived += Number(payment.amount) || 0;
+        }
+      });
     });
 
     let expenseVal = 0;
@@ -253,7 +268,7 @@ export function ReportsView({
       netProfit,
       cogs: estimatedCOGS
     };
-  }, [filteredTransactions, filteredExpenses, filteredPurchases, safeProducts]);
+  }, [filteredTransactions, filteredExpenses, filteredPurchases, safeProducts, safeTransactions, filterType, startDate, endDate]);
 
   // Chart aggregation for Daily Sales Trend
   const dailyChartData = useMemo(() => {
