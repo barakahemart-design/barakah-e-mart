@@ -425,11 +425,25 @@ class SupabaseService {
     if (matchPur != null) {
       final double quantity = (matchPur['quantity'] ?? 0.0).toDouble();
       final String productId = matchPur['product_id'] ?? '';
-      
+
+      // This legacy Flutter data path has no purchase-lot allocation. If the
+      // product has any recorded sale, we cannot prove that this specific
+      // purchase quantity is still on hand, so block deletion conservatively.
+      final lineItems = await _makeRequest('GET', '/api/db/fetch?table=transaction_items&owner_email=$userId') ?? [];
+      final productHasSales = (lineItems as List).any((item) =>
+        item['product_id'] == productId && (double.tryParse('${item['quantity'] ?? 0}') ?? 0) > 0
+      );
+      if (productHasSales) {
+        throw StateError('Cannot delete this purchase: the product has historical sales but no purchase-lot tracking to prove the remaining quantity.');
+      }
+
       final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
       final matchProd = (products as List).firstWhere((p) => p['id'] == productId, orElse: () => null);
       if (matchProd != null) {
         final double currentStock = (matchProd['stock'] ?? 0.0).toDouble();
+        if (currentStock + 0.000001 < quantity) {
+          throw StateError('Cannot delete this purchase: current stock is lower than the purchase quantity.');
+        }
         final updatedProd = {
           ...Map<String, dynamic>.from(matchProd),
           'stock': currentStock - quantity,
