@@ -332,7 +332,7 @@ export async function commitInvoiceEditBatch(input: InvoiceBatchInput): Promise<
 
   for (const product of input.products || []) {
     if (!product.id) continue;
-    const data = { ...product.data, id: product.id, ...identity };
+    const data: Record<string, any> = { ...product.data, id: product.id, ...identity };
     const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
     const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
     data.buyPrice = buyPrice;
