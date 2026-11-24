@@ -3571,7 +3571,7 @@ export default function App() {
             tax_amount: Number(tax) || 0,
             total_amount: Number(total) || 0,
             total: Number(total) || 0,
-            profit: Math.round(total - costOfGoodsSold),
+            profit: Math.round((total - tax) - costOfGoodsSold),
             discount: Number(discount) || 0,
             paid_amount: Number(paidAmount) || 0,
             paidAmount: Number(paidAmount) || 0,
