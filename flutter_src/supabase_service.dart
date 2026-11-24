@@ -680,13 +680,20 @@ class SupabaseService {
       final expenses = await fetchExpenses();
       
       double sales = 0.0;
+      double vatCollected = 0.0;
       double cogs = 0.0;
       double discounts = 0.0;
       double totalExpenses = 0.0;
-      
+
       for (final tx in ledger) {
         sales += tx.totalAmount;
         discounts += tx.discount;
+        final invoiceSubtotal = tx.items.fold<double>(
+          0.0,
+          (sum, item) => sum + item.quantity * item.sellPrice,
+        );
+        // Checkout adds VAT to the item subtotal; VAT collected is not revenue.
+        vatCollected += invoiceSubtotal * tx.vatRate / 100;
         for (final item in tx.items) {
           cogs += item.quantity * item.costPrice;
         }
@@ -698,13 +705,15 @@ class SupabaseService {
       
       return {
         'sales': sales,
+        'vat': vatCollected,
+        'net_sales': sales - vatCollected,
         'cogs': cogs,
         'discounts': discounts,
         'expenses': totalExpenses,
-        'net_profit': sales - cogs - totalExpenses,
+        'net_profit': sales - vatCollected - cogs - totalExpenses,
       };
     } catch (_) {
-      return {'sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
+      return {'sales': 0.0, 'vat': 0.0, 'net_sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
     }
   }
 
