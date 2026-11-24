@@ -2734,11 +2734,14 @@ export default function App() {
     if (!item) return;
 
     const itemId = item.id || `${txId}_item_${itemIdx}`;
-    updateDoc(doc(db, "transaction_items", itemId), {
+    setDoc(doc(db, "transaction_items", itemId), {
       cost_price: Number(item.buyPrice) || 0,
-      cost_allocations: item.costAllocations || []
-    }).catch((e) => {
+      cost_allocations: item.costAllocations || [],
+      is_negative_sale: item.isNegativeSale === true,
+      is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true
+    }, { merge: true }).catch((e) => {
       console.error("Failed to update transaction item cost in Firestore:", e);
+      triggerNotification("Cost update could not be synchronized to the cloud. Please retry before relying on the updated report.", "error");
     });
 
     try {
@@ -2755,7 +2758,9 @@ export default function App() {
         quantity: Number(item.quantity) || 0,
         sell_price: Number(item.price) || 0,
         cost_price: Number(item.buyPrice) || 0,
-        cost_allocations: item.costAllocations || []
+        cost_allocations: item.costAllocations || [],
+        is_negative_sale: item.isNegativeSale === true,
+        is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true
       };
       const flatIdx = flatItems.findIndex((entry: any) =>
         String(entry.firestoreId || entry.id || "") === String(itemId)
