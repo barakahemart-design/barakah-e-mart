@@ -290,6 +290,7 @@ import {
   subscribeToAuthChanges, 
   signOut, 
   fetchAndRestoreCloudBackup,
+  uploadPasscodeBackup,
   signInOrSignUpWithPasscode,
   signUpWithEmail,
   signInWithEmail,
@@ -303,7 +304,6 @@ import {
 import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
 import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
-import { deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
   generateInvoicePDF,
   generateDeliveryChallanPDF
@@ -321,7 +321,7 @@ export default function App() {
    const initialLoadedRef = useRef(false);
    const isReloadToastActiveRef = useRef(
      typeof window !== "undefined" &&
-     performance.getEntriesByType("navigation")[0]?.type === "reload" &&
+     (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload" &&
      !!localStorage.getItem("barakah_local_active_user")
    );
    const lastUploadedAtRef = useRef("");
@@ -2282,7 +2282,7 @@ export default function App() {
 
     // Delivery assignment is now initiated directly from the Customer Card via Invoice Assign.
     try {
-      generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
+      generateInvoicePDF(newTransaction, contacts.find(c => c.id === newTransaction.contactId || c.id === posSelectedContactId) || undefined, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
       });
     } catch (pdfErr) {
@@ -5067,16 +5067,17 @@ _${businessInfo.name}_`;
                 .map((item) => {
                   const Icon = item.Icon;
                   const isActive = activeTab === item.id;
+                  const hasAlert = "alert" in item && Boolean(hasAlert);
                   return (
                     <button
                       key={item.id}
                       id={`tab-${item.id}-btn`}
                       onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${item.alert
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${hasAlert
                         ? (isActive ? 'bg-[#FF5252]/10 text-[#FF5252] border border-[#FF5252]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent')
                         : (isActive ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent')}`}
                     >
-                      <Icon className={`w-4 h-4 shrink-0 ${item.alert ? 'text-[#FF5252]' : ''}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${hasAlert ? 'text-[#FF5252]' : ''}`} />
                       <span className="text-xs font-semibold leading-none">{item.label}</span>
                     </button>
                   );
