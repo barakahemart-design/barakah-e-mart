@@ -310,7 +310,7 @@ import {
   deleteCloudDocument,
   saveBusinessSettings,
 } from "./lib/firebase-helpers";
-import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc, runTransaction } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
 import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
@@ -3735,6 +3735,189 @@ export default function App() {
     }
 
     triggerNotification(`Invoice ${originalTx.invoiceNo} successfully updated and stock reconciled.`);
+  };
+
+  const handleProcessSalesReturn = async (request: {
+    transactionId: string; date: string; reason: string; refundMethod: string; note: string;
+    items: Array<{ transactionItemId: string; productId?: string; quantity: number }>;
+  }): Promise<boolean> => {
+    if (currentPanel !== "admin" || !activeUser || activeUser.isGuest || !firebaseAuth.currentUser) {
+      triggerNotification("Sign in as an administrator to process a sales return.", "error");
+      return false;
+    }
+    const localTx = transactions.find(tx => tx.id === request.transactionId);
+    if (!localTx || request.items.length === 0) return false;
+    const returnId = toUUID(`sales_return_${Date.now()}`, activeUser.email || "sales-return");
+    const returnDate = new Date(request.date + "T12:00:00").toISOString();
+    const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+    const transactionRef = doc(db, "transactions", localTx.firestoreId || localTx.id);
+
+    try {
+      const result = await runTransaction(db, async cloudTransaction => {
+        const invoiceSnapshot = await cloudTransaction.get(transactionRef);
+        if (!invoiceSnapshot.exists()) throw new Error("Original invoice not found in the cloud.");
+        const liveInvoice = invoiceSnapshot.data() || {};
+        const storeEmail = String(activeUser.email || "").trim().toLowerCase();
+        const documentStore = String(liveInvoice.store_id || liveInvoice.storeId || liveInvoice.email || liveInvoice.linked_email || "").trim().toLowerCase();
+        const documentUid = String(liveInvoice.user_id || liveInvoice.userId || liveInvoice.owner_id || "");
+        if ((documentStore && documentStore !== storeEmail) || (!documentStore && documentUid !== activeUser.uid)) {
+          throw new Error("This invoice does not belong to the active store.");
+        }
+        const liveItems = Array.isArray(liveInvoice.items) && liveInvoice.items.length ? liveInvoice.items : localTx.items;
+        const returnHistory = Array.isArray(liveInvoice.return_history) ? liveInvoice.return_history : (liveInvoice.returnHistory || []);
+        if (returnHistory.some((entry: any) => entry.id === returnId)) throw new Error("This return has already been recorded.");
+
+        const requested = request.items.map(line => {
+          const index = liveItems.findIndex((item: any, itemIndex: number) =>
+            String(item.firestoreId || item.id || `${localTx.id}_item_${itemIndex}`) === String(line.transactionItemId)
+          );
+          if (index < 0) throw new Error("A selected invoice line is missing. Refresh and try again.");
+          const item = liveItems[index];
+          const returnedBefore = returnHistory.flatMap((entry: any) => entry.items || [])
+            .filter((row: any) => String(row.transactionItemId) === String(line.transactionItemId))
+            .reduce((sum: number, row: any) => sum + (Number(row.quantity) || 0), 0);
+          const available = Math.max(0, (Number(item.quantity) || 0) - returnedBefore);
+          const quantity = Number(line.quantity) || 0;
+          if (quantity <= 0 || quantity > available + 0.000001) throw new Error(`Return quantity for ${item.name || "item"} exceeds the remaining quantity.`);
+          const productId = String(item.productId || item.product_id || line.productId || "");
+          if (!productId) throw new Error("Product identity is missing; stock cannot be safely restored.");
+          return { item, itemId: String(line.transactionItemId), productId, quantity, returnedBefore };
+        });
+
+        const productIds = Array.from(new Set(requested.map(row => row.productId)));
+        const snapshots = await Promise.all(productIds.map(id => cloudTransaction.get(doc(db, "products", id))));
+        const liveProducts = new Map<string, any>();
+        snapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists()) throw new Error("A returned product is missing from the store catalog. Restore its product record first.");
+          liveProducts.set(productIds[index], { ...snapshot.data(), id: productIds[index] });
+        });
+
+        const nextProducts = new Map<string, any>();
+        const returnedLines: any[] = [];
+        let returnedSubtotal = 0;
+        let returnedCost = 0;
+        requested.forEach(({ item, itemId, productId, quantity, returnedBefore }) => {
+          const product = nextProducts.get(productId) || liveProducts.get(productId);
+          const fallbackCost = Number(item.buyPrice ?? item.cost_price ?? product.buyPrice ?? product.buy_price) || 0;
+          const allocations = getCostAllocationsForItem({
+            id: itemId, quantity: Number(item.quantity) || 0, buyPrice: fallbackCost,
+            costAllocations: item.costAllocations || item.cost_allocations || []
+          }, fallbackCost);
+          let skip = returnedBefore;
+          let remaining = quantity;
+          const selectedAllocations: any[] = [];
+          allocations.forEach((allocation: any) => {
+            if (remaining <= 0.000001) return;
+            const allocationQty = Number(allocation.quantity) || 0;
+            if (skip >= allocationQty - 0.000001) { skip -= allocationQty; return; }
+            const take = Math.min(Math.max(0, allocationQty - skip), remaining);
+            if (take > 0.000001) {
+              selectedAllocations.push({ ...allocation, id: `${allocation.id}-return-${returnId}`, quantity: take });
+              remaining -= take;
+            }
+            skip = 0;
+          });
+          if (remaining > 0.000001) throw new Error(`FIFO cost history is incomplete for ${item.name || "item"}; return stopped to protect stock valuation.`);
+          const lineCost = selectedAllocations.reduce((sum: number, allocation: any) =>
+            sum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0);
+          nextProducts.set(productId, restoreFifoCost(product, {
+            ...item, id: `return-${returnId}-${itemId}`, quantity,
+            buyPrice: quantity > 0 ? lineCost / quantity : fallbackCost,
+            costAllocations: selectedAllocations
+          }));
+          returnedCost += lineCost;
+          returnedSubtotal += quantity * (Number(item.price ?? item.sell_price) || 0);
+          returnedLines.push({
+            transactionItemId: itemId, productId, productName: item.name || item.product_name || "Product",
+            quantity, unitSellPrice: Number(item.price ?? item.sell_price) || 0,
+            returnedCost: lineCost, costAllocations: selectedAllocations
+          });
+        });
+
+        const subtotal = Number(liveInvoice.subtotal ?? localTx.subtotal) || 0;
+        const tax = Number(liveInvoice.tax_amount ?? liveInvoice.tax ?? localTx.tax) || 0;
+        const discount = Number(liveInvoice.discount ?? localTx.discount) || 0;
+        const total = Number(liveInvoice.total_amount ?? liveInvoice.total ?? localTx.total) || 0;
+        const paid = Number(liveInvoice.paid_amount ?? liveInvoice.paidAmount ?? localTx.paidAmount) || 0;
+        const originalSubtotal = Number(liveInvoice.original_subtotal ?? liveInvoice.originalSubtotal) || subtotal;
+        const originalTotal = Number(liveInvoice.original_total ?? liveInvoice.originalTotal) || total;
+        const originalTax = Number(liveInvoice.original_tax ?? liveInvoice.originalTax) || tax;
+        const originalDiscount = Number(liveInvoice.original_discount ?? liveInvoice.originalDiscount) || discount;
+        if (originalSubtotal <= 0) throw new Error("Invoice subtotal is missing; a safe return amount cannot be calculated.");
+
+        const taxReturn = roundMoney(returnedSubtotal * originalTax / originalSubtotal);
+        const discountReturn = roundMoney(returnedSubtotal * originalDiscount / originalSubtotal);
+        const refundAmount = roundMoney(returnedSubtotal + taxReturn - discountReturn);
+        if (refundAmount <= 0 || refundAmount > total + 0.01) throw new Error("Return value exceeds the remaining invoice total.");
+        const cashRefund = roundMoney(Math.min(paid, refundAmount));
+        const nextSubtotal = Math.max(0, roundMoney(subtotal - returnedSubtotal));
+        const nextTax = Math.max(0, roundMoney(tax - taxReturn));
+        const nextDiscount = Math.max(0, roundMoney(discount - discountReturn));
+        const nextTotal = Math.max(0, roundMoney(total - refundAmount));
+        const nextPaid = Math.max(0, roundMoney(paid - cashRefund));
+        const nextDue = Math.max(0, roundMoney(nextTotal - nextPaid));
+        const nextStatus = nextDue <= 0.005 ? "paid" : nextPaid > 0 ? "partial" : "due";
+        const returnRecord = {
+          id: returnId, date: returnDate, reason: request.reason, note: request.note,
+          refundMethod: request.refundMethod, subtotalAmount: roundMoney(returnedSubtotal),
+          taxAmount: taxReturn, discountAmount: discountReturn, refundAmount, cashRefund,
+          dueReduction: roundMoney(refundAmount - cashRefund), items: returnedLines,
+          createdAt: new Date().toISOString(), createdBy: activeUser.email || "Unknown user"
+        };
+        const nextReturns = [...returnHistory, returnRecord];
+        const existingRefunds = Array.isArray(liveInvoice.refund_history) ? liveInvoice.refund_history : (liveInvoice.refundHistory || []);
+        const nextRefunds = cashRefund > 0
+          ? [...existingRefunds, { id: `refund-${returnId}`, returnId, amount: cashRefund, date: returnDate, method: request.refundMethod }]
+          : existingRefunds;
+        const originalCogs = liveItems.reduce((sum: number, item: any) => {
+          const qty = Number(item.quantity) || 0;
+          const unitCost = getAverageCostFromAllocations({
+            quantity: qty, buyPrice: Number(item.buyPrice ?? item.cost_price) || 0,
+            costAllocations: item.costAllocations || item.cost_allocations || []
+          }, Number(item.buyPrice ?? item.cost_price) || 0);
+          return sum + unitCost * qty;
+        }, 0);
+        const allReturnedCogs = nextReturns.reduce((sum: number, entry: any) =>
+          sum + (entry.items || []).reduce((lineSum: number, line: any) =>
+            lineSum + (line.costAllocations || []).reduce((costSum: number, allocation: any) =>
+              costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0), 0), 0);
+        const nextProfit = Math.round((nextTotal - nextTax) - Math.max(0, originalCogs - allReturnedCogs));
+
+        cloudTransaction.update(transactionRef, {
+          original_subtotal: originalSubtotal, original_total: originalTotal, original_tax: originalTax, original_discount: originalDiscount,
+          originalSubtotal, originalTotal, originalTax, originalDiscount,
+          subtotal: nextSubtotal, tax: nextTax, tax_amount: nextTax, discount: nextDiscount,
+          total_amount: nextTotal, total: nextTotal, paid_amount: nextPaid, paidAmount: nextPaid,
+          due_balance: nextDue, dueBalance: nextDue, status: nextStatus,
+          return_history: nextReturns, returnHistory: nextReturns, refund_history: nextRefunds, refundHistory: nextRefunds,
+          vat_rate: Number((originalTax / originalSubtotal * 100).toFixed(2)), profit: nextProfit,
+          updated_at: new Date().toISOString()
+        });
+        nextProducts.forEach((product, productId) => {
+          const buyPrice = Number(product.buyPrice ?? product.buy_price) || 0;
+          const sellPrice = Number(product.sellPrice ?? product.sell_price) || 0;
+          cloudTransaction.update(doc(db, "products", productId), {
+            stock: Number(product.stock) || 0, costLots: product.costLots || [], cost_lots: product.costLots || [],
+            buyPrice, buy_price: buyPrice, sellPrice, sell_price: sellPrice, updated_at: new Date().toISOString()
+          });
+        });
+        return {
+          transaction: {
+            ...localTx, subtotal: nextSubtotal, tax: nextTax, discount: nextDiscount, total: nextTotal,
+            paidAmount: nextPaid, dueBalance: nextDue, status: nextStatus, returnHistory: nextReturns,
+            refundHistory: nextRefunds, originalSubtotal, originalTotal, originalTax, originalDiscount
+          },
+          products: Array.from(nextProducts.values())
+        };
+      });
+      setTransactions(prev => prev.map(tx => tx.id === request.transactionId ? result.transaction : tx));
+      setProducts(prev => prev.map(product => result.products.find((updated: any) => updated.id === product.id) || product));
+      triggerNotification(`Return recorded for invoice ${localTx.invoiceNo}. Stock, FIFO cost lots and customer balance were updated.`, "success");
+      return true;
+    } catch (error: any) {
+      triggerNotification(error?.message || "Sales return could not be saved. No cloud or stock changes were applied.", "error");
+      return false;
+    }
   };
 
   // -----------------------------------------------------------------
