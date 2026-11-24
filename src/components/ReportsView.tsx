@@ -264,8 +264,8 @@ export function ReportsView({
         if (!t || !t.date) return;
         const parsed = safeDate(t.date);
         if (!parsed) return;
-        const sortDate = safeFormat(parsed, "yyyy-MM-dd");
-        const d = safeFormat(parsed, "dd MMM");
+        const sortDate = safeFormat(parsed, filterType === "yearly" ? "yyyy-MM" : "yyyy-MM-dd");
+        const d = safeFormat(parsed, filterType === "yearly" ? "MMM" : "dd MMM");
         if (!sortDate || !d) return;
         if (!map[sortDate]) map[sortDate] = { date: d, sortDate, Sales: 0, Purchases: 0, Expenses: 0 };
         const tot = typeof t.total === "number" ? t.total : parseFloat(t.total) || 0;
@@ -280,8 +280,8 @@ export function ReportsView({
         if (!p || !p.date) return;
         const parsed = safeDate(p.date + "T12:00:00") || safeDate(p.date);
         if (!parsed) return;
-        const sortDate = safeFormat(parsed, "yyyy-MM-dd");
-        const d = safeFormat(parsed, "dd MMM");
+        const sortDate = safeFormat(parsed, filterType === "yearly" ? "yyyy-MM" : "yyyy-MM-dd");
+        const d = safeFormat(parsed, filterType === "yearly" ? "MMM" : "dd MMM");
         if (!sortDate || !d) return;
         if (!map[sortDate]) map[sortDate] = { date: d, sortDate, Sales: 0, Purchases: 0, Expenses: 0 };
         const tot = typeof p.totalAmount === "number" ? p.totalAmount : parseFloat(p.totalAmount) || 0;
@@ -296,8 +296,8 @@ export function ReportsView({
         if (!e || !e.date) return;
         const parsed = safeDate(e.date + "T12:00:00") || safeDate(e.date);
         if (!parsed) return;
-        const sortDate = safeFormat(parsed, "yyyy-MM-dd");
-        const d = safeFormat(parsed, "dd MMM");
+        const sortDate = safeFormat(parsed, filterType === "yearly" ? "yyyy-MM" : "yyyy-MM-dd");
+        const d = safeFormat(parsed, filterType === "yearly" ? "MMM" : "dd MMM");
         if (!sortDate || !d) return;
         if (!map[sortDate]) map[sortDate] = { date: d, sortDate, Sales: 0, Purchases: 0, Expenses: 0 };
         const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
@@ -307,8 +307,9 @@ export function ReportsView({
       }
     });
 
-    return Object.values(map).sort((a, b) => a.sortDate.localeCompare(b.sortDate)).slice(-10);
-  }, [filteredTransactions, filteredPurchases, filteredExpenses]);
+    const maxGroups = filterType === "yearly" ? 12 : 10;
+    return Object.values(map).sort((a, b) => a.sortDate.localeCompare(b.sortDate)).slice(-maxGroups);
+  }, [filteredTransactions, filteredPurchases, filteredExpenses, filterType]);
 
   // Expenses categories classification chart data
   const expenseCatChartData = useMemo(() => {
