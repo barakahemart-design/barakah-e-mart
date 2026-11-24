@@ -183,24 +183,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
     }
   });
 
-  const salaryPaidByDay = new Map<string, number>();
-  (Array.isArray(staffList) ? staffList : []).forEach((staff: any) => {
-    (Array.isArray(staff?.salaryPayments) ? staff.salaryPayments : []).filter((payment: any) => payment?.status === "paid").forEach((payment: any) => {
-      const date = String(payment?.paymentDate || "").slice(0, 10);
-      if (date) salaryPaidByDay.set(date, (salaryPaidByDay.get(date) || 0) + (Number(payment?.amount) || 0));
-    });
-  });
-  const manualSalaryByDay = new Map<string, number>();
-  (Array.isArray(expenses) ? expenses : []).filter((expense: any) => /salary|payroll/i.test(String(expense?.category || ""))).forEach((expense: any) => {
-    const date = String(expense?.date || "").slice(0, 10);
-    if (date) manualSalaryByDay.set(date, (manualSalaryByDay.get(date) || 0) + (Number(expense?.amount) || 0));
-  });
-  salaryPaidByDay.forEach((amount, date) => {
-    const manualAmount = manualSalaryByDay.get(date);
-    if (manualAmount !== undefined && Math.abs(roundMoney(amount) - roundMoney(manualAmount)) <= 0.02) {
-      issues.push({ id: `salary-duplicate-${date}`, invoiceNo: `Salary ${date}`, message: "Paid Staff Hub salaries match manual Salary expense totals for this date; confirm the two sources are not counted twice." });
-    }
-  });
+
 
   return issues;
 }
