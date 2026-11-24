@@ -740,6 +740,7 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
               discount: Number(t.discount) || 0,
               total: Number(t.total_amount) || 0,
               paymentMethod: t.payment_method || "Cash",
+              paymentHistory: Array.isArray(t.payment_history) ? t.payment_history : (Array.isArray(t.paymentHistory) ? t.paymentHistory : []),
               status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
               paidAmount: Number(t.paid_amount) || 0,
               dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
