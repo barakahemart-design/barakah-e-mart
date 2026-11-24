@@ -3323,7 +3323,42 @@ export default function App() {
 
       let nextP: any = prod;
       soldItems.forEach(soldItem => {
-        nextP = restoreFifoCost(nextP, soldItem);
+        const itemId = String(soldItem.firestoreId || soldItem.id || "");
+        const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+          .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
+          .filter((line: any) => String(line.transactionItemId) === itemId)
+          .reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
+        const soldQty = Math.max(0, Number(soldItem.quantity) || 0);
+        const remainingQty = Math.max(0, soldQty - returnedQty);
+        if (remainingQty <= 0.000001) return;
+        if (returnedQty > soldQty + 0.000001) {
+          throw new Error("Return history exceeds the original sold quantity. Invoice deletion was stopped to protect stock.");
+        }
+        const allocations = getCostAllocationsForItem(soldItem, Number(soldItem.buyPrice) || Number(prod.buyPrice) || 0);
+        let skip = returnedQty;
+        let remaining = remainingQty;
+        const remainingAllocations: any[] = [];
+        allocations.forEach((allocation: any) => {
+          if (remaining <= 0.000001) return;
+          const allocationQty = Number(allocation.quantity) || 0;
+          if (skip >= allocationQty - 0.000001) { skip -= allocationQty; return; }
+          const take = Math.min(Math.max(0, allocationQty - skip), remaining);
+          if (take > 0.000001) remainingAllocations.push({ ...allocation, quantity: take });
+          remaining -= take;
+          skip = 0;
+        });
+        if (remaining > 0.000001) {
+          throw new Error("FIFO return allocation history is incomplete. Invoice deletion was stopped to protect stock valuation.");
+        }
+        const remainingItem = {
+          ...soldItem,
+          quantity: remainingQty,
+          costAllocations: remainingAllocations,
+          buyPrice: remainingQty > 0
+            ? remainingAllocations.reduce((sum: number, allocation: any) => sum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) / remainingQty
+            : Number(soldItem.buyPrice) || 0
+        };
+        nextP = restoreFifoCost(nextP, remainingItem);
       });
       return nextP;
     });
@@ -3392,6 +3427,10 @@ export default function App() {
     }
     const originalTx = transactions.find(t => t.id === id);
     if (!originalTx) return false;
+    if (Array.isArray(originalTx.returnHistory) && originalTx.returnHistory.length > 0) {
+      triggerNotification("This invoice already has processed returns. Its original lines and amounts are locked to preserve return and refund history.", "error");
+      return false;
+    }
 
     // Give each invoice line a stable identity independent of its product/model ID.
     const ensureUniqueLineIdentities = (sourceItems: any[]) => {
@@ -3918,7 +3957,17 @@ export default function App() {
         };
       });
       setTransactions(prev => prev.map(tx => tx.id === request.transactionId ? result.transaction : tx));
-      setProducts(prev => prev.map(product => result.products.find((updated: any) => updated.id === product.id) || product));
+      setProducts(prev => prev.map(product => {
+        const updated = result.products.find((candidate: any) => candidate.id === product.id);
+        return updated ? {
+          ...product,
+          ...updated,
+          buyPrice: Number(updated.buyPrice ?? updated.buy_price ?? product.buyPrice) || 0,
+          sellPrice: Number(updated.sellPrice ?? updated.sell_price ?? product.sellPrice) || 0,
+          imageUrl: updated.imageUrl || updated.image_url || product.imageUrl,
+          costLots: updated.costLots || updated.cost_lots || product.costLots
+        } : product;
+      }));
       triggerNotification(`Return recorded for invoice ${localTx.invoiceNo}. Stock, FIFO cost lots and customer balance were updated.`, "success");
       return true;
     } catch (error: any) {
