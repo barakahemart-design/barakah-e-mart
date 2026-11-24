@@ -1146,6 +1146,7 @@ export default function App() {
           discount: Number(t.discount) || 0,
           total: Number(t.total_amount) || 0,
           paymentMethod: t.payment_method || "Cash",
+          paymentHistory: Array.isArray(t.payment_history) ? t.payment_history : (Array.isArray(t.paymentHistory) ? t.paymentHistory : []),
           status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
           paidAmount: Number(t.paid_amount) || 0,
           dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
@@ -1327,6 +1328,7 @@ export default function App() {
         vat_rate: Number(docData.vat_rate) || 0,
         paid_amount: Number(docData.paid_amount) || 0,
         payment_method: docData.payment_method || "Cash",
+        payment_history: Array.isArray(docData.payment_history) ? docData.payment_history : (Array.isArray(docData.paymentHistory) ? docData.paymentHistory : []),
         signature_svg: docData.signature_svg || null,
         created_at: docData.created_at || new Date().toISOString()
       }));
@@ -3541,6 +3543,7 @@ export default function App() {
           vat_rate: Number(taxRate.toFixed(2)),
           paid_amount: Number(paidAmount) || 0,
           payment_method: targetTx.paymentMethod || targetTx.payment_method || "Cash",
+          payment_history: targetTx.paymentHistory || [],
           signature_svg: targetTx.customerSignature || targetTx.signature_svg || null,
           created_at: targetTx.date || targetTx.created_at || new Date().toISOString()
         };
@@ -3638,6 +3641,7 @@ export default function App() {
         discount: Number(discount) || 0,
         paid_amount: Number(paidAmount) || 0,
         paidAmount: Number(paidAmount) || 0,
+        payment_history: targetTx.paymentHistory || [],
         due_balance: Number(dueBalance) || 0,
         dueBalance: Number(dueBalance) || 0,
         status: status,
