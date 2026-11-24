@@ -3295,12 +3295,6 @@ export default function App() {
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
-    try {
-      await removeDeliveryAssignmentsForTransactions([t.firestoreId ?? t.id, t.id]);
-    } catch (error) {
-      console.warn("[Ledger] Linked delivery assignment cleanup will retry on Delivery Management load:", error);
-    }
-
     // Restore each sold unit to the same FIFO lot it originally came from.
     const restoredProducts = products.map(prod => {
       const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
@@ -3332,6 +3326,12 @@ export default function App() {
         triggerNotification(error?.message || "Invoice could not be deleted safely. No stock changes were applied.", "error");
         return;
       }
+    }
+
+    try {
+      await removeDeliveryAssignmentsForTransactions([t.firestoreId ?? t.id, t.id]);
+    } catch (error) {
+      console.warn("[Ledger] Linked delivery assignment cleanup will retry on Delivery Management load:", error);
     }
 
     setProducts(restoredProducts);
