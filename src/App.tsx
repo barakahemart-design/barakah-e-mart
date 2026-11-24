@@ -1108,7 +1108,10 @@ export default function App() {
             productId: item.product_id || undefined,
             category: item.category || "",
             buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
-            costAllocations: item.cost_allocations || item.costAllocations || undefined
+            costAllocations: item.cost_allocations || item.costAllocations || undefined,
+            isNegativeSale: item.is_negative_sale === true || item.isNegativeSale === true,
+            isNegativeSaleApproved: item.is_negative_sale_approved === true || item.isNegativeSaleApproved === true,
+            negativeSaleUpdated: item.is_negative_sale_approved === true || item.negativeSaleUpdated === true
           }));
         } else {
           // Keep existing items if present locally or in t.items to protect against incomplete collections snapshot
@@ -1120,14 +1123,25 @@ export default function App() {
           }
         }
 
+        const resolvedSubtotal = t.subtotal !== undefined && t.subtotal !== null
+          ? Number(t.subtotal) || 0
+          : mappedItems.length > 0
+            ? mappedItems.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0)
+            : Number(t.total_amount) || 0;
+        const resolvedTax = t.tax_amount !== undefined && t.tax_amount !== null
+          ? Number(t.tax_amount) || 0
+          : t.tax !== undefined && t.tax !== null
+            ? Number(t.tax) || 0
+            : Math.round(resolvedSubtotal * (Number(t.vat_rate) || 0) / 100);
+
         rebuiltList.push({
           id: t.id,
           firestoreId: t.firestoreId,
           invoiceNo: t.invoice_no,
           date: t.created_at || new Date().toISOString(),
           items: mappedItems,
-          subtotal: Number(t.total_amount) || 0,
-          tax: t.vat_rate ? Number(((t.total_amount * t.vat_rate) / 100).toFixed(2)) : 0,
+          subtotal: resolvedSubtotal,
+          tax: resolvedTax,
           discount: Number(t.discount) || 0,
           total: Number(t.total_amount) || 0,
           paymentMethod: t.payment_method || "Cash",
@@ -1304,6 +1318,10 @@ export default function App() {
         invoice_no: docData.invoice_no,
         customer_id: docData.customer_id || null,
         total_amount: Number(docData.total_amount) || 0,
+        subtotal: docData.subtotal !== undefined && docData.subtotal !== null ? Number(docData.subtotal) || 0 : undefined,
+        tax_amount: docData.tax_amount !== undefined && docData.tax_amount !== null
+          ? Number(docData.tax_amount) || 0
+          : docData.tax !== undefined && docData.tax !== null ? Number(docData.tax) || 0 : undefined,
         discount: Number(docData.discount) || 0,
         vat_rate: Number(docData.vat_rate) || 0,
         paid_amount: Number(docData.paid_amount) || 0,
@@ -1330,7 +1348,9 @@ export default function App() {
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
         cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
-        cost_allocations: docData.cost_allocations || docData.costAllocations || undefined
+        cost_allocations: docData.cost_allocations || docData.costAllocations || undefined,
+        is_negative_sale: docData.is_negative_sale === true || docData.isNegativeSale === true,
+        is_negative_sale_approved: docData.is_negative_sale_approved === true || docData.isNegativeSaleApproved === true
       }));
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
