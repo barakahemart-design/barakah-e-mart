@@ -228,11 +228,6 @@ export function ReportsView({
     filteredTransactions.forEach(t => {
       if (!t) return;
       if (Array.isArray(t.items)) {
-        const invoiceGrossItems = t.items.reduce((sum: number, line: any) =>
-          sum + (Number(line?.price) || 0) * (Number(line?.quantity) || 0), 0);
-        const invoiceTotal = Number(t.total) || 0;
-        const revenueAllocationFactor = invoiceGrossItems > 0 ? invoiceTotal / invoiceGrossItems : 1;
-
         t.items.forEach((item: any) => {
           if (!item) return;
           const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
@@ -433,6 +428,11 @@ export function ReportsView({
       }
 
       if (Array.isArray(t.items)) {
+        const invoiceGrossItems = t.items.reduce((sum: number, line: any) =>
+          sum + (Number(line?.price) || 0) * (Number(line?.quantity) || 0), 0);
+        const invoiceTotal = Number(t.total) || 0;
+        const revenueAllocationFactor = invoiceGrossItems > 0 ? invoiceTotal / invoiceGrossItems : 1;
+
         t.items.forEach((item: any) => {
           if (!item) return;
           // Resolve standard item buy price preferring updated item cost price first
