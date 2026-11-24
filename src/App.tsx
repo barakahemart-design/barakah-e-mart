@@ -101,6 +101,7 @@ import { CreditorDueView } from "./components/CreditorDueView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { DeliveryManagementView } from "./components/DeliveryManagementView";
 import { DeliveryDriverView } from "./components/DeliveryDriverView";
+import { SalesReturnsView } from "./components/SalesReturnsView";
 import { 
   INITIAL_PRODUCTS,
   INITIAL_CONTACTS,
@@ -217,6 +218,12 @@ export interface Transaction {
   contactId?: string;
   customerSignature?: string;
   paymentHistory?: Array<{ id: string; amount: number; date: string; recordedAt?: string }>;
+  returnHistory?: any[];
+  refundHistory?: Array<{ id: string; amount: number; date: string; method: string; returnId: string }>;
+  originalSubtotal?: number;
+  originalTotal?: number;
+  originalTax?: number;
+  originalDiscount?: number;
 }
 
 export interface BusinessInfo {
@@ -1149,6 +1156,12 @@ export default function App() {
           total: Number(t.total_amount) || 0,
           paymentMethod: t.payment_method || "Cash",
           paymentHistory: Array.isArray(t.payment_history) ? t.payment_history : (Array.isArray(t.paymentHistory) ? t.paymentHistory : []),
+          returnHistory: Array.isArray(t.return_history) ? t.return_history : (Array.isArray(t.returnHistory) ? t.returnHistory : (localNested.find((row: any) => row.id === t.id)?.returnHistory || [])),
+          refundHistory: Array.isArray(t.refund_history) ? t.refund_history : (Array.isArray(t.refundHistory) ? t.refundHistory : (localNested.find((row: any) => row.id === t.id)?.refundHistory || [])),
+          originalSubtotal: t.original_subtotal !== undefined ? Number(t.original_subtotal) : (t.originalSubtotal !== undefined ? Number(t.originalSubtotal) : undefined),
+          originalTotal: t.original_total !== undefined ? Number(t.original_total) : (t.originalTotal !== undefined ? Number(t.originalTotal) : undefined),
+          originalTax: t.original_tax !== undefined ? Number(t.original_tax) : (t.originalTax !== undefined ? Number(t.originalTax) : undefined),
+          originalDiscount: t.original_discount !== undefined ? Number(t.original_discount) : (t.originalDiscount !== undefined ? Number(t.originalDiscount) : undefined),
           status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
           paidAmount: Number(t.paid_amount) || 0,
           dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
@@ -1331,6 +1344,12 @@ export default function App() {
         paid_amount: Number(docData.paid_amount) || 0,
         payment_method: docData.payment_method || "Cash",
         payment_history: Array.isArray(docData.payment_history) ? docData.payment_history : (Array.isArray(docData.paymentHistory) ? docData.paymentHistory : []),
+        return_history: Array.isArray(docData.return_history) ? docData.return_history : (Array.isArray(docData.returnHistory) ? docData.returnHistory : []),
+        refund_history: Array.isArray(docData.refund_history) ? docData.refund_history : (Array.isArray(docData.refundHistory) ? docData.refundHistory : []),
+        original_subtotal: docData.original_subtotal ?? docData.originalSubtotal,
+        original_total: docData.original_total ?? docData.originalTotal,
+        original_tax: docData.original_tax ?? docData.originalTax,
+        original_discount: docData.original_discount ?? docData.originalDiscount,
         signature_svg: docData.signature_svg || null,
         created_at: docData.created_at || new Date().toISOString()
       }));
