@@ -77,6 +77,7 @@ interface ReportsViewProps {
   products?: any[];
   transactions?: any[];
   expenses?: any[];
+  additionalExpenses?: any[];
   purchases?: any[];
   contacts?: any[];
   businessInfo?: any;
@@ -87,6 +88,7 @@ export function ReportsView({
   products = [],
   transactions = [],
   expenses = [],
+  additionalExpenses = [],
   purchases = [],
   contacts = [],
   businessInfo,
@@ -94,7 +96,13 @@ export function ReportsView({
 }: ReportsViewProps) {
   const safeProducts = Array.isArray(products) ? products : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
-  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  const baseExpenses = Array.isArray(expenses) ? expenses : [];
+  const extraExpenses = Array.isArray(additionalExpenses) ? additionalExpenses : [];
+  const knownExpenseIds = new Set(baseExpenses.map((expense: any) => expense?.id).filter(Boolean));
+  const safeExpenses = [
+    ...baseExpenses,
+    ...extraExpenses.filter((expense: any) => !expense?.id || !knownExpenseIds.has(expense.id))
+  ];
   const safePurchases = Array.isArray(purchases) ? purchases : [];
   const safeContacts = Array.isArray(contacts) ? contacts : [];
 
