@@ -488,9 +488,9 @@ export function ReportsView({
       quantity: number;
       salePrice: number;
       totalRevenue: number;
-      totalCogs: number;
-      netProfit: number;
-      profitMarginPct: number;
+      totalCogs: number | null;
+      netProfit: number | null;
+      profitMarginPct: number | null;
     }> = [];
 
     // Sort transactions from newest to oldest safely
@@ -539,7 +539,7 @@ export function ReportsView({
           if (!item) return;
           // Resolve standard item buy price preferring updated item cost price first
           const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
-          const buyCost = getItemBuyCost(item, dbProduct);
+          const buyCost = getItemBuyCost(item);
 
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
           const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
@@ -548,18 +548,16 @@ export function ReportsView({
             .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
             .filter((line: any) => String(line.transactionItemId) === itemId);
           const returnedQty = returnedLines.reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
-          const returnedCost = returnedLines.reduce((sum: number, line: any) => {
-            if (Number.isFinite(Number(line.returnedCost))) return sum + Math.max(0, Number(line.returnedCost));
-            return sum + (Array.isArray(line.costAllocations) ? line.costAllocations.reduce((costSum: number, allocation: any) =>
-              costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) : 0);
-          }, 0);
+          const returnedCost = getReturnedItemCost(returnedLines);
           const netQty = Math.max(0, qty - returnedQty);
           // Allocate net sales (after invoice discount and excluding VAT) to
-          // the unreturned quantity; subtract the returned FIFO cost.
+          // the unreturned quantity. Missing historical cost stays explicitly unknown.
           const totalRevenue = price * netQty * revenueAllocationFactor;
-          const totalCogs = Math.max(0, buyCost * qty - returnedCost);
-          const netProfit = totalRevenue - totalCogs;
-          const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+          const totalCogs = buyCost === null || (returnedQty > 0 && returnedCost === null)
+            ? null
+            : Math.max(0, buyCost * qty - (returnedCost || 0));
+          const netProfit = totalCogs === null ? null : totalRevenue - totalCogs;
+          const profitMarginPct = totalRevenue > 0 && netProfit !== null ? (netProfit / totalRevenue) * 100 : null;
 
           list.push({
             date: txDateStr,
@@ -986,7 +984,7 @@ export function ReportsView({
                   cx="50"
                   cy="50"
                   r="40"
-                  stroke={netProfitMarginPct >= 20 ? "#00E676" : netProfitMarginPct >= 5 ? "#00B0FF" : netProfitMarginPct > 0 ? "#FFC400" : "#FF1744"}
+                  stroke={netProfitMarginPct === null ? "#FFC400" : netProfitMarginPct >= 20 ? "#00E676" : netProfitMarginPct >= 5 ? "#00B0FF" : netProfitMarginPct > 0 ? "#FFC400" : "#FF1744"}
                   strokeWidth="8"
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 40}`}
@@ -996,7 +994,7 @@ export function ReportsView({
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 <span className="text-base font-black font-mono text-white leading-none">
-                  {netProfitMarginPct.toFixed(1)}%
+                  {netProfitMarginPct === null ? "N/A" : `${netProfitMarginPct.toFixed(1)}%`}
                 </span>
                 <span className="text-[7px] font-mono text-[#A0A0A5] font-extrabold uppercase mt-1 tracking-wider leading-none">
                   Margin Rate
@@ -1094,7 +1092,7 @@ export function ReportsView({
                 }
 
                 return filteredList.map((p, idx) => {
-                  const isProfitPositive = p.netProfit >= 0;
+                  const isProfitPositive = p.netProfit !== null && p.netProfit >= 0;
                   return (
                     <tr key={idx} className="hover:bg-[#121214]/30 transition-colors">
                       <td className="py-3.5 px-4 font-mono text-slate-400">
@@ -1125,14 +1123,14 @@ export function ReportsView({
                         {currencySymbol}{p.salePrice.toLocaleString()}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono text-slate-400">
-                        {currencySymbol}{p.totalCogs.toLocaleString()}
+                        {p.totalCogs === null ? "Missing cost" : `${currencySymbol}${p.totalCogs.toLocaleString()}`}
                       </td>
                       <td className={`py-3.5 px-4 text-right font-mono font-extrabold ${isProfitPositive ? "text-[#00E676]" : "text-rose-500"}`}>
-                        {isProfitPositive ? "+" : ""}{currencySymbol}{Math.round(p.netProfit).toLocaleString()}
+                        {p.netProfit === null ? "N/A" : `${isProfitPositive ? "+" : ""}${currencySymbol}${Math.round(p.netProfit).toLocaleString()}`}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${isProfitPositive ? "bg-emerald-950/40 text-emerald-400 border border-emerald-950" : "bg-rose-950/40 text-rose-400 border border-rose-950"}`}>
-                          {p.profitMarginPct.toFixed(1)}%
+                          {p.profitMarginPct === null ? "N/A" : `${p.profitMarginPct.toFixed(1)}%`}
                         </span>
                       </td>
                     </tr>
