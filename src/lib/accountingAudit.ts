@@ -16,7 +16,7 @@ const roundMoney = (value: number) => Math.round(value * 100) / 100;
  * Read-only consistency checks over records already loaded by the app's
  * existing Firestore listeners. This function performs no reads or writes.
  */
-export function auditAccountingRecords(transactions: any[] = []): AccountingAuditIssue[] {
+export function auditAccountingRecords(transactions: any[] = [], products: any[] = [], purchases: any[] = [], expenses: any[] = [], staffList: any[] = []): AccountingAuditIssue[] {
   const issues: AccountingAuditIssue[] = [];
   const seenInvoices = new Set<string>();
 
@@ -95,14 +95,50 @@ export function auditAccountingRecords(transactions: any[] = []): AccountingAudi
       }
     }
 
+    const returnHistory = Array.isArray(transaction.returnHistory) ? transaction.returnHistory : [];
     const returnedByLine = new Map<string, number>();
-    (Array.isArray(transaction.returnHistory) ? transaction.returnHistory : []).forEach((entry: any) => {
+    returnHistory.forEach((entry: any) => {
+      const calculatedRefund = roundMoney(
+        (asFiniteNumber(entry?.subtotalAmount) || 0) +
+        (asFiniteNumber(entry?.taxAmount) || 0) -
+        (asFiniteNumber(entry?.discountAmount) || 0)
+      );
+      const savedRefund = asFiniteNumber(entry?.refundAmount);
+      if (savedRefund !== null && Math.abs(calculatedRefund - savedRefund) > 0.02) {
+        issues.push({
+          id: `return-value-${transaction.id || index}-${entry.id || returnHistory.indexOf(entry)}`,
+          invoiceNo,
+          message: "Return amount does not reconcile after its proportional VAT and discount adjustment."
+        });
+      }
       (Array.isArray(entry?.items) ? entry.items : []).forEach((line: any) => {
         const lineId = String(line?.transactionItemId || "");
         if (!lineId) return;
         returnedByLine.set(lineId, (returnedByLine.get(lineId) || 0) + (Number(line?.quantity) || 0));
       });
     });
+
+    const refundHistory = Array.isArray(transaction.refundHistory) ? transaction.refundHistory : [];
+    const refundTotal = refundHistory.reduce((sum: number, refund: any) => sum + Math.max(0, Number(refund?.amount) || 0), 0);
+    const returnCashTotal = returnHistory.reduce((sum: number, entry: any) => sum + Math.max(0, Number(entry?.cashRefund) || 0), 0);
+    if (Math.abs(roundMoney(refundTotal) - roundMoney(returnCashTotal)) > 0.02) {
+      issues.push({
+        id: `refund-history-${transaction.id || index}`,
+        invoiceNo,
+        message: "Cash refund history does not match the cash refund amounts saved in return records."
+      });
+    }
+    if (refundTotal > 0) {
+      const paymentHistory = Array.isArray(transaction.paymentHistory) ? transaction.paymentHistory : [];
+      const recordedCollections = paymentHistory.reduce((sum: number, payment: any) => sum + Math.max(0, Number(payment?.amount) || 0), 0);
+      if (paymentHistory.length > 0 && refundTotal > recordedCollections + 0.02) {
+        issues.push({
+          id: `refund-over-collection-${transaction.id || index}`,
+          invoiceNo,
+          message: "Cash refunds exceed the collection amounts recorded in payment history. Verify the original payment record."
+        });
+      }
+    }
     items.forEach((item: any, itemIndex: number) => {
       const lineId = String(item?.firestoreId || item?.id || `${transaction.id}_item_${itemIndex}`);
       const returned = returnedByLine.get(lineId) || 0;
@@ -115,6 +151,56 @@ export function auditAccountingRecords(transactions: any[] = []): AccountingAudi
         });
       }
     });
+  });
+
+  const productIds = new Set((Array.isArray(products) ? products : []).map(product => String(product?.id || "")));
+  (Array.isArray(products) ? products : []).forEach((product: any, index: number) => {
+    const productName = String(product?.name || product?.id || `Product ${index + 1}`);
+    const stock = asFiniteNumber(product?.stock);
+    if (stock !== null && stock < -0.000001) {
+      issues.push({ id: `negative-stock-${product.id || index}`, invoiceNo: productName, message: "Product currently has negative stock; reconcile outstanding Minus Sale quantities." });
+    }
+    const lots = Array.isArray(product?.costLots) ? product.costLots : (Array.isArray(product?.cost_lots) ? product.cost_lots : []);
+    if (lots.length > 0 && stock !== null && stock >= 0 && product?.hasNegativeSale !== true) {
+      const lotQuantity = lots.reduce((sum: number, lot: any) => sum + Math.max(0, Number(lot?.remainingQuantity) || 0), 0);
+      if (Math.abs(lotQuantity - stock) > 0.02) {
+        issues.push({ id: `fifo-stock-${product.id || index}`, invoiceNo: productName, message: `FIFO remaining lots (${roundMoney(lotQuantity)}) do not match product stock (${roundMoney(stock)}). Check manual stock adjustments and purchase lots.` });
+      }
+    }
+  });
+
+  (Array.isArray(purchases) ? purchases : []).forEach((purchase: any, index: number) => {
+    const quantity = asFiniteNumber(purchase?.quantity);
+    const buyPrice = asFiniteNumber(purchase?.buyPrice ?? purchase?.buy_price ?? purchase?.unitPrice);
+    const total = asFiniteNumber(purchase?.totalAmount ?? purchase?.total_amount);
+    const purchaseNo = String(purchase?.invoiceNo || purchase?.invoice_no || purchase?.id || `Purchase ${index + 1}`);
+    if (quantity !== null && buyPrice !== null && total !== null && quantity > 0 && Math.abs(roundMoney(quantity * buyPrice) - roundMoney(total)) > 1.5) {
+      issues.push({ id: `purchase-total-${purchase.id || index}`, invoiceNo: purchaseNo, message: "Purchase quantity × unit buy price does not match its saved total." });
+    }
+    const cashPaid = asFiniteNumber(purchase?.cashPaid ?? purchase?.cash_paid);
+    const due = asFiniteNumber(purchase?.dueAmount ?? purchase?.due_amount);
+    if (total !== null && cashPaid !== null && due !== null && Math.abs(roundMoney(Math.max(0, total - cashPaid)) - roundMoney(due)) > 1.5) {
+      issues.push({ id: `purchase-due-${purchase.id || index}`, invoiceNo: purchaseNo, message: "Supplier paid amount plus due does not reconcile to the purchase total." });
+    }
+  });
+
+  const salaryPaidByDay = new Map<string, number>();
+  (Array.isArray(staffList) ? staffList : []).forEach((staff: any) => {
+    (Array.isArray(staff?.salaryPayments) ? staff.salaryPayments : []).filter((payment: any) => payment?.status === "paid").forEach((payment: any) => {
+      const date = String(payment?.paymentDate || "").slice(0, 10);
+      if (date) salaryPaidByDay.set(date, (salaryPaidByDay.get(date) || 0) + (Number(payment?.amount) || 0));
+    });
+  });
+  const manualSalaryByDay = new Map<string, number>();
+  (Array.isArray(expenses) ? expenses : []).filter((expense: any) => /salary|payroll/i.test(String(expense?.category || ""))).forEach((expense: any) => {
+    const date = String(expense?.date || "").slice(0, 10);
+    if (date) manualSalaryByDay.set(date, (manualSalaryByDay.get(date) || 0) + (Number(expense?.amount) || 0));
+  });
+  salaryPaidByDay.forEach((amount, date) => {
+    const manualAmount = manualSalaryByDay.get(date);
+    if (manualAmount !== undefined && Math.abs(roundMoney(amount) - roundMoney(manualAmount)) <= 0.02) {
+      issues.push({ id: `salary-duplicate-${date}`, invoiceNo: `Salary ${date}`, message: "Paid Staff Hub salaries match manual Salary expense totals for this date; confirm the two sources are not counted twice." });
+    }
   });
 
   return issues;
