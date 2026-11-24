@@ -3295,22 +3295,10 @@ export default function App() {
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
-    await deleteCloudDocument("transactions", t.firestoreId ?? t.id);
     try {
       await removeDeliveryAssignmentsForTransactions([t.firestoreId ?? t.id, t.id]);
     } catch (error) {
       console.warn("[Ledger] Linked delivery assignment cleanup will retry on Delivery Management load:", error);
-    }
-
-    if (activeUser && !activeUser.isGuest) {
-      deleteTransaction(id).catch(err => {});
-      if (Array.isArray(t.items)) {
-        t.items.forEach(item => {
-          if (item.id) {
-            deleteDoc(doc(db, "transaction_items", item.firestoreId || item.id)).catch(err => {});
-          }
-        });
-      }
     }
 
     // Restore each sold unit to the same FIFO lot it originally came from.
@@ -3324,11 +3312,27 @@ export default function App() {
       soldItems.forEach(soldItem => {
         nextP = restoreFifoCost(nextP, soldItem);
       });
-      if (activeUser && !activeUser.isGuest) {
-        saveProduct(activeUser.uid, nextP).catch(err => {});
-      }
       return nextP;
     });
+
+    if (activeUser && !activeUser.isGuest) {
+      const productsToPersist = restoredProducts
+        .filter((product, index) => product !== products[index])
+        .map(product => ({ id: product.id, data: product }));
+      try {
+        await deleteInvoiceAndRestoreBatch({
+          transactionId: t.id,
+          transactionDocId: t.firestoreId || t.id,
+          itemIds: (Array.isArray(t.items) ? t.items : [])
+            .map(item => item.firestoreId || item.id)
+            .filter(Boolean),
+          products: productsToPersist
+        });
+      } catch (error: any) {
+        triggerNotification(error?.message || "Invoice could not be deleted safely. No stock changes were applied.", "error");
+        return;
+      }
+    }
 
     setProducts(restoredProducts);
     setTransactions(transactions.filter(item => item.id !== id));
