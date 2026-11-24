@@ -303,11 +303,23 @@ function assertProductVersion(current: Record<string, any>, expected?: Record<st
   if (!expected) return;
   const currentStock = Number(current.stock) || 0;
   const expectedStock = Number(expected.stock) || 0;
+  const currentBuyPrice = Number(current.buyPrice ?? current.buy_price) || 0;
+  const expectedBuyPrice = Number(expected.buyPrice ?? expected.buy_price) || 0;
+  const currentSellPrice = Number(current.sellPrice ?? current.sell_price) || 0;
+  const expectedSellPrice = Number(expected.sellPrice ?? expected.sell_price) || 0;
+  const currentUpdatedAt = String(current.updated_at ?? current.updatedAt ?? '');
+  const expectedUpdatedAt = String(expected.updated_at ?? expected.updatedAt ?? '');
   const currentLots = Array.isArray(current.costLots) ? current.costLots : (Array.isArray(current.cost_lots) ? current.cost_lots : []);
   const expectedLots = Array.isArray(expected.costLots) ? expected.costLots : (Array.isArray(expected.cost_lots) ? expected.cost_lots : []);
   const fingerprint = (lots: any[]) => JSON.stringify(lots.map(lot => ({ id: String(lot.id || lot.lotId || ''), remaining: Number(lot.remainingQuantity) || 0, unitCost: Number(lot.unitCost) || 0 })).sort((a, b) => a.id.localeCompare(b.id)));
-  if (Math.abs(currentStock - expectedStock) > 0.000001 || fingerprint(currentLots) !== fingerprint(expectedLots)) {
-    throw new Error('Product stock or FIFO lots changed on another device. Refresh the product and retry; no newer stock was overwritten.');
+  if (
+    Math.abs(currentStock - expectedStock) > 0.000001 ||
+    Math.abs(currentBuyPrice - expectedBuyPrice) > 0.000001 ||
+    Math.abs(currentSellPrice - expectedSellPrice) > 0.000001 ||
+    (currentUpdatedAt && expectedUpdatedAt && currentUpdatedAt !== expectedUpdatedAt) ||
+    fingerprint(currentLots) !== fingerprint(expectedLots)
+  ) {
+    throw new Error('Product stock, cost, price or FIFO lots changed on another device. Refresh the product and retry; no newer product data was overwritten.');
   }
 }
 
