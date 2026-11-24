@@ -1007,29 +1007,115 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         });
 
         const stockRemaining = new Map<string, number>();
+        const lotsByProduct = new Map<string, any[]>();
         const negativeProductIds = new Set<string>();
+        const productIds = Array.from(quantityByProduct.keys());
+
+        productIds.forEach(productId => {
+          const productData = productDataById.get(productId) || {};
+          const stock = Math.max(0, Number(productData.stock) || 0);
+          const rawLots = Array.isArray(productData.costLots) ? productData.costLots : (Array.isArray(productData.cost_lots) ? productData.cost_lots : []);
+          const lots = rawLots.map((lot: any, index: number) => ({
+            id: String(lot?.id || `legacy-lot-${index}`),
+            ...(lot?.purchaseId ? { purchaseId: String(lot.purchaseId) } : {}),
+            source: String(lot?.source || "purchase"),
+            receivedAt: String(lot?.receivedAt || "1970-01-01T00:00:00.000Z"),
+            receivedQuantity: Math.max(0, Number(lot?.receivedQuantity ?? lot?.remainingQuantity) || 0),
+            remainingQuantity: Math.max(0, Number(lot?.remainingQuantity) || 0),
+            unitCost: Math.max(0, Number(lot?.unitCost) || 0)
+          }));
+          if (lots.length === 0 && stock > 0) {
+            lots.push({
+              id: `opening-${productId}`, source: "opening",
+              receivedAt: "1970-01-01T00:00:00.000Z",
+              receivedQuantity: stock, remainingQuantity: stock,
+              unitCost: Math.max(0, Number(productData.buyPrice ?? productData.buy_price) || 0)
+            });
+          }
+          const lotQuantity = lots.reduce((sum: number, lot: any) => sum + lot.remainingQuantity, 0);
+          if (lotQuantity + 0.000001 < stock) {
+            const gap = stock - lotQuantity;
+            lots.push({
+              id: `reconciliation-${productId}`, source: "reconciliation",
+              receivedAt: new Date().toISOString(), receivedQuantity: gap,
+              remainingQuantity: gap,
+              unitCost: Math.max(0, Number(productData.buyPrice ?? productData.buy_price) || 0)
+            });
+          } else if (lotQuantity > stock + 0.000001) {
+            let excess = lotQuantity - stock;
+            [...lots].sort((a: any, b: any) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
+              .forEach((lot: any) => {
+                if (excess <= 0.000001) return;
+                const trim = Math.min(lot.remainingQuantity, excess);
+                lot.remainingQuantity -= trim;
+                excess -= trim;
+              });
+          }
+          lotsByProduct.set(productId, lots);
+          stockRemaining.set(productId, Number(productData.stock) || 0);
+        });
+
         const enrichedItems = normalizedItems.map((entry: any) => {
           const item = entry.data || {};
           const productId = String(item.product_id || "");
-          const currentStock = stockRemaining.has(productId)
-            ? Number(stockRemaining.get(productId)) || 0
-            : Number(productDataById.get(productId)?.stock) || 0;
+          const productData = productDataById.get(productId) || {};
+          const currentStock = Number(stockRemaining.get(productId)) || 0;
           const quantity = Number(item.quantity) || 0;
           const isNegativeSale = currentStock < quantity;
           if (isNegativeSale) negativeProductIds.add(productId);
           stockRemaining.set(productId, currentStock - quantity);
+
+          const lots = lotsByProduct.get(productId) || [];
+          let remainingToAllocate = Math.min(quantity, Math.max(0, currentStock));
+          const allocations: any[] = [];
+          [...lots].sort((a: any, b: any) => {
+            const dateDiff = new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime();
+            return dateDiff || a.id.localeCompare(b.id);
+          }).forEach((lot: any) => {
+            if (remainingToAllocate <= 0.000001 || lot.remainingQuantity <= 0.000001) return;
+            const take = Math.min(lot.remainingQuantity, remainingToAllocate);
+            lot.remainingQuantity -= take;
+            remainingToAllocate -= take;
+            allocations.push({
+              id: `alloc-${entry.id}-${allocations.length + 1}`,
+              lotId: lot.id,
+              ...(lot.purchaseId ? { purchaseId: lot.purchaseId } : {}),
+              source: lot.source,
+              quantity: take,
+              unitCost: lot.unitCost
+            });
+          });
+          const allocatedQuantity = allocations.reduce((sum: number, allocation: any) => sum + allocation.quantity, 0);
+          const unallocatedQuantity = Math.max(0, quantity - allocatedQuantity);
+          if (unallocatedQuantity > 0.000001) {
+            allocations.push({
+              id: `unallocated-${entry.id}`, source: "unallocated",
+              quantity: unallocatedQuantity,
+              unitCost: Math.max(0, Number(productData.buyPrice ?? productData.buy_price) || 0)
+            });
+          }
+          const totalCost = allocations.reduce((sum: number, allocation: any) => sum + allocation.quantity * allocation.unitCost, 0);
           return {
             ...entry,
-            data: { ...item, is_negative_sale: isNegativeSale, is_negative_sale_approved: false }
+            data: {
+              ...item,
+              cost_price: quantity > 0 ? totalCost / quantity : 0,
+              cost_allocations: allocations,
+              is_negative_sale: isNegativeSale,
+              is_negative_sale_approved: false
+            }
           };
         });
         const productResults: Array<{ id: string; data: any }> = Array.from(stockRemaining.entries()).map(([productId, nextStock]) => {
           const productData = productDataById.get(productId) || {};
+          const costLots = lotsByProduct.get(productId) || [];
           return {
             id: productId,
             data: {
               ...productData,
               stock: nextStock,
+              costLots,
+              cost_lots: costLots,
               hasNegativeSale: Boolean(productData.hasNegativeSale || negativeProductIds.has(productId)),
               negativeSaleUpdated: negativeProductIds.has(productId) ? false : Boolean(productData.negativeSaleUpdated),
               updated_at: new Date().toISOString()
@@ -1053,6 +1139,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         productResults.forEach(product => {
           cloudTx.update(adminDb!.collection("products").doc(product.id), {
             stock: product.data.stock,
+            costLots: product.data.costLots || [],
+            cost_lots: product.data.cost_lots || [],
+            hasNegativeSale: product.data.hasNegativeSale === true,
+            negativeSaleUpdated: product.data.negativeSaleUpdated === true,
             updated_at: product.data.updated_at
           });
         });
