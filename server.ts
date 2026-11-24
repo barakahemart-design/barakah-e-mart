@@ -1200,12 +1200,13 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return { invoice, items: enrichedItems, products: productResults };
       });
 
-      const events = [
-        broadcastSyncChange({ id: `transactions_${transactionId}_${Date.now()}`, table: "transactions", docId: transactionId, data: committed.invoice, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }),
-        ...committed.items.map((entry: any) => broadcastSyncChange({ id: `transaction_items_${entry.id}_${Date.now()}`, table: "transaction_items", docId: entry.id, data: { ...entry.data, id: entry.id, ...identity }, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() })),
-        ...committed.products.map((product: any) => broadcastSyncChange({ id: `products_${product.id}_${Date.now()}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }))
+      const syncTimestamp = Date.now();
+      const syncChanges: SyncChangeRecord[] = [
+        { id: `transactions_${transactionId}_${syncTimestamp}`, table: "transactions", docId: transactionId, data: committed.invoice, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp },
+        ...committed.items.map((entry: any) => ({ id: `transaction_items_${entry.id}_${syncTimestamp}`, table: "transaction_items", docId: entry.id, data: { ...entry.data, id: entry.id, ...identity }, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp })),
+        ...committed.products.map((product: any) => ({ id: `products_${product.id}_${syncTimestamp}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp }))
       ];
-      await Promise.all(events.map(event => event.catch(error => console.warn("[db/checkout] Sync event failed after commit:", error instanceof Error ? error.message : "unknown"))));
+      await broadcastSyncBatchChange(syncChanges).catch(error => console.warn("[db/checkout] Batched sync event failed after commit:", error instanceof Error ? error.message : "unknown"));
       return res.json({ success: true, persisted: true, transaction_id: transactionId });
     } catch (error: any) {
       console.error("[server.ts] /api/db/checkout error:", error instanceof Error ? error.message : "unknown");
@@ -1380,12 +1381,13 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         return { productResults, itemIds };
       });
 
-      const events = [
-        broadcastSyncChange({ id: `transactions_${transactionId}_${Date.now()}`, table: "transactions", docId: transactionId, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }),
-        ...deleted.itemIds.map((id: string) => broadcastSyncChange({ id: `transaction_items_${id}_${Date.now()}`, table: "transaction_items", docId: id, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() })),
-        ...deleted.productResults.map((product: any) => broadcastSyncChange({ id: `products_${product.id}_${Date.now()}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }))
+      const syncTimestamp = Date.now();
+      const syncChanges: SyncChangeRecord[] = [
+        { id: `transactions_${transactionId}_${syncTimestamp}`, table: "transactions", docId: transactionId, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp },
+        ...deleted.itemIds.map((id: string) => ({ id: `transaction_items_${id}_${syncTimestamp}`, table: "transaction_items", docId: id, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp })),
+        ...deleted.productResults.map((product: any) => ({ id: `products_${product.id}_${syncTimestamp}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp }))
       ];
-      await Promise.all(events.map(event => event.catch(error => console.warn("[db/sale-delete] Sync event failed after commit:", error instanceof Error ? error.message : "unknown"))));
+      await broadcastSyncBatchChange(syncChanges).catch(error => console.warn("[db/sale-delete] Batched sync event failed after commit:", error instanceof Error ? error.message : "unknown"));
       return res.json({ success: true, persisted: true });
     } catch (error: any) {
       console.error("[server.ts] /api/db/sale-delete error:", error instanceof Error ? error.message : "unknown");
