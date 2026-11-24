@@ -501,71 +501,49 @@ class SupabaseService {
   }) async {
     await _loadSession();
     final userId = _cachedSession?['id'] ?? '';
+    if (userId.isEmpty) throw StateError('Sign in before checkout.');
     final txId = 'tx_${DateTime.now().millisecondsSinceEpoch}';
-    
-    final txData = {
-      'id': txId,
-      'owner_id': userId,
-      'user_id': userId,
-      'invoice_no': invoiceNo,
-      'customer_id': customerId,
-      'total_amount': total,
-      'discount': discount,
-      'vat_rate': vatRate,
-      'paid_amount': paid,
-      'payment_method': method,
-      'signature_svg': signatureBase64,
-      'created_at': DateTime.now().toIso8601String(),
-    };
-    
-    await _makeRequest('POST', '/api/db/upsert', body: {
-      'table': 'transactions',
-      'id': txId,
-      'data': txData,
+    final createdAt = DateTime.now().toIso8601String();
+    final subtotal = cartItems.fold<double>(0.0, (sum, item) {
+      final Product product = item['product'];
+      final quantity = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      final price = (item['sell_price'] as num?)?.toDouble() ?? product.sellPrice;
+      return sum + quantity * price;
     });
-    
-    for (var item in cartItems) {
-      final Product prod = item['product'];
-      final double qty = item['quantity'];
-      final double selectedPrice = item['sell_price'];
-      final bool isNegative = prod.stock < qty;
-      final itemUUID = 'txi_${DateTime.now().millisecondsSinceEpoch}_${prod.id}';
-      
-      final itemData = {
-        'id': itemUUID,
-        'owner_id': userId,
-        'user_id': userId,
-        'transaction_id': txId,
-        'product_id': prod.id,
-        'quantity': qty,
-        'sell_price': selectedPrice,
-        'cost_price': prod.buyPrice,
-        'is_negative_sale': isNegative,
+    final invoiceTotal = total < 0 ? 0.0 : total;
+    final safePaid = paid.clamp(0.0, invoiceTotal).toDouble();
+    final due = (invoiceTotal - safePaid).clamp(0.0, invoiceTotal).toDouble();
+    final taxAmount = subtotal * (vatRate > 0 ? vatRate : 0) / 100;
+    final status = due <= 0.005 ? 'paid' : (safePaid > 0 ? 'partial' : 'due');
+    final txData = {
+      'id': txId, 'owner_id': userId, 'user_id': userId, 'invoice_no': invoiceNo,
+      'customer_id': customerId, 'subtotal': subtotal, 'tax': taxAmount, 'tax_amount': taxAmount,
+      'total_amount': invoiceTotal, 'total': invoiceTotal, 'discount': discount, 'vat_rate': vatRate,
+      'paid_amount': safePaid, 'paidAmount': safePaid, 'due_balance': due, 'dueBalance': due,
+      'status': status, 'payment_history': [], 'payment_method': method,
+      'signature_svg': signatureBase64, 'created_at': createdAt,
+    };
+    final lineItems = cartItems.asMap().entries.map((entry) {
+      final index = entry.key;
+      final item = entry.value;
+      final Product product = item['product'];
+      final quantity = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      final selectedPrice = (item['sell_price'] as num?)?.toDouble() ?? product.sellPrice;
+      final itemId = 'txi_${DateTime.now().microsecondsSinceEpoch}_${index}_${product.id}';
+      return {
+        'id': itemId,
+        'data': {
+          'id': itemId, 'owner_id': userId, 'user_id': userId, 'transaction_id': txId,
+          'product_id': product.id, 'product_name': product.name, 'category': product.category,
+          'quantity': quantity, 'sell_price': selectedPrice, 'cost_price': product.buyPrice,
+          'is_negative_sale': false, 'is_negative_sale_approved': false,
+        }
       };
-      
-      await _makeRequest('POST', '/api/db/upsert', body: {
-        'table': 'transaction_items',
-        'id': itemUUID,
-        'data': itemData,
-      });
-      
-      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
-      final match = (products as List).firstWhere((p) => p['id'] == prod.id, orElse: () => null);
-      if (match != null) {
-        final double currentStock = (match['stock'] ?? 0.0).toDouble();
-        final updatedProd = {
-          ...Map<String, dynamic>.from(match),
-          'stock': currentStock - qty,
-        };
-        await _makeRequest('POST', '/api/db/upsert', body: {
-          'table': 'products',
-          'id': prod.id,
-          'data': updatedProd,
-        });
-      }
-    }
+    }).toList();
+    // One authenticated server transaction commits invoice, lines and stock.
+    // It reads only distinct cart products; it never fetches the full catalog per line.
+    await _makeRequest('POST', '/api/db/checkout', body: {'transaction': txData, 'items': lineItems});
   }
-
   Future<void> deleteSaleMemo(OrderTransaction tx) async {
     await _loadSession();
     final userId = _cachedSession?['id'] ?? '';
