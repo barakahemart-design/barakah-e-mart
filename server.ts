@@ -912,6 +912,38 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  // Narrow existence check used by the Flutter legacy purchase-delete guard.
+  // It reads only line items for the requested product, not the whole store ledger.
+  app.get("/api/db/has-product-sales", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      const productId = String(req.query.product_id || "").trim();
+      const ownerEmail = String(req.query.owner_email || "").trim().toLowerCase();
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      if (!productId || productId.length > 128) return res.status(400).json({ error: "A valid product_id is required." });
+      if (ownerEmail && ownerEmail !== cleanEmail) return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is not configured." });
+
+      const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
+      const matchingLines = await adminDb.collection("transaction_items")
+        .where("product_id", "==", productId)
+        .get();
+      const hasSales = matchingLines.docs.some(snapshot => {
+        const data = snapshot.data() || {};
+        const hasStoreIdentity = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail]
+          .some(value => typeof value === "string" && value.trim() !== "");
+        const docUid = String(data.user_id || data.userId || data.owner_id || "");
+        const owned = isOwnedByVerifiedAccount(data, verified) || (!hasStoreIdentity && allowedIds.includes(docUid));
+        return owned && (Number(data.quantity) || 0) > 0;
+      });
+      return res.json({ hasSales });
+    } catch (error: any) {
+      console.error("[server.ts] /api/db/has-product-sales error:", error instanceof Error ? error.message : "unknown");
+      return res.status(503).json({ error: "Could not verify product sales history. Purchase deletion was not performed." });
+    }
+  });
+
   app.post("/api/db/upsert", async (req: Request, res: Response) => {
     const { table, id, data } = req.body || {};
     try {
