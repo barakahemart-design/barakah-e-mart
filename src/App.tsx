@@ -2752,40 +2752,43 @@ export default function App() {
     triggerNotification(updated ? "Product negative stock marked as green / updated! 🟢" : "Product negative stock reset to red.", "success");
   };
 
-  const persistTransactionItemCost = (txId: string, itemIdx: number, updatedTransactions: any[]) => {
+  const persistTransactionItemCost = async (txId: string, itemIdx: number, updatedTransactions: any[]): Promise<boolean> => {
     const targetTx = updatedTransactions.find(t => t.id === txId);
     const item = targetTx?.items?.[itemIdx];
-    if (!item) return;
+    if (!item) return false;
 
-    const itemId = item.id || `${txId}_item_${itemIdx}`;
-    setDoc(doc(db, "transaction_items", itemId), {
+    const itemId = item.firestoreId || item.id || `${txId}_item_${itemIdx}`;
+    const activeUserId = activeUser?.uid || "";
+    const storeEmail = (businessInfo?.email || activeUser?.email || "").trim().toLowerCase();
+    const flatItem = {
+      id: itemId,
+      transaction_id: txId,
+      product_id: item.productId || null,
+      product_name: item.name || "Product Item",
+      quantity: Number(item.quantity) || 0,
+      sell_price: Number(item.price) || 0,
       cost_price: Number(item.buyPrice) || 0,
       cost_allocations: item.costAllocations || [],
       is_negative_sale: item.isNegativeSale === true,
-      is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true
-    }, { merge: true }).catch((e) => {
-      console.error("Failed to update transaction item cost in Firestore:", e);
-      triggerNotification("Cost update could not be synchronized to the cloud. Please retry before relying on the updated report.", "error");
-    });
+      is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true,
+      ...(activeUserId ? { user_id: activeUserId, owner_id: activeUserId } : {}),
+      ...(storeEmail ? { store_id: storeEmail, storeId: storeEmail, linked_email: storeEmail, email: storeEmail } : {})
+    };
 
     try {
-      const activeUserId = activeUser?.uid;
+      if (activeUser && !activeUser.isGuest) {
+        await setDoc(doc(db, "transaction_items", itemId), flatItem, { merge: true });
+      }
+    } catch (e) {
+      console.error("Failed to update transaction item cost in Firestore:", e);
+      triggerNotification("Cost update could not be synchronized to the cloud. The local change is retained; please retry sync before relying on the updated report.", "error");
+      return false;
+    }
+
+    try {
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
       let flatItems = JSON.parse(rawLocalItems);
       if (!Array.isArray(flatItems)) flatItems = [];
-      const productUUID = item.productId || null;
-      const flatItem = {
-        id: itemId,
-        transaction_id: txId,
-        product_id: productUUID,
-        product_name: item.name || "Product Item",
-        quantity: Number(item.quantity) || 0,
-        sell_price: Number(item.price) || 0,
-        cost_price: Number(item.buyPrice) || 0,
-        cost_allocations: item.costAllocations || [],
-        is_negative_sale: item.isNegativeSale === true,
-        is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true
-      };
       const flatIdx = flatItems.findIndex((entry: any) =>
         String(entry.firestoreId || entry.id || "") === String(itemId)
       );
@@ -2797,9 +2800,11 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to update unit cost in localStorage:", err);
     }
+    return true;
   };
 
-  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
+  const handleUpdateTransactionItemBuyPrice = async (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
+    if (!Number.isFinite(newBuyPrice) || newBuyPrice < 0) return;
     const updatedTransactions = transactions.map(t => {
       if (t.id !== txId) return t;
       const updatedItems = t.items.map((it, idx) => {
@@ -2813,8 +2818,8 @@ export default function App() {
       return { ...t, items: updatedItems };
     });
 
+    const saved = await persistTransactionItemCost(txId, itemIdx, updatedTransactions);
     setTransactions(updatedTransactions);
-    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
 
     // The negative-stock editor's optional checkbox updates only the catalog
     // default. It never overwrites any other sold unit's saved cost.
@@ -2832,10 +2837,10 @@ export default function App() {
       setProducts(updatedProducts);
     }
 
-    triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
+    if (saved) triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
   };
 
-  const handleUpdateTransactionItemUnitCost = (txId: string, itemIdx: number, allocationIdx: number, newUnitCost: number) => {
+  const handleUpdateTransactionItemUnitCost = async (txId: string, itemIdx: number, allocationIdx: number, newUnitCost: number) => {
     if (!Number.isFinite(newUnitCost) || newUnitCost < 0) return;
 
     const updatedTransactions = transactions.map(t => {
@@ -2846,9 +2851,9 @@ export default function App() {
       return { ...t, items: updatedItems };
     });
 
+    const saved = await persistTransactionItemCost(txId, itemIdx, updatedTransactions);
     setTransactions(updatedTransactions);
-    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
-    triggerNotification("Only the selected unit's cost price was updated.", "success");
+    if (saved) triggerNotification("Only the selected unit's cost price was updated.", "success");
   };
 
   const handleNavigateToCustomer = (customerName: string) => {
