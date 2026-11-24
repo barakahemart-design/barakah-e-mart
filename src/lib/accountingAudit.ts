@@ -128,17 +128,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
         message: "Cash refund history does not match the cash refund amounts saved in return records."
       });
     }
-    if (refundTotal > 0) {
-      const paymentHistory = Array.isArray(transaction.paymentHistory) ? transaction.paymentHistory : [];
-      const recordedCollections = paymentHistory.reduce((sum: number, payment: any) => sum + Math.max(0, Number(payment?.amount) || 0), 0);
-      if (paymentHistory.length > 0 && refundTotal > recordedCollections + 0.02) {
-        issues.push({
-          id: `refund-over-collection-${transaction.id || index}`,
-          invoiceNo,
-          message: "Cash refunds exceed the collection amounts recorded in payment history. Verify the original payment record."
-        });
-      }
-    }
+
     items.forEach((item: any, itemIndex: number) => {
       const lineId = String(item?.firestoreId || item?.id || `${transaction.id}_item_${itemIndex}`);
       const returned = returnedByLine.get(lineId) || 0;
