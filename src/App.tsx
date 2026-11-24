@@ -3790,7 +3790,13 @@ export default function App() {
         const liveProducts = new Map<string, any>();
         snapshots.forEach((snapshot, index) => {
           if (!snapshot.exists()) throw new Error("A returned product is missing from the store catalog. Restore its product record first.");
-          liveProducts.set(productIds[index], { ...snapshot.data(), id: productIds[index] });
+          const productData = snapshot.data() || {};
+          const productStore = String(productData.store_id || productData.storeId || productData.email || productData.linked_email || productData.linkedEmail || "").trim().toLowerCase();
+          const productUid = String(productData.user_id || productData.userId || productData.owner_id || "");
+          if ((productStore && productStore !== storeEmail) || (!productStore && productUid && productUid !== activeUser.uid)) {
+            throw new Error("A returned product belongs to a different store. No return was saved.");
+          }
+          liveProducts.set(productIds[index], { ...productData, id: productIds[index] });
         });
 
         const nextProducts = new Map<string, any>();
