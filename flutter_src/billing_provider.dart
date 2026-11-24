@@ -135,7 +135,10 @@ class BillingProvider with ChangeNotifier {
     return _cart.fold(0.0, (sum, item) => sum + (item['quantity'] * item['sell_price']));
   }
 
-  double get cartVatAmount => 0.0; // Disabled percentage tax calculations globally
+  double get cartVatAmount {
+    final rate = _cartVatRate.isFinite && _cartVatRate > 0 ? _cartVatRate : 0.0;
+    return cartSubtotal * rate / 100;
+  }
 
   double get cartGrandTotal {
     final double res = cartSubtotal - _cartDiscount + cartVatAmount;
