@@ -429,10 +429,11 @@ class SupabaseService {
       // This legacy Flutter data path has no purchase-lot allocation. If the
       // product has any recorded sale, we cannot prove that this specific
       // purchase quantity is still on hand, so block deletion conservatively.
-      final lineItems = await _makeRequest('GET', '/api/db/fetch?table=transaction_items&owner_email=$userId') ?? [];
-      final productHasSales = (lineItems as List).any((item) =>
-        item['product_id'] == productId && (double.tryParse('${item['quantity'] ?? 0}') ?? 0) > 0
+      final salesHistory = await _makeRequest(
+        'GET',
+        '/api/db/has-product-sales?product_id=${Uri.encodeQueryComponent(productId)}&owner_email=${Uri.encodeQueryComponent(userId)}',
       );
+      final productHasSales = salesHistory is Map && salesHistory['hasSales'] == true;
       if (productHasSales) {
         throw StateError('Cannot delete this purchase: the product has historical sales but no purchase-lot tracking to prove the remaining quantity.');
       }
