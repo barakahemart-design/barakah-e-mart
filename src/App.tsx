@@ -128,7 +128,8 @@ import {
   deletePurchase,
   handleSave,
   commitInvoiceEditBatch,
-  deleteInvoiceAndRestoreBatch
+  deleteInvoiceAndRestoreBatch,
+  commitSaleCreationTransaction
 } from "./lib/firestoreService";
 
 export interface Product {
@@ -2177,15 +2178,64 @@ export default function App() {
       fifoProductUpdates.get(product.id) || product
     );
 
-    setProducts(updatedProducts);
-    setTransactions([newTransaction, ...transactions]);
+    let finalTransaction: Transaction = newTransaction;
+    let finalProducts: Product[] = updatedProducts;
+    if (activeUser && !activeUser.isGuest) {
+      try {
+        const cloudResult = await commitSaleCreationTransaction({
+          transactionId: uniqueTxId,
+          invoiceNo: uniqueInvoiceNo,
+          customerId: newTransaction.contactId || null,
+          date: targetDateStr,
+          subtotal: cartSubtotal,
+          tax: calculatedTaxAmount,
+          discount: customerDiscount,
+          total: invoiceGrandTotal,
+          paidAmount: newTransaction.paidAmount,
+          dueBalance: computedInvoiceDueBalance,
+          paymentMethod,
+          status: paymentStatus,
+          vatRate: invoiceTaxRate,
+          signatureSvg: signatureStr || null,
+          items: posCart.map((cartItem, index) => ({
+            id: costedCartItems[index].id,
+            productDocId: String(cartItem.product.id),
+            productId: costedCartItems[index].productId,
+            name: cartItem.product.name,
+            category: cartItem.product.category || "Uncategorized",
+            quantity: cartItem.quantity,
+            price: cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice,
+            warranty: cartItem.warranty || "",
+            warrantyDetails: cartItem.product.warrantyDetails || ""
+          }))
+        });
+        finalTransaction = { ...newTransaction, items: cloudResult.items };
+        const cloudProducts = new Map(cloudResult.products.map((product: any) => [product.id, product]));
+        finalProducts = products.map(product => {
+          const updated: any = cloudProducts.get(product.id);
+          return updated ? {
+            ...product, ...updated,
+            buyPrice: Number(updated.buyPrice ?? updated.buy_price ?? product.buyPrice) || 0,
+            sellPrice: Number(updated.sellPrice ?? updated.sell_price ?? product.sellPrice) || 0,
+            imageUrl: updated.imageUrl || updated.image_url || product.imageUrl,
+            costLots: updated.costLots || updated.cost_lots || product.costLots
+          } : product;
+        });
+      } catch (error: any) {
+        triggerNotification(error?.message || "Invoice could not be saved atomically. Your cart is unchanged; please retry.", "error");
+        return;
+      }
+    }
+
+    setProducts(finalProducts);
+    setTransactions([finalTransaction, ...transactions]);
 
     // Regenerate and update local storage keys to immediately refresh dashboard and prevent empty-item filters in subscriptions
     try {
       const activeUserId = activeUser?.uid;
 
       // 1. Update barakah_transactions
-      const updatedTransactions = [newTransaction, ...transactions];
+      const updatedTransactions = [finalTransaction, ...transactions];
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
 
       // 2. Update barakah_flat_transaction_items
@@ -2193,13 +2243,13 @@ export default function App() {
       let flatItems = JSON.parse(rawLocalItems);
       if (!Array.isArray(flatItems)) flatItems = [];
 
-      newTransaction.items.forEach((nestedIt: any, idx: number) => {
+      finalTransaction.items.forEach((nestedIt: any, idx: number) => {
         const itemUUID = nestedIt.id || `${newTransaction.id}_item_${idx}`;
         const productUUID = nestedIt.productId || null;
 
         const flatItem = {
           id: itemUUID,
-          transaction_id: newTransaction.id,
+          transaction_id: finalTransaction.id,
           product_id: productUUID,
           product_name: nestedIt.name || "Product Item",
           quantity: Number(nestedIt.quantity) || 0,
@@ -2231,16 +2281,20 @@ export default function App() {
 
       const flatTxItem = {
         id: newTransaction.id,
-        firestoreId: newTransaction.id,
-        invoice_no: newTransaction.invoiceNo,
-        customer_id: newTransaction.contactId || null,
-        total_amount: Number(newTransaction.total) || 0,
-        discount: Number(newTransaction.discount) || 0,
-        vat_rate: newTransaction.tax && newTransaction.subtotal ? Number(((Number(newTransaction.tax) / Number(newTransaction.subtotal)) * 100).toFixed(2)) : 0.0,
-        paid_amount: Number(newTransaction.paidAmount) || 0,
-        payment_method: newTransaction.paymentMethod || "Cash",
-        signature_svg: newTransaction.customerSignature || null,
-        created_at: newTransaction.date || new Date().toISOString()
+        firestoreId: finalTransaction.id,
+        invoice_no: finalTransaction.invoiceNo,
+        customer_id: finalTransaction.contactId || null,
+        total_amount: Number(finalTransaction.total) || 0,
+        discount: Number(finalTransaction.discount) || 0,
+        subtotal: Number(finalTransaction.subtotal) || 0,
+        tax_amount: Number(finalTransaction.tax) || 0,
+        vat_rate: finalTransaction.tax && finalTransaction.subtotal ? Number(((Number(finalTransaction.tax) / Number(finalTransaction.subtotal)) * 100).toFixed(2)) : 0.0,
+        paid_amount: Number(finalTransaction.paidAmount) || 0,
+        payment_method: finalTransaction.paymentMethod || "Cash",
+        payment_history: [],
+        due_balance: Number(finalTransaction.dueBalance) || 0,
+        signature_svg: finalTransaction.customerSignature || null,
+        created_at: finalTransaction.date || new Date().toISOString()
       };
 
       const txIdx = flatTxList.findIndex((x: any) => x.id === newTransaction.id);
@@ -2254,56 +2308,14 @@ export default function App() {
       }
       localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTxList));
 
-      // 4. Save real-time transaction to Firestore cloud for multi-device sync
-      if (activeUser && !activeUser.isGuest) {
-        // Main transaction document
-        await saveTransaction(activeUserId, flatTxItem);
 
-        // Individual item records
-        newTransaction.items.forEach((nestedIt: any, idx: number) => {
-          const itemUUID = nestedIt.id || `${newTransaction.id}_item_${idx}`;
-          const productUUID = nestedIt.productId || null;
-
-          const flatItem = {
-            id: itemUUID,
-            transaction_id: newTransaction.id,
-            product_id: productUUID,
-            product_name: nestedIt.name || "Product Item",
-            category: nestedIt.category || "Uncategorized",
-            quantity: Number(nestedIt.quantity) || 0,
-            sell_price: Number(nestedIt.price) || 0,
-            cost_price: Number(nestedIt.buyPrice) || 0,
-            cost_allocations: nestedIt.costAllocations || [],
-            is_negative_sale: nestedIt.isNegativeSale === true,
-            is_negative_sale_approved: nestedIt.isNegativeSaleApproved === true || nestedIt.negativeSaleUpdated === true,
-            user_id: activeUserId,
-            store_id: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
-            storeId: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
-            linked_email: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
-            email: cleanEmail
-          };
-          handleSave("transaction_items", activeUserId, flatItem).catch(err => {
-            console.error("Cloud save transaction item failed:", err);
-          });
-        });
-
-        // Updated inventory stock levels
-        posCart.forEach(cartItem => {
-          const targetProd = updatedProducts.find(p => p.id === cartItem.product.id || (p.sku && cartItem.product.sku === p.sku));
-          if (targetProd) {
-            saveProduct(activeUserId, targetProd).catch(err => {
-              console.error("Cloud save product stock failed:", err);
-            });
-          }
-        });
-      }
     } catch (err) {
       console.warn("Failed to update flat items in localStorage during checkout:", err);
     }
 
     // Delivery assignment is now initiated directly from the Customer Card via Invoice Assign.
     try {
-      generateInvoicePDF(newTransaction, contacts.find(c => c.id === newTransaction.contactId || c.id === posSelectedContactId) || undefined, businessInfo).catch(err => {
+      generateInvoicePDF(finalTransaction, contacts.find(c => c.id === newTransaction.contactId || c.id === posSelectedContactId) || undefined, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
       });
     } catch (pdfErr) {
