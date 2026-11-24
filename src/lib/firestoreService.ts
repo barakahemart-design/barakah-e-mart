@@ -7,7 +7,8 @@ import {
   getDocs,
   query,
   where,
-  or
+  or,
+  writeBatch
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -267,3 +268,139 @@ export async function deleteCustomer(customerId: string): Promise<void> { return
 export async function deleteTransaction(transactionId: string): Promise<void> { return handleDelete('transactions', transactionId); }
 export async function deleteExpense(expenseId: string): Promise<void> { return handleDelete('expenses', expenseId); }
 export async function deletePurchase(purchaseId: string): Promise<void> { return handleDelete('purchases', purchaseId); }
+
+
+type InvoiceBatchInput = {
+  transactionDocId: string;
+  transactionData: Record<string, any>;
+  items: Array<{ docId: string; data: Record<string, any> }>;
+  deletedItemIds?: string[];
+  products?: Array<{ id: string; data: Record<string, any> }>;
+};
+
+function currentStoreWriteIdentity() {
+  const currentUser = auth.currentUser;
+  if (!currentUser?.uid || !currentUser.email) {
+    throw new Error("You must be signed in with Firebase before saving invoice changes.");
+  }
+  const email = currentUser.email.trim().toLowerCase();
+  return {
+    user_id: currentUser.uid,
+    userId: currentUser.uid,
+    owner_id: currentUser.uid,
+    store_id: email,
+    storeId: email,
+    email,
+    linked_email: email,
+    linkedEmail: email,
+    deleted: false,
+    isDeleted: false,
+    updated_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Commits an invoice, its line items and only the stock records affected by
+ * the edit in one Firestore batch. No collection scans or new listeners.
+ */
+export async function commitInvoiceEditBatch(input: InvoiceBatchInput): Promise<void> {
+  const identity = currentStoreWriteIdentity();
+  const batch = writeBatch(db);
+  let operationCount = 0;
+
+  batch.set(doc(db, "transactions", input.transactionDocId), {
+    ...input.transactionData,
+    ...identity
+  }, { merge: true });
+  operationCount += 1;
+
+  for (const item of input.items) {
+    if (!item.docId) continue;
+    batch.set(doc(db, "transaction_items", item.docId), {
+      ...item.data,
+      id: item.docId,
+      ...identity
+    }, { merge: true });
+    operationCount += 1;
+  }
+
+  for (const itemId of new Set(input.deletedItemIds || [])) {
+    if (!itemId) continue;
+    batch.set(doc(db, "deleted_records", `transaction_items__${itemId}`), {
+      id: itemId,
+      collection: "transaction_items",
+      record_id: itemId,
+      ...identity,
+      deleted_at: new Date().toISOString()
+    }, { merge: true });
+    batch.delete(doc(db, "transaction_items", itemId));
+    operationCount += 2;
+  }
+
+  for (const product of input.products || []) {
+    if (!product.id) continue;
+    const data = { ...product.data, id: product.id, ...identity };
+    const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
+    const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
+    data.buyPrice = buyPrice;
+    data.buy_price = buyPrice;
+    data.sellPrice = sellPrice;
+    data.sell_price = sellPrice;
+    data.imageUrl = data.imageUrl || data.image_url || "";
+    data.image_url = data.imageUrl;
+    batch.set(doc(db, "products", product.id), data, { merge: true });
+    operationCount += 1;
+  }
+
+  if (operationCount > 500) {
+    throw new Error("This invoice edit affects too many records for one safe atomic save. No cloud changes were made.");
+  }
+  await batch.commit();
+}
+
+/** Atomically tombstones/deletes an invoice and its lines while restoring stock. */
+export async function deleteInvoiceAndRestoreBatch(input: {
+  transactionId: string;
+  transactionDocId: string;
+  itemIds: string[];
+  products: Array<{ id: string; data: Record<string, any> }>;
+}): Promise<void> {
+  const identity = currentStoreWriteIdentity();
+  const batch = writeBatch(db);
+  let operationCount = 0;
+  const addTombstoneAndDelete = (collectionName: string, recordId: string, physicalId: string) => {
+    if (!recordId || !physicalId) return;
+    batch.set(doc(db, "deleted_records", `${collectionName}__${recordId}`), {
+      id: recordId,
+      collection: collectionName,
+      record_id: recordId,
+      ...identity,
+      deleted_at: new Date().toISOString()
+    }, { merge: true });
+    batch.delete(doc(db, collectionName, physicalId));
+    operationCount += 2;
+  };
+
+  addTombstoneAndDelete("transactions", input.transactionId, input.transactionDocId);
+  for (const itemId of new Set(input.itemIds || [])) {
+    addTombstoneAndDelete("transaction_items", itemId, itemId);
+  }
+  for (const product of input.products || []) {
+    if (!product.id) continue;
+    const data = { ...product.data, id: product.id, ...identity };
+    const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
+    const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
+    data.buyPrice = buyPrice;
+    data.buy_price = buyPrice;
+    data.sellPrice = sellPrice;
+    data.sell_price = sellPrice;
+    data.imageUrl = data.imageUrl || data.image_url || "";
+    data.image_url = data.imageUrl;
+    batch.set(doc(db, "products", product.id), data, { merge: true });
+    operationCount += 1;
+  }
+  if (operationCount > 500) {
+    throw new Error("This invoice deletion affects too many records for one safe atomic save. No cloud changes were made.");
+  }
+  await batch.commit();
+}
