@@ -326,15 +326,8 @@ export async function commitInvoiceEditBatch(input: InvoiceBatchInput): Promise<
 
   for (const itemId of new Set(input.deletedItemIds || [])) {
     if (!itemId) continue;
-    batch.set(doc(db, "deleted_records", `transaction_items__${itemId}`), {
-      id: itemId,
-      collection: "transaction_items",
-      record_id: itemId,
-      ...identity,
-      deleted_at: new Date().toISOString()
-    }, { merge: true });
     batch.delete(doc(db, "transaction_items", itemId));
-    operationCount += 2;
+    operationCount += 1;
   }
 
   for (const product of input.products || []) {
@@ -368,22 +361,15 @@ export async function deleteInvoiceAndRestoreBatch(input: {
   const identity = currentStoreWriteIdentity();
   const batch = writeBatch(db);
   let operationCount = 0;
-  const addTombstoneAndDelete = (collectionName: string, recordId: string, physicalId: string) => {
-    if (!recordId || !physicalId) return;
-    batch.set(doc(db, "deleted_records", `${collectionName}__${recordId}`), {
-      id: recordId,
-      collection: collectionName,
-      record_id: recordId,
-      ...identity,
-      deleted_at: new Date().toISOString()
-    }, { merge: true });
+  const addDelete = (collectionName: string, physicalId: string) => {
+    if (!physicalId) return;
     batch.delete(doc(db, collectionName, physicalId));
-    operationCount += 2;
+    operationCount += 1;
   };
 
-  addTombstoneAndDelete("transactions", input.transactionId, input.transactionDocId);
+  addDelete("transactions", input.transactionDocId);
   for (const itemId of new Set(input.itemIds || [])) {
-    addTombstoneAndDelete("transaction_items", itemId, itemId);
+    addDelete("transaction_items", itemId);
   }
   for (const product of input.products || []) {
     if (!product.id) continue;
