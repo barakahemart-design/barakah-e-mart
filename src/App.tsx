@@ -3314,54 +3314,61 @@ export default function App() {
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
-    // Restore each sold unit to the same FIFO lot it originally came from.
-    const restoredProducts = products.map(prod => {
-      const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
-        item.productId === prod.id || item.id === prod.id
-      );
-      if (soldItems.length === 0) return prod;
+    // Restore only the still-sold units; units already returned were restored
+    // during the return transaction and must never be added to stock twice.
+    let restoredProducts: Product[];
+    try {
+      restoredProducts = products.map(prod => {
+        const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
+          item.productId === prod.id || item.id === prod.id
+        );
+        if (soldItems.length === 0) return prod;
 
-      let nextP: any = prod;
-      soldItems.forEach(soldItem => {
-        const itemId = String(soldItem.firestoreId || soldItem.id || "");
-        const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
-          .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
-          .filter((line: any) => String(line.transactionItemId) === itemId)
-          .reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
-        const soldQty = Math.max(0, Number(soldItem.quantity) || 0);
-        const remainingQty = Math.max(0, soldQty - returnedQty);
-        if (remainingQty <= 0.000001) return;
-        if (returnedQty > soldQty + 0.000001) {
-          throw new Error("Return history exceeds the original sold quantity. Invoice deletion was stopped to protect stock.");
-        }
-        const allocations = getCostAllocationsForItem(soldItem, Number(soldItem.buyPrice) || Number(prod.buyPrice) || 0);
-        let skip = returnedQty;
-        let remaining = remainingQty;
-        const remainingAllocations: any[] = [];
-        allocations.forEach((allocation: any) => {
-          if (remaining <= 0.000001) return;
-          const allocationQty = Number(allocation.quantity) || 0;
-          if (skip >= allocationQty - 0.000001) { skip -= allocationQty; return; }
-          const take = Math.min(Math.max(0, allocationQty - skip), remaining);
-          if (take > 0.000001) remainingAllocations.push({ ...allocation, quantity: take });
-          remaining -= take;
-          skip = 0;
+        let nextP: any = prod;
+        soldItems.forEach(soldItem => {
+          const itemId = String(soldItem.firestoreId || soldItem.id || "");
+          const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+            .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
+            .filter((line: any) => String(line.transactionItemId) === itemId)
+            .reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
+          const soldQty = Math.max(0, Number(soldItem.quantity) || 0);
+          const remainingQty = Math.max(0, soldQty - returnedQty);
+          if (returnedQty > soldQty + 0.000001) {
+            throw new Error("Return history exceeds the original sold quantity. Invoice deletion was stopped to protect stock.");
+          }
+          if (remainingQty <= 0.000001) return;
+          const allocations = getCostAllocationsForItem(soldItem, Number(soldItem.buyPrice) || Number(prod.buyPrice) || 0);
+          let skip = returnedQty;
+          let remaining = remainingQty;
+          const remainingAllocations: any[] = [];
+          allocations.forEach((allocation: any) => {
+            if (remaining <= 0.000001) return;
+            const allocationQty = Number(allocation.quantity) || 0;
+            if (skip >= allocationQty - 0.000001) { skip -= allocationQty; return; }
+            const take = Math.min(Math.max(0, allocationQty - skip), remaining);
+            if (take > 0.000001) remainingAllocations.push({ ...allocation, quantity: take });
+            remaining -= take;
+            skip = 0;
+          });
+          if (remaining > 0.000001) {
+            throw new Error("FIFO return allocation history is incomplete. Invoice deletion was stopped to protect stock valuation.");
+          }
+          const remainingItem = {
+            ...soldItem,
+            quantity: remainingQty,
+            costAllocations: remainingAllocations,
+            buyPrice: remainingQty > 0
+              ? remainingAllocations.reduce((sum: number, allocation: any) => sum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) / remainingQty
+              : Number(soldItem.buyPrice) || 0
+          };
+          nextP = restoreFifoCost(nextP, remainingItem);
         });
-        if (remaining > 0.000001) {
-          throw new Error("FIFO return allocation history is incomplete. Invoice deletion was stopped to protect stock valuation.");
-        }
-        const remainingItem = {
-          ...soldItem,
-          quantity: remainingQty,
-          costAllocations: remainingAllocations,
-          buyPrice: remainingQty > 0
-            ? remainingAllocations.reduce((sum: number, allocation: any) => sum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) / remainingQty
-            : Number(soldItem.buyPrice) || 0
-        };
-        nextP = restoreFifoCost(nextP, remainingItem);
+        return nextP;
       });
-      return nextP;
-    });
+    } catch (error: any) {
+      triggerNotification(error?.message || "Invoice stock restoration failed. Nothing was deleted.", "error");
+      return;
+    }
 
     if (activeUser && !activeUser.isGuest) {
       const productsToPersist = restoredProducts
