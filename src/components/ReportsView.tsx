@@ -623,8 +623,43 @@ export function ReportsView({
     const netSales = Math.max(0, salesTotal - taxTotal);
     const grossProfit = profitComplete ? netSales - cogs : null;
     const netProfit = profitComplete ? (grossProfit as number) - expenseTotal : null;
-    const cashReceived = sales.reduce((n, t) => n + (Number(t.paidAmount ?? t.paid_amount) || 0), 0);
-    return { monthName, monthIndex, sales, expenses: monthExpenses, purchases: monthPurchases, salesTotal, expenseTotal, purchaseTotal, cogs, grossProfit, netProfit, profitComplete, incompleteCostLines, cashReceived, productRows };
+    // Attribute collections/refunds to the date they actually happened, not the invoice date.
+    let cashReceived = 0;
+    const cashMovements: any[] = [];
+    safeTransactions.forEach(t => {
+      if (!t) return;
+      const paid = Number(t.paidAmount ?? t.paid_amount) || 0;
+      const payments = Array.isArray(t.paymentHistory) ? t.paymentHistory : (Array.isArray(t.payment_history) ? t.payment_history : []);
+      const refunds = Array.isArray(t.refundHistory) ? t.refundHistory : (Array.isArray(t.refund_history) ? t.refund_history : []);
+      const refundTotal = refunds.reduce((n: number, r: any) => n + Math.max(0, Number(r?.amount) || 0), 0);
+      const historyTotal = payments.reduce((n: number, p: any) => n + Math.max(0, Number(p?.amount) || 0), 0);
+      const grossCollected = paid + refundTotal;
+      let remainingHistory = Math.min(grossCollected, historyTotal);
+      if (inMonth(t.date)) {
+        const legacyCollection = Math.max(0, grossCollected - remainingHistory);
+        if (legacyCollection > 0) {
+          cashReceived += legacyCollection;
+          cashMovements.push({ date: t.date, invoiceNo: t.invoiceNo || t.invoice_no || "N/A", type: "Invoice collection (legacy date)", amount: legacyCollection });
+        }
+      }
+      [...payments].sort((a: any, b: any) => String(a?.date || "").localeCompare(String(b?.date || ""))).forEach((payment: any) => {
+        const amount = Math.min(remainingHistory, Math.max(0, Number(payment?.amount) || 0));
+        if (amount <= 0) return;
+        if (inMonth(payment?.date)) {
+          cashReceived += amount;
+          cashMovements.push({ date: payment.date, invoiceNo: t.invoiceNo || t.invoice_no || "N/A", type: "Payment received", amount });
+        }
+        remainingHistory -= amount;
+      });
+      refunds.forEach((refund: any) => {
+        const amount = Math.max(0, Number(refund?.amount) || 0);
+        if (inMonth(refund?.date)) {
+          cashReceived -= amount;
+          cashMovements.push({ date: refund.date, invoiceNo: t.invoiceNo || t.invoice_no || "N/A", type: "Refund paid", amount: -amount });
+        }
+      });
+    });
+    return { monthName, monthIndex, sales, expenses: monthExpenses, purchases: monthPurchases, salesTotal, expenseTotal, purchaseTotal, cogs, grossProfit, netProfit, profitComplete, incompleteCostLines, cashReceived, cashMovements, productRows };
   }), [safeTransactions, safeExpenses, safePurchases, archiveYear]);
 
   const netProfitMarginPct = useMemo(() => {
@@ -657,6 +692,7 @@ export function ReportsView({
           {!m.profitComplete && <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">Profit cannot be verified: {m.incompleteCostLines} sold item line(s) are missing reliable historical cost. No estimated cost is substituted.</div>}
           <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Products Sold & Item-wise Profit</h4><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date / Invoice","Product","Qty","Sales","COGS","Profit"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.productRows.length ? m.productRows.map((p:any,i:number)=><tr key={i}><td className="p-3">{p.date}<div className="text-slate-500">{p.invoiceNo}</div></td><td className="p-3 font-bold">{p.productName}{p.sku && <div className="text-slate-500">{p.sku}</div>}</td><td className="p-3 text-right">{p.quantity}</td><td className="p-3 text-right">{money(p.revenue)}</td><td className="p-3 text-right">{p.cogs === null ? "Missing cost" : money(p.cogs)}</td><td className="p-3 text-right">{p.profit === null ? "N/A" : money(p.profit)}</td></tr>):<tr><td colSpan={6} className="p-5 text-center text-slate-500">No products sold this month.</td></tr>}</tbody></table></div></section>
           <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Sales Invoices</h4><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Invoice","Customer","Total","Paid","Due"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.sales.length ? m.sales.map((t:any,i:number)=>{const customer=safeContacts.find((ct:any)=>ct?.id===t.contactId);return <tr key={t.id||i}><td className="p-3">{t.date}</td><td className="p-3">{t.invoiceNo||t.invoice_no||"—"}</td><td className="p-3">{customer?.name||"Walk-In Customer"}</td><td className="p-3 text-right">{money(Number(t.total)||0)}</td><td className="p-3 text-right">{money(Number(t.paidAmount??t.paid_amount)||0)}</td><td className="p-3 text-right">{money(Number(t.dueBalance??t.due_balance)||0)}</td></tr>}):<tr><td colSpan={6} className="p-5 text-center text-slate-500">No sales invoices.</td></tr>}</tbody></table></div></section>
+          <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Payments & Refunds</h4><div className="overflow-x-auto"><table className="w-full min-w-[500px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Invoice","Type","Amount"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.cashMovements.length ? m.cashMovements.map((p:any,i:number)=><tr key={i}><td className="p-3">{p.date}</td><td className="p-3">{p.invoiceNo}</td><td className="p-3">{p.type}</td><td className={`p-3 text-right ${p.amount < 0 ? "text-rose-400" : "text-emerald-400"}`}>{money(p.amount)}</td></tr>):<tr><td colSpan={4} className="p-5 text-center text-slate-500">No dated payment or refund entries.</td></tr>}</tbody></table></div></section>
           <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Expenses</h4><div className="overflow-x-auto"><table className="w-full min-w-[550px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Category","Description","Amount"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.expenses.length ? m.expenses.map((e:any,i:number)=><tr key={e.id||i}><td className="p-3">{e.date}</td><td className="p-3">{e.category||"Other"}</td><td className="p-3">{e.description||e.note||"—"}</td><td className="p-3 text-right">{money(Number(e.amount)||0)}</td></tr>):<tr><td colSpan={4} className="p-5 text-center text-slate-500">No expenses.</td></tr>}</tbody></table></div></section>
           <section className="rounded-xl border border-slate-700 bg-[#1e1e24] overflow-hidden"><h4 className="font-bold p-4 border-b border-slate-700">Purchases</h4><div className="overflow-x-auto"><table className="w-full min-w-[550px] text-xs"><thead className="bg-[#141419] text-slate-400"><tr>{["Date","Supplier","Reference","Total"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{m.purchases.length ? m.purchases.map((p:any,i:number)=><tr key={p.id||i}><td className="p-3">{p.date}</td><td className="p-3">{p.supplierName||p.supplier||"—"}</td><td className="p-3">{p.invoiceNo||p.reference||p.id||"—"}</td><td className="p-3 text-right">{money(Number(p.totalAmount)||0)}</td></tr>):<tr><td colSpan={4} className="p-5 text-center text-slate-500">No purchases.</td></tr>}</tbody></table></div></section>
         </div>}
