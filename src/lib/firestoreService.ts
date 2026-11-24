@@ -8,7 +8,6 @@ import {
   query,
   where,
   or,
-  writeBatch,
   runTransaction
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
@@ -275,133 +274,143 @@ export async function deletePurchase(purchaseId: string): Promise<void> { return
 type InvoiceBatchInput = {
   transactionDocId: string;
   transactionData: Record<string, any>;
+  expectedInvoice?: { total?: number; paidAmount?: number; dueBalance?: number };
   items: Array<{ docId: string; data: Record<string, any> }>;
   deletedItemIds?: string[];
-  products?: Array<{ id: string; data: Record<string, any> }>;
+  products?: Array<{ id: string; data: Record<string, any>; expectedData?: Record<string, any> }>;
 };
 
 function currentStoreWriteIdentity() {
   const currentUser = auth.currentUser;
-  if (!currentUser?.uid || !currentUser.email) {
-    throw new Error("You must be signed in with Firebase before saving invoice changes.");
-  }
+  if (!currentUser?.uid || !currentUser.email) throw new Error('You must be signed in with Firebase before saving invoice changes.');
   const email = currentUser.email.trim().toLowerCase();
-  return {
-    user_id: currentUser.uid,
-    userId: currentUser.uid,
-    owner_id: currentUser.uid,
-    store_id: email,
-    storeId: email,
-    email,
-    linked_email: email,
-    linkedEmail: email,
-    deleted: false,
-    isDeleted: false,
-    updated_at: new Date().toISOString()
-  };
+  return { user_id: currentUser.uid, userId: currentUser.uid, owner_id: currentUser.uid, store_id: email, storeId: email, email, linked_email: email, linkedEmail: email, deleted: false, isDeleted: false, updated_at: new Date().toISOString() };
 }
 
-/**
- * Commits an invoice, its line items and only the stock records affected by
- * the edit in one Firestore batch. No collection scans or new listeners.
+function assertInvoiceVersion(data: Record<string, any>, expected?: { total?: number; paidAmount?: number; dueBalance?: number }) {
+  if (!expected) return;
+  const currentTotal = Number(data.total_amount ?? data.total) || 0;
+  const currentPaid = Number(data.paid_amount ?? data.paidAmount) || 0;
+  const currentDue = Number(data.due_balance ?? data.dueBalance) || 0;
+  if ((expected.total !== undefined && Math.abs(currentTotal - expected.total) > 0.01) ||
+      (expected.paidAmount !== undefined && Math.abs(currentPaid - expected.paidAmount) > 0.01) ||
+      (expected.dueBalance !== undefined && Math.abs(currentDue - expected.dueBalance) > 0.01)) {
+    throw new Error('This invoice changed on another device. Refresh the invoice and retry so no newer payment or balance is overwritten.');
+  }
+}
+
+function assertProductVersion(current: Record<string, any>, expected?: Record<string, any>) {
+  if (!expected) return;
+  const currentStock = Number(current.stock) || 0;
+  const expectedStock = Number(expected.stock) || 0;
+  const currentLots = Array.isArray(current.costLots) ? current.costLots : (Array.isArray(current.cost_lots) ? current.cost_lots : []);
+  const expectedLots = Array.isArray(expected.costLots) ? expected.costLots : (Array.isArray(expected.cost_lots) ? expected.cost_lots : []);
+  const fingerprint = (lots: any[]) => JSON.stringify(lots.map(lot => ({ id: String(lot.id || lot.lotId || ''), remaining: Number(lot.remainingQuantity) || 0, unitCost: Number(lot.unitCost) || 0 })).sort((a, b) => a.id.localeCompare(b.id)));
+  if (Math.abs(currentStock - expectedStock) > 0.000001 || fingerprint(currentLots) !== fingerprint(expectedLots)) {
+    throw new Error('Product stock or FIFO lots changed on another device. Refresh the product and retry; no newer stock was overwritten.');
+  }
+}
+
+function assertCurrentStoreOwnership(data: Record<string, any>, identity: ReturnType<typeof currentStoreWriteIdentity>) {
+  const emailValues = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail].filter((value: any) => typeof value === 'string' && value.trim()).map((value: string) => value.trim().toLowerCase());
+  if (emailValues.length && emailValues.some(value => value !== identity.store_id)) throw new Error('This record belongs to another store.');
+  if (!emailValues.length) {
+    const uidValues = [data.user_id, data.userId, data.owner_id].filter((value: any) => typeof value === 'string' && value.trim());
+    if (uidValues.length && uidValues.some(value => value !== identity.user_id)) throw new Error('This record belongs to another account.');
+  }
+}
+
+/** Commits an invoice edit, its line items and changed stock in one transaction.
+ * It checks the versions loaded by the UI before writing, so a concurrent sale
+ * or due collection on another device is never silently overwritten.
  */
 export async function commitInvoiceEditBatch(input: InvoiceBatchInput): Promise<void> {
   const identity = currentStoreWriteIdentity();
-  const batch = writeBatch(db);
-  let operationCount = 0;
+  const transactionRef = doc(db, 'transactions', input.transactionDocId);
+  const products = (input.products || []).filter(product => !!product.id);
+  const deletedItemIds = Array.from(new Set(input.deletedItemIds || [])).filter(Boolean);
+  const operationCount = 1 + input.items.length + deletedItemIds.length * 2 + products.length;
+  if (operationCount > 500) throw new Error('This invoice edit affects too many records for one safe atomic save. No cloud changes were made.');
+  await runTransaction(db, async cloudTransaction => {
+    const invoiceSnapshot = await cloudTransaction.get(transactionRef);
+    if (!invoiceSnapshot.exists()) throw new Error('Invoice no longer exists in the cloud. Refresh and retry.');
+    const invoiceData = invoiceSnapshot.data() || {};
+    assertCurrentStoreOwnership(invoiceData, identity);
+    assertInvoiceVersion(invoiceData, input.expectedInvoice);
+    const productRefs = products.map(product => doc(db, 'products', product.id));
+    const productSnapshots = await Promise.all(productRefs.map(ref => cloudTransaction.get(ref)));
+    productSnapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists()) throw new Error('A product changed or was removed before the invoice edit could be saved.');
+      const current = snapshot.data() || {};
+      assertCurrentStoreOwnership(current, identity);
+      assertProductVersion(current, products[index].expectedData);
+    });
 
-  batch.set(doc(db, "transactions", input.transactionDocId), {
-    ...input.transactionData,
-    ...identity
-  }, { merge: true });
-  operationCount += 1;
-
-  for (const item of input.items) {
-    if (!item.docId) continue;
-    batch.set(doc(db, "transaction_items", item.docId), {
-      ...item.data,
-      id: item.docId,
-      ...identity
-    }, { merge: true });
-    operationCount += 1;
-  }
-
-  for (const itemId of new Set(input.deletedItemIds || [])) {
-    if (!itemId) continue;
-    batch.delete(doc(db, "transaction_items", itemId));
-    operationCount += 1;
-  }
-
-  for (const product of input.products || []) {
-    if (!product.id) continue;
-    const data: Record<string, any> = { ...product.data, id: product.id, ...identity };
-    const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
-    const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
-    data.buyPrice = buyPrice;
-    data.buy_price = buyPrice;
-    data.sellPrice = sellPrice;
-    data.sell_price = sellPrice;
-    data.imageUrl = data.imageUrl || data.image_url || "";
-    data.image_url = data.imageUrl;
-    batch.set(doc(db, "products", product.id), data, { merge: true });
-    operationCount += 1;
-  }
-
-  if (operationCount > 500) {
-    throw new Error("This invoice edit affects too many records for one safe atomic save. No cloud changes were made.");
-  }
-  await batch.commit();
+    cloudTransaction.set(transactionRef, { ...input.transactionData, ...identity }, { merge: true });
+    input.items.forEach(item => {
+      if (!item.docId) return;
+      cloudTransaction.set(doc(db, 'transaction_items', item.docId), { ...item.data, id: item.docId, ...identity }, { merge: true });
+    });
+    deletedItemIds.forEach(itemId => {
+      cloudTransaction.set(doc(db, 'deleted_records', 'transaction_items__' + itemId), { id: itemId, collection: 'transaction_items', record_id: itemId, ...identity, deleted: true, isDeleted: true, deleted_at: new Date().toISOString() }, { merge: true });
+      cloudTransaction.delete(doc(db, 'transaction_items', itemId));
+    });
+    products.forEach(product => {
+      const data: Record<string, any> = { ...product.data, id: product.id, ...identity };
+      const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
+      const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
+      data.buyPrice = buyPrice; data.buy_price = buyPrice; data.sellPrice = sellPrice; data.sell_price = sellPrice;
+      data.imageUrl = data.imageUrl || data.image_url || ''; data.image_url = data.imageUrl;
+      cloudTransaction.set(doc(db, 'products', product.id), data, { merge: true });
+    });
+  });
 }
 
-/** Atomically tombstones/deletes an invoice and its lines while restoring stock. */
+/** Atomically tombstones/deletes an invoice and restores only its validated stock snapshot. */
 export async function deleteInvoiceAndRestoreBatch(input: {
   transactionId: string;
   transactionDocId: string;
   itemIds: string[];
-  products: Array<{ id: string; data: Record<string, any> }>;
+  expectedInvoice?: { total?: number; paidAmount?: number; dueBalance?: number };
+  products: Array<{ id: string; data: Record<string, any>; expectedData?: Record<string, any> }>;
 }): Promise<void> {
   const identity = currentStoreWriteIdentity();
-  const batch = writeBatch(db);
-  let operationCount = 0;
-  const addDelete = (collectionName: string, recordId: string, physicalId: string) => {
-    if (!recordId || !physicalId) return;
-    // Preserve the app's existing deletion tombstone contract so older backup
-    // restores cannot resurrect an invoice or one of its line items.
-    batch.set(doc(db, "deleted_records", `${collectionName}__${recordId}`), {
-      id: recordId,
-      collection: collectionName,
-      record_id: recordId,
-      ...identity,
-      deleted_at: new Date().toISOString()
-    }, { merge: true });
-    batch.delete(doc(db, collectionName, physicalId));
-    operationCount += 2;
-  };
+  const transactionRef = doc(db, 'transactions', input.transactionDocId);
+  const products = (input.products || []).filter(product => !!product.id);
+  const itemIds = Array.from(new Set(input.itemIds || [])).filter(Boolean);
+  const operationCount = 2 + itemIds.length * 2 + products.length;
+  if (operationCount > 500) throw new Error('This invoice deletion affects too many records for one safe atomic save. No cloud changes were made.');
+  await runTransaction(db, async cloudTransaction => {
+    const invoiceSnapshot = await cloudTransaction.get(transactionRef);
+    if (!invoiceSnapshot.exists()) throw new Error('Invoice no longer exists in the cloud. Refresh and retry.');
+    const invoiceData = invoiceSnapshot.data() || {};
+    assertCurrentStoreOwnership(invoiceData, identity);
+    assertInvoiceVersion(invoiceData, input.expectedInvoice);
+    const productRefs = products.map(product => doc(db, 'products', product.id));
+    const productSnapshots = await Promise.all(productRefs.map(ref => cloudTransaction.get(ref)));
+    productSnapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists()) throw new Error('A product needed for stock restoration no longer exists.');
+      const current = snapshot.data() || {};
+      assertCurrentStoreOwnership(current, identity);
+      assertProductVersion(current, products[index].expectedData);
+    });
 
-  addDelete("transactions", input.transactionId, input.transactionDocId);
-  for (const itemId of new Set(input.itemIds || [])) {
-    addDelete("transaction_items", itemId, itemId);
-  }
-  for (const product of input.products || []) {
-    if (!product.id) continue;
-    const data: Record<string, any> = { ...product.data, id: product.id, ...identity };
-    const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
-    const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
-    data.buyPrice = buyPrice;
-    data.buy_price = buyPrice;
-    data.sellPrice = sellPrice;
-    data.sell_price = sellPrice;
-    data.imageUrl = data.imageUrl || data.image_url || "";
-    data.image_url = data.imageUrl;
-    batch.set(doc(db, "products", product.id), data, { merge: true });
-    operationCount += 1;
-  }
-  if (operationCount > 500) {
-    throw new Error("This invoice deletion affects too many records for one safe atomic save. No cloud changes were made.");
-  }
-  await batch.commit();
+    cloudTransaction.set(doc(db, 'deleted_records', 'transactions__' + input.transactionId), { id: input.transactionId, collection: 'transactions', record_id: input.transactionId, ...identity, deleted: true, isDeleted: true, deleted_at: new Date().toISOString() }, { merge: true });
+    cloudTransaction.delete(transactionRef);
+    itemIds.forEach(itemId => {
+      cloudTransaction.set(doc(db, 'deleted_records', 'transaction_items__' + itemId), { id: itemId, collection: 'transaction_items', record_id: itemId, ...identity, deleted: true, isDeleted: true, deleted_at: new Date().toISOString() }, { merge: true });
+      cloudTransaction.delete(doc(db, 'transaction_items', itemId));
+    });
+    products.forEach(product => {
+      const data: Record<string, any> = { ...product.data, id: product.id, ...identity };
+      const buyPrice = Number(data.buyPrice ?? data.buy_price) || 0;
+      const sellPrice = Number(data.sellPrice ?? data.sell_price) || 0;
+      data.buyPrice = buyPrice; data.buy_price = buyPrice; data.sellPrice = sellPrice; data.sell_price = sellPrice;
+      data.imageUrl = data.imageUrl || data.image_url || ''; data.image_url = data.imageUrl;
+      cloudTransaction.set(doc(db, 'products', product.id), data, { merge: true });
+    });
+  });
 }
-
 
 type SaleCreationInput = {
   transactionId: string;
