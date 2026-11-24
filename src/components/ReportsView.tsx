@@ -222,15 +222,23 @@ export function ReportsView({
       if (!t) return;
       const paid = typeof t.paidAmount === "number" ? t.paidAmount : parseFloat(t.paidAmount) || 0;
       const history = Array.isArray(t.paymentHistory) ? t.paymentHistory : [];
-      const historyTotal = history.reduce((sum: number, payment: any) => sum + (Number(payment?.amount) || 0), 0);
-      const effectiveHistoryTotal = Math.min(paid, historyTotal);
-      if (isDateInFilter(t.date)) cashReceived += Math.max(0, paid - effectiveHistoryTotal);
+      const refunds = Array.isArray(t.refundHistory) ? t.refundHistory : [];
+      const refundTotal = refunds.reduce((sum: number, refund: any) => sum + Math.max(0, Number(refund?.amount) || 0), 0);
+      const historyTotal = history.reduce((sum: number, payment: any) => sum + Math.max(0, Number(payment?.amount) || 0), 0);
+      // Reconstruct cash received before refunds, then post each refund on its
+      // actual refund date instead of rewriting the original collection date.
+      const grossCollected = paid + refundTotal;
+      const effectiveHistoryTotal = Math.min(grossCollected, historyTotal);
+      if (isDateInFilter(t.date)) cashReceived += Math.max(0, grossCollected - effectiveHistoryTotal);
       let remainingHistoryAmount = effectiveHistoryTotal;
       [...history].sort((a: any, b: any) => String(a?.date || "").localeCompare(String(b?.date || ""))).forEach((payment: any) => {
         const recordedAmount = Math.min(remainingHistoryAmount, Math.max(0, Number(payment?.amount) || 0));
         if (recordedAmount <= 0) return;
         if (payment?.date && isDateInFilter(payment.date)) cashReceived += recordedAmount;
         remainingHistoryAmount -= recordedAmount;
+      });
+      refunds.forEach((refund: any) => {
+        if (refund?.date && isDateInFilter(refund.date)) cashReceived -= Math.max(0, Number(refund.amount) || 0);
       });
     });
 
@@ -253,15 +261,23 @@ export function ReportsView({
     let estimatedCOGS = 0;
     filteredTransactions.forEach(t => {
       if (!t) return;
+      let invoiceCogs = 0;
       if (Array.isArray(t.items)) {
         t.items.forEach((item: any) => {
           if (!item) return;
           const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
           const buyCost = getItemBuyCost(item, dbProduct);
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
-          estimatedCOGS += buyCost * qty;
+          invoiceCogs += buyCost * qty;
         });
       }
+      const returnedCogs = (Array.isArray(t.returnHistory) ? t.returnHistory : []).reduce((sum: number, entry: any) =>
+        sum + (Array.isArray(entry.items) ? entry.items.reduce((lineSum: number, line: any) => {
+          if (Number.isFinite(Number(line.returnedCost))) return lineSum + Math.max(0, Number(line.returnedCost));
+          return lineSum + (Array.isArray(line.costAllocations) ? line.costAllocations.reduce((costSum: number, allocation: any) =>
+            costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) : 0);
+        }, 0) : 0), 0);
+      estimatedCOGS += Math.max(0, invoiceCogs - returnedCogs);
     });
 
     // POS adds VAT on top of the discounted subtotal. VAT collected is a
@@ -473,10 +489,21 @@ export function ReportsView({
 
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
           const price = typeof item.price === "number" ? item.price : parseFloat(item.price) || 0;
-          // Allocate net sales (after invoice discount and excluding collected VAT)
-          // across lines by gross line value so item profits reconcile to the P&L.
-          const totalRevenue = price * qty * revenueAllocationFactor;
-          const totalCogs = buyCost * qty;
+          const itemId = String(item.firestoreId || item.id || `${t.id}_item_${t.items.indexOf(item)}`);
+          const returnedLines = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+            .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
+            .filter((line: any) => String(line.transactionItemId) === itemId);
+          const returnedQty = returnedLines.reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
+          const returnedCost = returnedLines.reduce((sum: number, line: any) => {
+            if (Number.isFinite(Number(line.returnedCost))) return sum + Math.max(0, Number(line.returnedCost));
+            return sum + (Array.isArray(line.costAllocations) ? line.costAllocations.reduce((costSum: number, allocation: any) =>
+              costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) : 0);
+          }, 0);
+          const netQty = Math.max(0, qty - returnedQty);
+          // Allocate net sales (after invoice discount and excluding VAT) to
+          // the unreturned quantity; subtract the returned FIFO cost.
+          const totalRevenue = price * netQty * revenueAllocationFactor;
+          const totalCogs = Math.max(0, buyCost * qty - returnedCost);
           const netProfit = totalRevenue - totalCogs;
           const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
@@ -487,7 +514,7 @@ export function ReportsView({
             productName: item.name || "Unknown Product",
             sku: item.sku || dbProduct?.sku || "",
             category: item.category || dbProduct?.category || "",
-            quantity: qty,
+            quantity: netQty,
             salePrice: price,
             totalRevenue,
             totalCogs,
