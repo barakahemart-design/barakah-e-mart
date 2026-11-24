@@ -215,11 +215,14 @@ export function ReportsView({
       const paid = typeof t.paidAmount === "number" ? t.paidAmount : parseFloat(t.paidAmount) || 0;
       const history = Array.isArray(t.paymentHistory) ? t.paymentHistory : [];
       const historyTotal = history.reduce((sum: number, payment: any) => sum + (Number(payment?.amount) || 0), 0);
-      if (isDateInFilter(t.date)) cashReceived += Math.max(0, paid - historyTotal);
-      history.forEach((payment: any) => {
-        if (payment?.date && isDateInFilter(payment.date)) {
-          cashReceived += Number(payment.amount) || 0;
-        }
+      const effectiveHistoryTotal = Math.min(paid, historyTotal);
+      if (isDateInFilter(t.date)) cashReceived += Math.max(0, paid - effectiveHistoryTotal);
+      let remainingHistoryAmount = effectiveHistoryTotal;
+      [...history].sort((a: any, b: any) => String(a?.date || "").localeCompare(String(b?.date || ""))).forEach((payment: any) => {
+        const recordedAmount = Math.min(remainingHistoryAmount, Math.max(0, Number(payment?.amount) || 0));
+        if (recordedAmount <= 0) return;
+        if (payment?.date && isDateInFilter(payment.date)) cashReceived += recordedAmount;
+        remainingHistoryAmount -= recordedAmount;
       });
     });
 
