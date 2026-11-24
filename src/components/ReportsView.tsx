@@ -138,12 +138,8 @@ export function ReportsView({
         return safeIsWithinInterval(date, { start: s, end: e });
       }
 
-      // Restrict today, yesterday, weekly, monthly to the current month
-      const isCurrentMonth = date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-      if (!isCurrentMonth) return false;
-
       if (filterType === "monthly") {
-        return true;
+        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
       }
 
       if (filterType === "today") {
@@ -163,7 +159,7 @@ export function ReportsView({
       }
 
       if (filterType === "weekly") {
-        const sevenDaysAgo = safeSubDays(safeToday, 7);
+        const sevenDaysAgo = safeSubDays(safeToday, 6);
         if (!sevenDaysAgo) return false;
         const s = safeStartOfDay(sevenDaysAgo);
         const e = safeEndOfDay(safeToday);
@@ -236,7 +232,7 @@ export function ReportsView({
           if (!item) return;
           const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
           const buyCost = getItemBuyCost(item, dbProduct);
-          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 1;
+          const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
           estimatedCOGS += buyCost * qty;
         });
       }
@@ -261,18 +257,19 @@ export function ReportsView({
 
   // Chart aggregation for Daily Sales Trend
   const dailyChartData = useMemo(() => {
-    const map: Record<string, { date: string; Sales: number; Purchases: number; Expenses: number }> = {};
+    const map: Record<string, { date: string; sortDate: string; Sales: number; Purchases: number; Expenses: number }> = {};
     
     filteredTransactions.forEach(t => {
       try {
         if (!t || !t.date) return;
         const parsed = safeDate(t.date);
         if (!parsed) return;
+        const sortDate = safeFormat(parsed, "yyyy-MM-dd");
         const d = safeFormat(parsed, "dd MMM");
-        if (!d) return;
-        if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
+        if (!sortDate || !d) return;
+        if (!map[sortDate]) map[sortDate] = { date: d, sortDate, Sales: 0, Purchases: 0, Expenses: 0 };
         const tot = typeof t.total === "number" ? t.total : parseFloat(t.total) || 0;
-        map[d].Sales += tot;
+        map[sortDate].Sales += tot;
       } catch (err) {
         console.warn("Failed to format transaction date:", t.date, err);
       }
@@ -283,11 +280,12 @@ export function ReportsView({
         if (!p || !p.date) return;
         const parsed = safeDate(p.date + "T12:00:00") || safeDate(p.date);
         if (!parsed) return;
+        const sortDate = safeFormat(parsed, "yyyy-MM-dd");
         const d = safeFormat(parsed, "dd MMM");
-        if (!d) return;
-        if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
+        if (!sortDate || !d) return;
+        if (!map[sortDate]) map[sortDate] = { date: d, sortDate, Sales: 0, Purchases: 0, Expenses: 0 };
         const tot = typeof p.totalAmount === "number" ? p.totalAmount : parseFloat(p.totalAmount) || 0;
-        map[d].Purchases += tot;
+        map[sortDate].Purchases += tot;
       } catch (err) {
         console.warn("Failed to format purchase date:", p.date, err);
       }
@@ -298,17 +296,18 @@ export function ReportsView({
         if (!e || !e.date) return;
         const parsed = safeDate(e.date + "T12:00:00") || safeDate(e.date);
         if (!parsed) return;
+        const sortDate = safeFormat(parsed, "yyyy-MM-dd");
         const d = safeFormat(parsed, "dd MMM");
-        if (!d) return;
-        if (!map[d]) map[d] = { date: d, Sales: 0, Purchases: 0, Expenses: 0 };
+        if (!sortDate || !d) return;
+        if (!map[sortDate]) map[sortDate] = { date: d, sortDate, Sales: 0, Purchases: 0, Expenses: 0 };
         const amt = typeof e.amount === "number" ? e.amount : parseFloat(e.amount) || 0;
-        map[d].Expenses += amt;
+        map[sortDate].Expenses += amt;
       } catch (err) {
         console.warn("Failed to format expense date:", e.date, err);
       }
     });
 
-    return Object.values(map).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10).reverse();
+    return Object.values(map).sort((a, b) => a.sortDate.localeCompare(b.sortDate)).slice(-10);
   }, [filteredTransactions, filteredPurchases, filteredExpenses]);
 
   // Expenses categories classification chart data
