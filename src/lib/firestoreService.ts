@@ -8,9 +8,11 @@ import {
   query,
   where,
   or,
-  writeBatch
+  writeBatch,
+  runTransaction
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
+import { allocateFifoCost } from './fifoCosting';
 
 /** Firebase Auth is the authoritative account identity on every device. */
 export function getActiveStoreEmail(): string {
@@ -398,4 +400,163 @@ export async function deleteInvoiceAndRestoreBatch(input: {
     throw new Error("This invoice deletion affects too many records for one safe atomic save. No cloud changes were made.");
   }
   await batch.commit();
+}
+
+
+type SaleCreationInput = {
+  transactionId: string;
+  invoiceNo: string;
+  customerId?: string | null;
+  date: string;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  paidAmount: number;
+  dueBalance: number;
+  paymentMethod: string;
+  status: string;
+  vatRate: number;
+  signatureSvg?: string | null;
+  items: Array<{
+    id: string;
+    productDocId: string;
+    productId: string;
+    name: string;
+    category?: string;
+    quantity: number;
+    price: number;
+    warranty?: string;
+    warrantyDetails?: string;
+  }>;
+};
+
+/**
+ * Creates a sale, its line items and FIFO stock decrements in one Firestore
+ * transaction. Reads only the invoice ID and the distinct products in cart.
+ */
+export async function commitSaleCreationTransaction(input: SaleCreationInput): Promise<{ items: any[]; products: any[] }> {
+  const identity = currentStoreWriteIdentity();
+  if (1 + input.items.length + new Set(input.items.map(item => item.productDocId)).size > 500) {
+    throw new Error("This cart is too large for one atomic checkout. No invoice or stock changes were made.");
+  }
+  const transactionRef = doc(db, "transactions", input.transactionId);
+  const productIds = Array.from(new Set(input.items.map(item => item.productDocId)));
+  return runTransaction(db, async cloudTransaction => {
+    const existingInvoice = await cloudTransaction.get(transactionRef);
+    if (existingInvoice.exists()) throw new Error("This invoice ID already exists. Please generate the invoice again.");
+    const productRefs = productIds.map(productId => doc(db, "products", productId));
+    const snapshots = await Promise.all(productRefs.map(ref => cloudTransaction.get(ref)));
+    const liveProducts = new Map<string, any>();
+    snapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists()) throw new Error("A product in this cart is missing from the cloud catalog. Refresh Products before checkout.");
+      const data = snapshot.data() || {};
+      const productStore = String(data.store_id || data.storeId || data.email || data.linked_email || data.linkedEmail || "").trim().toLowerCase();
+      const productUid = String(data.user_id || data.userId || data.owner_id || "");
+      if ((productStore && productStore !== identity.store_id) || (!productStore && productUid && productUid !== identity.user_id)) {
+        throw new Error("A product in this cart belongs to another store. Checkout was stopped.");
+      }
+      liveProducts.set(productIds[index], {
+        ...data,
+        id: productIds[index],
+        stock: Number(data.stock) || 0,
+        buyPrice: Number(data.buyPrice ?? data.buy_price) || 0,
+        sellPrice: Number(data.sellPrice ?? data.sell_price) || 0,
+        costLots: Array.isArray(data.costLots) ? data.costLots : (Array.isArray(data.cost_lots) ? data.cost_lots : [])
+      });
+    });
+
+    const productUpdates = new Map<string, any>();
+    const items = input.items.map(line => {
+      const sourceProduct = productUpdates.get(line.productDocId) || liveProducts.get(line.productDocId);
+      const quantity = Number(line.quantity) || 0;
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Cart contains an invalid product quantity.");
+      const isNegativeSale = Number(sourceProduct.stock) < quantity;
+      const allocation = allocateFifoCost(sourceProduct, quantity, input.date);
+      const nextProduct = {
+        ...allocation.product,
+        hasNegativeSale: isNegativeSale ? true : allocation.product.hasNegativeSale,
+        negativeSaleUpdated: isNegativeSale ? false : allocation.product.negativeSaleUpdated
+      };
+      productUpdates.set(line.productDocId, nextProduct);
+      return {
+        id: line.id,
+        firestoreId: line.id,
+        name: line.name,
+        quantity,
+        price: Number(line.price) || 0,
+        total: (Number(line.price) || 0) * quantity,
+        productId: line.productId,
+        buyPrice: allocation.averageUnitCost,
+        costAllocations: allocation.allocations,
+        category: line.category || "Uncategorized",
+        warranty: line.warranty || "",
+        warrantyDetails: line.warrantyDetails || "",
+        isNegativeSale
+      };
+    });
+
+    const nestedItems = items.map(item => ({ ...item }));
+    cloudTransaction.set(transactionRef, {
+      id: input.transactionId,
+      invoice_no: input.invoiceNo,
+      customer_id: input.customerId || null,
+      items: nestedItems,
+      subtotal: Number(input.subtotal) || 0,
+      tax: Number(input.tax) || 0,
+      tax_amount: Number(input.tax) || 0,
+      total_amount: Number(input.total) || 0,
+      total: Number(input.total) || 0,
+      discount: Number(input.discount) || 0,
+      vat_rate: Number(input.vatRate) || 0,
+      paid_amount: Number(input.paidAmount) || 0,
+      paidAmount: Number(input.paidAmount) || 0,
+      due_balance: Number(input.dueBalance) || 0,
+      dueBalance: Number(input.dueBalance) || 0,
+      payment_history: [],
+      payment_method: input.paymentMethod || "Cash",
+      signature_svg: input.signatureSvg || null,
+      status: input.status,
+      created_at: input.date,
+      ...identity
+    });
+
+    items.forEach(item => {
+      cloudTransaction.set(doc(db, "transaction_items", item.id), {
+        id: item.id,
+        transaction_id: input.transactionId,
+        product_id: item.productId || null,
+        product_name: item.name || "Product Item",
+        category: item.category || "Uncategorized",
+        quantity: Number(item.quantity) || 0,
+        sell_price: Number(item.price) || 0,
+        cost_price: Number(item.buyPrice) || 0,
+        cost_allocations: item.costAllocations || [],
+        is_negative_sale: item.isNegativeSale === true,
+        is_negative_sale_approved: false,
+        warranty: item.warranty || "",
+        warranty_details: item.warrantyDetails || "",
+        ...identity
+      });
+    });
+
+    productUpdates.forEach((product, productId) => {
+      const buyPrice = Number(product.buyPrice ?? product.buy_price) || 0;
+      const sellPrice = Number(product.sellPrice ?? product.sell_price) || 0;
+      cloudTransaction.update(doc(db, "products", productId), {
+        stock: Number(product.stock) || 0,
+        costLots: product.costLots || [],
+        cost_lots: product.costLots || [],
+        buyPrice,
+        buy_price: buyPrice,
+        sellPrice,
+        sell_price: sellPrice,
+        hasNegativeSale: product.hasNegativeSale === true,
+        negativeSaleUpdated: product.negativeSaleUpdated === true,
+        updated_at: new Date().toISOString()
+      });
+    });
+
+    return { items, products: Array.from(productUpdates.values()) };
+  });
 }
