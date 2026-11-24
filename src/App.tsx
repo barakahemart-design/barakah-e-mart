@@ -2940,7 +2940,13 @@ export default function App() {
       productId: updatedFields.productId ?? originalPur.productId,
       quantity: Number(updatedFields.quantity ?? originalPur.quantity),
       buyPrice: Number(updatedFields.unitPrice ?? updatedFields.buyPrice ?? originalPur.buyPrice),
-      totalAmount: Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice)))
+      totalAmount: Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice))),
+      cashPaid: Number(originalPur.cashPaid ?? 0),
+      dueAmount: Math.max(
+        0,
+        Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice))) -
+          Number(originalPur.cashPaid ?? 0)
+      )
     };
 
     const originalProduct = products.find(prod => prod.id === originalPur.productId);
