@@ -4803,6 +4803,7 @@ _${businessInfo.name}_`;
     const filteredDashboardPurchases = purchases.filter(p => checkDateInFilter(p.date));
 
     const totalSalesTk = filteredDashboardTx.reduce((sum, t) => sum + t.total, 0);
+    const totalSalesTaxTk = filteredDashboardTx.reduce((sum, t) => sum + (Number(t.tax) || 0), 0);
     const totalOutstandingDueTk = filteredDashboardTx.reduce((sum, t) => sum + t.dueBalance, 0);
     const totalExpensesTk = filteredDashboardExpenses.reduce((sum, e) => sum + e.amount, 0);
     const totalPurchasesTk = filteredDashboardPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
@@ -4835,6 +4836,7 @@ _${businessInfo.name}_`;
       filteredDashboardExpenses,
       filteredDashboardPurchases,
       totalSalesTk,
+      totalSalesTaxTk,
       totalOutstandingDueTk,
       totalExpensesTk,
       totalPurchasesTk,
@@ -4848,6 +4850,7 @@ _${businessInfo.name}_`;
     filteredDashboardExpenses,
     filteredDashboardPurchases,
     totalSalesTk,
+    totalSalesTaxTk,
     totalOutstandingDueTk,
     totalExpensesTk,
     totalPurchasesTk,
@@ -4857,11 +4860,11 @@ _${businessInfo.name}_`;
 
   const totalDuesActiveState = totalOutstandingDueTk;
   const netEarningsReceived = totalSalesTk - totalOutstandingDueTk;
-  const netProfitAmt = Math.round(totalSalesTk - totalCostOfGoodsSold - totalExpensesTk);
+  const netProfitAmt = Math.round(totalSalesTk - totalSalesTaxTk - totalCostOfGoodsSold - totalExpensesTk);
   
   // Backward compatibility variables for render blocks
   const projectedProductSellTotal = totalSalesTk;
-  const projectedProductProfit = totalSalesTk - totalCostOfGoodsSold;
+  const projectedProductProfit = totalSalesTk - totalSalesTaxTk - totalCostOfGoodsSold;
   const projectedNetTerminalProfit = netProfitAmt;
 
   // Filter lists dynamically
