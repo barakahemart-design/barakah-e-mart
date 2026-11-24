@@ -944,6 +944,189 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  // Atomic Flutter POS checkout: one transaction for invoice, lines and
+  // stock decrements. It reads only the distinct products in the cart.
+  app.post("/api/db/checkout", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Unauthenticated checkout request." });
+      if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is unavailable." });
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      if (!cleanEmail) return res.status(403).json({ error: "A verified account email is required." });
+
+      const transactionData = req.body?.transaction;
+      const lineItems = Array.isArray(req.body?.items) ? req.body.items : [];
+      const transactionId = String(transactionData?.id || "").trim();
+      if (!transactionId || transactionId.length > 128 || lineItems.length < 1 || lineItems.length > 300) {
+        return res.status(400).json({ error: "Invalid invoice or cart line items." });
+      }
+      const normalizedItems = lineItems.map((entry: any) => ({
+        id: String(entry?.id || "").trim(),
+        data: entry?.data && typeof entry.data === "object" ? entry.data : {}
+      }));
+      if (normalizedItems.some((entry: any) => !entry.id || entry.id.length > 128)) {
+        return res.status(400).json({ error: "Every checkout line must have a valid unique ID." });
+      }
+      if (new Set(normalizedItems.map((entry: any) => entry.id)).size !== normalizedItems.length) {
+        return res.status(400).json({ error: "Duplicate checkout line IDs were detected." });
+      }
+
+      const quantityByProduct = new Map<string, number>();
+      normalizedItems.forEach((entry: any) => {
+        const productId = String(entry.data.product_id || "").trim();
+        const quantity = Number(entry.data.quantity) || 0;
+        if (!productId || productId.length > 128 || !Number.isFinite(quantity) || quantity <= 0) {
+          throw Object.assign(new Error("Invalid product or quantity in checkout."), { status: 400 });
+        }
+        quantityByProduct.set(productId, (quantityByProduct.get(productId) || 0) + quantity);
+      });
+      if (1 + normalizedItems.length + quantityByProduct.size > 500) {
+        return res.status(400).json({ error: "Checkout exceeds the atomic Firestore write limit." });
+      }
+
+      const transactionRef = adminDb.collection("transactions").doc(transactionId);
+      const productRefs = Array.from(quantityByProduct.keys()).map(id => adminDb!.collection("products").doc(id));
+      const identity = {
+        user_id: verified.uid, userId: verified.uid, owner_id: verified.uid,
+        store_id: cleanEmail, storeId: cleanEmail, email: cleanEmail,
+        linked_email: cleanEmail, linkedEmail: cleanEmail
+      };
+
+      const committed = await adminDb.runTransaction(async cloudTx => {
+        const invoiceSnapshot = await cloudTx.get(transactionRef);
+        if (invoiceSnapshot.exists) throw Object.assign(new Error("Invoice ID already exists."), { status: 409 });
+        const productSnapshots = await Promise.all(productRefs.map(ref => cloudTx.get(ref)));
+        const productResults: Array<{ id: string; data: any }> = [];
+        productSnapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) throw Object.assign(new Error("A cart product no longer exists."), { status: 409 });
+          const productData = snapshot.data() || {};
+          if (!isOwnedByVerifiedAccount(productData, verified)) {
+            throw Object.assign(new Error("A cart product belongs to another store."), { status: 403 });
+          }
+          const productId = Array.from(quantityByProduct.keys())[index];
+          const nextStock = (Number(productData.stock) || 0) - (quantityByProduct.get(productId) || 0);
+          productResults.push({ id: productId, data: { ...productData, stock: nextStock, updated_at: new Date().toISOString() } });
+        });
+
+        const invoice = {
+          ...transactionData,
+          id: transactionId,
+          ...identity,
+          updated_at: new Date().toISOString()
+        };
+        cloudTx.create(transactionRef, invoice);
+        normalizedItems.forEach((entry: any) => {
+          const itemRef = adminDb!.collection("transaction_items").doc(entry.id);
+          const item = { ...entry.data, id: entry.id, ...identity, updated_at: new Date().toISOString() };
+          cloudTx.create(itemRef, item);
+        });
+        productResults.forEach(product => {
+          cloudTx.update(adminDb!.collection("products").doc(product.id), {
+            stock: product.data.stock,
+            updated_at: product.data.updated_at
+          });
+        });
+        return { invoice, items: normalizedItems, products: productResults };
+      });
+
+      const events = [
+        broadcastSyncChange({ id: `transactions_${transactionId}_${Date.now()}`, table: "transactions", docId: transactionId, data: committed.invoice, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }),
+        ...committed.items.map((entry: any) => broadcastSyncChange({ id: `transaction_items_${entry.id}_${Date.now()}`, table: "transaction_items", docId: entry.id, data: { ...entry.data, id: entry.id, ...identity }, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() })),
+        ...committed.products.map((product: any) => broadcastSyncChange({ id: `products_${product.id}_${Date.now()}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }))
+      ];
+      await Promise.all(events.map(event => event.catch(error => console.warn("[db/checkout] Sync event failed after commit:", error instanceof Error ? error.message : "unknown"))));
+      return res.json({ success: true, persisted: true, transaction_id: transactionId });
+    } catch (error: any) {
+      console.error("[server.ts] /api/db/checkout error:", error instanceof Error ? error.message : "unknown");
+      return res.status(Number(error?.status) || 503).json({ error: error?.message || "Atomic checkout failed. No invoice or stock changes were saved." });
+    }
+  });
+
+  // Atomic sale deletion for the legacy Flutter client. The server derives
+  // stock restoration from the saved line items; clients never fetch the
+  // entire products collection to restore one invoice.
+  app.post("/api/db/sale-delete", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Unauthenticated sale deletion request." });
+      if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is unavailable." });
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      const transactionId = String(req.body?.transaction_id || "").trim();
+      const itemIds = Array.isArray(req.body?.item_ids) ? Array.from(new Set(req.body.item_ids.map((id: any) => String(id || "").trim()).filter(Boolean))) : [];
+      if (!transactionId || transactionId.length > 128 || itemIds.length < 1 || itemIds.length > 300 || itemIds.some((id: string) => id.length > 128)) {
+        return res.status(400).json({ error: "Invalid sale or line-item IDs." });
+      }
+      const transactionRef = adminDb.collection("transactions").doc(transactionId);
+      const itemRefs = itemIds.map((id: string) => adminDb!.collection("transaction_items").doc(id));
+
+      const deleted = await adminDb.runTransaction(async cloudTx => {
+        const invoiceSnapshot = await cloudTx.get(transactionRef);
+        if (!invoiceSnapshot.exists) throw Object.assign(new Error("Sale invoice was not found."), { status: 404 });
+        const invoiceData = invoiceSnapshot.data() || {};
+        if (!isOwnedByVerifiedAccount(invoiceData, verified)) throw Object.assign(new Error("Sale invoice belongs to another store."), { status: 403 });
+
+        const itemSnapshots = await Promise.all(itemRefs.map(ref => cloudTx.get(ref)));
+        const productQty = new Map<string, number>();
+        itemSnapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) throw Object.assign(new Error("A sale line is missing. No stock was restored."), { status: 409 });
+          const item = snapshot.data() || {};
+          if (!isOwnedByVerifiedAccount(item, verified) || String(item.transaction_id || "") !== transactionId) {
+            throw Object.assign(new Error("A sale line does not belong to this invoice or store."), { status: 403 });
+          }
+          const productId = String(item.product_id || "").trim();
+          const quantity = Number(item.quantity) || 0;
+          if (!productId || quantity <= 0) throw Object.assign(new Error("A sale line has invalid stock information."), { status: 409 });
+          productQty.set(productId, (productQty.get(productId) || 0) + quantity);
+        });
+
+        const productIds = Array.from(productQty.keys());
+        const productRefs = productIds.map(id => adminDb!.collection("products").doc(id));
+        const productSnapshots = await Promise.all(productRefs.map(ref => cloudTx.get(ref)));
+        const productResults: Array<{ id: string; data: any }> = [];
+        productSnapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) throw Object.assign(new Error("A product needed for stock restoration is missing."), { status: 409 });
+          const productData = snapshot.data() || {};
+          if (!isOwnedByVerifiedAccount(productData, verified)) throw Object.assign(new Error("A stock record belongs to another store."), { status: 403 });
+          const productId = productIds[index];
+          productResults.push({ id: productId, data: { ...productData, stock: (Number(productData.stock) || 0) + (productQty.get(productId) || 0) } });
+        });
+
+        const identity = {
+          user_id: verified.uid, userId: verified.uid, owner_id: verified.uid,
+          store_id: cleanEmail, storeId: cleanEmail, email: cleanEmail,
+          linked_email: cleanEmail, linkedEmail: cleanEmail
+        };
+        cloudTx.set(adminDb!.collection("deleted_records").doc(`transactions__${transactionId}`), {
+          id: transactionId, collection: "transactions", record_id: transactionId, ...identity, deleted_at: new Date().toISOString()
+        }, { merge: true });
+        cloudTx.delete(transactionRef);
+        itemIds.forEach((id: string, index: number) => {
+          cloudTx.set(adminDb!.collection("deleted_records").doc(`transaction_items__${id}`), {
+            id, collection: "transaction_items", record_id: id, ...identity, deleted_at: new Date().toISOString()
+          }, { merge: true });
+          cloudTx.delete(itemRefs[index]);
+        });
+        productResults.forEach(product => {
+          cloudTx.update(adminDb!.collection("products").doc(product.id), {
+            stock: product.data.stock, updated_at: new Date().toISOString()
+          });
+        });
+        return { productResults, itemIds };
+      });
+
+      const events = [
+        broadcastSyncChange({ id: `transactions_${transactionId}_${Date.now()}`, table: "transactions", docId: transactionId, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }),
+        ...deleted.itemIds.map((id: string) => broadcastSyncChange({ id: `transaction_items_${id}_${Date.now()}`, table: "transaction_items", docId: id, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() })),
+        ...deleted.productResults.map((product: any) => broadcastSyncChange({ id: `products_${product.id}_${Date.now()}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: Date.now() }))
+      ];
+      await Promise.all(events.map(event => event.catch(error => console.warn("[db/sale-delete] Sync event failed after commit:", error instanceof Error ? error.message : "unknown"))));
+      return res.json({ success: true, persisted: true });
+    } catch (error: any) {
+      console.error("[server.ts] /api/db/sale-delete error:", error instanceof Error ? error.message : "unknown");
+      return res.status(Number(error?.status) || 503).json({ error: error?.message || "Atomic sale deletion failed. No stock or invoice changes were made." });
+    }
+  });
+
   app.post("/api/db/upsert", async (req: Request, res: Response) => {
     const { table, id, data } = req.body || {};
     try {
