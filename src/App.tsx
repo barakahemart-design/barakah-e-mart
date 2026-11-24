@@ -214,6 +214,7 @@ export interface Transaction {
   dueBalance: number;
   contactId?: string;
   customerSignature?: string;
+  paymentHistory?: Array<{ id: string; amount: number; date: string; recordedAt?: string }>;
 }
 
 export interface BusinessInfo {
@@ -3181,48 +3182,66 @@ export default function App() {
   }, [ledgerCurrentPage]);
 
   const incrementDuePayment = (invoiceNo: string, collectionAmt: number) => {
-    if (!collectionAmt || collectionAmt <= 0) return;
+    if (!Number.isFinite(collectionAmt) || collectionAmt <= 0) return;
 
     const targetTx = transactions.find(t => t.invoiceNo === invoiceNo);
-    if (targetTx) {
-      const newPaid = Math.min(targetTx.total, targetTx.paidAmount + collectionAmt);
-      const newDue = Math.max(0, targetTx.total - newPaid);
+    if (!targetTx) return;
 
-      if (activeUser && !activeUser.isGuest) {
-        const activeUserId = activeUser.uid;
-        const flatTxItem = {
-          id: targetTx.id,
-          firestoreId: targetTx.firestoreId || targetTx.id,
-          invoice_no: targetTx.invoiceNo,
-          customer_id: targetTx.contactId || null,
-          total_amount: Number(targetTx.total) || 0,
-          discount: Number(targetTx.discount) || 0,
-          vat_rate: targetTx.tax && targetTx.subtotal ? Number(((Number(targetTx.tax) / Number(targetTx.subtotal)) * 100).toFixed(2)) : 0.0,
-          paid_amount: Number(newPaid) || 0,
-          payment_method: targetTx.paymentMethod || "Cash",
-          signature_svg: targetTx.customerSignature || null,
-          created_at: targetTx.date || new Date().toISOString()
-        };
-        saveTransaction(activeUserId, flatTxItem).catch(err => {
-          console.error("Cloud save increment due payment failed:", err);
-        });
-      }
+    const outstanding = Math.max(0, Number(targetTx.total) - Number(targetTx.paidAmount || 0));
+    if (collectionAmt > outstanding) {
+      triggerNotification(`Collection amount exceeds the outstanding due of ${businessInfo.currencySymbol} ${outstanding.toLocaleString()}.`, "error");
+      return;
     }
 
-    setTransactions(transactions.map((t) => {
-      if (t.invoiceNo === invoiceNo) {
-        const newPaid = Math.min(t.total, t.paidAmount + collectionAmt);
-        const newDue = Math.max(0, t.total - newPaid);
-        return {
+    const newPaid = Math.min(Number(targetTx.total) || 0, (Number(targetTx.paidAmount) || 0) + collectionAmt);
+    const newDue = Math.max(0, (Number(targetTx.total) || 0) - newPaid);
+    const paymentHistory = [
+      ...(Array.isArray(targetTx.paymentHistory) ? targetTx.paymentHistory : []),
+      {
+        id: `pay_${Date.now()}_${targetTx.id}`,
+        amount: collectionAmt,
+        date: format(new Date(), "yyyy-MM-dd"),
+        recordedAt: new Date().toISOString()
+      }
+    ];
+
+    const updatedTransactions = transactions.map(t => t.id === targetTx.id
+      ? {
           ...t,
           paidAmount: newPaid,
           dueBalance: newDue,
+          paymentHistory,
           status: newDue === 0 ? "paid" : "partial"
-        };
-      }
-      return t;
-    }));
-    triggerNotification(`Invoice ${invoiceNo}: ${collectionAmt} BDT received & recorded.`);
+        }
+      : t
+    );
+    setTransactions(updatedTransactions);
+
+    if (activeUser && !activeUser.isGuest) {
+      const activeUserId = activeUser.uid;
+      const flatTxItem = {
+        id: targetTx.id,
+        firestoreId: targetTx.firestoreId || targetTx.id,
+        invoice_no: targetTx.invoiceNo,
+        customer_id: targetTx.contactId || null,
+        total_amount: Number(targetTx.total) || 0,
+        subtotal: Number(targetTx.subtotal) || 0,
+        tax_amount: Number(targetTx.tax) || 0,
+        discount: Number(targetTx.discount) || 0,
+        vat_rate: targetTx.tax && targetTx.subtotal ? Number(((Number(targetTx.tax) / Number(targetTx.subtotal)) * 100).toFixed(2)) : 0.0,
+        paid_amount: Number(newPaid) || 0,
+        payment_history: paymentHistory,
+        payment_method: targetTx.paymentMethod || "Cash",
+        signature_svg: targetTx.customerSignature || null,
+        created_at: targetTx.date || new Date().toISOString()
+      };
+      saveTransaction(activeUserId, flatTxItem).catch(err => {
+        console.error("Cloud save increment due payment failed:", err);
+        triggerNotification("Payment was added locally but cloud sync failed. Please retry synchronization.", "error");
+      });
+    }
+
+    triggerNotification(`Invoice ${invoiceNo}: ${collectionAmt.toLocaleString()} ${businessInfo.currencySymbol} received and recorded.`);
   };
 
   const removeDeliveryAssignmentsForTransactions = async (transactionIds: string[]) => {
