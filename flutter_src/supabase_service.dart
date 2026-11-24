@@ -546,36 +546,13 @@ class SupabaseService {
   }
   Future<void> deleteSaleMemo(OrderTransaction tx) async {
     await _loadSession();
-    final userId = _cachedSession?['id'] ?? '';
-    
-    for (var item in tx.items) {
-      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
-      final match = (products as List).firstWhere((p) => p['id'] == item.productId, orElse: () => null);
-      if (match != null) {
-        final double stockNow = (match['stock'] ?? 0.0).toDouble();
-        final updatedProd = {
-          ...Map<String, dynamic>.from(match),
-          'stock': stockNow + item.quantity,
-        };
-        await _makeRequest('POST', '/api/db/upsert', body: {
-          'table': 'products',
-          'id': item.productId,
-          'data': updatedProd,
-        });
-      }
-      
-      await _makeRequest('POST', '/api/db/delete', body: {
-        'table': 'transaction_items',
-        'id': item.id,
-      });
-    }
-    
-    await _makeRequest('POST', '/api/db/delete', body: {
-      'table': 'transactions',
-      'id': tx.id,
+    if (_cachedSession == null) throw StateError('Sign in before deleting a sale.');
+    final itemIds = tx.items.map((item) => item.id).where((id) => id.isNotEmpty).toSet().toList();
+    await _makeRequest('POST', '/api/db/sale-delete', body: {
+      'transaction_id': tx.id,
+      'item_ids': itemIds,
     });
   }
-
   // -------------------------------------------------------------
   // 5. CRM CUSTOMERS & OUTGOINGS
   // -------------------------------------------------------------
