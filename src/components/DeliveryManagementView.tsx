@@ -19,6 +19,7 @@ type DeliveryExpense = {
 };
 
 interface Props {
+  key?: string;
   adminPin: string;
   salesPin?: string;
   panelRole?: "admin" | "sales";
