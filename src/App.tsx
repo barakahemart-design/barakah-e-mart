@@ -3362,7 +3362,7 @@ export default function App() {
     setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
   };
 
-  const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
+  const handleEditTransaction = async (id: string, updatedFields: Partial<Transaction>) => {
     if (currentPanel !== "admin" && currentPanel !== "sales") {
       triggerNotification("Security block: Unauthorized action! 🛑", "error");
       return;
@@ -3466,21 +3466,6 @@ export default function App() {
     const status = dueBalance === 0 ? "paid" : paidAmount > 0 ? "partial" : "due";
 
     const updatedProductsList = workingProducts;
-    setProducts(updatedProductsList);
-    if (activeUser && !activeUser.isGuest) {
-      updatedProductsList.forEach((nextProduct, index) => {
-        const previousProduct = products[index];
-        if (previousProduct && (
-          previousProduct.stock !== nextProduct.stock ||
-          JSON.stringify(previousProduct.costLots || []) !== JSON.stringify(nextProduct.costLots || [])
-        )) {
-          saveProduct(activeUser.uid, nextProduct).catch(err =>
-            console.error("Failed to sync FIFO stock after invoice edit:", err)
-          );
-        }
-      });
-    }
-
     const updatedTransactionsList = transactions.map(t => {
       if (t.id === id) {
         return {
@@ -3497,6 +3482,117 @@ export default function App() {
       }
       return t;
     });
+
+    const targetTxForCommit = updatedTransactionsList.find(t => t.id === id);
+    const changedProductsForCommit = updatedProductsList.filter((nextProduct, index) => {
+      const previousProduct = products[index];
+      return !!previousProduct && (
+        Number(previousProduct.stock) !== Number(nextProduct.stock) ||
+        JSON.stringify(previousProduct.costLots || []) !== JSON.stringify(nextProduct.costLots || []) ||
+        Boolean(previousProduct.hasNegativeSale) !== Boolean(nextProduct.hasNegativeSale) ||
+        Boolean(previousProduct.negativeSaleUpdated) !== Boolean(nextProduct.negativeSaleUpdated)
+      );
+    });
+
+    if (activeUser && !activeUser.isGuest && targetTxForCommit) {
+      let costOfGoodsSold = 0;
+      items.forEach(item => {
+        const dbProduct = customerDirectoryData.productsById.get(item.productId || "") ||
+          customerDirectoryData.productsById.get(item.id || "") ||
+          customerDirectoryData.productsByName.get(item.name || "");
+        let buyCost = 0;
+        if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
+          buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+        } else if (item.buyPrice !== undefined && item.buyPrice !== null && Number.isFinite(Number(item.buyPrice))) {
+          buyCost = Number(item.buyPrice);
+        } else if (dbProduct?.buyPrice !== undefined && dbProduct?.buyPrice !== null && Number.isFinite(Number(dbProduct.buyPrice))) {
+          buyCost = Number(dbProduct.buyPrice);
+        } else {
+          buyCost = (Number(item.price) || 0) * 0.70;
+        }
+        costOfGoodsSold += buyCost * (Number(item.quantity) || 0);
+      });
+
+      const nestedItems = items.map(item => ({
+        id: item.firestoreId || item.id || "",
+        firestoreId: item.firestoreId || item.id || "",
+        name: item.name || "",
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.price) || 0,
+        total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
+        productId: item.productId || "",
+        buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+        costAllocations: item.costAllocations || [],
+        warranty: item.warranty || "",
+        warrantyDetails: item.warrantyDetails || "",
+        isNegativeSale: item.isNegativeSale === true,
+        isNegativeSaleApproved: item.isNegativeSaleApproved === true,
+        negativeSaleUpdated: item.negativeSaleUpdated === true
+      }));
+      const selectedDate = updatedFields.date || originalTx.date || originalTx.created_at;
+      const parsedDate = selectedDate ? new Date(selectedDate as any) : null;
+      const createdAt = parsedDate && !Number.isNaN(parsedDate.getTime())
+        ? parsedDate.toISOString()
+        : (originalTx.created_at || originalTx.date || new Date().toISOString());
+
+      try {
+        await commitInvoiceEditBatch({
+          transactionDocId: originalTx.firestoreId || originalTx.id,
+          transactionData: {
+            id: originalTx.id,
+            invoice_no: targetTxForCommit.invoiceNo,
+            customer_id: targetTxForCommit.contactId || null,
+            items: nestedItems,
+            subtotal: Number(subtotal) || 0,
+            tax: Number(tax) || 0,
+            tax_amount: Number(tax) || 0,
+            total_amount: Number(total) || 0,
+            total: Number(total) || 0,
+            profit: Math.round(total - costOfGoodsSold),
+            discount: Number(discount) || 0,
+            paid_amount: Number(paidAmount) || 0,
+            paidAmount: Number(paidAmount) || 0,
+            payment_history: originalTx.paymentHistory || [],
+            due_balance: Number(dueBalance) || 0,
+            dueBalance: Number(dueBalance) || 0,
+            status,
+            payment_method: targetTxForCommit.paymentMethod || "Cash",
+            created_at: createdAt,
+            vat_rate: originalSubtotal > 0 ? Number(((originalTax / originalSubtotal) * 100).toFixed(2)) : 0,
+            updated_at: new Date().toISOString()
+          },
+          items: items.map(item => {
+            const docId = item.firestoreId || item.id;
+            return {
+              docId,
+              data: {
+                transaction_id: originalTx.id,
+                product_id: item.productId || null,
+                product_name: item.name || "Product Item",
+                category: item.category || "Uncategorized",
+                quantity: Number(item.quantity) || 0,
+                sell_price: Number(item.price) || 0,
+                cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+                cost_allocations: item.costAllocations || [],
+                is_negative_sale: item.isNegativeSale === true,
+                is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true,
+                warranty: item.warranty || "",
+                warranty_details: item.warrantyDetails || ""
+              }
+            };
+          }),
+          deletedItemIds: originalItems
+            .map(item => item.firestoreId || item.id)
+            .filter(itemId => !!itemId && !items.some(item => (item.firestoreId || item.id) === itemId)),
+          products: changedProductsForCommit.map(product => ({ id: product.id, data: product }))
+        });
+      } catch (error: any) {
+        triggerNotification(error?.message || "Invoice changes could not be saved to the cloud. No stock or invoice changes were applied.", "error");
+        return;
+      }
+    }
+
+    setProducts(updatedProductsList);
     setTransactions(updatedTransactionsList);
 
     // Regenerate and update local storage keys
@@ -3590,110 +3686,6 @@ export default function App() {
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactionsList));
     } catch (err) {
       console.warn("Failed to update flat items in localStorage during edit:", err);
-    }
-
-    // Update remaining line items and permanently remove deleted line-item documents.
-    const remainingDocIds = new Set<string>();
-    items.forEach(item => {
-      const docId = item.firestoreId || item.id;
-      if (docId) {
-        remainingDocIds.add(docId);
-        updateDoc(doc(db, "transaction_items", docId), {
-          sell_price: Number(item.price) || 0,
-          quantity: Number(item.quantity) || 0,
-          product_name: item.name || "Product Item",
-          product_id: item.productId || null,
-          cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
-          cost_allocations: item.costAllocations || [],
-          is_negative_sale: item.isNegativeSale === true,
-          is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true,
-          warranty: item.warranty || "",
-          warranty_details: item.warrantyDetails || ""
-        }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
-      }
-    });
-    originalItems.forEach(oldItem => {
-      const oldDocId = oldItem.firestoreId || oldItem.id;
-      const stillExists = items.some(item => (item.firestoreId || item.id) === oldDocId);
-      if (oldDocId && !stillExists && !remainingDocIds.has(oldDocId)) {
-        deleteDoc(doc(db, "transaction_items", oldDocId)).catch((e) => console.error("Failed to delete removed transaction item from Firestore:", e));
-      }
-    });
-
-    // Update the parent transaction document in the transactions collection.
-    const txDocId = originalTx.firestoreId || originalTx.id;
-    if (txDocId) {
-      let costOfGoodsSold = 0;
-      items.forEach(item => {
-        const dbProduct = customerDirectoryData.productsById.get(item.productId || "") || customerDirectoryData.productsById.get(item.id || "") || customerDirectoryData.productsByName.get(item.name || "");
-        let buyCost = 0;
-        if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
-          buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
-        } else if (item.buyPrice !== undefined && item.buyPrice !== null && Number.isFinite(Number(item.buyPrice))) {
-          buyCost = Number(item.buyPrice);
-        } else if (dbProduct?.buyPrice !== undefined && dbProduct?.buyPrice !== null && Number.isFinite(Number(dbProduct.buyPrice))) {
-          buyCost = Number(dbProduct.buyPrice);
-        } else {
-          buyCost = (Number(item.price) || 0) * 0.70;
-        }
-        costOfGoodsSold += buyCost * (Number(item.quantity) || 0);
-      });
-      const profit = Math.round(total - costOfGoodsSold);
-
-      const nestedItems = items.map(item => ({
-        id: item.id || "",
-        firestoreId: item.firestoreId || "",
-        name: item.name || "",
-        quantity: Number(item.quantity) || 0,
-        price: Number(item.price) || 0,
-        total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
-        productId: item.productId || "",
-        buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
-        costAllocations: item.costAllocations || [],
-        warranty: item.warranty || "",
-        warrantyDetails: item.warrantyDetails || "",
-        isNegativeSale: item.isNegativeSale || false,
-        isNegativeSaleApproved: item.isNegativeSaleApproved === true,
-        negativeSaleUpdated: item.negativeSaleUpdated === true
-      }));
-
-      updateDoc(doc(db, "transactions", txDocId), {
-        items: nestedItems,
-        subtotal: Number(subtotal) || 0,
-        tax: Number(tax) || 0,
-        total_amount: Number(total) || 0,
-        total: Number(total) || 0,
-        profit: profit,
-        discount: Number(discount) || 0,
-        paid_amount: Number(paidAmount) || 0,
-        paidAmount: Number(paidAmount) || 0,
-        payment_history: originalTx.paymentHistory || [],
-        due_balance: Number(dueBalance) || 0,
-        dueBalance: Number(dueBalance) || 0,
-        status: status,
-        // The invoice date is edited from Ledger Box. Keep Firestore's
-        // canonical transaction timestamp aligned with the selected date,
-        // because realtime recovery reads created_at as Transaction.date.
-        created_at: (() => {
-          const selectedDate = updatedFields.date || originalTx.date || originalTx.created_at;
-          const parsedDate = selectedDate ? new Date(selectedDate as any) : null;
-          return parsedDate && !Number.isNaN(parsedDate.getTime())
-            ? parsedDate.toISOString()
-            : (originalTx.created_at || originalTx.date || new Date().toISOString());
-        })(),
-        vat_rate: originalTx.tax && subtotal ? Number(((Number(originalTx.tax) / Number(subtotal)) * 100).toFixed(2)) : 0.0,
-        updated_at: new Date().toISOString()
-      }).catch((e) => {
-        console.error("Failed to update parent transaction in Firestore:", e);
-      });
-    }
-
-    if (activeUser && !activeUser.isGuest) {
-      updatedProductsList.forEach(p => {
-        saveProduct(activeUser.uid, p).catch(err => {
-          console.error("Cloud save product stock after edit transaction failed:", err);
-        });
-      });
     }
 
     // Directly backup to cloud since auto-backup is disabled/skipped via isRemoteUpdateActiveRef during active sessions
