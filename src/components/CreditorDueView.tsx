@@ -138,12 +138,12 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
                     const totalDue = linkedEntries.reduce((sum, entry) => sum + (Number(entry.dueAmount) || 0), 0);
                     const totalPaid = linkedEntries.reduce((sum, entry) => sum + (Number(entry.paidAmount) || 0), 0);
                     const confirmed = window.confirm(
-                      `Permanently delete ${c.name} and ALL of their ${linkedEntries.length} transaction(s)?\n\nTotal due: ${businessInfo.currencySymbol} ${totalDue.toLocaleString()}\nTotal paid: ${businessInfo.currencySymbol} ${totalPaid.toLocaleString()}\n\nThis removes the creditor profile and its complete transaction history from the Creditor Management ledger. This cannot be undone.`
+                      `Archive ${c.name}? Their ${linkedEntries.length} transaction(s) will remain in the ledger for accounting history.\n\nTotal due: ${businessInfo.currencySymbol} ${totalDue.toLocaleString()}\nTotal paid: ${businessInfo.currencySymbol} ${totalPaid.toLocaleString()}\n\nArchived creditors are removed from new-entry selection but their balances and history are preserved.`
                     );
                     if (!confirmed) return;
                     updateLedger({
-                      creditors: creditors.filter(x => x.id !== c.id),
-                      entries: entries.filter(entry => entry.creditorId !== c.id)
+                      creditors: creditors.map(x => x.id === c.id ? { ...x, active: false } : x),
+                      entries
                     });
                     if (creditorId === c.id) setCreditorId("");
                   }} className="px-3 py-2 rounded-lg border border-white/15 text-white/65 hover:text-white hover:border-white/35 text-[10px] font-bold flex items-center gap-1"><Trash2 className="w-3 h-3" />Remove</button>
