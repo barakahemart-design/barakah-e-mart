@@ -2941,6 +2941,16 @@ export default function App() {
         triggerNotification("This purchase batch has already supplied sold units. It cannot be deleted because that would break the sales cost history.", "error");
         return;
       }
+    } else {
+      const productHasSales = transactions.some(tx =>
+        Array.isArray(tx.items) && tx.items.some(item =>
+          item.productId === matchingPur.productId && Number(item.quantity) > 0
+        )
+      );
+      if (productHasSales) {
+        triggerNotification("This product has historical sales but this purchase has no FIFO lot history. Deletion is blocked to protect stock and past cost records.", "error");
+        return;
+      }
     }
 
     const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
@@ -3001,6 +3011,20 @@ export default function App() {
       const checkedUpdate = updatePurchaseCostLot(originalProduct, id, updatedPur);
       if (!checkedUpdate) {
         triggerNotification("Purchase quantity cannot be reduced below the quantity already sold from this batch.", "error");
+        return;
+      }
+    } else if (!originalLot) {
+      const productHasSales = transactions.some(tx =>
+        Array.isArray(tx.items) && tx.items.some(item =>
+          item.productId === originalPur.productId && Number(item.quantity) > 0
+        )
+      );
+      const changesCostHistory =
+        updatedPur.productId !== originalPur.productId ||
+        updatedPur.quantity !== Number(originalPur.quantity) ||
+        updatedPur.buyPrice !== Number(originalPur.buyPrice);
+      if (productHasSales && changesCostHistory) {
+        triggerNotification("This product has historical sales but this purchase has no FIFO lot history. Product, quantity, and buy-cost edits are blocked to protect past sale costs.", "error");
         return;
       }
     }
