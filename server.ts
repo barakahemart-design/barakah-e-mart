@@ -1095,8 +1095,22 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const invoiceData = invoiceSnapshot.data() || {};
         if (!isOwnedByVerifiedAccount(invoiceData, verified)) throw Object.assign(new Error("Sale invoice belongs to another store."), { status: 403 });
 
+        const invoiceLines = Array.isArray(invoiceData.items) ? invoiceData.items : [];
+        const invoiceLineIds = invoiceLines.map((line: any, index: number) => String(line?.firestoreId || line?.id || `${transactionId}_item_${index}`));
+        if (invoiceLineIds.length > 0 && (invoiceLineIds.length !== itemIds.length || invoiceLineIds.some((id: string) => !itemIds.includes(id)))) {
+          throw Object.assign(new Error("The supplied sale lines do not match the original invoice. Refresh before deleting."), { status: 409 });
+        }
+
+        const returnedByLine = new Map<string, number>();
+        const returnHistory = Array.isArray(invoiceData.return_history) ? invoiceData.return_history : (Array.isArray(invoiceData.returnHistory) ? invoiceData.returnHistory : []);
+        returnHistory.forEach((entry: any) => (Array.isArray(entry?.items) ? entry.items : []).forEach((line: any) => {
+          const lineId = String(line?.transactionItemId || line?.transaction_item_id || "");
+          if (lineId) returnedByLine.set(lineId, (returnedByLine.get(lineId) || 0) + (Number(line?.quantity) || 0));
+        }));
+
         const itemSnapshots = await Promise.all(itemRefs.map(ref => cloudTx.get(ref)));
         const productQty = new Map<string, number>();
+        const restoreAllocations = new Map<string, Array<{ itemId: string; itemNegative: boolean; allocation: any }>>();
         itemSnapshots.forEach((snapshot, index) => {
           if (!snapshot.exists) throw Object.assign(new Error("A sale line is missing. No stock was restored."), { status: 409 });
           const item = snapshot.data() || {};
@@ -1104,9 +1118,47 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
             throw Object.assign(new Error("A sale line does not belong to this invoice or store."), { status: 403 });
           }
           const productId = String(item.product_id || "").trim();
-          const quantity = Number(item.quantity) || 0;
-          if (!productId || quantity <= 0) throw Object.assign(new Error("A sale line has invalid stock information."), { status: 409 });
-          productQty.set(productId, (productQty.get(productId) || 0) + quantity);
+          const soldQuantity = Number(item.quantity) || 0;
+          if (!productId || soldQuantity <= 0) throw Object.assign(new Error("A sale line has invalid stock information."), { status: 409 });
+          const itemId = itemIds[index];
+          const returnedQuantity = returnedByLine.get(itemId) || 0;
+          if (returnedQuantity > soldQuantity + 0.000001) {
+            throw Object.assign(new Error("Return history exceeds the sold quantity. Sale deletion was stopped to protect stock."), { status: 409 });
+          }
+          const quantityToRestore = Math.max(0, soldQuantity - returnedQuantity);
+          if (quantityToRestore <= 0.000001) return;
+          productQty.set(productId, (productQty.get(productId) || 0) + quantityToRestore);
+
+          const allocations = Array.isArray(item.cost_allocations) ? item.cost_allocations : (Array.isArray(item.costAllocations) ? item.costAllocations : []);
+          let skipReturned = returnedQuantity;
+          let remaining = quantityToRestore;
+          const selected: any[] = [];
+          allocations.forEach((allocation: any) => {
+            if (remaining <= 0.000001) return;
+            const allocationQuantity = Math.max(0, Number(allocation?.quantity) || 0);
+            if (skipReturned >= allocationQuantity - 0.000001) {
+              skipReturned -= allocationQuantity;
+              return;
+            }
+            const take = Math.min(Math.max(0, allocationQuantity - skipReturned), remaining);
+            if (take > 0.000001) {
+              selected.push({ ...allocation, quantity: take });
+              remaining -= take;
+            }
+            skipReturned = 0;
+          });
+          if (remaining > 0.000001 && item.is_negative_sale !== true) {
+            selected.push({
+              id: `legacy-delete-recovery-${itemId}`,
+              source: "recovered",
+              quantity: remaining,
+              unitCost: Math.max(0, Number(item.cost_price ?? item.buyPrice) || 0)
+            });
+          }
+          if (!restoreAllocations.has(productId)) restoreAllocations.set(productId, []);
+          selected.forEach(allocation => restoreAllocations.get(productId)!.push({
+            itemId, itemNegative: item.is_negative_sale === true, allocation
+          }));
         });
 
         const productIds = Array.from(productQty.keys());
@@ -1121,7 +1173,44 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
           const productData = snapshot.data() || {};
           if (!isOwnedByVerifiedAccount(productData, verified)) throw Object.assign(new Error("A stock record belongs to another store."), { status: 403 });
           const productId = productIds[index];
-          productResults.push({ id: productId, data: { ...productData, stock: (Number(productData.stock) || 0) + (productQty.get(productId) || 0) } });
+          const stock = Number(productData.stock) || 0;
+          const rawLots = Array.isArray(productData.costLots) ? productData.costLots : (Array.isArray(productData.cost_lots) ? productData.cost_lots : []);
+          const lots = rawLots.map((lot: any, lotIndex: number) => ({
+            id: String(lot?.id || `legacy-lot-${lotIndex}`),
+            purchaseId: lot?.purchaseId ? String(lot.purchaseId) : undefined,
+            source: String(lot?.source || "purchase"),
+            receivedAt: String(lot?.receivedAt || "1970-01-01T00:00:00.000Z"),
+            receivedQuantity: Math.max(0, Number(lot?.receivedQuantity ?? lot?.remainingQuantity) || 0),
+            remainingQuantity: Math.max(0, Number(lot?.remainingQuantity) || 0),
+            unitCost: Math.max(0, Number(lot?.unitCost) || 0)
+          }));
+          const restoredEntries = restoreAllocations.get(productId) || [];
+          restoredEntries.forEach(({ itemId, itemNegative, allocation }) => {
+            const quantity = Math.max(0, Number(allocation.quantity) || 0);
+            if (quantity <= 0.000001) return;
+            const lotId = allocation.lotId ? String(allocation.lotId) : "";
+            const targetLot = lotId ? lots.find((lot: any) => lot.id === lotId) : undefined;
+            if (targetLot) {
+              targetLot.remainingQuantity = Math.min(targetLot.receivedQuantity, targetLot.remainingQuantity + quantity);
+            } else if (String(allocation.source || "") !== "unallocated" && !itemNegative) {
+              lots.push({
+                id: `recovered-${itemId}-${String(allocation.id || lots.length)}`,
+                source: "recovered",
+                receivedAt: new Date().toISOString(),
+                receivedQuantity: quantity,
+                remainingQuantity: quantity,
+                unitCost: Math.max(0, Number(allocation.unitCost) || 0)
+              });
+            }
+          });
+          const nextProduct = {
+            ...productData,
+            stock: stock + (productQty.get(productId) || 0),
+            costLots: lots,
+            cost_lots: lots,
+            updated_at: new Date().toISOString()
+          };
+          productResults.push({ id: productId, data: nextProduct });
         });
 
         const identity = {
@@ -1141,7 +1230,10 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         });
         productResults.forEach(product => {
           cloudTx.update(adminDb!.collection("products").doc(product.id), {
-            stock: product.data.stock, updated_at: new Date().toISOString()
+            stock: product.data.stock,
+            costLots: product.data.costLots,
+            cost_lots: product.data.cost_lots,
+            updated_at: product.data.updated_at
           });
         });
         return { productResults, itemIds };
