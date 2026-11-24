@@ -501,58 +501,95 @@ class SupabaseService {
   }) async {
     await _loadSession();
     final userId = _cachedSession?['id'] ?? '';
-    if (userId.isEmpty) throw StateError('Sign in before checkout.');
-    final txId = 'tx_${DateTime.now().millisecondsSinceEpoch}';
-    final createdAt = DateTime.now().toIso8601String();
+    if (userId.toString().isEmpty) throw StateError('Please sign in before checkout.');
+    if (cartItems.isEmpty) throw StateError('Your cart is empty.');
+
+    final txId = 'tx_${DateTime.now().microsecondsSinceEpoch}';
     final subtotal = cartItems.fold<double>(0.0, (sum, item) {
-      final Product product = item['product'];
       final quantity = (item['quantity'] as num?)?.toDouble() ?? 0.0;
-      final price = (item['sell_price'] as num?)?.toDouble() ?? product.sellPrice;
+      final price = (item['sell_price'] as num?)?.toDouble() ?? 0.0;
       return sum + quantity * price;
     });
-    final invoiceTotal = total < 0 ? 0.0 : total;
-    final safePaid = paid.clamp(0.0, invoiceTotal).toDouble();
-    final due = (invoiceTotal - safePaid).clamp(0.0, invoiceTotal).toDouble();
-    final taxAmount = subtotal * (vatRate > 0 ? vatRate : 0) / 100;
-    final status = due <= 0.005 ? 'paid' : (safePaid > 0 ? 'partial' : 'due');
-    final txData = {
-      'id': txId, 'owner_id': userId, 'user_id': userId, 'invoice_no': invoiceNo,
-      'customer_id': customerId, 'subtotal': subtotal, 'tax': taxAmount, 'tax_amount': taxAmount,
-      'total_amount': invoiceTotal, 'total': invoiceTotal, 'discount': discount, 'vat_rate': vatRate,
-      'paid_amount': safePaid, 'paidAmount': safePaid, 'due_balance': due, 'dueBalance': due,
-      'status': status, 'payment_history': [], 'payment_method': method,
-      'signature_svg': signatureBase64, 'created_at': createdAt,
+    final tax = subtotal * (vatRate.isFinite && vatRate > 0 ? vatRate : 0.0) / 100;
+    final safeTotal = total.isFinite ? total : 0.0;
+    final safePaid = paid.isFinite ? paid : 0.0;
+    if (safeTotal < 0 || safePaid < 0 || safePaid > safeTotal + 0.01) {
+      throw StateError('Payment amount cannot be greater than the invoice total.');
+    }
+
+    final transactionData = {
+      'id': txId,
+      'owner_id': userId,
+      'user_id': userId,
+      'invoice_no': invoiceNo,
+      'customer_id': customerId,
+      'subtotal': subtotal,
+      'tax': tax,
+      'tax_amount': tax,
+      'total': safeTotal,
+      'total_amount': safeTotal,
+      'discount': discount,
+      'vat_rate': vatRate,
+      'paid_amount': safePaid,
+      'paidAmount': safePaid,
+      'due_balance': (safeTotal - safePaid).clamp(0.0, double.infinity),
+      'dueBalance': (safeTotal - safePaid).clamp(0.0, double.infinity),
+      'payment_history': <Map<String, dynamic>>[],
+      'payment_method': method,
+      'signature_svg': signatureBase64,
+      'status': safePaid >= safeTotal ? 'paid' : (safePaid > 0 ? 'partial' : 'due'),
+      'created_at': DateTime.now().toIso8601String(),
     };
-    final lineItems = cartItems.asMap().entries.map((entry) {
-      final index = entry.key;
-      final item = entry.value;
-      final Product product = item['product'];
-      final quantity = (item['quantity'] as num?)?.toDouble() ?? 0.0;
-      final selectedPrice = (item['sell_price'] as num?)?.toDouble() ?? product.sellPrice;
-      final itemId = 'txi_${DateTime.now().microsecondsSinceEpoch}_${index}_${product.id}';
-      return {
+
+    final lineItems = <Map<String, dynamic>>[];
+    for (var index = 0; index < cartItems.length; index++) {
+      final cartItem = cartItems[index];
+      final Product product = cartItem['product'];
+      final quantity = (cartItem['quantity'] as num?)?.toDouble() ?? 0.0;
+      final selectedPrice = (cartItem['sell_price'] as num?)?.toDouble() ?? product.sellPrice;
+      if (quantity <= 0 || !quantity.isFinite || selectedPrice < 0 || !selectedPrice.isFinite) {
+        throw StateError('A cart line has an invalid quantity or selling price.');
+      }
+      final itemId = 'txi_${DateTime.now().microsecondsSinceEpoch}_${product.id}_$index';
+      lineItems.add({
         'id': itemId,
         'data': {
-          'id': itemId, 'owner_id': userId, 'user_id': userId, 'transaction_id': txId,
-          'product_id': product.id, 'product_name': product.name, 'category': product.category,
-          'quantity': quantity, 'sell_price': selectedPrice, 'cost_price': product.buyPrice,
-          'is_negative_sale': false, 'is_negative_sale_approved': false,
+          'id': itemId,
+          'transaction_id': txId,
+          'product_id': product.id,
+          'product_name': product.name,
+          'quantity': quantity,
+          'sell_price': selectedPrice,
+          'cost_price': product.buyPrice,
+          'is_negative_sale': product.stock < quantity,
+          'warranty': '',
+          'warranty_details': ''
         }
-      };
-    }).toList();
-    // One authenticated server transaction commits invoice, lines and stock.
-    // It reads only distinct cart products; it never fetches the full catalog per line.
-    await _makeRequest('POST', '/api/db/checkout', body: {'transaction': txData, 'items': lineItems});
-  }
-  Future<void> deleteSaleMemo(OrderTransaction tx) async {
-    await _loadSession();
-    if (_cachedSession == null) throw StateError('Sign in before deleting a sale.');
-    final itemIds = tx.items.map((item) => item.id).where((id) => id.isNotEmpty).toSet().toList();
-    await _makeRequest('POST', '/api/db/sale-delete', body: {
-      'transaction_id': tx.id,
-      'item_ids': itemIds,
+      });
+    }
+
+    // One server-side Firestore transaction creates the invoice and line items
+    // while decrementing stock. Any failed validation leaves all three unchanged.
+    await _makeRequest('POST', '/api/db/checkout', body: {
+      'transaction': transactionData,
+      'items': lineItems,
     });
   }
+
+  Future<void> deleteSaleMemo(OrderTransaction tx) async {
+    await _loadSession();
+    final userId = _cachedSession?['id'] ?? '';
+    if (userId.toString().isEmpty) throw StateError('Please sign in before deleting a sale.');
+    if (tx.items.isEmpty) throw StateError('The invoice has no saved line items to delete.');
+
+    // The server validates ownership and atomically restores stock, writes
+    // deletion tombstones, and removes the invoice and all of its line items.
+    await _makeRequest('POST', '/api/db/sale-delete', body: {
+      'transaction_id': tx.id,
+      'item_ids': tx.items.map((item) => item.id).toList(),
+    });
+  }
+
   // -------------------------------------------------------------
   // 5. CRM CUSTOMERS & OUTGOINGS
   // -------------------------------------------------------------
