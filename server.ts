@@ -593,6 +593,57 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   }
 
+  // Persist one compact event document for an atomic multi-record operation,
+  // while still emitting one logical change per record to realtime clients.
+  // This keeps the durable sync log from doubling every checkout/delete write.
+  async function broadcastSyncBatchChange(changes: SyncChangeRecord[]) {
+    const validChanges = changes.filter(change => change && change.storeEmail);
+    if (validChanges.length === 0) return;
+    const storeEmail = validChanges[0].storeEmail.trim().toLowerCase();
+    const timestamp = Math.max(...validChanges.map(change => Number(change.timestamp) || Date.now()));
+    if (validChanges.some(change => change.storeEmail.trim().toLowerCase() !== storeEmail)) {
+      throw new Error("A sync batch cannot contain changes from multiple stores.");
+    }
+
+    if (adminDb) {
+      const storeKey = createHash("sha256").update(storeEmail).digest("hex");
+      await adminDb.collection("sync_events").doc(storeKey).collection("events").add({
+        batch: true,
+        changes: validChanges.map(change => ({
+          id: change.id,
+          table: change.table,
+          docId: change.docId,
+          data: change.data ?? null,
+          isDelete: change.isDelete,
+          timestamp: change.timestamp
+        })),
+        storeEmail,
+        timestamp
+      });
+    }
+
+    validChanges.forEach(change => {
+      syncChangeHistory.push(change);
+      const payload = `data: ${JSON.stringify({
+        type: change.isDelete ? "delete" : "upsert",
+        table: change.table,
+        id: change.docId,
+        data: change.data,
+        storeEmail,
+        timestamp: change.timestamp
+      })}\\n\\n`;
+      for (const client of sseClients) {
+        try {
+          const clientEmail = (client.email || "").trim().toLowerCase();
+          if (clientEmail && clientEmail === storeEmail) client.res.write(payload);
+        } catch (_) {
+          sseClients.delete(client);
+        }
+      }
+    });
+    while (syncChangeHistory.length > 1000) syncChangeHistory.shift();
+  }
+
   // Cache account identity lookups: polling must not re-read profiles and passcode
   // vault documents on every reconciliation request.
   const resolvedUserIdsCache = new Map<string, { ids: string[]; expiresAt: number }>();
@@ -1531,11 +1582,23 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const storeKey = createHash("sha256").update(email).digest("hex");
         const eventsSnap = await adminDb.collection("sync_events").doc(storeKey).collection("events")
           .where("timestamp", ">", since).orderBy("timestamp", "asc").limit(500).get();
-        changes = eventsSnap.docs.map((eventDoc) => ({
-          id: eventDoc.id,
-          ...(eventDoc.data() as Omit<SyncChangeRecord, "id" | "userIds">),
-          userIds: [verified.uid, email]
-        }));
+        changes = eventsSnap.docs.flatMap((eventDoc) => {
+          const eventData = eventDoc.data() || {};
+          if (Array.isArray(eventData.changes)) {
+            return eventData.changes.map((change: any, index: number) => ({
+              ...change,
+              id: String(change.id || `${eventDoc.id}_${index}`),
+              storeEmail: eventData.storeEmail || email,
+              userIds: [verified.uid, email],
+              timestamp: Number(change.timestamp) || Number(eventData.timestamp) || 0
+            }));
+          }
+          return [{
+            id: eventDoc.id,
+            ...(eventData as Omit<SyncChangeRecord, "id" | "userIds">),
+            userIds: [verified.uid, email]
+          }];
+        });
       } catch (eventError) {
         console.error("[sync/poll] Durable event read failed:", eventError instanceof Error ? eventError.message : "unknown");
         return res.status(503).json({ error: "Sync temporarily unavailable. Please retry." });
