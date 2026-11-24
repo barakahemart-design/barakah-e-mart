@@ -536,7 +536,8 @@ export function ReportsView({
 
         t.items.forEach((item: any) => {
           if (!item) return;
-          // Resolve standard item buy price preferring updated item cost price first
+          const dbProduct = safeProducts.find(p => p && (p.id === item.productId || p.id === item.id || p.name === item.name));
+          // Cost comes only from the historical invoice snapshot, never the live catalog.
           const buyCost = getItemBuyCost(item);
 
           const qty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
@@ -733,11 +734,11 @@ export function ReportsView({
         <div className="bg-[#1E1E24] p-5 rounded-2xl border border-[#2D2D35] flex items-center justify-between shadow-lg relative overflow-hidden group">
           <div className="space-y-1.5">
             <span className="text-[9px] font-mono tracking-widest text-[#A0A0A5] uppercase font-bold block">Estimated Net Profit</span>
-            <span className={`text-xl font-extrabold font-mono block ${stats.netProfit >= 0 ? "text-[#00E676]" : "text-rose-500"}`}>
-              {stats.netProfit >= 0 ? "+" : ""}{currencySymbol}{stats.netProfit.toLocaleString()}
+            <span className={`text-xl font-extrabold font-mono block ${!stats.profitComplete ? "text-amber-300" : stats.netProfit >= 0 ? "text-[#00E676]" : "text-rose-500"}`}>
+              {stats.profitComplete ? `${stats.netProfit >= 0 ? "+" : ""}${currencySymbol}${stats.netProfit.toLocaleString()}` : "Cost data incomplete"}
             </span>
             <span className="text-[10px] text-slate-400 block font-mono">
-              Estimated COGS: {currencySymbol}{stats.cogs.toLocaleString()}
+              {stats.profitComplete ? `Verified COGS: ${currencySymbol}${stats.cogs.toLocaleString()}` : `${stats.incompleteCostLines} sale line(s) need historical cost`}
             </span>
           </div>
           <div className="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/15 text-emerald-400">
