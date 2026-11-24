@@ -4473,18 +4473,17 @@ _${businessInfo.name}_`;
       t.items.forEach(item => {
         const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
         let buyCost = 0;
-        if (item.buyPrice && item.buyPrice > 0) {
-          buyCost = item.buyPrice;
-        } else if (dbProduct && dbProduct.buyPrice > 0) {
-          buyCost = dbProduct.buyPrice;
-        } else if (dbProduct) {
-          buyCost = dbProduct.buyPrice;
-        } else if (item.buyPrice !== undefined) {
-          buyCost = item.buyPrice;
+        if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
+          buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+        } else if (item.buyPrice !== undefined && item.buyPrice !== null && Number.isFinite(Number(item.buyPrice))) {
+          buyCost = Number(item.buyPrice);
+        } else if (dbProduct?.buyPrice !== undefined && dbProduct?.buyPrice !== null && Number.isFinite(Number(dbProduct.buyPrice))) {
+          buyCost = Number(dbProduct.buyPrice);
         } else {
-          buyCost = item.price * 0.70;
+          buyCost = (Number(item.price) || 0) * 0.70;
         }
-        totalCostOfGoodsSold += buyCost * item.quantity;
+        const quantity = Number(item.quantity ?? 0);
+        totalCostOfGoodsSold += buyCost * (Number.isFinite(quantity) ? quantity : 0);
       });
     });
 
