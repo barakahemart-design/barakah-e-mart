@@ -4988,7 +4988,7 @@ _${businessInfo.name}_`;
       acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount || 0);
       return acc;
     }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value })), [expenses, paidDeliveryExpenses]);
+  ).map(([name, value]) => ({ name, value })), [expenses, paidDeliveryExpenses, paidSalaryExpenses]);
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 
