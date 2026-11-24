@@ -3390,10 +3390,18 @@ export default function App() {
         await deleteInvoiceAndRestoreBatch({
           transactionId: t.id,
           transactionDocId: t.firestoreId || t.id,
+          expectedInvoice: {
+            total: Number(t.total) || 0,
+            paidAmount: Number(t.paidAmount) || 0,
+            dueBalance: Number(t.dueBalance) || 0
+          },
           itemIds: (Array.isArray(t.items) ? t.items : [])
             .map(item => item.firestoreId || item.id)
             .filter(Boolean),
-          products: productsToPersist
+          products: productsToPersist.map(product => ({
+            ...product,
+            expectedData: products.find(original => original.id === product.id)
+          }))
         });
       } catch (error: any) {
         triggerNotification(error?.message || "Invoice could not be deleted safely. No stock changes were applied.", "error");
@@ -3619,6 +3627,11 @@ export default function App() {
       try {
         await commitInvoiceEditBatch({
           transactionDocId: originalTx.firestoreId || originalTx.id,
+          expectedInvoice: {
+            total: Number(originalTx.total) || 0,
+            paidAmount: Number(originalTx.paidAmount) || 0,
+            dueBalance: Number(originalTx.dueBalance) || 0
+          },
           transactionData: {
             id: originalTx.id,
             invoice_no: targetTxForCommit.invoiceNo,
@@ -3665,7 +3678,11 @@ export default function App() {
           deletedItemIds: originalItems
             .map(item => item.firestoreId || item.id)
             .filter(itemId => !!itemId && !items.some(item => (item.firestoreId || item.id) === itemId)),
-          products: changedProductsForCommit.map(product => ({ id: product.id, data: product }))
+          products: changedProductsForCommit.map(product => ({
+            id: product.id,
+            data: product,
+            expectedData: products.find(original => original.id === product.id)
+          }))
         });
       } catch (error: any) {
         triggerNotification(error?.message || "Invoice changes could not be saved to the cloud. No stock or invoice changes were applied.", "error");
