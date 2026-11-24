@@ -4538,9 +4538,76 @@ _${businessInfo.name}_`;
       date: expense.dashboard_date || expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date
     })), [deliveryExpenseRecords]);
 
+  // Salary payments live in the existing staffList settings document. Derive
+  // paid payroll expenses in memory instead of creating another collection or
+  // adding Firestore listeners/writes. Existing manual Salary expenses are
+  // reconciled by date and amount to avoid counting the same payroll twice.
+  const paidSalaryExpenses = useMemo(() => {
+    const salaryRows = staffList.flatMap(staff =>
+      (Array.isArray(staff.salaryPayments) ? staff.salaryPayments : [])
+        .filter(payment => payment?.status === "paid" && Number(payment.amount) > 0 && payment.paymentDate)
+        .map(payment => ({
+          id: `salary_payment_${staff.id}_${payment.id}`,
+          category: "Salary",
+          amount: Number(payment.amount) || 0,
+          description: `Salary payment - ${staff.name}`,
+          date: String(payment.paymentDate).slice(0, 10),
+          staffName: staff.name
+        }))
+    );
+    const manualSalaryRows = expenses.filter(expense =>
+      /salary|payroll/i.test(String(expense.category || ""))
+    );
+    const normalizeDay = (value: any) => {
+      const raw = String(value || "");
+      const parsed = new Date(raw);
+      return Number.isNaN(parsed.getTime()) ? raw.slice(0, 10) : parsed.toISOString().slice(0, 10);
+    };
+    const salaryByDay = new Map<string, typeof salaryRows>();
+    salaryRows.forEach(row => {
+      const day = normalizeDay(row.date);
+      salaryByDay.set(day, [...(salaryByDay.get(day) || []), row]);
+    });
+    const manualByDay = new Map<string, Expense[]>();
+    manualSalaryRows.forEach(row => {
+      const day = normalizeDay(row.date);
+      manualByDay.set(day, [...(manualByDay.get(day) || []), row]);
+    });
+
+    const result: Array<{ id: string; category: string; amount: number; description: string; date: string }> = [];
+    salaryByDay.forEach((daySalaryRows, day) => {
+      const manualRows = manualByDay.get(day) || [];
+      const salaryTotal = daySalaryRows.reduce((sum, row) => sum + row.amount, 0);
+      const manualTotal = manualRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+      // If the manual Salary ledger already records the exact payroll total
+      // for this date, keep that canonical expense and do not add derived rows.
+      if (manualRows.length > 0 && Math.abs(manualTotal - salaryTotal) < 0.01) return;
+
+      const usedManualIds = new Set<string>();
+      daySalaryRows.forEach(row => {
+        const match = manualRows.find(manual =>
+          !usedManualIds.has(String(manual.id)) &&
+          Math.abs((Number(manual.amount) || 0) - row.amount) < 0.01
+        );
+        if (match) {
+          usedManualIds.add(String(match.id));
+          return;
+        }
+        result.push({
+          id: row.id,
+          category: row.category,
+          amount: row.amount,
+          description: row.description,
+          date: row.date
+        });
+      });
+    });
+    return result;
+  }, [staffList, expenses]);
+
   const dashboardMetrics = useMemo(() => {
     const filteredDashboardTx = transactions.filter(t => checkDateInFilter(t.date));
-    const allDashboardExpenses = [...expenses, ...paidDeliveryExpenses];
+    const allDashboardExpenses = [...expenses, ...paidDeliveryExpenses, ...paidSalaryExpenses];
     const filteredDashboardExpenses = allDashboardExpenses.filter(e => checkDateInFilter(e.date));
     const filteredDashboardPurchases = purchases.filter(p => checkDateInFilter(p.date));
 
@@ -4583,7 +4650,7 @@ _${businessInfo.name}_`;
       totalUnitsSold,
       totalCostOfGoodsSold
     };
-  }, [transactions, expenses, paidDeliveryExpenses, purchases, products, dashboardFilter, customStart, customEnd]);
+  }, [transactions, expenses, paidDeliveryExpenses, paidSalaryExpenses, purchases, products, dashboardFilter, customStart, customEnd]);
 
   const {
     filteredDashboardTx,
@@ -4722,7 +4789,7 @@ _${businessInfo.name}_`;
   }), [transactions]);
 
   const expenseCategoryPlotData = useMemo(() => Object.entries(
-    [...expenses, ...paidDeliveryExpenses].reduce((acc, curr) => {
+    [...expenses, ...paidDeliveryExpenses, ...paidSalaryExpenses].reduce((acc, curr) => {
       acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount || 0);
       return acc;
     }, {} as Record<string, number>)
@@ -5322,7 +5389,7 @@ _${businessInfo.name}_`;
               products={products}
               transactions={transactions}
               expenses={expenses}
-              additionalExpenses={paidDeliveryExpenses}
+              additionalExpenses={[...paidDeliveryExpenses, ...paidSalaryExpenses]}
               purchases={purchases}
               contacts={contacts}
               businessInfo={businessInfo}
