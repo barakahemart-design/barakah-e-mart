@@ -1,7 +1,10 @@
+import { calculateHistoricalCogs } from "./profitCalculations";
+
 export type AccountingAuditIssue = {
   id: string;
   invoiceNo: string;
   message: string;
+  transactionId?: string;
 };
 
 const asFiniteNumber = (value: any): number | null => {
@@ -27,7 +30,8 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
 
     if (invoiceKey) {
       if (seenInvoices.has(invoiceKey)) {
-        issues.push({ id: `duplicate-${transaction.id || index}`, invoiceNo, message: "Duplicate invoice number found." });
+        issues.push({ id: `duplicate-${transaction.id || index}`, invoiceNo,
+          transactionId: String(transaction.id || ""), message: "Duplicate invoice number found." });
       } else {
         seenInvoices.add(invoiceKey);
       }
@@ -44,6 +48,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
         issues.push({
           id: `total-${transaction.id || index}`,
           invoiceNo,
+          transactionId: String(transaction.id || ""),
           message: `Invoice total does not reconcile (expected ${expectedTotal.toFixed(2)}, saved ${total.toFixed(2)}).`
         });
       }
@@ -55,6 +60,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
       issues.push({
         id: `balance-${transaction.id || index}`,
         invoiceNo,
+          transactionId: String(transaction.id || ""),
         message: `Paid amount plus outstanding due does not equal the invoice total.`
       });
     }
@@ -89,11 +95,22 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
           issues.push({
             id: `subtotal-${transaction.id || index}`,
             invoiceNo,
+          transactionId: String(transaction.id || ""),
             message: `Product line values after recorded returns do not match the saved invoice subtotal.`
           });
         }
       }
     }
+
+    const costAudit = calculateHistoricalCogs([transaction]);
+    costAudit.incompleteLines.forEach((line, lineIndex) => {
+      issues.push({
+        id: `historical-cost-${transaction.id || index}-${line.itemId || lineIndex}`,
+        invoiceNo,
+        transactionId: String(transaction.id || ""),
+        message: `Historical cost review — ${line.productName}: ${line.reason}`
+      });
+    });
 
     const returnHistory = Array.isArray(transaction.returnHistory) ? transaction.returnHistory : [];
     const returnedByLine = new Map<string, number>();
@@ -108,6 +125,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
         issues.push({
           id: `return-value-${transaction.id || index}-${entry.id || returnHistory.indexOf(entry)}`,
           invoiceNo,
+          transactionId: String(transaction.id || ""),
           message: "Return amount does not reconcile after its proportional VAT and discount adjustment."
         });
       }
@@ -125,6 +143,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
       issues.push({
         id: `refund-history-${transaction.id || index}`,
         invoiceNo,
+          transactionId: String(transaction.id || ""),
         message: "Cash refund history does not match the cash refund amounts saved in return records."
       });
     }
@@ -137,6 +156,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
         issues.push({
           id: `return-qty-${transaction.id || index}-${itemIndex}`,
           invoiceNo,
+          transactionId: String(transaction.id || ""),
           message: `Returned quantity exceeds the original sold quantity for ${item?.name || "a product line"}.`
         });
       }
