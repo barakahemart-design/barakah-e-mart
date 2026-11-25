@@ -694,6 +694,38 @@ export function ReportsView({
     </div>;
   }
 
+  if (reportSection === "dashboard" && !monthlyArchiveOpen) {
+    const totalSales = archiveMonthData.reduce((n:any,m:any)=>n+(Number(m.salesTotal)||0),0);
+    const totalExpenses = archiveMonthData.reduce((n:any,m:any)=>n+(Number(m.expensesTotal)||0),0);
+    const totalPurchases = archiveMonthData.reduce((n:any,m:any)=>n+(Number(m.purchasesTotal)||0),0);
+    const reportCards = [
+      {key:"sales",title:"Sales & Invoices",desc:"সব বিক্রয় ও ইনভয়েসের বিস্তারিত",count:safeTransactions.length},
+      {key:"issues",title:"Accounting Issues",desc:"হিসাবের অমিল ও যাচাইয়ের বিষয়",count:integrityIssues.length},
+      {key:"expenses",title:"Expenses",desc:"সকল খরচের তালিকা ও বিবরণ",count:safeExpenses.length},
+      {key:"purchases",title:"Purchases",desc:"সকল ক্রয় ও সাপ্লায়ার রেকর্ড",count:safePurchases.length},
+      {key:"payments",title:"Payments & Refunds",desc:"পেমেন্ট ও রিফান্ডের হিসাব",count:archiveMonthData.reduce((n:any,m:any)=>n+m.cashMovements.length,0)},
+      {key:"products",title:"Products Sold & Profit",desc:"পণ্যভিত্তিক বিক্রি, খরচ ও লাভ",count:individualSaleItemsLedger.length}
+    ] as const;
+    return <div className="space-y-5 text-slate-200 pb-8" id="reports-view">
+      <section className="rounded-2xl border border-slate-700 bg-[#1e1e24] p-4">
+        <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-white">Reports Dashboard</h2><p className="text-xs text-slate-400 mt-1">Business overview — সব রিপোর্টের মূল সারসংক্ষেপ</p></div><span className="rounded-lg bg-sky-500/10 border border-sky-500/20 px-3 py-2 text-[10px] font-bold text-sky-300">OVERVIEW</span></div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          {[{label:"Total Sales",value:totalSales},{label:"Total Expenses",value:totalExpenses},{label:"Total Purchases",value:totalPurchases},{label:"Invoices",value:safeTransactions.length}].map(x=><div key={x.label} className="rounded-xl bg-[#121214] border border-slate-800 p-3"><p className="text-[10px] text-slate-400">{x.label}</p><p className="text-base font-black text-white mt-1">{x.label==="Invoices"?x.value:currencySymbol+Math.round(x.value).toLocaleString()}</p></div>)}
+        </div>
+      </section>
+      <section className="rounded-2xl border border-slate-700 bg-[#1e1e24] p-4">
+        <h3 className="font-black text-white text-sm">Report Sections</h3><p className="text-[10px] text-slate-400 mt-1 mb-3">প্রতিটি রিপোর্ট আলাদা ঘরে রাখা হয়েছে। বিস্তারিত দেখতে ঘরে ক্লিক করুন।</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {reportCards.map(item=><button key={item.key} onClick={()=>setReportSection(item.key)} className="min-h-[104px] rounded-xl border border-slate-700 bg-[#121214] hover:border-sky-400 p-4 text-left transition-colors"><div className="flex items-center justify-between gap-2"><b className="text-sm text-white">{item.title}</b><span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] text-sky-300">{item.count}</span></div><p className="text-[11px] text-slate-400 mt-2">{item.desc}</p><p className="text-[10px] font-bold text-sky-300 mt-3">Open section →</p></button>)}
+        </div>
+      </section>
+      <section className="rounded-2xl border border-slate-700 bg-[#1e1e24] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3"><div><h3 className="font-black text-white text-sm">Monthly Business Archive</h3><p className="text-[10px] text-slate-400 mt-1">১২ মাসের প্রতিটি মাস আলাদা ঘরে — ক্লিক করলে মাসের পূর্ণ রিপোর্ট।</p></div><div className="flex items-center gap-3"><button onClick={()=>setArchiveYear(y=>y-1)} className="rounded-lg bg-[#121214] border border-slate-700 px-3 py-1.5">‹</button><b className="text-xs font-mono text-white">{archiveYear}</b><button disabled={archiveYear>=new Date().getFullYear()} onClick={()=>setArchiveYear(y=>y+1)} className="rounded-lg bg-[#121214] border border-slate-700 px-3 py-1.5 disabled:opacity-30">›</button></div></div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{archiveMonthData.map(month=><button key={month.monthIndex} onClick={()=>{setMonthlyArchiveOpen(true);setSelectedArchiveMonth(month.monthIndex);}} className="rounded-xl border border-slate-700 bg-[#121214] hover:border-sky-500 p-3 text-left"><div className="flex items-center justify-between"><b className="text-xs text-white">{month.monthName}</b><CalendarDays className="w-4 h-4 text-sky-300"/></div><p className="text-[10px] text-slate-400 mt-2">{month.sales.length} sales · {month.expenses.length} expenses</p><p className="text-sm font-mono font-black text-white mt-1">{currencySymbol}{Math.round(month.salesTotal).toLocaleString()}</p><p className={`text-[9px] mt-1 font-bold ${month.netProfit===null?"text-amber-300":month.netProfit>=0?"text-emerald-400":"text-rose-400"}`}>{month.netProfit===null?"Profit incomplete":`Net: ${currencySymbol}${Math.round(month.netProfit).toLocaleString()}`}</p></button>)}</div>
+      </section>
+    </div>;
+  }
+
   // Dedicated month picker and month-detail page.
   if (monthlyArchiveOpen) {
     const m = selectedArchiveMonth === null ? null : archiveMonthData[selectedArchiveMonth];
