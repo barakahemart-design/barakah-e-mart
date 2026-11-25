@@ -101,6 +101,7 @@ interface ReportsViewProps {
   businessInfo?: any;
   currencySymbol?: string;
   onNavigateToInvoice?: (invoiceNo: string) => void;
+  onOpenFullDashboard?: () => void;
 }
 
 export function ReportsView({
@@ -113,7 +114,8 @@ export function ReportsView({
   staffList = [],
   businessInfo,
   currencySymbol = "৳",
-  onNavigateToInvoice
+  onNavigateToInvoice,
+  onOpenFullDashboard
 }: ReportsViewProps) {
   const safeProducts = Array.isArray(products) ? products : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
@@ -710,7 +712,7 @@ export function ReportsView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-xl font-black text-white">Reports Dashboard</h2><p className="text-xs text-slate-400 mt-1">Choose a report to open its own detail page.</p></div>
       </div>
-      <button type="button" onClick={() => setFullDashboardOpen(true)} className="w-full rounded-2xl border border-sky-500/40 bg-gradient-to-r from-sky-500/15 to-indigo-500/10 p-5 text-left hover:border-sky-400 transition-colors" id="open-full-reports-overview">
+      <button type="button" onClick={() => onOpenFullDashboard ? onOpenFullDashboard() : setFullDashboardOpen(true)} className="w-full rounded-2xl border border-sky-500/40 bg-gradient-to-r from-sky-500/15 to-indigo-500/10 p-5 text-left hover:border-sky-400 transition-colors" id="open-full-reports-overview">
         <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-sky-300">Overview</p><h3 className="mt-1 text-lg font-black text-white">Full Business Dashboard</h3><p className="mt-1 text-xs text-slate-400">Open date filters, live time, sales, cash, expenses, COGS, net profit and charts in one page.</p></div><span className="rounded-xl bg-sky-500/15 px-4 py-3 text-sm font-black text-sky-200">Open →</span></div>
       </button>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" id="reports-section-cards">
