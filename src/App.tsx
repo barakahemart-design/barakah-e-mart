@@ -1373,7 +1373,9 @@ export default function App() {
         product_name: docData.product_name || "Product Item",
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
-        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
+        // Preserve missing historical cost as undefined; zero is a valid explicit cost, not a missing-value default.
+        cost_price: docData.cost_price !== undefined && docData.cost_price !== null && docData.cost_price !== ""
+          ? Number(docData.cost_price) : undefined,
         cost_allocations: docData.cost_allocations || docData.costAllocations || undefined,
         is_negative_sale: docData.is_negative_sale === true || docData.isNegativeSale === true,
         is_negative_sale_approved: docData.is_negative_sale_approved === true || docData.isNegativeSaleApproved === true
