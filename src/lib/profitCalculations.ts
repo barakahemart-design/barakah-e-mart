@@ -50,9 +50,15 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
     const returns = (Array.isArray(transaction.returnHistory) ? transaction.returnHistory :
       (Array.isArray(transaction.return_history) ? transaction.return_history : []))
       .flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
-    const knownItemIds = new Set(items.map((item: any, itemIndex: number) => String(item?.firestoreId || item?.id || `${transaction.id || txIndex}_item_${itemIndex}`)));
+    const getItemId = (item: any, itemIndex: number) =>
+      String(item?.firestoreId || item?.firestore_id || item?.id || `${transaction.id || txIndex}_item_${itemIndex}`);
+    const getReturnItemId = (line: any) =>
+      String(line?.transactionItemId || line?.transaction_item_id ||
+        line?.transactionItemFirestoreId || line?.transaction_item_firestore_id ||
+        line?.itemId || line?.item_id || "");
+    const knownItemIds = new Set(items.map((item: any, itemIndex: number) => getItemId(item, itemIndex)));
     returns.forEach((line: any, returnIndex: number) => {
-      const returnItemId = String(line?.transactionItemId || line?.transaction_item_id || "");
+      const returnItemId = getReturnItemId(line);
       if (!returnItemId || !knownItemIds.has(returnItemId)) {
         incompleteLines.push({ transactionId: String(transaction.id || ""), invoiceNo: String(transaction.invoiceNo || transaction.invoice_no || transaction.id || "Unknown invoice"), itemId: `return-${returnIndex}`, productName: String(line?.productName || line?.product_name || "Returned item"), reason: "Return record cannot be matched to its original invoice item." });
       }
@@ -67,7 +73,7 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
       }
       if (quantity <= EPSILON) return;
 
-      const itemId = String(item.firestoreId || item.id || `${transaction.id || txIndex}_item_${itemIndex}`);
+      const itemId = getItemId(item, itemIndex);
       const allocations = readAllocations(item);
       let originalCost: number | null = null;
       let unitCost: number | null = null;
@@ -87,7 +93,7 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
       }
 
       const returnedLines = returns.filter((line: any) =>
-        String(line?.transactionItemId || line?.transaction_item_id || "") === itemId
+        getReturnItemId(line) === itemId
       );
       const returnedQuantity = returnedLines.reduce((sum: number, line: any) =>
         sum + Math.max(0, Number(line?.quantity) || 0), 0);
