@@ -701,8 +701,8 @@ export function ReportsView({
   }
 
   return (
-      <button onClick={() => { setMonthlyArchiveOpen(true); setSelectedArchiveMonth(null); }} className="w-full text-left rounded-2xl border border-sky-500/30 bg-[#1e1e24] hover:border-sky-400 p-4 flex items-center justify-between gap-3" id="monthly-business-archive-entry"><div className="flex items-center gap-3"><CalendarDays className="w-6 h-6 text-sky-300"/><div><h3 className="font-black text-white text-sm">Monthly Business Archive</h3><p className="text-[10px] text-slate-400 mt-1">View each month's sales, products, profit, expenses and purchases separately.</p></div></div><span className="text-xs font-bold text-sky-300 whitespace-nowrap">Open →</span></button>
     <div className="space-y-6 text-slate-300 font-sans" id="reports-view">
+      <button onClick={() => { setMonthlyArchiveOpen(true); setSelectedArchiveMonth(null); }} className="w-full text-left rounded-2xl border border-sky-500/30 bg-[#1e1e24] hover:border-sky-400 p-4 flex items-center justify-between gap-3" id="monthly-business-archive-entry"><div className="flex items-center gap-3"><CalendarDays className="w-6 h-6 text-sky-300"/><div><h3 className="font-black text-white text-sm">Monthly Business Archive</h3><p className="text-[10px] text-slate-400 mt-1">View each month's sales, products, profit, expenses and purchases separately.</p></div></div><span className="text-xs font-bold text-sky-300 whitespace-nowrap">Open →</span></button>
       <div className="rounded-2xl border border-slate-700 bg-[#111827] p-4" id="accounting-integrity-audit">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
