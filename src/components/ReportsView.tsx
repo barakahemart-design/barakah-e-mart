@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -101,7 +101,6 @@ interface ReportsViewProps {
   businessInfo?: any;
   currencySymbol?: string;
   onNavigateToInvoice?: (invoiceNo: string) => void;
-  onOpenFullDashboard?: () => void;
 }
 
 export function ReportsView({
@@ -114,8 +113,7 @@ export function ReportsView({
   staffList = [],
   businessInfo,
   currencySymbol = "৳",
-  onNavigateToInvoice,
-  onOpenFullDashboard
+  onNavigateToInvoice
 }: ReportsViewProps) {
   const safeProducts = Array.isArray(products) ? products : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
@@ -134,6 +132,11 @@ export function ReportsView({
   );
 
   const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "weekly" | "monthly" | "yearly" | "custom">("all");
+  const [reportCurrentTime, setReportCurrentTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setReportCurrentTime(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [startDate, setStartDate] = useState(() => {
     const thirtyDaysAgo = safeSubDays(new Date(), 30);
     return safeFormat(thirtyDaysAgo, "yyyy-MM-dd", "");
@@ -712,7 +715,7 @@ export function ReportsView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-xl font-black text-white">Reports Dashboard</h2><p className="text-xs text-slate-400 mt-1">Choose a report to open its own detail page.</p></div>
       </div>
-      <button type="button" onClick={() => onOpenFullDashboard ? onOpenFullDashboard() : setFullDashboardOpen(true)} className="w-full rounded-2xl border border-sky-500/40 bg-gradient-to-r from-sky-500/15 to-indigo-500/10 p-5 text-left hover:border-sky-400 transition-colors" id="open-full-reports-overview">
+      <button type="button" onClick={() => { setMonthlyArchiveOpen(false); setSelectedArchiveMonth(null); setFullDashboardOpen(true); }} className="w-full rounded-2xl border border-sky-500/40 bg-gradient-to-r from-sky-500/15 to-indigo-500/10 p-5 text-left hover:border-sky-400 transition-colors" id="open-full-reports-overview">
         <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-sky-300">Overview</p><h3 className="mt-1 text-lg font-black text-white">Full Business Dashboard</h3><p className="mt-1 text-xs text-slate-400">Open date filters, live time, sales, cash, expenses, COGS, net profit and charts in one page.</p></div><span className="rounded-xl bg-sky-500/15 px-4 py-3 text-sm font-black text-sky-200">Open →</span></div>
       </button>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" id="reports-section-cards">
@@ -733,7 +736,7 @@ export function ReportsView({
   return (
     <div className="space-y-6 text-slate-300 font-sans" id="reports-view">
 
-      {fullDashboardOpen && <div className="flex items-center justify-between gap-3"><div><button type="button" onClick={() => setFullDashboardOpen(false)} className="mb-2 text-xs font-bold text-sky-300">← Back to Reports Dashboard</button><h2 className="text-lg font-black text-white">Full Business Overview</h2></div><span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[10px] font-bold text-sky-200">Overview</span></div>}
+      {fullDashboardOpen && <div className="flex items-center justify-between gap-3"><div><button type="button" onClick={() => setFullDashboardOpen(false)} className="mb-2 text-xs font-bold text-sky-300">← Back to Reports Dashboard</button><h2 className="text-lg font-black text-white">Reports Business Dashboard</h2><p className="mt-1 text-[10px] text-slate-400">{reportCurrentTime.toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })} · {reportCurrentTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}</p></div><span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[10px] font-bold text-sky-200">REPORT OVERVIEW</span></div>}
       <div className="rounded-2xl border border-slate-700 bg-[#111827] p-4" id="accounting-integrity-audit">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
