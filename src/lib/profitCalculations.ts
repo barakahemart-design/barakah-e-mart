@@ -64,14 +64,18 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
       const allocations = readAllocations(item);
       let originalCost: number | null = null;
       let unitCost: number | null = null;
+      let safeReturnFallbackUnitCost: number | null = null;
       if (allocations.length) {
         const totals = sumAllocations(allocations);
         if (totals && Math.abs(totals.quantity - quantity) <= EPSILON) {
           originalCost = totals.cost;
           unitCost = totals.cost / quantity;
+          const allocationUnitCosts = allocations.map((allocation: any) => Number(allocation?.unitCost ?? allocation?.unit_cost));
+          safeReturnFallbackUnitCost = allocationUnitCosts.every((value: number) => Math.abs(value - allocationUnitCosts[0]) <= 0.000001) ? allocationUnitCosts[0] : null;
         }
       } else {
         unitCost = readUnitCost(item);
+        safeReturnFallbackUnitCost = unitCost;
         if (unitCost !== null) originalCost = unitCost * quantity;
       }
 
@@ -111,8 +115,8 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
             returnedCost += totals.cost;
             continue;
           }
-          if (unitCost !== null) {
-            returnedCost += unitCost * lineQty;
+          if (safeReturnFallbackUnitCost !== null) {
+            returnedCost += safeReturnFallbackUnitCost * lineQty;
           } else {
             returnCostComplete = false;
             break;
