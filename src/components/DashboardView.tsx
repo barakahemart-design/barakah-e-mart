@@ -46,6 +46,9 @@ interface DashboardViewProps {
   totalOutstandingDueTk: number;
   totalPurchasesTk: number;
   totalUnitsSold: number;
+  totalSalesTaxTk: number;
+  totalCostOfGoodsSold: number;
+  profitComplete: boolean;
   netProfitAmt: number | null;
   incompleteCostLines?: any[];
 
@@ -76,6 +79,9 @@ export function DashboardView({
   totalOutstandingDueTk,
   totalPurchasesTk,
   totalUnitsSold,
+  totalSalesTaxTk,
+  totalCostOfGoodsSold,
+  profitComplete,
   netProfitAmt,
   incompleteCostLines = [],
 
@@ -131,6 +137,8 @@ export function DashboardView({
 
   const activeExpenses = getActiveExpensesData();
   const activePlotData = getActivePlotData();
+  const netSalesExcludingVat = Math.max(0, totalSalesTk - totalSalesTaxTk);
+  const cogsExceedsNetSales = profitComplete && totalCostOfGoodsSold > netSalesExcludingVat + 0.02;
 
   // Dynamically calculate sum of slice
   const displayedExpensesTotal = expenseCategoryPlotData && expenseCategoryPlotData.length > 0 
@@ -334,6 +342,18 @@ export function DashboardView({
         </div>
 
       </div>
+
+      {(netProfitAmt === null || cogsExceedsNetSales) && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4" id="dashboard-profit-review-alert">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs font-black text-amber-200">Profit calculation needs review</h3>
+              <p className="mt-1 text-xs text-slate-300">{netProfitAmt === null ? `${incompleteCostLines.length} sale line(s) have missing or inconsistent historical cost / return data. Profit is not estimated.` : `COGS exceeds net sales by ${currencySymbol}${formatMoney(totalCostOfGoodsSold - netSalesExcludingVat)}. This may be a real loss or incorrect saved item costs.`}</p>
+            </div>
+            <button type="button" onClick={() => onNavigate("reports")} className="rounded-lg border border-amber-400/40 px-3 py-2 text-[10px] font-bold text-amber-100 hover:bg-amber-500/10">Open accounting review →</button>
+          </div>
+        </div>
+      )}
 
       <ProductSalesBreakdown
         products={products}
