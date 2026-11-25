@@ -5656,6 +5656,7 @@ _${businessInfo.name}_`;
               totalPurchasesTk={totalPurchasesTk}
               totalUnitsSold={totalUnitsSold}
               netProfitAmt={netProfitAmt}
+              incompleteCostLines={incompleteCostLines}
               ledgerTrendsPlotData={ledgerTrendsPlotData}
               expenseCategoryPlotData={expenseCategoryPlotData}
             />
