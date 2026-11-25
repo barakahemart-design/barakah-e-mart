@@ -640,6 +640,12 @@ export function ReportsView({
     return (stats.netProfit / netSales) * 100;
   }, [stats]);
 
+  const netSalesForPeriod = Math.max(0, stats.salesVal - stats.salesTax);
+  const cogsExceedsSalesIssue = stats.profitComplete && stats.cogs > netSalesForPeriod + 0.02
+    ? { id: "period-cogs-exceeds-sales", invoiceNo: "Selected reporting period", message: `Recorded COGS exceeds net sales by ${currencySymbol}${Math.round(stats.cogs - netSalesForPeriod).toLocaleString()}. This may be a genuine loss or an incorrect sale-time cost; review item costs before changing any record.` }
+    : null;
+  const displayIntegrityIssues = cogsExceedsSalesIssue ? [...integrityIssues, cogsExceedsSalesIssue] : integrityIssues;
+
   const COLORS = ["#00E676", "#00B0FF", "#FFC400", "#D500F9", "#FF9100", "#FF1744"];
 
   // Export to simple printed CSV or receipt
@@ -655,7 +661,7 @@ export function ReportsView({
     return <div className="space-y-5 text-slate-200 pb-8" id="reports-category-page">
       <div><button onClick={()=>setReportSection("dashboard")} className="text-xs font-bold text-sky-400 mb-2">← Back to Dashboard</button><h2 className="text-xl font-black text-white">{titles[reportSection]}</h2><p className="text-xs text-slate-400 mt-1">Detailed records in a separate report page.</p></div>
       <div className="rounded-2xl border border-slate-700 bg-[#1e1e24] overflow-hidden">
-      {reportSection === "issues" && <><h3 className="p-4 border-b border-slate-700 font-bold">Accounting review ({integrityIssues.length})</h3>{integrityIssues.length ? integrityIssues.map(issue=><div key={issue.id} className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3"><div className="min-w-0 flex-1"><b className="text-xs text-amber-200">{issue.invoiceNo}</b><p className="text-xs mt-1">{issue.message}</p></div>{issue.transactionId && onNavigateToInvoice && <button type="button" onClick={()=>onNavigateToInvoice(issue.invoiceNo)} className="shrink-0 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-[10px] font-bold text-sky-200 hover:bg-sky-500/20">Review / Correct in Ledger →</button>}</div>):<p className="p-8 text-center text-emerald-300">No accounting mismatches detected.</p>}</>}
+      {reportSection === "issues" && <><h3 className="p-4 border-b border-slate-700 font-bold">Accounting review ({displayIntegrityIssues.length})</h3>{displayIntegrityIssues.length ? displayIntegrityIssues.map(issue=><div key={issue.id} className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3"><div className="min-w-0 flex-1"><b className="text-xs text-amber-200">{issue.invoiceNo}</b><p className="text-xs mt-1">{issue.message}</p></div>{issue.transactionId && onNavigateToInvoice && <button type="button" onClick={()=>onNavigateToInvoice(issue.invoiceNo)} className="shrink-0 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-[10px] font-bold text-sky-200 hover:bg-sky-500/20">Review / Correct in Ledger →</button>}</div>):<p className="p-8 text-center text-emerald-300">No accounting mismatches detected.</p>}</>}
       {reportSection === "sales" && <><h3 className="p-4 border-b border-slate-700 font-bold">All Sales Invoices ({safeTransactions.length})</h3><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-xs"><thead><tr className="bg-[#141419] text-slate-400">{["Date","Invoice","Customer","Total","Paid","Due"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{safeTransactions.length ? [...safeTransactions].sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))).map((t:any,i:number)=>{const c=safeContacts.find((ct:any)=>ct?.id===(t.contactId||t.contact_id));return <tr key={t.id||i}><td className="p-3">{t.date||"—"}</td><td className="p-3">{t.invoiceNo||t.invoice_no||"—"}</td><td className="p-3">{c?.name||"Walk-In Customer"}</td><td className="p-3 text-right">{money(Number(t.total)||0)}</td><td className="p-3 text-right">{money(Number(t.paidAmount??t.paid_amount)||0)}</td><td className="p-3 text-right">{money(Number(t.dueBalance??t.due_balance)||0)}</td></tr>}) : <tr><td colSpan={6} className="p-8 text-center">No sales invoices.</td></tr>}</tbody></table></div></>}
       {reportSection === "expenses" && <><h3 className="p-4 border-b border-slate-700 font-bold">All Expenses ({safeExpenses.length})</h3><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-xs"><thead><tr className="bg-[#141419] text-slate-400">{["Date","Category","Description","Amount"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{safeExpenses.map((e:any,i:number)=><tr key={e.id||i}><td className="p-3">{e.date||"—"}</td><td className="p-3">{e.category||"Other"}</td><td className="p-3">{e.description||e.note||"—"}</td><td className="p-3 text-right">{money(Number(e.amount)||0)}</td></tr>)}</tbody></table></div></>}
       {reportSection === "purchases" && <><h3 className="p-4 border-b border-slate-700 font-bold">All Purchases ({safePurchases.length})</h3><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-xs"><thead><tr className="bg-[#141419] text-slate-400">{["Date","Supplier","Reference","Total"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-700">{safePurchases.map((p:any,i:number)=><tr key={p.id||i}><td className="p-3">{p.date||"—"}</td><td className="p-3">{p.supplierName||p.supplier||"—"}</td><td className="p-3">{p.invoiceNo||p.reference||p.id||"—"}</td><td className="p-3 text-right">{money(Number(p.totalAmount)||0)}</td></tr>)}</tbody></table></div></>}
@@ -694,7 +700,7 @@ export function ReportsView({
   if (!fullDashboardOpen && !monthlyArchiveOpen && reportSection === "dashboard") {
     const cards = [
       { key: "sales", title: "Sales & Invoices", count: safeTransactions.length, note: "Invoices, customer sales and balances" },
-      { key: "issues", title: "Accounting Issues", count: integrityIssues.length, note: "Find mismatches and open correction actions" },
+      { key: "issues", title: "Accounting Issues", count: displayIntegrityIssues.length, note: "Find mismatches and open correction actions" },
       { key: "expenses", title: "Expenses", count: safeExpenses.length, note: "Operating, delivery and salary expenses" },
       { key: "purchases", title: "Purchases", count: safePurchases.length, note: "Purchase bills and supplier records" },
       { key: "payments", title: "Payments & Refunds", count: archiveMonthData.reduce((n, m) => n + m.cashMovements.length, 0), note: "Collections and refunds by payment date" },
@@ -733,18 +739,20 @@ export function ReportsView({
             <p className="mt-1 text-[10px] text-slate-400">Checks invoice totals, paid/due balances, product line values and return quantities using data already loaded by the existing live listeners. No extra Firestore reads or writes.</p>
           </div>
           <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${integrityIssues.length === 0 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>
-            {integrityIssues.length === 0 ? "No mismatches detected" : `${integrityIssues.length} item(s) need review`}
+            {integrityIssues.length === 0 ? "No mismatches detected" : `${displayIntegrityIssues.length} item(s) need review`}
           </div>
         </div>
-        {integrityIssues.length > 0 && <div className="mt-3 space-y-2">
-          {integrityIssues.map(issue => <div key={issue.id} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.06] px-3 py-2">
+        {displayIntegrityIssues.length > 0 && <div className="mt-3 space-y-2">
+          {displayIntegrityIssues.map(issue => <div key={issue.id} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.06] px-3 py-2">
             <p className="text-[10px] font-bold text-amber-200">{issue.invoiceNo}</p>
             <p className="mt-0.5 text-[10px] text-slate-300">{issue.message}</p>
           </div>)}
-          <p className="text-[10px] text-slate-400">Showing all {integrityIssues.length} findings. No records were changed.</p>
+          <p className="text-[10px] text-slate-400">Showing all {displayIntegrityIssues.length} findings. No records were changed.</p>
         </div>}
       </div>
       
+      {cogsExceedsSalesIssue && <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" id="cogs-exceeds-sales-warning"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-xs font-black text-amber-200">Profitability needs review</h3><p className="mt-1 text-xs text-slate-300">{cogsExceedsSalesIssue.message}</p></div><button type="button" onClick={()=>setReportSection("issues")} className="rounded-lg border border-amber-400/40 px-3 py-2 text-[10px] font-bold text-amber-100 hover:bg-amber-500/10">Review cost issues →</button></div></div>}
+
       {/* Dynamic Selector Header Panel */}
       <div className="bg-[#1E1E24] p-5 rounded-2xl border border-[#2D2D35] flex flex-col lg:flex-row items-center justify-between gap-5 shadow-lg relative overflow-hidden" id="reports-period-selector-bar">
         <div className="space-y-1">
