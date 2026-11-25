@@ -5686,7 +5686,6 @@ _${businessInfo.name}_`;
               businessInfo={businessInfo}
               currencySymbol={businessInfo?.currencySymbol || "৳"}
               onNavigateToInvoice={handleNavigateToInvoice}
-              onOpenFullDashboard={() => setActiveTab("dashboard")}
             />
           )}
 
