@@ -112,7 +112,8 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
       });
     });
 
-    const returnHistory = Array.isArray(transaction.returnHistory) ? transaction.returnHistory : [];
+    const returnHistory = Array.isArray(transaction.returnHistory) ? transaction.returnHistory :
+      (Array.isArray(transaction.return_history) ? transaction.return_history : []);
     const returnedByLine = new Map<string, number>();
     returnHistory.forEach((entry: any) => {
       const calculatedRefund = roundMoney(
@@ -130,7 +131,9 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
         });
       }
       (Array.isArray(entry?.items) ? entry.items : []).forEach((line: any) => {
-        const lineId = String(line?.transactionItemId || "");
+        const lineId = String(line?.transactionItemId || line?.transaction_item_id ||
+          line?.transactionItemFirestoreId || line?.transaction_item_firestore_id ||
+          line?.itemId || line?.item_id || "");
         if (!lineId) return;
         returnedByLine.set(lineId, (returnedByLine.get(lineId) || 0) + (Number(line?.quantity) || 0));
       });
@@ -149,7 +152,7 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
     }
 
     items.forEach((item: any, itemIndex: number) => {
-      const lineId = String(item?.firestoreId || item?.id || `${transaction.id}_item_${itemIndex}`);
+      const lineId = String(item?.firestoreId || item?.firestore_id || item?.id || `${transaction.id}_item_${itemIndex}`);
       const returned = returnedByLine.get(lineId) || 0;
       const sold = Math.max(0, Number(item?.quantity) || 0);
       if (returned > sold + 0.000001) {
