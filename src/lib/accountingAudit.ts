@@ -139,7 +139,8 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
       });
     });
 
-    const refundHistory = Array.isArray(transaction.refundHistory) ? transaction.refundHistory : [];
+    const refundHistory = Array.isArray(transaction.refundHistory) ? transaction.refundHistory :
+      (Array.isArray(transaction.refund_history) ? transaction.refund_history : []);
     const refundTotal = refundHistory.reduce((sum: number, refund: any) => sum + Math.max(0, Number(refund?.amount) || 0), 0);
     const returnCashTotal = returnHistory.reduce((sum: number, entry: any) => sum + Math.max(0, Number(entry?.cashRefund) || 0), 0);
     if (Math.abs(roundMoney(refundTotal) - roundMoney(returnCashTotal)) > 0.02) {
