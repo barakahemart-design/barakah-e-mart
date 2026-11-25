@@ -5655,6 +5655,9 @@ _${businessInfo.name}_`;
               totalOutstandingDueTk={totalOutstandingDueTk}
               totalPurchasesTk={totalPurchasesTk}
               totalUnitsSold={totalUnitsSold}
+              totalSalesTaxTk={totalSalesTaxTk}
+              totalCostOfGoodsSold={totalCostOfGoodsSold}
+              profitComplete={profitComplete}
               netProfitAmt={netProfitAmt}
               incompleteCostLines={incompleteCostLines}
               ledgerTrendsPlotData={ledgerTrendsPlotData}
