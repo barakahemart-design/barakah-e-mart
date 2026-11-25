@@ -2814,11 +2814,18 @@ export default function App() {
 
     try {
       if (activeUser && !activeUser.isGuest) {
+        // Persist the cost in both representations: the flat item collection and
+        // the nested invoice snapshot consumed by historical COGS calculations.
         await setDoc(doc(db, "transaction_items", itemId), flatItem, { merge: true });
+        await setDoc(
+          doc(db, "transactions", targetTx.firestoreId || targetTx.id || txId),
+          { items: targetTx.items, updated_at: new Date().toISOString() },
+          { merge: true }
+        );
       }
     } catch (e) {
       console.error("Failed to update transaction item cost in Firestore:", e);
-      triggerNotification("Cost update could not be synchronized to the cloud. The local change is retained; please retry sync before relying on the updated report.", "error");
+      triggerNotification("Cost update could not be synchronized to the cloud. The report was not updated; please retry the correction.", "error");
       return false;
     }
 
@@ -2856,6 +2863,7 @@ export default function App() {
     });
 
     const saved = await persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+    if (!saved) return;
     setTransactions(updatedTransactions);
 
     // The negative-stock editor's optional checkbox updates only the catalog
@@ -2889,8 +2897,9 @@ export default function App() {
     });
 
     const saved = await persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+    if (!saved) return;
     setTransactions(updatedTransactions);
-    if (saved) triggerNotification("Only the selected unit's cost price was updated.", "success");
+    triggerNotification("Only the selected unit's cost price was updated.", "success");
   };
 
   const handleNavigateToCustomer = (customerName: string) => {
@@ -3881,10 +3890,34 @@ export default function App() {
         let returnedCost = 0;
         requested.forEach(({ item, itemId, productId, quantity, returnedBefore }) => {
           const product = nextProducts.get(productId) || liveProducts.get(productId);
-          const fallbackCost = Number(item.buyPrice ?? item.cost_price ?? product.buyPrice ?? product.buy_price) || 0;
+          const savedAllocations = Array.isArray(item.costAllocations) ? item.costAllocations :
+            (Array.isArray(item.cost_allocations) ? item.cost_allocations : []);
+          const soldQuantity = Number(item.quantity);
+          const savedUnitCostRaw = item.buyPrice ?? item.cost_price ?? item.buy_price;
+          const savedUnitCost = savedUnitCostRaw === undefined || savedUnitCostRaw === null || savedUnitCostRaw === ""
+            ? null : Number(savedUnitCostRaw);
+          if (savedAllocations.length > 0) {
+            const allocatedQuantity = savedAllocations.reduce((sum: number, allocation: any) => sum + (Number(allocation?.quantity) || 0), 0);
+            const allocationsValid = savedAllocations.every((allocation: any) =>
+              Number.isFinite(Number(allocation?.quantity)) && Number(allocation.quantity) >= 0 &&
+              Number.isFinite(Number(allocation?.unitCost ?? allocation?.unit_cost)) &&
+              Number(allocation?.unitCost ?? allocation?.unit_cost) >= 0
+            );
+            if (!allocationsValid || !Number.isFinite(soldQuantity) || Math.abs(allocatedQuantity - soldQuantity) > 0.000001) {
+              throw new Error(`Historical FIFO cost is incomplete for ${item.name || "item"}; correct the original invoice cost before processing this return.`);
+            }
+          } else if (savedUnitCost === null || !Number.isFinite(savedUnitCost) || savedUnitCost < 0) {
+            throw new Error(`Historical sale cost is missing for ${item.name || "item"}; the current catalog price cannot be used for a return. Correct the original invoice cost first.`);
+          }
+          const fallbackCost = savedUnitCost ?? (
+            savedAllocations.length > 0
+              ? savedAllocations.reduce((sum: number, allocation: any) =>
+                  sum + (Number(allocation.quantity) || 0) * Number(allocation.unitCost ?? allocation.unit_cost), 0) / Math.max(soldQuantity, 0.000001)
+              : 0
+          );
           const allocations = getCostAllocationsForItem({
-            id: itemId, quantity: Number(item.quantity) || 0, buyPrice: fallbackCost,
-            costAllocations: item.costAllocations || item.cost_allocations || []
+            id: itemId, quantity: soldQuantity, buyPrice: fallbackCost,
+            costAllocations: savedAllocations
           }, fallbackCost);
           let skip = returnedBefore;
           let remaining = quantity;
