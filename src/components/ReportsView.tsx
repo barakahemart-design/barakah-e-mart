@@ -738,8 +738,8 @@ export function ReportsView({
             <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">Read-only Accounting Integrity Check</h3>
             <p className="mt-1 text-[10px] text-slate-400">Checks invoice totals, paid/due balances, product line values and return quantities using data already loaded by the existing live listeners. No extra Firestore reads or writes.</p>
           </div>
-          <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${integrityIssues.length === 0 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>
-            {integrityIssues.length === 0 ? "No mismatches detected" : `${displayIntegrityIssues.length} item(s) need review`}
+          <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${displayIntegrityIssues.length === 0 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>
+            {displayIntegrityIssues.length === 0 ? "No mismatches detected" : `${displayIntegrityIssues.length} item(s) need review`}
           </div>
         </div>
         {displayIntegrityIssues.length > 0 && <div className="mt-3 space-y-2">
