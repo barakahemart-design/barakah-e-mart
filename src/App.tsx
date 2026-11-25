@@ -87,6 +87,7 @@ import {
   updateOneCostAllocation,
   updatePurchaseCostLot
 } from "./lib/fifoCosting";
+import { calculateHistoricalCogs } from "./lib/profitCalculations";
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
@@ -4906,32 +4907,8 @@ _${businessInfo.name}_`;
       return sum + Math.max(0, soldQty - returnedQty);
     }, 0);
 
-    let totalCostOfGoodsSold = 0;
-    filteredDashboardTx.forEach(t => {
-      let invoiceCogs = 0;
-      (t.items || []).forEach(item => {
-        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
-        let buyCost = 0;
-        if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
-          buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
-        } else if (item.buyPrice !== undefined && item.buyPrice !== null && Number.isFinite(Number(item.buyPrice))) {
-          buyCost = Number(item.buyPrice);
-        } else if (dbProduct?.buyPrice !== undefined && dbProduct?.buyPrice !== null && Number.isFinite(Number(dbProduct.buyPrice))) {
-          buyCost = Number(dbProduct.buyPrice);
-        } else {
-          buyCost = (Number(item.price) || 0) * 0.70;
-        }
-        const quantity = Number(item.quantity ?? 0);
-        invoiceCogs += buyCost * (Number.isFinite(quantity) ? quantity : 0);
-      });
-      const returnedCogs = (Array.isArray(t.returnHistory) ? t.returnHistory : []).reduce((sum: number, entry: any) =>
-        sum + (Array.isArray(entry.items) ? entry.items.reduce((lineSum: number, line: any) => {
-          if (Number.isFinite(Number(line.returnedCost))) return lineSum + Math.max(0, Number(line.returnedCost));
-          return lineSum + (Array.isArray(line.costAllocations) ? line.costAllocations.reduce((costSum: number, allocation: any) =>
-            costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) : 0);
-        }, 0) : 0), 0);
-      totalCostOfGoodsSold += Math.max(0, invoiceCogs - returnedCogs);
-    });
+    const historicalCogs = calculateHistoricalCogs(filteredDashboardTx);
+    const totalCostOfGoodsSold = historicalCogs.totalCogs;
 
     return {
       filteredDashboardTx,
@@ -4943,7 +4920,9 @@ _${businessInfo.name}_`;
       totalExpensesTk,
       totalPurchasesTk,
       totalUnitsSold,
-      totalCostOfGoodsSold
+      totalCostOfGoodsSold,
+      profitComplete: historicalCogs.complete,
+      incompleteCostLines: historicalCogs.incompleteLines
     };
   }, [transactions, expenses, paidDeliveryExpenses, paidSalaryExpenses, purchases, products, dashboardFilter, customStart, customEnd]);
 
@@ -4957,12 +4936,14 @@ _${businessInfo.name}_`;
     totalExpensesTk,
     totalPurchasesTk,
     totalUnitsSold,
-    totalCostOfGoodsSold
+    totalCostOfGoodsSold,
+    profitComplete,
+    incompleteCostLines
   } = dashboardMetrics;
 
   const totalDuesActiveState = totalOutstandingDueTk;
   const netEarningsReceived = totalSalesTk - totalOutstandingDueTk;
-  const netProfitAmt = Math.round(totalSalesTk - totalSalesTaxTk - totalCostOfGoodsSold - totalExpensesTk);
+  const netProfitAmt = profitComplete ? Math.round(totalSalesTk - totalSalesTaxTk - totalCostOfGoodsSold - totalExpensesTk) : null;
   
   // Backward compatibility variables for render blocks
   const projectedProductSellTotal = totalSalesTk;
