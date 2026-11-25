@@ -43,6 +43,10 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
   (Array.isArray(transactions) ? transactions : []).forEach((transaction: any, txIndex: number) => {
     if (!transaction || typeof transaction !== "object") return;
     const items = Array.isArray(transaction.items) ? transaction.items : [];
+    if (items.length === 0 && (Number(transaction.total ?? transaction.total_amount) || 0) > 0) {
+      incompleteLines.push({ transactionId: String(transaction.id || ""), invoiceNo: String(transaction.invoiceNo || transaction.invoice_no || transaction.id || "Unknown invoice"), itemId: "missing-items", productName: "Invoice items", reason: "Invoice has no saved product-item snapshot, so historical COGS cannot be verified." });
+      return;
+    }
     const returns = (Array.isArray(transaction.returnHistory) ? transaction.returnHistory :
       (Array.isArray(transaction.return_history) ? transaction.return_history : []))
       .flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
