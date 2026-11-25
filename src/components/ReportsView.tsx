@@ -437,7 +437,7 @@ export function ReportsView({
           };
         }
         const soldQty = typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0;
-        const itemId = String(item.firestoreId || item.id || `${t.id}_item_${index}`);
+        const itemId = String(item.firestoreId || item.firestore_id || item.id || `${t.id}_item_${index}`);
         const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
           .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
           .filter((line: any) => String(line.transactionItemId) === itemId)
@@ -579,12 +579,12 @@ export function ReportsView({
         if (!item) return;
         const qty = Math.max(0, Number(item.quantity) || 0);
         const itemId = String(item.firestoreId || item.id || `${t.id}_item_${index}`);
-        const returnedLines = returns.filter((line: any) => String(line?.transactionItemId || line?.transaction_item_id || "") === itemId);
+        const returnedLines = returns.filter((line: any) => String(line?.transactionItemId || line?.transaction_item_id || line?.transactionItemFirestoreId || line?.transaction_item_firestore_id || line?.itemId || line?.item_id || "") === itemId);
         const returnedQty = returnedLines.reduce((n: number, line: any) => n + Math.max(0, Number(line?.quantity) || 0), 0);
         const netQty = Math.max(0, qty - returnedQty);
         const grossItems = (Array.isArray(t.items) ? t.items : []).reduce((n: number, line: any, lineIndex: number) => {
           const lineId = String(line?.firestoreId || line?.id || `${t.id}_item_${lineIndex}`);
-          const lineReturns = returns.filter((ret: any) => String(ret?.transactionItemId || ret?.transaction_item_id || "") === lineId);
+          const lineReturns = returns.filter((ret: any) => String(ret?.transactionItemId || ret?.transaction_item_id || ret?.transactionItemFirestoreId || ret?.transaction_item_firestore_id || ret?.itemId || ret?.item_id || "") === lineId);
           const remain = Math.max(0, (Number(line?.quantity) || 0) - lineReturns.reduce((sum: number, ret: any) => sum + (Number(ret?.quantity) || 0), 0));
           return n + (Number(line?.price) || 0) * remain;
         }, 0);
