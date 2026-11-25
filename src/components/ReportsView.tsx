@@ -40,6 +40,7 @@ import {
   safeSubDays
 } from "../lib/dateUtils";
 import { auditAccountingRecords } from "../lib/accountingAudit";
+import { calculateHistoricalCogs } from "../lib/profitCalculations";
 
 // Resolve historical unit cost only from the sale snapshot. Never substitute the
 // current catalog cost or a percentage of the selling price for an old sale.
@@ -99,6 +100,7 @@ interface ReportsViewProps {
   staffList?: any[];
   businessInfo?: any;
   currencySymbol?: string;
+  onNavigateToInvoice?: (invoiceNo: string) => void;
 }
 
 export function ReportsView({
@@ -110,7 +112,8 @@ export function ReportsView({
   contacts = [],
   staffList = [],
   businessInfo,
-  currencySymbol = "৳"
+  currencySymbol = "৳",
+  onNavigateToInvoice
 }: ReportsViewProps) {
   const safeProducts = Array.isArray(products) ? products : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
@@ -138,6 +141,7 @@ export function ReportsView({
   });
   const [productSearch, setProductSearch] = useState("");
   const [monthlyArchiveOpen, setMonthlyArchiveOpen] = useState(false);
+  const [fullDashboardOpen, setFullDashboardOpen] = useState(false);
   const [reportSection, setReportSection] = useState<"dashboard" | "sales" | "issues" | "expenses" | "purchases" | "payments" | "products">("dashboard");
   const [selectedArchiveMonth, setSelectedArchiveMonth] = useState<number | null>(null);
   const [archiveYear, setArchiveYear] = useState(() => new Date().getFullYear());
@@ -282,49 +286,15 @@ export function ReportsView({
       purchaseVal += tot;
     });
 
-    // COGS must come from the historical invoice snapshot/FIFO allocations.
-    // If any sold/returned line has no reliable cost, suppress profit/loss rather
-    // than manufacturing a number from today's catalog price or a 70% heuristic.
-    let estimatedCOGS = 0;
-    let incompleteCostLines = 0;
-    filteredTransactions.forEach(t => {
-      if (!t) return;
-      const returnLines = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
-        .flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
-      let invoiceCogs = 0;
-      let invoiceCostComplete = true;
-      (Array.isArray(t.items) ? t.items : []).forEach((item: any, itemIndex: number) => {
-        if (!item) return;
-        const qty = Number(item.quantity) || 0;
-        const itemId = String(item.firestoreId || item.id || `${t.id}_item_${itemIndex}`);
-        const itemReturns = returnLines.filter((line: any) => String(line?.transactionItemId || line?.transaction_item_id || "") === itemId);
-        const returnedQty = itemReturns.reduce((sum: number, line: any) => sum + Math.max(0, Number(line?.quantity) || 0), 0);
-        if (returnedQty > qty + 0.000001) {
-          invoiceCostComplete = false;
-          incompleteCostLines += 1;
-          return;
-        }
-        const unitCost = getItemBuyCost(item);
-        if (unitCost === null) {
-          invoiceCostComplete = false;
-          incompleteCostLines += 1;
-          return;
-        }
-        const returnedCost = getReturnedItemCost(itemReturns);
-        if (returnedQty > 0 && returnedCost === null) {
-          invoiceCostComplete = false;
-          incompleteCostLines += 1;
-          return;
-        }
-        invoiceCogs += Math.max(0, qty * unitCost - (returnedCost || 0));
-      });
-      if (invoiceCostComplete) estimatedCOGS += invoiceCogs;
-    });
+    // Use the same strict sale-time cost engine as the main Dashboard.
+    const historicalCogs = calculateHistoricalCogs(filteredTransactions);
+    const estimatedCOGS = historicalCogs.totalCogs;
+    const incompleteCostLines = historicalCogs.incompleteLines.length;
 
     // POS adds VAT on top of the discounted subtotal. VAT collected is a
     // payable, not business revenue, so exclude it from business revenue.
     const netSalesExcludingVat = Math.max(0, salesVal - salesTax);
-    const profitComplete = incompleteCostLines === 0;
+    const profitComplete = historicalCogs.complete;
     const grossProfit = profitComplete ? netSalesExcludingVat - estimatedCOGS : 0;
     const netProfit = profitComplete ? grossProfit - expenseVal : 0;
 
@@ -342,7 +312,7 @@ export function ReportsView({
       profitComplete,
       incompleteCostLines
     };
-  }, [filteredTransactions, filteredExpenses, filteredPurchases, safeProducts, safeTransactions, filterType, startDate, endDate]);
+  }, [filteredTransactions, filteredExpenses, filteredPurchases, safeTransactions, filterType, startDate, endDate]);
 
   // Chart aggregation for Daily Sales Trend
   const dailyChartData = useMemo(() => {
@@ -594,7 +564,9 @@ export function ReportsView({
     const taxTotal = sales.reduce((n, t) => n + (Number(t.tax) || 0), 0);
     const expenseTotal = monthExpenses.reduce((n, e) => n + (Number(e.amount) || 0), 0);
     const purchaseTotal = monthPurchases.reduce((n, p) => n + (Number(p.totalAmount) || 0), 0);
-    let cogs = 0, incompleteCostLines = 0;
+    const historicalCogs = calculateHistoricalCogs(sales);
+    let cogs = historicalCogs.totalCogs;
+    let incompleteCostLines = historicalCogs.incompleteLines.length;
     const productRows: any[] = [];
     sales.forEach(t => {
       const returns = (Array.isArray(t.returnHistory) ? t.returnHistory : []).flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
@@ -608,7 +580,7 @@ export function ReportsView({
         const grossItems = (Array.isArray(t.items) ? t.items : []).reduce((n: number, line: any, lineIndex: number) => {
           const lineId = String(line?.firestoreId || line?.id || `${t.id}_item_${lineIndex}`);
           const lineReturns = returns.filter((ret: any) => String(ret?.transactionItemId || ret?.transaction_item_id || "") === lineId);
-          const remain = Math.max(0, (Number(line?.quantity) || 0) - lineReturns.reduce((s: number, ret: any) => s + (Number(ret?.quantity) || 0), 0));
+          const remain = Math.max(0, (Number(line?.quantity) || 0) - lineReturns.reduce((sum: number, ret: any) => sum + (Number(ret?.quantity) || 0), 0));
           return n + (Number(line?.price) || 0) * remain;
         }, 0);
         const netInvoice = Math.max(0, (Number(t.total) || 0) - (Number(t.tax) || 0));
@@ -616,7 +588,6 @@ export function ReportsView({
         const unitCost = getItemBuyCost(item), returnedCost = getReturnedItemCost(returnedLines);
         const lineCogs = unitCost === null || (returnedQty > 0 && returnedCost === null) ? null : Math.max(0, qty * unitCost - (returnedCost || 0));
         const profit = lineCogs === null ? null : revenue - lineCogs;
-        if (lineCogs === null) incompleteCostLines += 1; else cogs += lineCogs;
         productRows.push({ date: t.date, invoiceNo: t.invoiceNo || t.invoice_no || "N/A", productName: item.name || "Unknown Product", sku: item.sku || "", quantity: netQty, revenue, cogs: lineCogs, profit });
       });
     });
