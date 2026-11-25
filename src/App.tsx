@@ -5682,6 +5682,7 @@ _${businessInfo.name}_`;
               staffList={staffList}
               businessInfo={businessInfo}
               currencySymbol={businessInfo?.currencySymbol || "৳"}
+              onNavigateToInvoice={handleNavigateToInvoice}
             />
           )}
 
