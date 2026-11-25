@@ -1106,33 +1106,44 @@ export default function App() {
       const rebuiltList: any[] = [];
 
       flatTx.forEach(t => {
-        const relatedItems = flatItems.filter((item: any) => item.transaction_id === t.id);
+        const relatedItems = flatItems.filter((item: any) =>
+          String(item.transaction_id || item.transactionId || "") === String(t.id)
+        );
+        const existing = localNested.find((x: any) => x.id === t.id);
+        // Some legacy invoices stored product lines directly on the invoice document.
+        const nestedItems = Array.isArray(t.items) && t.items.length > 0
+          ? t.items
+          : (Array.isArray(existing?.items) ? existing.items : []);
         let mappedItems: any[] = [];
 
         if (relatedItems.length > 0) {
-          mappedItems = relatedItems.map((item: any) => ({
-            id: item.id,
-            firestoreId: item.firestoreId,
-            name: item.product_name || "Product Item",
-            quantity: Number(item.quantity) || 0,
-            price: Number(item.sell_price) || 0,
-            total: Number(item.quantity * item.sell_price) || 0,
-            productId: item.product_id || undefined,
-            category: item.category || "",
-            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
-            costAllocations: item.cost_allocations || item.costAllocations || undefined,
-            isNegativeSale: item.is_negative_sale === true || item.isNegativeSale === true,
-            isNegativeSaleApproved: item.is_negative_sale_approved === true || item.isNegativeSaleApproved === true,
-            negativeSaleUpdated: item.is_negative_sale_approved === true || item.negativeSaleUpdated === true
-          }));
-        } else {
-          // Keep existing items if present locally or in t.items to protect against incomplete collections snapshot
-          const existing = localNested.find((x: any) => x.id === t.id);
-          if (existing && Array.isArray(existing.items) && existing.items.length > 0) {
-            mappedItems = existing.items;
-          } else if (Array.isArray(t.items) && t.items.length > 0) {
-            mappedItems = t.items;
-          }
+          mappedItems = relatedItems.map((item: any, itemIndex: number) => {
+            const itemId = String(item.firestoreId || item.firestore_id || item.id || "");
+            const nestedItem = nestedItems.find((candidate: any) =>
+              itemId && String(candidate?.firestoreId || candidate?.firestore_id || candidate?.id || "") === itemId
+            ) || (nestedItems.length === relatedItems.length ? nestedItems[itemIndex] : undefined);
+            const savedCost = item.cost_price ?? item.buy_price ?? item.buyPrice ??
+              nestedItem?.buyPrice ?? nestedItem?.cost_price ?? nestedItem?.buy_price;
+            const savedAllocations = item.cost_allocations ?? item.costAllocations ??
+              nestedItem?.costAllocations ?? nestedItem?.cost_allocations;
+            return {
+              id: item.id || item.firestoreId || nestedItem?.id || String(t.id) + "_item_" + itemIndex,
+              firestoreId: item.firestoreId || item.firestore_id || nestedItem?.firestoreId || nestedItem?.firestore_id,
+              name: item.product_name || item.productName || nestedItem?.name || nestedItem?.product_name || "Product Item",
+              quantity: Number(item.quantity ?? nestedItem?.quantity) || 0,
+              price: Number(item.sell_price ?? item.price ?? nestedItem?.price ?? nestedItem?.sell_price) || 0,
+              total: (Number(item.quantity ?? nestedItem?.quantity) || 0) * (Number(item.sell_price ?? item.price ?? nestedItem?.price ?? nestedItem?.sell_price) || 0),
+              productId: item.product_id || item.productId || nestedItem?.productId || nestedItem?.product_id || undefined,
+              category: item.category || nestedItem?.category || "",
+              buyPrice: savedCost !== undefined && savedCost !== null && savedCost !== "" ? Number(savedCost) : undefined,
+              costAllocations: Array.isArray(savedAllocations) ? savedAllocations : undefined,
+              isNegativeSale: item.is_negative_sale === true || item.isNegativeSale === true || nestedItem?.isNegativeSale === true,
+              isNegativeSaleApproved: item.is_negative_sale_approved === true || item.isNegativeSaleApproved === true || nestedItem?.isNegativeSaleApproved === true,
+              negativeSaleUpdated: item.is_negative_sale_approved === true || item.negativeSaleUpdated === true || nestedItem?.negativeSaleUpdated === true
+            };
+          });
+        } else if (nestedItems.length > 0) {
+          mappedItems = nestedItems;
         }
 
         const resolvedSubtotal = t.subtotal !== undefined && t.subtotal !== null
@@ -1334,6 +1345,7 @@ export default function App() {
       const flatTransactions = items.map(docData => ({
         id: docData.id,
         firestoreId: docData.firestoreId,
+        items: Array.isArray(docData.items) ? docData.items : [],
         invoice_no: docData.invoice_no,
         customer_id: docData.customer_id || null,
         total_amount: Number(docData.total_amount) || 0,
@@ -1368,14 +1380,18 @@ export default function App() {
       const flatItems = items.map((docData: any) => ({
         id: docData.id,
         firestoreId: docData.firestoreId,
-        transaction_id: docData.transaction_id,
-        product_id: docData.product_id || null,
+        transaction_id: docData.transaction_id || docData.transactionId || "",
+        product_id: docData.product_id || docData.productId || null,
         product_name: docData.product_name || "Product Item",
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
         // Preserve missing historical cost as undefined; zero is a valid explicit cost, not a missing-value default.
         cost_price: docData.cost_price !== undefined && docData.cost_price !== null && docData.cost_price !== ""
-          ? Number(docData.cost_price) : undefined,
+          ? Number(docData.cost_price)
+          : docData.buy_price !== undefined && docData.buy_price !== null && docData.buy_price !== ""
+            ? Number(docData.buy_price)
+            : docData.buyPrice !== undefined && docData.buyPrice !== null && docData.buyPrice !== ""
+              ? Number(docData.buyPrice) : undefined,
         cost_allocations: docData.cost_allocations || docData.costAllocations || undefined,
         is_negative_sale: docData.is_negative_sale === true || docData.isNegativeSale === true,
         is_negative_sale_approved: docData.is_negative_sale_approved === true || docData.isNegativeSaleApproved === true
