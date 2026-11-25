@@ -2816,12 +2816,14 @@ export default function App() {
       if (activeUser && !activeUser.isGuest) {
         // Persist the cost in both representations: the flat item collection and
         // the nested invoice snapshot consumed by historical COGS calculations.
-        await setDoc(doc(db, "transaction_items", itemId), flatItem, { merge: true });
-        await setDoc(
-          doc(db, "transactions", targetTx.firestoreId || targetTx.id || txId),
-          { items: targetTx.items, updated_at: new Date().toISOString() },
-          { merge: true }
-        );
+        await runTransaction(db, async cloudTransaction => {
+          cloudTransaction.set(doc(db, "transaction_items", itemId), flatItem, { merge: true });
+          cloudTransaction.set(
+            doc(db, "transactions", targetTx.firestoreId || targetTx.id || txId),
+            { items: targetTx.items, updated_at: new Date().toISOString() },
+            { merge: true }
+          );
+        });
       }
     } catch (e) {
       console.error("Failed to update transaction item cost in Firestore:", e);
