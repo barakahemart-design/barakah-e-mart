@@ -50,6 +50,13 @@ export function calculateHistoricalCogs(transactions: any[] = []): HistoricalCog
     const returns = (Array.isArray(transaction.returnHistory) ? transaction.returnHistory :
       (Array.isArray(transaction.return_history) ? transaction.return_history : []))
       .flatMap((entry: any) => Array.isArray(entry?.items) ? entry.items : []);
+    const knownItemIds = new Set(items.map((item: any, itemIndex: number) => String(item?.firestoreId || item?.id || `${transaction.id || txIndex}_item_${itemIndex}`)));
+    returns.forEach((line: any, returnIndex: number) => {
+      const returnItemId = String(line?.transactionItemId || line?.transaction_item_id || "");
+      if (!returnItemId || !knownItemIds.has(returnItemId)) {
+        incompleteLines.push({ transactionId: String(transaction.id || ""), invoiceNo: String(transaction.invoiceNo || transaction.invoice_no || transaction.id || "Unknown invoice"), itemId: `return-${returnIndex}`, productName: String(line?.productName || line?.product_name || "Returned item"), reason: "Return record cannot be matched to its original invoice item." });
+      }
+    });
 
     items.forEach((item: any, itemIndex: number) => {
       if (!item) return;
