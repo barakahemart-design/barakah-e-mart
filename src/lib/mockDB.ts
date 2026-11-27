@@ -53,6 +53,10 @@ export interface TransactionItem {
   productId?: string;
   buyPrice?: number;
   isNegativeSale?: boolean;
+  isNegativeSaleApproved?: boolean;
+  costAllocations?: any[];
+  warranty?: string;
+  warrantyDetails?: string;
 }
 
 export interface Transaction {

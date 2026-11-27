@@ -12,6 +12,7 @@ type Expense = { id: string; amount: number; reason: string; category: string; d
 type DriverProfile = { uid: string; name: string; email: string; phone?: string };
 
 interface Props {
+  key?: string;
   staff: DriverProfile;
   currencySymbol?: string;
   onLogout: () => void;

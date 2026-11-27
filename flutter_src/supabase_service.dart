@@ -425,11 +425,26 @@ class SupabaseService {
     if (matchPur != null) {
       final double quantity = (matchPur['quantity'] ?? 0.0).toDouble();
       final String productId = matchPur['product_id'] ?? '';
-      
+
+      // This legacy Flutter data path has no purchase-lot allocation. If the
+      // product has any recorded sale, we cannot prove that this specific
+      // purchase quantity is still on hand, so block deletion conservatively.
+      final salesHistory = await _makeRequest(
+        'GET',
+        '/api/db/has-product-sales?product_id=${Uri.encodeQueryComponent(productId)}&owner_email=${Uri.encodeQueryComponent(userId)}',
+      );
+      final productHasSales = salesHistory is Map && salesHistory['hasSales'] == true;
+      if (productHasSales) {
+        throw StateError('Cannot delete this purchase: the product has historical sales but no purchase-lot tracking to prove the remaining quantity.');
+      }
+
       final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
       final matchProd = (products as List).firstWhere((p) => p['id'] == productId, orElse: () => null);
       if (matchProd != null) {
         final double currentStock = (matchProd['stock'] ?? 0.0).toDouble();
+        if (currentStock + 0.000001 < quantity) {
+          throw StateError('Cannot delete this purchase: current stock is lower than the purchase quantity.');
+        }
         final updatedProd = {
           ...Map<String, dynamic>.from(matchProd),
           'stock': currentStock - quantity,
@@ -486,100 +501,92 @@ class SupabaseService {
   }) async {
     await _loadSession();
     final userId = _cachedSession?['id'] ?? '';
-    final txId = 'tx_${DateTime.now().millisecondsSinceEpoch}';
-    
-    final txData = {
+    if (userId.toString().isEmpty) throw StateError('Please sign in before checkout.');
+    if (cartItems.isEmpty) throw StateError('Your cart is empty.');
+
+    final txId = 'tx_${DateTime.now().microsecondsSinceEpoch}';
+    final subtotal = cartItems.fold<double>(0.0, (sum, item) {
+      final quantity = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      final price = (item['sell_price'] as num?)?.toDouble() ?? 0.0;
+      return sum + quantity * price;
+    });
+    final tax = subtotal * (vatRate.isFinite && vatRate > 0 ? vatRate : 0.0) / 100;
+    final safeTotal = total.isFinite ? total : 0.0;
+    final safePaid = paid.isFinite ? paid : 0.0;
+    if (safeTotal < 0 || safePaid < 0 || safePaid > safeTotal + 0.01) {
+      throw StateError('Payment amount cannot be greater than the invoice total.');
+    }
+
+    final transactionData = {
       'id': txId,
       'owner_id': userId,
       'user_id': userId,
       'invoice_no': invoiceNo,
       'customer_id': customerId,
-      'total_amount': total,
+      'subtotal': subtotal,
+      'tax': tax,
+      'tax_amount': tax,
+      'total': safeTotal,
+      'total_amount': safeTotal,
       'discount': discount,
       'vat_rate': vatRate,
-      'paid_amount': paid,
+      'paid_amount': safePaid,
+      'paidAmount': safePaid,
+      'due_balance': (safeTotal - safePaid).clamp(0.0, double.infinity),
+      'dueBalance': (safeTotal - safePaid).clamp(0.0, double.infinity),
+      'payment_history': <Map<String, dynamic>>[],
       'payment_method': method,
       'signature_svg': signatureBase64,
+      'status': safePaid >= safeTotal ? 'paid' : (safePaid > 0 ? 'partial' : 'due'),
       'created_at': DateTime.now().toIso8601String(),
     };
-    
-    await _makeRequest('POST', '/api/db/upsert', body: {
-      'table': 'transactions',
-      'id': txId,
-      'data': txData,
-    });
-    
-    for (var item in cartItems) {
-      final Product prod = item['product'];
-      final double qty = item['quantity'];
-      final double selectedPrice = item['sell_price'];
-      final bool isNegative = prod.stock < qty;
-      final itemUUID = 'txi_${DateTime.now().millisecondsSinceEpoch}_${prod.id}';
-      
-      final itemData = {
-        'id': itemUUID,
-        'owner_id': userId,
-        'user_id': userId,
-        'transaction_id': txId,
-        'product_id': prod.id,
-        'quantity': qty,
-        'sell_price': selectedPrice,
-        'cost_price': prod.buyPrice,
-        'is_negative_sale': isNegative,
-      };
-      
-      await _makeRequest('POST', '/api/db/upsert', body: {
-        'table': 'transaction_items',
-        'id': itemUUID,
-        'data': itemData,
-      });
-      
-      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
-      final match = (products as List).firstWhere((p) => p['id'] == prod.id, orElse: () => null);
-      if (match != null) {
-        final double currentStock = (match['stock'] ?? 0.0).toDouble();
-        final updatedProd = {
-          ...Map<String, dynamic>.from(match),
-          'stock': currentStock - qty,
-        };
-        await _makeRequest('POST', '/api/db/upsert', body: {
-          'table': 'products',
-          'id': prod.id,
-          'data': updatedProd,
-        });
+
+    final lineItems = <Map<String, dynamic>>[];
+    for (var index = 0; index < cartItems.length; index++) {
+      final cartItem = cartItems[index];
+      final Product product = cartItem['product'];
+      final quantity = (cartItem['quantity'] as num?)?.toDouble() ?? 0.0;
+      final selectedPrice = (cartItem['sell_price'] as num?)?.toDouble() ?? product.sellPrice;
+      if (quantity <= 0 || !quantity.isFinite || selectedPrice < 0 || !selectedPrice.isFinite) {
+        throw StateError('A cart line has an invalid quantity or selling price.');
       }
+      final itemId = 'txi_${DateTime.now().microsecondsSinceEpoch}_${product.id}_$index';
+      lineItems.add({
+        'id': itemId,
+        'data': {
+          'id': itemId,
+          'transaction_id': txId,
+          'product_id': product.id,
+          'product_name': product.name,
+          'quantity': quantity,
+          'sell_price': selectedPrice,
+          'cost_price': product.buyPrice,
+          'is_negative_sale': product.stock < quantity,
+          'warranty': '',
+          'warranty_details': ''
+        }
+      });
     }
+
+    // One server-side Firestore transaction creates the invoice and line items
+    // while decrementing stock. Any failed validation leaves all three unchanged.
+    await _makeRequest('POST', '/api/db/checkout', body: {
+      'transaction': transactionData,
+      'items': lineItems,
+    });
   }
 
   Future<void> deleteSaleMemo(OrderTransaction tx) async {
     await _loadSession();
     final userId = _cachedSession?['id'] ?? '';
-    
-    for (var item in tx.items) {
-      final products = await _makeRequest('GET', '/api/db/fetch?table=products&owner_email=$userId') ?? [];
-      final match = (products as List).firstWhere((p) => p['id'] == item.productId, orElse: () => null);
-      if (match != null) {
-        final double stockNow = (match['stock'] ?? 0.0).toDouble();
-        final updatedProd = {
-          ...Map<String, dynamic>.from(match),
-          'stock': stockNow + item.quantity,
-        };
-        await _makeRequest('POST', '/api/db/upsert', body: {
-          'table': 'products',
-          'id': item.productId,
-          'data': updatedProd,
-        });
-      }
-      
-      await _makeRequest('POST', '/api/db/delete', body: {
-        'table': 'transaction_items',
-        'id': item.id,
-      });
-    }
-    
-    await _makeRequest('POST', '/api/db/delete', body: {
-      'table': 'transactions',
-      'id': tx.id,
+    if (userId.toString().isEmpty) throw StateError('Please sign in before deleting a sale.');
+    if (tx.items.isEmpty) throw StateError('The invoice has no saved line items to delete.');
+
+    // The server validates ownership and atomically restores stock, writes
+    // deletion tombstones, and removes the invoice and all of its line items.
+    await _makeRequest('POST', '/api/db/sale-delete', body: {
+      'transaction_id': tx.id,
+      'item_ids': tx.items.map((item) => item.id).toList(),
     });
   }
 
@@ -666,13 +673,20 @@ class SupabaseService {
       final expenses = await fetchExpenses();
       
       double sales = 0.0;
+      double vatCollected = 0.0;
       double cogs = 0.0;
       double discounts = 0.0;
       double totalExpenses = 0.0;
-      
+
       for (final tx in ledger) {
         sales += tx.totalAmount;
         discounts += tx.discount;
+        final invoiceSubtotal = tx.items.fold<double>(
+          0.0,
+          (sum, item) => sum + item.quantity * item.sellPrice,
+        );
+        // Checkout adds VAT to the item subtotal; VAT collected is not revenue.
+        vatCollected += invoiceSubtotal * tx.vatRate / 100;
         for (final item in tx.items) {
           cogs += item.quantity * item.costPrice;
         }
@@ -684,13 +698,15 @@ class SupabaseService {
       
       return {
         'sales': sales,
+        'vat': vatCollected,
+        'net_sales': sales - vatCollected,
         'cogs': cogs,
         'discounts': discounts,
         'expenses': totalExpenses,
-        'net_profit': sales - cogs - totalExpenses,
+        'net_profit': sales - vatCollected - cogs - totalExpenses,
       };
     } catch (_) {
-      return {'sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
+      return {'sales': 0.0, 'vat': 0.0, 'net_sales': 0.0, 'cogs': 0.0, 'discounts': 0.0, 'expenses': 0.0, 'net_profit': 0.0};
     }
   }
 

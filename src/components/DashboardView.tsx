@@ -46,7 +46,11 @@ interface DashboardViewProps {
   totalOutstandingDueTk: number;
   totalPurchasesTk: number;
   totalUnitsSold: number;
-  netProfitAmt: number;
+  totalSalesTaxTk: number;
+  totalCostOfGoodsSold: number;
+  profitComplete: boolean;
+  netProfitAmt: number | null;
+  incompleteCostLines?: any[];
 
   ledgerTrendsPlotData?: any[];
   expenseCategoryPlotData?: any[];
@@ -75,7 +79,11 @@ export function DashboardView({
   totalOutstandingDueTk,
   totalPurchasesTk,
   totalUnitsSold,
+  totalSalesTaxTk,
+  totalCostOfGoodsSold,
+  profitComplete,
   netProfitAmt,
+  incompleteCostLines = [],
 
   ledgerTrendsPlotData,
   expenseCategoryPlotData
@@ -129,6 +137,8 @@ export function DashboardView({
 
   const activeExpenses = getActiveExpensesData();
   const activePlotData = getActivePlotData();
+  const netSalesExcludingVat = Math.max(0, totalSalesTk - totalSalesTaxTk);
+  const cogsExceedsNetSales = profitComplete && totalCostOfGoodsSold > netSalesExcludingVat + 0.02;
 
   // Dynamically calculate sum of slice
   const displayedExpensesTotal = expenseCategoryPlotData && expenseCategoryPlotData.length > 0 
@@ -318,12 +328,12 @@ export function DashboardView({
               True Net Profit
             </span>
             <div className="mt-2.5 flex items-baseline gap-1 overflow-hidden" id="profit-display-num">
-              <span className="text-sm font-bold text-sky-400 shrink-0">{currencySymbol}</span>
+              <span className="text-sm font-bold text-sky-400 shrink-0">{netProfitAmt === null ? "" : currencySymbol}</span>
               <span className="text-xl sm:text-2xl font-black text-sky-400 tracking-normal font-sans truncate pr-1">
-                {formatMoney(netProfitAmt)}
+                {netProfitAmt === null ? "Incomplete" : formatMoney(netProfitAmt)}
               </span>
             </div>
-            <span className="text-[10px] text-slate-500 mt-1 block">Net income after COGS</span>
+            <span className="text-[10px] text-slate-500 mt-1 block">{netProfitAmt === null ? `${incompleteCostLines.length} sale line(s) need historical cost review` : "Net income after COGS and expenses"}</span>
           </div>
 
           <div className="w-10 h-10 sm:w-11 sm:h-11 bg-sky-500/5 text-sky-400 rounded-xl flex items-center justify-center shrink-0 border border-sky-500/10 shadow-sm transition-transform group-hover:scale-105">
@@ -332,6 +342,18 @@ export function DashboardView({
         </div>
 
       </div>
+
+      {(netProfitAmt === null || cogsExceedsNetSales) && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4" id="dashboard-profit-review-alert">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs font-black text-amber-200">Profit calculation needs review</h3>
+              <p className="mt-1 text-xs text-slate-300">{netProfitAmt === null ? `${incompleteCostLines.length} sale line(s) have missing or inconsistent historical cost / return data. Profit is not estimated.` : `COGS exceeds net sales by ${currencySymbol}${formatMoney(totalCostOfGoodsSold - netSalesExcludingVat)}. This may be a real loss or incorrect saved item costs.`}</p>
+            </div>
+            <button type="button" onClick={() => onNavigate("reports")} className="rounded-lg border border-amber-400/40 px-3 py-2 text-[10px] font-bold text-amber-100 hover:bg-amber-500/10">Open accounting review →</button>
+          </div>
+        </div>
+      )}
 
       <ProductSalesBreakdown
         products={products}

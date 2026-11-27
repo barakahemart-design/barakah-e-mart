@@ -53,6 +53,8 @@ interface ProductsViewProps {
     stock: number;
     unit: string;
     imageUrl?: string;
+    warranty?: string;
+    warrantyDetails?: string;
   }) => void;
   onDeleteProduct: (id: string, name: string) => void;
   currencySymbol: string;

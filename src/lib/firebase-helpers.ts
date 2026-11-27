@@ -715,21 +715,38 @@ export const fetchAndRestoreCloudBackup = async (email: string, pin: string, ove
                 productId: item.product_id || undefined,
                 buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
                 costAllocations: item.cost_allocations || item.costAllocations || undefined,
+                isNegativeSale: item.is_negative_sale === true || item.isNegativeSale === true,
+                isNegativeSaleApproved: item.is_negative_sale_approved === true || item.isNegativeSaleApproved === true,
+                negativeSaleUpdated: item.is_negative_sale_approved === true || item.negativeSaleUpdated === true,
                 warranty: item.warranty || "",
                 warrantyDetails: item.warrantyDetails || item.warranty_details || ""
               };
             });
+
+            const resolvedSubtotal = mappedItems.length > 0
+              ? mappedItems.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0)
+              : Number(t.subtotal ?? t.total_amount) || 0;
+            const resolvedTax = t.tax_amount !== undefined && t.tax_amount !== null
+              ? Number(t.tax_amount) || 0
+              : Math.round(resolvedSubtotal * (Number(t.vat_rate) || 0) / 100);
 
             return {
               id: t.id,
               invoiceNo: t.invoice_no,
               date: t.created_at || new Date().toISOString(),
               items: mappedItems,
-              subtotal: Number(t.total_amount) || 0,
-              tax: t.vat_rate ? Number(((t.total_amount * t.vat_rate) / 100).toFixed(2)) : 0,
+              subtotal: resolvedSubtotal,
+              tax: resolvedTax,
               discount: Number(t.discount) || 0,
               total: Number(t.total_amount) || 0,
               paymentMethod: t.payment_method || "Cash",
+              paymentHistory: Array.isArray(t.payment_history) ? t.payment_history : (Array.isArray(t.paymentHistory) ? t.paymentHistory : []),
+              returnHistory: Array.isArray(t.return_history) ? t.return_history : (Array.isArray(t.returnHistory) ? t.returnHistory : []),
+              refundHistory: Array.isArray(t.refund_history) ? t.refund_history : (Array.isArray(t.refundHistory) ? t.refundHistory : []),
+              originalSubtotal: t.original_subtotal !== undefined ? Number(t.original_subtotal) : (t.originalSubtotal !== undefined ? Number(t.originalSubtotal) : undefined),
+              originalTotal: t.original_total !== undefined ? Number(t.original_total) : (t.originalTotal !== undefined ? Number(t.originalTotal) : undefined),
+              originalTax: t.original_tax !== undefined ? Number(t.original_tax) : (t.originalTax !== undefined ? Number(t.originalTax) : undefined),
+              originalDiscount: t.original_discount !== undefined ? Number(t.original_discount) : (t.originalDiscount !== undefined ? Number(t.originalDiscount) : undefined),
               status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
               paidAmount: Number(t.paid_amount) || 0,
               dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,

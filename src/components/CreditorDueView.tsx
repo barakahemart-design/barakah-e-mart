@@ -7,6 +7,8 @@ type CreditorEntry = {
   id: string; creditorId: string; creditorName: string; dueAmount: number;
   paidAmount: number; date: string; paymentMethod: string; note?: string;
   paidBy?: string; receivedBy?: string;
+  createdAt?: string; createdBy?: string; updatedAt?: string;
+  editHistory?: Array<{ editedAt: string; editedBy: string; before: Record<string, any>; after: Record<string, any> }>;
 };
 type Ledger = { creditors: Creditor[]; entries: CreditorEntry[] };
 
@@ -35,6 +37,12 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
   const [editingCreditorId, setEditingCreditorId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editEntryDate, setEditEntryDate] = useState("");
+  const [editEntryDue, setEditEntryDue] = useState("");
+  const [editEntryPaid, setEditEntryPaid] = useState("");
+  const [editEntryMethod, setEditEntryMethod] = useState("Cash");
+  const [editEntryNote, setEditEntryNote] = useState("");
 
   const ledger: Ledger = (businessInfo?.creditorLedger || { creditors: [], entries: [] }) as Ledger;
   const creditors = ledger.creditors || [];
@@ -48,6 +56,76 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
 
   const updateLedger = (next: Ledger) => {
     setBusinessInfo((prev: any) => ({ ...prev, creditorLedger: next }));
+  };
+
+  const beginEntryEdit = (entry: CreditorEntry) => {
+    setEditingEntryId(entry.id);
+    setEditEntryDate(String(entry.date || "").slice(0, 10));
+    setEditEntryDue(String(Number(entry.dueAmount) || 0));
+    setEditEntryPaid(String(Number(entry.paidAmount) || 0));
+    setEditEntryMethod(entry.paymentMethod || "Cash");
+    setEditEntryNote(entry.note || "");
+  };
+
+  const cancelEntryEdit = () => {
+    setEditingEntryId(null);
+    setEditEntryDate("");
+    setEditEntryDue("");
+    setEditEntryPaid("");
+    setEditEntryMethod("Cash");
+    setEditEntryNote("");
+  };
+
+  const saveEntryEdit = (entry: CreditorEntry) => {
+    const nextDue = Number(editEntryDue);
+    const nextPaid = Number(editEntryPaid);
+    if (!editEntryDate || !Number.isFinite(nextDue) || !Number.isFinite(nextPaid) || nextDue < 0 || nextPaid < 0) {
+      triggerNotification("Enter a valid date and non-negative due/paid amounts.", "error");
+      return;
+    }
+    const balanceBefore = entries
+      .filter(row => row.creditorId === entry.creditorId && row.id !== entry.id)
+      .reduce((sum, row) => sum + (Number(row.dueAmount) || 0) - (Number(row.paidAmount) || 0), 0);
+    if (nextPaid > balanceBefore + nextDue + 0.000001) {
+      triggerNotification("Paid amount cannot exceed the creditor balance after this edited due entry.", "error");
+      return;
+    }
+
+    const editedAt = new Date().toISOString();
+    const before = {
+      dueAmount: Number(entry.dueAmount) || 0,
+      paidAmount: Number(entry.paidAmount) || 0,
+      date: entry.date,
+      paymentMethod: entry.paymentMethod,
+      note: entry.note || ""
+    };
+    const after = {
+      dueAmount: nextDue,
+      paidAmount: nextPaid,
+      date: new Date(editEntryDate + "T12:00:00").toISOString(),
+      paymentMethod: editEntryMethod,
+      note: editEntryNote.trim()
+    };
+    const editedEntry: CreditorEntry = {
+      ...entry,
+      ...after,
+      updatedAt: editedAt,
+      editHistory: [
+        ...(Array.isArray(entry.editHistory) ? entry.editHistory : []),
+        {
+          editedAt,
+          editedBy: activeUser?.email || "Unknown user",
+          before,
+          after
+        }
+      ]
+    };
+    updateLedger({
+      creditors,
+      entries: entries.map(row => row.id === entry.id ? editedEntry : row)
+    });
+    cancelEntryEdit();
+    triggerNotification("Creditor transaction updated. Previous values are preserved in its audit history.", "success");
   };
 
   const summaries = useMemo(() => creditors.map(c => {
@@ -90,7 +168,7 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
           if (paidValue > previousBalance + dueValue) { triggerNotification("Paid amount cannot exceed the existing balance plus this new due.", "error"); return; }
           const creditor = activeCreditors.find(c => c.id === creditorId);
           if (!creditor) return;
-          const entry: CreditorEntry = { id: toUUID(`creditor_entry_${Date.now()}`, activeUser?.email || "creditor"), creditorId, creditorName: creditor.name, dueAmount: dueValue, paidAmount: paidValue, date: new Date(date + "T12:00:00").toISOString(), paymentMethod: method, note: note.trim(), paidBy: businessInfo?.name || "Business", receivedBy: paidValue > 0 ? creditor.name : "" };
+          const entry: CreditorEntry = { id: toUUID(`creditor_entry_${Date.now()}`, activeUser?.email || "creditor"), creditorId, creditorName: creditor.name, dueAmount: dueValue, paidAmount: paidValue, date: new Date(date + "T12:00:00").toISOString(), paymentMethod: method, note: note.trim(), paidBy: businessInfo?.name || "Business", receivedBy: paidValue > 0 ? creditor.name : "", createdAt: new Date().toISOString(), createdBy: activeUser?.email || "Unknown user", editHistory: [] };
           updateLedger({ creditors, entries: [entry, ...entries] });
           setDue(""); setPaid(""); setNote("");
           triggerNotification("Creditor transaction saved.", "success");
@@ -138,12 +216,12 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
                     const totalDue = linkedEntries.reduce((sum, entry) => sum + (Number(entry.dueAmount) || 0), 0);
                     const totalPaid = linkedEntries.reduce((sum, entry) => sum + (Number(entry.paidAmount) || 0), 0);
                     const confirmed = window.confirm(
-                      `Permanently delete ${c.name} and ALL of their ${linkedEntries.length} transaction(s)?\n\nTotal due: ${businessInfo.currencySymbol} ${totalDue.toLocaleString()}\nTotal paid: ${businessInfo.currencySymbol} ${totalPaid.toLocaleString()}\n\nThis removes the creditor profile and its complete transaction history from the Creditor Management ledger. This cannot be undone.`
+                      `Archive ${c.name}? Their ${linkedEntries.length} transaction(s) will remain in the ledger for accounting history.\n\nTotal due: ${businessInfo.currencySymbol} ${totalDue.toLocaleString()}\nTotal paid: ${businessInfo.currencySymbol} ${totalPaid.toLocaleString()}\n\nArchived creditors are removed from new-entry selection but their balances and history are preserved.`
                     );
                     if (!confirmed) return;
                     updateLedger({
-                      creditors: creditors.filter(x => x.id !== c.id),
-                      entries: entries.filter(entry => entry.creditorId !== c.id)
+                      creditors: creditors.map(x => x.id === c.id ? { ...x, active: false } : x),
+                      entries
                     });
                     if (creditorId === c.id) setCreditorId("");
                   }} className="px-3 py-2 rounded-lg border border-white/15 text-white/65 hover:text-white hover:border-white/35 text-[10px] font-bold flex items-center gap-1"><Trash2 className="w-3 h-3" />Remove</button>
@@ -167,8 +245,41 @@ export function CreditorDueView({ businessInfo, setBusinessInfo, triggerNotifica
         </div>
         <div className="bg-[#0b0f19] border border-slate-800 rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-slate-800"><h2 className="text-sm font-bold text-white">Transaction History</h2></div>
-          <div className="overflow-x-auto"><table className="w-full text-xs text-left min-w-[980px]"><thead className="text-[10px] text-slate-500 uppercase bg-[#050912]"><tr><th className="p-3">Date</th><th className="p-3">Creditor</th><th className="p-3 text-right">Due Added</th><th className="p-3 text-right">Paid</th><th className="p-3">Paid By</th><th className="p-3">Received By</th><th className="p-3">Payment Method</th><th className="p-3">Note</th></tr></thead>
-            <tbody className="divide-y divide-slate-800">{entries.map(e => <tr key={e.id}><td className="p-3 whitespace-nowrap text-slate-400">{safeFormat(e.date, "dd MMM yyyy", "—")}</td><td className="p-3 text-white">{e.creditorName}</td><td className="p-3 text-right text-amber-400">{businessInfo.currencySymbol} {(e.dueAmount || 0).toLocaleString()}</td><td className="p-3 text-right text-white">{businessInfo.currencySymbol} {(e.paidAmount || 0).toLocaleString()}</td><td className="p-3 text-white">{e.paidAmount > 0 ? (e.paidBy || businessInfo?.name || "Business") : "—"}</td><td className="p-3 text-white">{e.paidAmount > 0 ? (e.receivedBy || e.creditorName) : "—"}</td><td className="p-3 text-white/75">{e.paymentMethod}</td><td className="p-3 text-white/55">{e.note || "—"}</td></tr>)}</tbody>
+          <div className="overflow-x-auto"><table className="w-full text-xs text-left min-w-[980px]"><thead className="text-[10px] text-slate-500 uppercase bg-[#050912]"><tr><th className="p-3">Date</th><th className="p-3">Creditor</th><th className="p-3 text-right">Due Added</th><th className="p-3 text-right">Paid</th><th className="p-3">Paid By</th><th className="p-3">Received By</th><th className="p-3">Payment Method</th><th className="p-3">Note / Audit History</th><th className="p-3">Actions</th></tr></thead>
+            <tbody className="divide-y divide-slate-800">{entries.map(e => editingEntryId === e.id ? (
+              <tr key={e.id} className="bg-white/[0.04]">
+                <td className="p-2"><input type="date" value={editEntryDate} onChange={event => setEditEntryDate(event.target.value)} className={inputClass} /></td>
+                <td className="p-2 text-white">{e.creditorName}</td>
+                <td className="p-2"><input type="number" min="0" step="0.01" value={editEntryDue} onChange={event => setEditEntryDue(event.target.value)} className={inputClass} /></td>
+                <td className="p-2"><input type="number" min="0" step="0.01" value={editEntryPaid} onChange={event => setEditEntryPaid(event.target.value)} className={inputClass} /></td>
+                <td className="p-2 text-white">{e.paidBy || businessInfo?.name || "Business"}</td>
+                <td className="p-2 text-white">{e.receivedBy || e.creditorName}</td>
+                <td className="p-2"><select value={editEntryMethod} onChange={event => setEditEntryMethod(event.target.value)} className={inputClass}><option>Cash</option><option>Bank</option><option>Mobile Banking</option><option>Other</option></select></td>
+                <td className="p-2"><input value={editEntryNote} onChange={event => setEditEntryNote(event.target.value)} placeholder="Note" className={inputClass} /></td>
+                <td className="p-2"><div className="flex gap-1"><button onClick={() => saveEntryEdit(e)} className="px-2 py-2 rounded-lg border border-emerald-400/30 text-emerald-300"><Check className="w-3 h-3" /></button><button onClick={cancelEntryEdit} className="px-2 py-2 rounded-lg border border-white/20 text-white/70"><X className="w-3 h-3" /></button></div></td>
+              </tr>
+            ) : (
+              <tr key={e.id}>
+                <td className="p-3 whitespace-nowrap text-slate-400">{safeFormat(e.date, "dd MMM yyyy", "—")}</td>
+                <td className="p-3 text-white">{e.creditorName}</td>
+                <td className="p-3 text-right text-amber-400">{businessInfo.currencySymbol} {(e.dueAmount || 0).toLocaleString()}</td>
+                <td className="p-3 text-right text-white">{businessInfo.currencySymbol} {(e.paidAmount || 0).toLocaleString()}</td>
+                <td className="p-3 text-white">{e.paidAmount > 0 ? (e.paidBy || businessInfo?.name || "Business") : "—"}</td>
+                <td className="p-3 text-white">{e.paidAmount > 0 ? (e.receivedBy || e.creditorName) : "—"}</td>
+                <td className="p-3 text-white/75">{e.paymentMethod}</td>
+                <td className="p-3 text-slate-400">
+                  <div>{e.note || "—"}</div>
+                  {(e.editHistory || []).length > 0 && <details className="mt-1 text-[10px] text-cyan-300"><summary className="cursor-pointer">Edited {(e.editHistory || []).length} time(s)</summary>
+                    <div className="mt-1 space-y-1 text-white/60">{(e.editHistory || []).map((change, index) => <div key={index} className="rounded bg-white/[0.04] p-2">
+                      <div>{safeFormat(change.editedAt, "dd MMM yyyy HH:mm", "Edit")} · {change.editedBy}</div>
+                      <div>Due: {Number(change.before?.dueAmount || 0).toLocaleString()} → {Number(change.after?.dueAmount || 0).toLocaleString()}</div>
+                      <div>Paid: {Number(change.before?.paidAmount || 0).toLocaleString()} → {Number(change.after?.paidAmount || 0).toLocaleString()}</div>
+                    </div>)}</div>
+                  </details>}
+                </td>
+                <td className="p-2"><button onClick={() => beginEntryEdit(e)} className="px-2 py-2 rounded-lg border border-white/20 text-white/75 hover:text-white"><Pencil className="w-3 h-3" /></button></td>
+              </tr>
+            ))}</tbody>
           </table></div>
           {entries.length === 0 && <p className="p-8 text-center text-xs text-slate-500">No creditor transactions recorded yet.</p>}
         </div>

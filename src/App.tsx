@@ -87,6 +87,7 @@ import {
   updateOneCostAllocation,
   updatePurchaseCostLot
 } from "./lib/fifoCosting";
+import { calculateHistoricalCogs } from "./lib/profitCalculations";
 
 import { AuthScreen } from "./components/AuthScreen";
 import { PanelGateLock } from "./components/PanelGateLock";
@@ -101,6 +102,7 @@ import { CreditorDueView } from "./components/CreditorDueView";
 import { Staff, SalaryPayment, StaffManagementView } from "./components/StaffManagementView";
 import { DeliveryManagementView } from "./components/DeliveryManagementView";
 import { DeliveryDriverView } from "./components/DeliveryDriverView";
+import { SalesReturnsView } from "./components/SalesReturnsView";
 import { 
   INITIAL_PRODUCTS,
   INITIAL_CONTACTS,
@@ -125,7 +127,10 @@ import {
   deleteTransaction,
   deleteExpense,
   deletePurchase,
-  handleSave
+  handleSave,
+  commitInvoiceEditBatch,
+  deleteInvoiceAndRestoreBatch,
+  commitSaleCreationTransaction
 } from "./lib/firestoreService";
 
 export interface Product {
@@ -214,6 +219,13 @@ export interface Transaction {
   dueBalance: number;
   contactId?: string;
   customerSignature?: string;
+  paymentHistory?: Array<{ id: string; amount: number; date: string; recordedAt?: string }>;
+  returnHistory?: any[];
+  refundHistory?: Array<{ id: string; amount: number; date: string; method: string; returnId: string }>;
+  originalSubtotal?: number;
+  originalTotal?: number;
+  originalTax?: number;
+  originalDiscount?: number;
 }
 
 export interface BusinessInfo {
@@ -289,6 +301,7 @@ import {
   subscribeToAuthChanges, 
   signOut, 
   fetchAndRestoreCloudBackup,
+  uploadPasscodeBackup,
   signInOrSignUpWithPasscode,
   signUpWithEmail,
   signInWithEmail,
@@ -299,10 +312,9 @@ import {
   deleteCloudDocument,
   saveBusinessSettings,
 } from "./lib/firebase-helpers";
-import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, updateDoc, runTransaction } from "firebase/firestore";
 import { db, auth as firebaseAuth } from "./lib/firebase";
 import { createDeliveryOfflineOperation, deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
-import { deliveryStorageKey, isRetryableDeliveryError, readDeliveryLocal, writeDeliveryLocal } from "./lib/deliveryOffline";
 import { 
   generateInvoicePDF,
   generateDeliveryChallanPDF
@@ -320,7 +332,7 @@ export default function App() {
    const initialLoadedRef = useRef(false);
    const isReloadToastActiveRef = useRef(
      typeof window !== "undefined" &&
-     performance.getEntriesByType("navigation")[0]?.type === "reload" &&
+     (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload" &&
      !!localStorage.getItem("barakah_local_active_user")
    );
    const lastUploadedAtRef = useRef("");
@@ -450,7 +462,7 @@ export default function App() {
     try {
       if (localStorage.getItem("barakah_local_active_user")) {
         const savedTab = sessionStorage.getItem("barakah_active_tab");
-        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "staff", "delivery", "settings"];
+        const validTabs = ["dashboard", "pos", "contacts", "products", "negative-sales", "purchases", "inventory", "duelist", "ledger", "expenses", "reports", "returns", "staff", "delivery", "settings"];
         if (savedTab && validTabs.includes(savedTab)) return savedTab as any;
       }
     } catch (_) {}
@@ -1094,31 +1106,56 @@ export default function App() {
       const rebuiltList: any[] = [];
 
       flatTx.forEach(t => {
-        const relatedItems = flatItems.filter((item: any) => item.transaction_id === t.id);
+        const relatedItems = flatItems.filter((item: any) =>
+          String(item.transaction_id || item.transactionId || "") === String(t.id)
+        );
+        const existing = localNested.find((x: any) => x.id === t.id);
+        // Some legacy invoices stored product lines directly on the invoice document.
+        const nestedItems = Array.isArray(t.items) && t.items.length > 0
+          ? t.items
+          : (Array.isArray(existing?.items) ? existing.items : []);
         let mappedItems: any[] = [];
 
         if (relatedItems.length > 0) {
-          mappedItems = relatedItems.map((item: any) => ({
-            id: item.id,
-            firestoreId: item.firestoreId,
-            name: item.product_name || "Product Item",
-            quantity: Number(item.quantity) || 0,
-            price: Number(item.sell_price) || 0,
-            total: Number(item.quantity * item.sell_price) || 0,
-            productId: item.product_id || undefined,
-            category: item.category || "",
-            buyPrice: item.cost_price !== undefined ? Number(item.cost_price) : undefined,
-            costAllocations: item.cost_allocations || item.costAllocations || undefined
-          }));
-        } else {
-          // Keep existing items if present locally or in t.items to protect against incomplete collections snapshot
-          const existing = localNested.find((x: any) => x.id === t.id);
-          if (existing && Array.isArray(existing.items) && existing.items.length > 0) {
-            mappedItems = existing.items;
-          } else if (Array.isArray(t.items) && t.items.length > 0) {
-            mappedItems = t.items;
-          }
+          mappedItems = relatedItems.map((item: any, itemIndex: number) => {
+            const itemId = String(item.firestoreId || item.firestore_id || item.id || "");
+            const nestedItem = nestedItems.find((candidate: any) =>
+              itemId && String(candidate?.firestoreId || candidate?.firestore_id || candidate?.id || "") === itemId
+            ) || (nestedItems.length === relatedItems.length ? nestedItems[itemIndex] : undefined);
+            const savedCost = item.cost_price ?? item.buy_price ?? item.buyPrice ??
+              nestedItem?.buyPrice ?? nestedItem?.cost_price ?? nestedItem?.buy_price;
+            const savedAllocations = item.cost_allocations ?? item.costAllocations ??
+              nestedItem?.costAllocations ?? nestedItem?.cost_allocations;
+            return {
+              id: item.id || item.firestoreId || nestedItem?.id || String(t.id) + "_item_" + itemIndex,
+              firestoreId: item.firestoreId || item.firestore_id || nestedItem?.firestoreId || nestedItem?.firestore_id,
+              name: item.product_name || item.productName || nestedItem?.name || nestedItem?.product_name || "Product Item",
+              quantity: Number(item.quantity ?? nestedItem?.quantity) || 0,
+              price: Number(item.sell_price ?? item.price ?? nestedItem?.price ?? nestedItem?.sell_price) || 0,
+              total: (Number(item.quantity ?? nestedItem?.quantity) || 0) * (Number(item.sell_price ?? item.price ?? nestedItem?.price ?? nestedItem?.sell_price) || 0),
+              productId: item.product_id || item.productId || nestedItem?.productId || nestedItem?.product_id || undefined,
+              category: item.category || nestedItem?.category || "",
+              buyPrice: savedCost !== undefined && savedCost !== null && savedCost !== "" ? Number(savedCost) : undefined,
+              costAllocations: Array.isArray(savedAllocations) ? savedAllocations : undefined,
+              isNegativeSale: item.is_negative_sale === true || item.isNegativeSale === true || nestedItem?.isNegativeSale === true,
+              isNegativeSaleApproved: item.is_negative_sale_approved === true || item.isNegativeSaleApproved === true || nestedItem?.isNegativeSaleApproved === true,
+              negativeSaleUpdated: item.is_negative_sale_approved === true || item.negativeSaleUpdated === true || nestedItem?.negativeSaleUpdated === true
+            };
+          });
+        } else if (nestedItems.length > 0) {
+          mappedItems = nestedItems;
         }
+
+        const resolvedSubtotal = t.subtotal !== undefined && t.subtotal !== null
+          ? Number(t.subtotal) || 0
+          : mappedItems.length > 0
+            ? mappedItems.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0)
+            : Number(t.total_amount) || 0;
+        const resolvedTax = t.tax_amount !== undefined && t.tax_amount !== null
+          ? Number(t.tax_amount) || 0
+          : t.tax !== undefined && t.tax !== null
+            ? Number(t.tax) || 0
+            : Math.round(resolvedSubtotal * (Number(t.vat_rate) || 0) / 100);
 
         rebuiltList.push({
           id: t.id,
@@ -1126,11 +1163,18 @@ export default function App() {
           invoiceNo: t.invoice_no,
           date: t.created_at || new Date().toISOString(),
           items: mappedItems,
-          subtotal: Number(t.total_amount) || 0,
-          tax: t.vat_rate ? Number(((t.total_amount * t.vat_rate) / 100).toFixed(2)) : 0,
+          subtotal: resolvedSubtotal,
+          tax: resolvedTax,
           discount: Number(t.discount) || 0,
           total: Number(t.total_amount) || 0,
           paymentMethod: t.payment_method || "Cash",
+          paymentHistory: Array.isArray(t.payment_history) ? t.payment_history : (Array.isArray(t.paymentHistory) ? t.paymentHistory : []),
+          returnHistory: Array.isArray(t.return_history) ? t.return_history : (Array.isArray(t.returnHistory) ? t.returnHistory : (localNested.find((row: any) => row.id === t.id)?.returnHistory || [])),
+          refundHistory: Array.isArray(t.refund_history) ? t.refund_history : (Array.isArray(t.refundHistory) ? t.refundHistory : (localNested.find((row: any) => row.id === t.id)?.refundHistory || [])),
+          originalSubtotal: t.original_subtotal !== undefined ? Number(t.original_subtotal) : (t.originalSubtotal !== undefined ? Number(t.originalSubtotal) : undefined),
+          originalTotal: t.original_total !== undefined ? Number(t.original_total) : (t.originalTotal !== undefined ? Number(t.originalTotal) : undefined),
+          originalTax: t.original_tax !== undefined ? Number(t.original_tax) : (t.originalTax !== undefined ? Number(t.originalTax) : undefined),
+          originalDiscount: t.original_discount !== undefined ? Number(t.original_discount) : (t.originalDiscount !== undefined ? Number(t.originalDiscount) : undefined),
           status: t.paid_amount >= t.total_amount ? "paid" : (t.paid_amount > 0 ? "partial" : "due"),
           paidAmount: Number(t.paid_amount) || 0,
           dueBalance: Math.max(0, Number(t.total_amount) - Number(t.paid_amount)) || 0,
@@ -1301,13 +1345,25 @@ export default function App() {
       const flatTransactions = items.map(docData => ({
         id: docData.id,
         firestoreId: docData.firestoreId,
+        items: Array.isArray(docData.items) ? docData.items : [],
         invoice_no: docData.invoice_no,
         customer_id: docData.customer_id || null,
         total_amount: Number(docData.total_amount) || 0,
+        subtotal: docData.subtotal !== undefined && docData.subtotal !== null ? Number(docData.subtotal) || 0 : undefined,
+        tax_amount: docData.tax_amount !== undefined && docData.tax_amount !== null
+          ? Number(docData.tax_amount) || 0
+          : docData.tax !== undefined && docData.tax !== null ? Number(docData.tax) || 0 : undefined,
         discount: Number(docData.discount) || 0,
         vat_rate: Number(docData.vat_rate) || 0,
         paid_amount: Number(docData.paid_amount) || 0,
         payment_method: docData.payment_method || "Cash",
+        payment_history: Array.isArray(docData.payment_history) ? docData.payment_history : (Array.isArray(docData.paymentHistory) ? docData.paymentHistory : []),
+        return_history: Array.isArray(docData.return_history) ? docData.return_history : (Array.isArray(docData.returnHistory) ? docData.returnHistory : []),
+        refund_history: Array.isArray(docData.refund_history) ? docData.refund_history : (Array.isArray(docData.refundHistory) ? docData.refundHistory : []),
+        original_subtotal: docData.original_subtotal ?? docData.originalSubtotal,
+        original_total: docData.original_total ?? docData.originalTotal,
+        original_tax: docData.original_tax ?? docData.originalTax,
+        original_discount: docData.original_discount ?? docData.originalDiscount,
         signature_svg: docData.signature_svg || null,
         created_at: docData.created_at || new Date().toISOString()
       }));
@@ -1324,13 +1380,21 @@ export default function App() {
       const flatItems = items.map((docData: any) => ({
         id: docData.id,
         firestoreId: docData.firestoreId,
-        transaction_id: docData.transaction_id,
-        product_id: docData.product_id || null,
+        transaction_id: docData.transaction_id || docData.transactionId || "",
+        product_id: docData.product_id || docData.productId || null,
         product_name: docData.product_name || "Product Item",
         quantity: Number(docData.quantity) || 0,
         sell_price: Number(docData.sell_price) || 0,
-        cost_price: docData.cost_price !== undefined ? Number(docData.cost_price) : 0,
-        cost_allocations: docData.cost_allocations || docData.costAllocations || undefined
+        // Preserve missing historical cost as undefined; zero is a valid explicit cost, not a missing-value default.
+        cost_price: docData.cost_price !== undefined && docData.cost_price !== null && docData.cost_price !== ""
+          ? Number(docData.cost_price)
+          : docData.buy_price !== undefined && docData.buy_price !== null && docData.buy_price !== ""
+            ? Number(docData.buy_price)
+            : docData.buyPrice !== undefined && docData.buyPrice !== null && docData.buyPrice !== ""
+              ? Number(docData.buyPrice) : undefined,
+        cost_allocations: docData.cost_allocations || docData.costAllocations || undefined,
+        is_negative_sale: docData.is_negative_sale === true || docData.isNegativeSale === true,
+        is_negative_sale_approved: docData.is_negative_sale_approved === true || docData.isNegativeSaleApproved === true
       }));
 
       localStorage.setItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId), JSON.stringify(flatItems));
@@ -2133,15 +2197,64 @@ export default function App() {
       fifoProductUpdates.get(product.id) || product
     );
 
-    setProducts(updatedProducts);
-    setTransactions([newTransaction, ...transactions]);
+    let finalTransaction: Transaction = newTransaction;
+    let finalProducts: Product[] = updatedProducts;
+    if (activeUser && !activeUser.isGuest) {
+      try {
+        const cloudResult = await commitSaleCreationTransaction({
+          transactionId: uniqueTxId,
+          invoiceNo: uniqueInvoiceNo,
+          customerId: newTransaction.contactId || null,
+          date: targetDateStr,
+          subtotal: cartSubtotal,
+          tax: calculatedTaxAmount,
+          discount: customerDiscount,
+          total: invoiceGrandTotal,
+          paidAmount: newTransaction.paidAmount,
+          dueBalance: computedInvoiceDueBalance,
+          paymentMethod,
+          status: paymentStatus,
+          vatRate: invoiceTaxRate,
+          signatureSvg: signatureStr || null,
+          items: posCart.map((cartItem, index) => ({
+            id: costedCartItems[index].id,
+            productDocId: String(cartItem.product.id),
+            productId: costedCartItems[index].productId,
+            name: cartItem.product.name,
+            category: cartItem.product.category || "Uncategorized",
+            quantity: cartItem.quantity,
+            price: cartItem.price !== undefined ? cartItem.price : cartItem.product.sellPrice,
+            warranty: cartItem.warranty || "",
+            warrantyDetails: cartItem.product.warrantyDetails || ""
+          }))
+        });
+        finalTransaction = { ...newTransaction, items: cloudResult.items };
+        const cloudProducts = new Map(cloudResult.products.map((product: any) => [product.id, product]));
+        finalProducts = products.map(product => {
+          const updated: any = cloudProducts.get(product.id);
+          return updated ? {
+            ...product, ...updated,
+            buyPrice: Number(updated.buyPrice ?? updated.buy_price ?? product.buyPrice) || 0,
+            sellPrice: Number(updated.sellPrice ?? updated.sell_price ?? product.sellPrice) || 0,
+            imageUrl: updated.imageUrl || updated.image_url || product.imageUrl,
+            costLots: updated.costLots || updated.cost_lots || product.costLots
+          } : product;
+        });
+      } catch (error: any) {
+        triggerNotification(error?.message || "Invoice could not be saved atomically. Your cart is unchanged; please retry.", "error");
+        return;
+      }
+    }
+
+    setProducts(finalProducts);
+    setTransactions([finalTransaction, ...transactions]);
 
     // Regenerate and update local storage keys to immediately refresh dashboard and prevent empty-item filters in subscriptions
     try {
       const activeUserId = activeUser?.uid;
 
       // 1. Update barakah_transactions
-      const updatedTransactions = [newTransaction, ...transactions];
+      const updatedTransactions = [finalTransaction, ...transactions];
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactions));
 
       // 2. Update barakah_flat_transaction_items
@@ -2149,19 +2262,21 @@ export default function App() {
       let flatItems = JSON.parse(rawLocalItems);
       if (!Array.isArray(flatItems)) flatItems = [];
 
-      newTransaction.items.forEach((nestedIt: any, idx: number) => {
+      finalTransaction.items.forEach((nestedIt: any, idx: number) => {
         const itemUUID = nestedIt.id || `${newTransaction.id}_item_${idx}`;
         const productUUID = nestedIt.productId || null;
 
         const flatItem = {
           id: itemUUID,
-          transaction_id: newTransaction.id,
+          transaction_id: finalTransaction.id,
           product_id: productUUID,
           product_name: nestedIt.name || "Product Item",
           quantity: Number(nestedIt.quantity) || 0,
           sell_price: Number(nestedIt.price) || 0,
           cost_price: Number(nestedIt.buyPrice) || 0,
           cost_allocations: nestedIt.costAllocations || [],
+          is_negative_sale: nestedIt.isNegativeSale === true,
+          is_negative_sale_approved: nestedIt.isNegativeSaleApproved === true || nestedIt.negativeSaleUpdated === true,
           warranty: nestedIt.warranty || "",
           warranty_details: nestedIt.warrantyDetails || ""
         };
@@ -2185,16 +2300,20 @@ export default function App() {
 
       const flatTxItem = {
         id: newTransaction.id,
-        firestoreId: newTransaction.id,
-        invoice_no: newTransaction.invoiceNo,
-        customer_id: newTransaction.contactId || null,
-        total_amount: Number(newTransaction.total) || 0,
-        discount: Number(newTransaction.discount) || 0,
-        vat_rate: newTransaction.tax && newTransaction.subtotal ? Number(((Number(newTransaction.tax) / Number(newTransaction.subtotal)) * 100).toFixed(2)) : 0.0,
-        paid_amount: Number(newTransaction.paidAmount) || 0,
-        payment_method: newTransaction.paymentMethod || "Cash",
-        signature_svg: newTransaction.customerSignature || null,
-        created_at: newTransaction.date || new Date().toISOString()
+        firestoreId: finalTransaction.id,
+        invoice_no: finalTransaction.invoiceNo,
+        customer_id: finalTransaction.contactId || null,
+        total_amount: Number(finalTransaction.total) || 0,
+        discount: Number(finalTransaction.discount) || 0,
+        subtotal: Number(finalTransaction.subtotal) || 0,
+        tax_amount: Number(finalTransaction.tax) || 0,
+        vat_rate: finalTransaction.tax && finalTransaction.subtotal ? Number(((Number(finalTransaction.tax) / Number(finalTransaction.subtotal)) * 100).toFixed(2)) : 0.0,
+        paid_amount: Number(finalTransaction.paidAmount) || 0,
+        payment_method: finalTransaction.paymentMethod || "Cash",
+        payment_history: [],
+        due_balance: Number(finalTransaction.dueBalance) || 0,
+        signature_svg: finalTransaction.customerSignature || null,
+        created_at: finalTransaction.date || new Date().toISOString()
       };
 
       const txIdx = flatTxList.findIndex((x: any) => x.id === newTransaction.id);
@@ -2208,54 +2327,14 @@ export default function App() {
       }
       localStorage.setItem(getDbKey("barakah_flat_transactions", undefined, activeUserId), JSON.stringify(flatTxList));
 
-      // 4. Save real-time transaction to Firestore cloud for multi-device sync
-      if (activeUser && !activeUser.isGuest) {
-        // Main transaction document
-        await saveTransaction(activeUserId, flatTxItem);
 
-        // Individual item records
-        newTransaction.items.forEach((nestedIt: any, idx: number) => {
-          const itemUUID = nestedIt.id || `${newTransaction.id}_item_${idx}`;
-          const productUUID = nestedIt.productId || null;
-
-          const flatItem = {
-            id: itemUUID,
-            transaction_id: newTransaction.id,
-            product_id: productUUID,
-            product_name: nestedIt.name || "Product Item",
-            category: nestedIt.category || "Uncategorized",
-            quantity: Number(nestedIt.quantity) || 0,
-            sell_price: Number(nestedIt.price) || 0,
-            cost_price: Number(nestedIt.buyPrice) || 0,
-            cost_allocations: nestedIt.costAllocations || [],
-            user_id: activeUserId,
-            store_id: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
-            storeId: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
-            linked_email: (businessInfo?.email || cleanEmail).trim().toLowerCase(),
-            email: cleanEmail
-          };
-          handleSave("transaction_items", activeUserId, flatItem).catch(err => {
-            console.error("Cloud save transaction item failed:", err);
-          });
-        });
-
-        // Updated inventory stock levels
-        posCart.forEach(cartItem => {
-          const targetProd = updatedProducts.find(p => p.id === cartItem.product.id || (p.sku && cartItem.product.sku === p.sku));
-          if (targetProd) {
-            saveProduct(activeUserId, targetProd).catch(err => {
-              console.error("Cloud save product stock failed:", err);
-            });
-          }
-        });
-      }
     } catch (err) {
       console.warn("Failed to update flat items in localStorage during checkout:", err);
     }
 
     // Delivery assignment is now initiated directly from the Customer Card via Invoice Assign.
     try {
-      generateInvoicePDF(newTransaction, pairedContact, businessInfo).catch(err => {
+      generateInvoicePDF(finalTransaction, contacts.find(c => c.id === newTransaction.contactId || c.id === posSelectedContactId) || undefined, businessInfo).catch(err => {
         console.error("Async error in generateInvoicePDF:", err);
       });
     } catch (pdfErr) {
@@ -2728,35 +2807,52 @@ export default function App() {
     triggerNotification(updated ? "Product negative stock marked as green / updated! 🟢" : "Product negative stock reset to red.", "success");
   };
 
-  const persistTransactionItemCost = (txId: string, itemIdx: number, updatedTransactions: any[]) => {
+  const persistTransactionItemCost = async (txId: string, itemIdx: number, updatedTransactions: any[]): Promise<boolean> => {
     const targetTx = updatedTransactions.find(t => t.id === txId);
     const item = targetTx?.items?.[itemIdx];
-    if (!item) return;
+    if (!item) return false;
 
-    const itemId = item.id || `${txId}_item_${itemIdx}`;
-    updateDoc(doc(db, "transaction_items", itemId), {
+    const itemId = item.firestoreId || item.id || `${txId}_item_${itemIdx}`;
+    const activeUserId = activeUser?.uid || "";
+    const storeEmail = (businessInfo?.email || activeUser?.email || "").trim().toLowerCase();
+    const flatItem = {
+      id: itemId,
+      transaction_id: txId,
+      product_id: item.productId || null,
+      product_name: item.name || "Product Item",
+      quantity: Number(item.quantity) || 0,
+      sell_price: Number(item.price) || 0,
       cost_price: Number(item.buyPrice) || 0,
-      cost_allocations: item.costAllocations || []
-    }).catch((e) => {
-      console.error("Failed to update transaction item cost in Firestore:", e);
-    });
+      cost_allocations: item.costAllocations || [],
+      is_negative_sale: item.isNegativeSale === true,
+      is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true,
+      ...(activeUserId ? { user_id: activeUserId, owner_id: activeUserId } : {}),
+      ...(storeEmail ? { store_id: storeEmail, storeId: storeEmail, linked_email: storeEmail, email: storeEmail } : {})
+    };
 
     try {
-      const activeUserId = activeUser?.uid;
+      if (activeUser && !activeUser.isGuest) {
+        // Persist the cost in both representations: the flat item collection and
+        // the nested invoice snapshot consumed by historical COGS calculations.
+        await runTransaction(db, async cloudTransaction => {
+          cloudTransaction.set(doc(db, "transaction_items", itemId), flatItem, { merge: true });
+          cloudTransaction.set(
+            doc(db, "transactions", targetTx.firestoreId || targetTx.id || txId),
+            { items: targetTx.items, updated_at: new Date().toISOString() },
+            { merge: true }
+          );
+        });
+      }
+    } catch (e) {
+      console.error("Failed to update transaction item cost in Firestore:", e);
+      triggerNotification("Cost update could not be synchronized to the cloud. The report was not updated; please retry the correction.", "error");
+      return false;
+    }
+
+    try {
       const rawLocalItems = localStorage.getItem(getDbKey("barakah_flat_transaction_items", undefined, activeUserId)) || "[]";
       let flatItems = JSON.parse(rawLocalItems);
       if (!Array.isArray(flatItems)) flatItems = [];
-      const productUUID = item.productId || null;
-      const flatItem = {
-        id: itemId,
-        transaction_id: txId,
-        product_id: productUUID,
-        product_name: item.name || "Product Item",
-        quantity: Number(item.quantity) || 0,
-        sell_price: Number(item.price) || 0,
-        cost_price: Number(item.buyPrice) || 0,
-        cost_allocations: item.costAllocations || []
-      };
       const flatIdx = flatItems.findIndex((entry: any) =>
         String(entry.firestoreId || entry.id || "") === String(itemId)
       );
@@ -2768,9 +2864,11 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to update unit cost in localStorage:", err);
     }
+    return true;
   };
 
-  const handleUpdateTransactionItemBuyPrice = (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
+  const handleUpdateTransactionItemBuyPrice = async (txId: string, itemIdx: number, newBuyPrice: number, isApproved?: boolean, productId?: string) => {
+    if (!Number.isFinite(newBuyPrice) || newBuyPrice < 0) return;
     const updatedTransactions = transactions.map(t => {
       if (t.id !== txId) return t;
       const updatedItems = t.items.map((it, idx) => {
@@ -2784,8 +2882,9 @@ export default function App() {
       return { ...t, items: updatedItems };
     });
 
+    const saved = await persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+    if (!saved) return;
     setTransactions(updatedTransactions);
-    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
 
     // The negative-stock editor's optional checkbox updates only the catalog
     // default. It never overwrites any other sold unit's saved cost.
@@ -2803,10 +2902,10 @@ export default function App() {
       setProducts(updatedProducts);
     }
 
-    triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
+    if (saved) triggerNotification("Transaction item cost specified and approved! Net profit recalculated instantly.", "success");
   };
 
-  const handleUpdateTransactionItemUnitCost = (txId: string, itemIdx: number, allocationIdx: number, newUnitCost: number) => {
+  const handleUpdateTransactionItemUnitCost = async (txId: string, itemIdx: number, allocationIdx: number, newUnitCost: number) => {
     if (!Number.isFinite(newUnitCost) || newUnitCost < 0) return;
 
     const updatedTransactions = transactions.map(t => {
@@ -2817,8 +2916,9 @@ export default function App() {
       return { ...t, items: updatedItems };
     });
 
+    const saved = await persistTransactionItemCost(txId, itemIdx, updatedTransactions);
+    if (!saved) return;
     setTransactions(updatedTransactions);
-    persistTransactionItemCost(txId, itemIdx, updatedTransactions);
     triggerNotification("Only the selected unit's cost price was updated.", "success");
   };
 
@@ -2834,6 +2934,32 @@ export default function App() {
     setLedgerStatusFilter("all");
     setActiveTab("ledger");
     triggerNotification(`Displaying account transaction details of invoice: ${invoiceNo}`, "info");
+  };
+
+  const handleReviewDuplicateInvoice = (transactionId: string) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Only administrators can review or delete duplicate invoices.", "error");
+      return;
+    }
+    const target = transactions.find(item => String(item.id) === String(transactionId));
+    if (!target) {
+      triggerNotification("This invoice record is no longer available. Refresh Accounting Issues and try again.", "error");
+      return;
+    }
+    const invoiceKey = String(target.invoiceNo || target.invoice_no || "").trim().toLowerCase();
+    const duplicateCount = transactions.filter(item =>
+      String(item.invoiceNo || item.invoice_no || "").trim().toLowerCase() === invoiceKey
+    ).length;
+    if (!invoiceKey || duplicateCount < 2) {
+      triggerNotification("This invoice is no longer a duplicate. Accounting Review will refresh automatically.", "info");
+      return;
+    }
+    setLedgerSearch(String(target.invoiceNo || target.invoice_no || ""));
+    setLedgerStatusFilter("all");
+    setEditingTx(target);
+    setDeleteTxId(target.id);
+    setActiveTab("ledger");
+    triggerNotification("Duplicate invoice selected. Review the invoice, then confirm deletion in the ledger panel.", "info");
   };
 
   const handleAddPurchase = (pur: any) => {
@@ -2904,6 +3030,16 @@ export default function App() {
         triggerNotification("This purchase batch has already supplied sold units. It cannot be deleted because that would break the sales cost history.", "error");
         return;
       }
+    } else {
+      const productHasSales = transactions.some(tx =>
+        Array.isArray(tx.items) && tx.items.some(item =>
+          item.productId === matchingPur.productId && Number(item.quantity) > 0
+        )
+      );
+      if (productHasSales) {
+        triggerNotification("This product has historical sales but this purchase has no FIFO lot history. Deletion is blocked to protect stock and past cost records.", "error");
+        return;
+      }
     }
 
     const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
@@ -2940,7 +3076,13 @@ export default function App() {
       productId: updatedFields.productId ?? originalPur.productId,
       quantity: Number(updatedFields.quantity ?? originalPur.quantity),
       buyPrice: Number(updatedFields.unitPrice ?? updatedFields.buyPrice ?? originalPur.buyPrice),
-      totalAmount: Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice)))
+      totalAmount: Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice))),
+      cashPaid: Number(originalPur.cashPaid ?? 0),
+      dueAmount: Math.max(
+        0,
+        Number(updatedFields.totalAmount ?? (Number(updatedFields.quantity ?? originalPur.quantity) * Number(updatedFields.unitPrice ?? originalPur.buyPrice))) -
+          Number(originalPur.cashPaid ?? 0)
+      )
     };
 
     const originalProduct = products.find(prod => prod.id === originalPur.productId);
@@ -2958,6 +3100,20 @@ export default function App() {
       const checkedUpdate = updatePurchaseCostLot(originalProduct, id, updatedPur);
       if (!checkedUpdate) {
         triggerNotification("Purchase quantity cannot be reduced below the quantity already sold from this batch.", "error");
+        return;
+      }
+    } else if (!originalLot) {
+      const productHasSales = transactions.some(tx =>
+        Array.isArray(tx.items) && tx.items.some(item =>
+          item.productId === originalPur.productId && Number(item.quantity) > 0
+        )
+      );
+      const changesCostHistory =
+        updatedPur.productId !== originalPur.productId ||
+        updatedPur.quantity !== Number(originalPur.quantity) ||
+        updatedPur.buyPrice !== Number(originalPur.buyPrice);
+      if (productHasSales && changesCostHistory) {
+        triggerNotification("This product has historical sales but this purchase has no FIFO lot history. Product, quantity, and buy-cost edits are blocked to protect past sale costs.", "error");
         return;
       }
     }
@@ -3141,48 +3297,66 @@ export default function App() {
   }, [ledgerCurrentPage]);
 
   const incrementDuePayment = (invoiceNo: string, collectionAmt: number) => {
-    if (!collectionAmt || collectionAmt <= 0) return;
+    if (!Number.isFinite(collectionAmt) || collectionAmt <= 0) return;
 
     const targetTx = transactions.find(t => t.invoiceNo === invoiceNo);
-    if (targetTx) {
-      const newPaid = Math.min(targetTx.total, targetTx.paidAmount + collectionAmt);
-      const newDue = Math.max(0, targetTx.total - newPaid);
+    if (!targetTx) return;
 
-      if (activeUser && !activeUser.isGuest) {
-        const activeUserId = activeUser.uid;
-        const flatTxItem = {
-          id: targetTx.id,
-          firestoreId: targetTx.firestoreId || targetTx.id,
-          invoice_no: targetTx.invoiceNo,
-          customer_id: targetTx.contactId || null,
-          total_amount: Number(targetTx.total) || 0,
-          discount: Number(targetTx.discount) || 0,
-          vat_rate: targetTx.tax && targetTx.subtotal ? Number(((Number(targetTx.tax) / Number(targetTx.subtotal)) * 100).toFixed(2)) : 0.0,
-          paid_amount: Number(newPaid) || 0,
-          payment_method: targetTx.paymentMethod || "Cash",
-          signature_svg: targetTx.customerSignature || null,
-          created_at: targetTx.date || new Date().toISOString()
-        };
-        saveTransaction(activeUserId, flatTxItem).catch(err => {
-          console.error("Cloud save increment due payment failed:", err);
-        });
-      }
+    const outstanding = Math.max(0, Number(targetTx.total) - Number(targetTx.paidAmount || 0));
+    if (collectionAmt > outstanding) {
+      triggerNotification(`Collection amount exceeds the outstanding due of ${businessInfo.currencySymbol} ${outstanding.toLocaleString()}.`, "error");
+      return;
     }
 
-    setTransactions(transactions.map((t) => {
-      if (t.invoiceNo === invoiceNo) {
-        const newPaid = Math.min(t.total, t.paidAmount + collectionAmt);
-        const newDue = Math.max(0, t.total - newPaid);
-        return {
+    const newPaid = Math.min(Number(targetTx.total) || 0, (Number(targetTx.paidAmount) || 0) + collectionAmt);
+    const newDue = Math.max(0, (Number(targetTx.total) || 0) - newPaid);
+    const paymentHistory = [
+      ...(Array.isArray(targetTx.paymentHistory) ? targetTx.paymentHistory : []),
+      {
+        id: `pay_${Date.now()}_${targetTx.id}`,
+        amount: collectionAmt,
+        date: format(new Date(), "yyyy-MM-dd"),
+        recordedAt: new Date().toISOString()
+      }
+    ];
+
+    const updatedTransactions = transactions.map(t => t.id === targetTx.id
+      ? {
           ...t,
           paidAmount: newPaid,
           dueBalance: newDue,
+          paymentHistory,
           status: newDue === 0 ? "paid" : "partial"
-        };
-      }
-      return t;
-    }));
-    triggerNotification(`Invoice ${invoiceNo}: ${collectionAmt} BDT received & recorded.`);
+        }
+      : t
+    );
+    setTransactions(updatedTransactions);
+
+    if (activeUser && !activeUser.isGuest) {
+      const activeUserId = activeUser.uid;
+      const flatTxItem = {
+        id: targetTx.id,
+        firestoreId: targetTx.firestoreId || targetTx.id,
+        invoice_no: targetTx.invoiceNo,
+        customer_id: targetTx.contactId || null,
+        total_amount: Number(targetTx.total) || 0,
+        subtotal: Number(targetTx.subtotal) || 0,
+        tax_amount: Number(targetTx.tax) || 0,
+        discount: Number(targetTx.discount) || 0,
+        vat_rate: targetTx.tax && targetTx.subtotal ? Number(((Number(targetTx.tax) / Number(targetTx.subtotal)) * 100).toFixed(2)) : 0.0,
+        paid_amount: Number(newPaid) || 0,
+        payment_history: paymentHistory,
+        payment_method: targetTx.paymentMethod || "Cash",
+        signature_svg: targetTx.customerSignature || null,
+        created_at: targetTx.date || new Date().toISOString()
+      };
+      saveTransaction(activeUserId, flatTxItem).catch(err => {
+        console.error("Cloud save increment due payment failed:", err);
+        triggerNotification("Payment was added locally but cloud sync failed. Please retry synchronization.", "error");
+      });
+    }
+
+    triggerNotification(`Invoice ${invoiceNo}: ${collectionAmt.toLocaleString()} ${businessInfo.currencySymbol} received and recorded.`);
   };
 
   const removeDeliveryAssignmentsForTransactions = async (transactionIds: string[]) => {
@@ -3208,47 +3382,104 @@ export default function App() {
     const t = transactions.find(item => item.id === id);
     if (!t) return;
 
-    await deleteCloudDocument("transactions", t.firestoreId ?? t.id);
+    // Restore only the still-sold units; units already returned were restored
+    // during the return transaction and must never be added to stock twice.
+    let restoredProducts: Product[];
+    try {
+      restoredProducts = products.map(prod => {
+        const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
+          item.productId === prod.id || item.id === prod.id
+        );
+        if (soldItems.length === 0) return prod;
+
+        let nextP: any = prod;
+        soldItems.forEach(soldItem => {
+          const itemId = String(soldItem.firestoreId || soldItem.id || "");
+          const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : [])
+            .flatMap((entry: any) => Array.isArray(entry.items) ? entry.items : [])
+            .filter((line: any) => String(line.transactionItemId) === itemId)
+            .reduce((sum: number, line: any) => sum + (Number(line.quantity) || 0), 0);
+          const soldQty = Math.max(0, Number(soldItem.quantity) || 0);
+          const remainingQty = Math.max(0, soldQty - returnedQty);
+          if (returnedQty > soldQty + 0.000001) {
+            throw new Error("Return history exceeds the original sold quantity. Invoice deletion was stopped to protect stock.");
+          }
+          if (remainingQty <= 0.000001) return;
+          const allocations = getCostAllocationsForItem(soldItem, Number(soldItem.buyPrice) || Number(prod.buyPrice) || 0);
+          let skip = returnedQty;
+          let remaining = remainingQty;
+          const remainingAllocations: any[] = [];
+          allocations.forEach((allocation: any) => {
+            if (remaining <= 0.000001) return;
+            const allocationQty = Number(allocation.quantity) || 0;
+            if (skip >= allocationQty - 0.000001) { skip -= allocationQty; return; }
+            const take = Math.min(Math.max(0, allocationQty - skip), remaining);
+            if (take > 0.000001) remainingAllocations.push({ ...allocation, quantity: take });
+            remaining -= take;
+            skip = 0;
+          });
+          if (remaining > 0.000001) {
+            throw new Error("FIFO return allocation history is incomplete. Invoice deletion was stopped to protect stock valuation.");
+          }
+          const remainingItem = {
+            ...soldItem,
+            quantity: remainingQty,
+            costAllocations: remainingAllocations,
+            buyPrice: remainingQty > 0
+              ? remainingAllocations.reduce((sum: number, allocation: any) => sum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0) / remainingQty
+              : Number(soldItem.buyPrice) || 0
+          };
+          nextP = restoreFifoCost(nextP, remainingItem);
+        });
+        return nextP;
+      });
+    } catch (error: any) {
+      triggerNotification(error?.message || "Invoice stock restoration failed. Nothing was deleted.", "error");
+      return;
+    }
+
+    if (activeUser && !activeUser.isGuest) {
+      const productsToPersist = restoredProducts
+        .filter((product, index) => product !== products[index])
+        .map(product => ({ id: product.id, data: product }));
+      try {
+        await deleteInvoiceAndRestoreBatch({
+          transactionId: t.id,
+          transactionDocId: t.firestoreId || t.id,
+          expectedInvoice: {
+            total: Number(t.total) || 0,
+            paidAmount: Number(t.paidAmount) || 0,
+            dueBalance: Number(t.dueBalance) || 0
+          },
+          // Only delete transaction_items documents whose real Firestore
+          // document ID was supplied by the subscription. Nested legacy invoice
+          // snapshots may have an item.id/product ID that is NOT a document ID.
+          itemIds: (Array.isArray(t.items) ? t.items : [])
+            .map(item => item.firestoreId || item.firestore_id)
+            .filter((itemId): itemId is string => typeof itemId === "string" && itemId.trim().length > 0),
+          products: productsToPersist.map(product => ({
+            ...product,
+            expectedData: products.find(original => original.id === product.id)
+          }))
+        });
+      } catch (error: any) {
+        triggerNotification(error?.message || "Invoice could not be deleted safely. No stock changes were applied.", "error");
+        return;
+      }
+    }
+
     try {
       await removeDeliveryAssignmentsForTransactions([t.firestoreId ?? t.id, t.id]);
     } catch (error) {
       console.warn("[Ledger] Linked delivery assignment cleanup will retry on Delivery Management load:", error);
     }
 
-    if (activeUser && !activeUser.isGuest) {
-      deleteTransaction(id).catch(err => {});
-      if (Array.isArray(t.items)) {
-        t.items.forEach(item => {
-          if (item.id) {
-            deleteDoc(doc(db, "transaction_items", item.firestoreId || item.id)).catch(err => {});
-          }
-        });
-      }
-    }
-
-    // Restore each sold unit to the same FIFO lot it originally came from.
-    const restoredProducts = products.map(prod => {
-      const soldItems = (Array.isArray(t.items) ? t.items : []).filter(item =>
-        item.productId === prod.id || item.id === prod.id
-      );
-      if (soldItems.length === 0) return prod;
-
-      let nextP: any = prod;
-      soldItems.forEach(soldItem => {
-        nextP = restoreFifoCost(nextP, soldItem);
-      });
-      if (activeUser && !activeUser.isGuest) {
-        saveProduct(activeUser.uid, nextP).catch(err => {});
-      }
-      return nextP;
-    });
-
     setProducts(restoredProducts);
     setTransactions(transactions.filter(item => item.id !== id));
     triggerNotification(`Invoice ${t.invoiceNo} has been successfully deleted.`, "success");
   };
 
-  const handleDeleteTransactionItem = (transactionId: string, itemIndex: number) => {
+  const handleDeleteTransactionItem = async (transactionId: string, itemIndex: number) => {
     if (currentPanel !== "admin") {
       triggerNotification("Security block: Only administrators are authorized to delete individual sale items! 🛑", "error");
       return;
@@ -3271,17 +3502,21 @@ export default function App() {
     if (!item) return;
     if (!window.confirm("Remove \"" + item.name + "\" from Invoice " + targetTx.invoiceNo + "? Only this product line will be removed; the invoice and other items will remain.")) return;
     const updatedItems = normalizedItems.filter((_, idx) => idx !== itemIndex);
-    handleEditTransaction(transactionId, { items: updatedItems });
-    setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
+    const saved = await handleEditTransaction(transactionId, { items: updatedItems });
+    if (saved) setEditingTx(prev => prev && prev.id === transactionId ? { ...prev, items: updatedItems } : prev);
   };
 
-  const handleEditTransaction = (id: string, updatedFields: Partial<Transaction>) => {
+  const handleEditTransaction = async (id: string, updatedFields: Partial<Transaction>) => {
     if (currentPanel !== "admin" && currentPanel !== "sales") {
       triggerNotification("Security block: Unauthorized action! 🛑", "error");
-      return;
+      return false;
     }
     const originalTx = transactions.find(t => t.id === id);
-    if (!originalTx) return;
+    if (!originalTx) return false;
+    if (Array.isArray(originalTx.returnHistory) && originalTx.returnHistory.length > 0) {
+      triggerNotification("This invoice already has processed returns. Its original lines and amounts are locked to preserve return and refund history.", "error");
+      return false;
+    }
 
     // Give each invoice line a stable identity independent of its product/model ID.
     const ensureUniqueLineIdentities = (sourceItems: any[]) => {
@@ -3379,21 +3614,6 @@ export default function App() {
     const status = dueBalance === 0 ? "paid" : paidAmount > 0 ? "partial" : "due";
 
     const updatedProductsList = workingProducts;
-    setProducts(updatedProductsList);
-    if (activeUser && !activeUser.isGuest) {
-      updatedProductsList.forEach((nextProduct, index) => {
-        const previousProduct = products[index];
-        if (previousProduct && (
-          previousProduct.stock !== nextProduct.stock ||
-          JSON.stringify(previousProduct.costLots || []) !== JSON.stringify(nextProduct.costLots || [])
-        )) {
-          saveProduct(activeUser.uid, nextProduct).catch(err =>
-            console.error("Failed to sync FIFO stock after invoice edit:", err)
-          );
-        }
-      });
-    }
-
     const updatedTransactionsList = transactions.map(t => {
       if (t.id === id) {
         return {
@@ -3410,6 +3630,126 @@ export default function App() {
       }
       return t;
     });
+
+    const targetTxForCommit = updatedTransactionsList.find(t => t.id === id);
+    const changedProductsForCommit = updatedProductsList.filter((nextProduct, index) => {
+      const previousProduct = products[index];
+      return !!previousProduct && (
+        Number(previousProduct.stock) !== Number(nextProduct.stock) ||
+        JSON.stringify(previousProduct.costLots || []) !== JSON.stringify(nextProduct.costLots || []) ||
+        Boolean(previousProduct.hasNegativeSale) !== Boolean(nextProduct.hasNegativeSale) ||
+        Boolean(previousProduct.negativeSaleUpdated) !== Boolean(nextProduct.negativeSaleUpdated)
+      );
+    });
+
+    if (activeUser && !activeUser.isGuest && targetTxForCommit) {
+      let costOfGoodsSold = 0;
+      items.forEach(item => {
+        const dbProduct = customerDirectoryData.productsById.get(item.productId || "") ||
+          customerDirectoryData.productsById.get(item.id || "") ||
+          customerDirectoryData.productsByName.get(item.name || "");
+        let buyCost = 0;
+        if (Array.isArray(item.costAllocations) && item.costAllocations.length > 0) {
+          buyCost = getAverageCostFromAllocations(item, dbProduct?.buyPrice ?? 0);
+        } else if (item.buyPrice !== undefined && item.buyPrice !== null && Number.isFinite(Number(item.buyPrice))) {
+          buyCost = Number(item.buyPrice);
+        } else if (dbProduct?.buyPrice !== undefined && dbProduct?.buyPrice !== null && Number.isFinite(Number(dbProduct.buyPrice))) {
+          buyCost = Number(dbProduct.buyPrice);
+        } else {
+          buyCost = (Number(item.price) || 0) * 0.70;
+        }
+        costOfGoodsSold += buyCost * (Number(item.quantity) || 0);
+      });
+
+      const nestedItems = items.map(item => ({
+        id: item.firestoreId || item.id || "",
+        firestoreId: item.firestoreId || item.id || "",
+        name: item.name || "",
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.price) || 0,
+        total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
+        productId: item.productId || "",
+        buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+        costAllocations: item.costAllocations || [],
+        warranty: item.warranty || "",
+        warrantyDetails: item.warrantyDetails || "",
+        isNegativeSale: item.isNegativeSale === true,
+        isNegativeSaleApproved: item.isNegativeSaleApproved === true,
+        negativeSaleUpdated: item.negativeSaleUpdated === true
+      }));
+      const selectedDate = updatedFields.date || originalTx.date || originalTx.created_at;
+      const parsedDate = selectedDate ? new Date(selectedDate as any) : null;
+      const createdAt = parsedDate && !Number.isNaN(parsedDate.getTime())
+        ? parsedDate.toISOString()
+        : (originalTx.created_at || originalTx.date || new Date().toISOString());
+
+      try {
+        await commitInvoiceEditBatch({
+          transactionDocId: originalTx.firestoreId || originalTx.id,
+          expectedInvoice: {
+            total: Number(originalTx.total) || 0,
+            paidAmount: Number(originalTx.paidAmount) || 0,
+            dueBalance: Number(originalTx.dueBalance) || 0
+          },
+          transactionData: {
+            id: originalTx.id,
+            invoice_no: targetTxForCommit.invoiceNo,
+            customer_id: targetTxForCommit.contactId || null,
+            items: nestedItems,
+            subtotal: Number(subtotal) || 0,
+            tax: Number(tax) || 0,
+            tax_amount: Number(tax) || 0,
+            total_amount: Number(total) || 0,
+            total: Number(total) || 0,
+            profit: Math.round((total - tax) - costOfGoodsSold),
+            discount: Number(discount) || 0,
+            paid_amount: Number(paidAmount) || 0,
+            paidAmount: Number(paidAmount) || 0,
+            payment_history: originalTx.paymentHistory || [],
+            due_balance: Number(dueBalance) || 0,
+            dueBalance: Number(dueBalance) || 0,
+            status,
+            payment_method: targetTxForCommit.paymentMethod || "Cash",
+            created_at: createdAt,
+            vat_rate: originalSubtotal > 0 ? Number(((originalTax / originalSubtotal) * 100).toFixed(2)) : 0,
+            updated_at: new Date().toISOString()
+          },
+          items: items.map(item => {
+            const docId = item.firestoreId || item.id;
+            return {
+              docId,
+              data: {
+                transaction_id: originalTx.id,
+                product_id: item.productId || null,
+                product_name: item.name || "Product Item",
+                category: item.category || "Uncategorized",
+                quantity: Number(item.quantity) || 0,
+                sell_price: Number(item.price) || 0,
+                cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
+                cost_allocations: item.costAllocations || [],
+                is_negative_sale: item.isNegativeSale === true,
+                is_negative_sale_approved: item.isNegativeSaleApproved === true || item.negativeSaleUpdated === true,
+                warranty: item.warranty || "",
+                warranty_details: item.warrantyDetails || ""
+              }
+            };
+          }),
+          deletedItemIds: originalItems
+            .map(item => item.firestoreId || item.id)
+            .filter(itemId => !!itemId && !items.some(item => (item.firestoreId || item.id) === itemId)),
+          products: changedProductsForCommit.map(product => ({
+            id: product.id,
+            data: product,
+            expectedData: products.find(original => original.id === product.id)
+          }))
+        });
+      } catch (error: any) {
+        triggerNotification(error?.message || "Invoice changes could not be saved to the cloud. No stock or invoice changes were applied.", "error");
+        return false;
+      }
+    }
+
+    setProducts(updatedProductsList);
     setTransactions(updatedTransactionsList);
 
     // Regenerate and update local storage keys
@@ -3447,6 +3787,8 @@ export default function App() {
             sell_price: Number(nestedIt.price) || 0,
             cost_price: nestedIt.buyPrice !== undefined ? Number(nestedIt.buyPrice) : 0,
             cost_allocations: nestedIt.costAllocations || [],
+            is_negative_sale: nestedIt.isNegativeSale === true,
+            is_negative_sale_approved: nestedIt.isNegativeSaleApproved === true || nestedIt.negativeSaleUpdated === true,
             warranty: nestedIt.warranty || "",
             warranty_details: nestedIt.warrantyDetails || ""
           };
@@ -3480,6 +3822,7 @@ export default function App() {
           vat_rate: Number(taxRate.toFixed(2)),
           paid_amount: Number(paidAmount) || 0,
           payment_method: targetTx.paymentMethod || targetTx.payment_method || "Cash",
+          payment_history: targetTx.paymentHistory || [],
           signature_svg: targetTx.customerSignature || targetTx.signature_svg || null,
           created_at: targetTx.date || targetTx.created_at || new Date().toISOString()
         };
@@ -3500,105 +3843,6 @@ export default function App() {
       localStorage.setItem(getDbKey("barakah_transactions", undefined, activeUserId), JSON.stringify(updatedTransactionsList));
     } catch (err) {
       console.warn("Failed to update flat items in localStorage during edit:", err);
-    }
-
-    // Update remaining line items and permanently remove deleted line-item documents.
-    const remainingDocIds = new Set<string>();
-    items.forEach(item => {
-      const docId = item.firestoreId || item.id;
-      if (docId) {
-        remainingDocIds.add(docId);
-        updateDoc(doc(db, "transaction_items", docId), {
-          sell_price: Number(item.price) || 0,
-          quantity: Number(item.quantity) || 0,
-          product_name: item.name || "Product Item",
-          product_id: item.productId || null,
-          cost_price: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
-          cost_allocations: item.costAllocations || [],
-          warranty: item.warranty || "",
-          warranty_details: item.warrantyDetails || ""
-        }).catch((e) => console.error("Failed to update transaction item in Firestore:", e));
-      }
-    });
-    originalItems.forEach(oldItem => {
-      const oldDocId = oldItem.firestoreId || oldItem.id;
-      const stillExists = items.some(item => (item.firestoreId || item.id) === oldDocId);
-      if (oldDocId && !stillExists && !remainingDocIds.has(oldDocId)) {
-        deleteDoc(doc(db, "transaction_items", oldDocId)).catch((e) => console.error("Failed to delete removed transaction item from Firestore:", e));
-      }
-    });
-
-    // Update the parent transaction document in the transactions collection.
-    const txDocId = originalTx.firestoreId || originalTx.id;
-    if (txDocId) {
-      let costOfGoodsSold = 0;
-      items.forEach(item => {
-        const dbProduct = customerDirectoryData.productsById.get(item.productId || "") || customerDirectoryData.productsById.get(item.id || "") || customerDirectoryData.productsByName.get(item.name || "");
-        let buyCost = 0;
-        if (item.buyPrice && item.buyPrice > 0) {
-          buyCost = item.buyPrice;
-        } else if (dbProduct && dbProduct.buyPrice > 0) {
-          buyCost = dbProduct.buyPrice;
-        } else if (item.buyPrice !== undefined) {
-          buyCost = item.buyPrice;
-        } else {
-          buyCost = item.price * 0.70;
-        }
-        costOfGoodsSold += buyCost * (Number(item.quantity) || 0);
-      });
-      const profit = Math.round(total - costOfGoodsSold);
-
-      const nestedItems = items.map(item => ({
-        id: item.id || "",
-        firestoreId: item.firestoreId || "",
-        name: item.name || "",
-        quantity: Number(item.quantity) || 0,
-        price: Number(item.price) || 0,
-        total: (Number(item.quantity) || 0) * (Number(item.price) || 0),
-        productId: item.productId || "",
-        buyPrice: item.buyPrice !== undefined ? Number(item.buyPrice) : 0,
-        costAllocations: item.costAllocations || [],
-        warranty: item.warranty || "",
-        warrantyDetails: item.warrantyDetails || "",
-        isNegativeSale: item.isNegativeSale || false
-      }));
-
-      updateDoc(doc(db, "transactions", txDocId), {
-        items: nestedItems,
-        subtotal: Number(subtotal) || 0,
-        tax: Number(tax) || 0,
-        total_amount: Number(total) || 0,
-        total: Number(total) || 0,
-        profit: profit,
-        discount: Number(discount) || 0,
-        paid_amount: Number(paidAmount) || 0,
-        paidAmount: Number(paidAmount) || 0,
-        due_balance: Number(dueBalance) || 0,
-        dueBalance: Number(dueBalance) || 0,
-        status: status,
-        // The invoice date is edited from Ledger Box. Keep Firestore's
-        // canonical transaction timestamp aligned with the selected date,
-        // because realtime recovery reads created_at as Transaction.date.
-        created_at: (() => {
-          const selectedDate = updatedFields.date || originalTx.date || originalTx.created_at;
-          const parsedDate = selectedDate ? new Date(selectedDate as any) : null;
-          return parsedDate && !Number.isNaN(parsedDate.getTime())
-            ? parsedDate.toISOString()
-            : (originalTx.created_at || originalTx.date || new Date().toISOString());
-        })(),
-        vat_rate: originalTx.tax && subtotal ? Number(((Number(originalTx.tax) / Number(subtotal)) * 100).toFixed(2)) : 0.0,
-        updated_at: new Date().toISOString()
-      }).catch((e) => {
-        console.error("Failed to update parent transaction in Firestore:", e);
-      });
-    }
-
-    if (activeUser && !activeUser.isGuest) {
-      updatedProductsList.forEach(p => {
-        saveProduct(activeUser.uid, p).catch(err => {
-          console.error("Cloud save product stock after edit transaction failed:", err);
-        });
-      });
     }
 
     // Directly backup to cloud since auto-backup is disabled/skipped via isRemoteUpdateActiveRef during active sessions
@@ -3625,6 +3869,230 @@ export default function App() {
     }
 
     triggerNotification(`Invoice ${originalTx.invoiceNo} successfully updated and stock reconciled.`);
+    return true;
+  };
+
+  const handleProcessSalesReturn = async (request: {
+    transactionId: string; date: string; reason: string; refundMethod: string; note: string;
+    items: Array<{ transactionItemId: string; productId?: string; quantity: number }>;
+  }): Promise<boolean> => {
+    if (currentPanel !== "admin" || !activeUser || activeUser.isGuest || !firebaseAuth.currentUser) {
+      triggerNotification("Sign in as an administrator to process a sales return.", "error");
+      return false;
+    }
+    const localTx = transactions.find(tx => tx.id === request.transactionId);
+    if (!localTx || request.items.length === 0) return false;
+    const returnId = toUUID(`sales_return_${Date.now()}`, activeUser.email || "sales-return");
+    const returnDate = new Date(request.date + "T12:00:00").toISOString();
+    const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+    const transactionRef = doc(db, "transactions", localTx.firestoreId || localTx.id);
+
+    try {
+      const result = await runTransaction(db, async cloudTransaction => {
+        const invoiceSnapshot = await cloudTransaction.get(transactionRef);
+        if (!invoiceSnapshot.exists()) throw new Error("Original invoice not found in the cloud.");
+        const liveInvoice = invoiceSnapshot.data() || {};
+        const storeEmail = String(activeUser.email || "").trim().toLowerCase();
+        const documentStore = String(liveInvoice.store_id || liveInvoice.storeId || liveInvoice.email || liveInvoice.linked_email || "").trim().toLowerCase();
+        const documentUid = String(liveInvoice.user_id || liveInvoice.userId || liveInvoice.owner_id || "");
+        if ((documentStore && documentStore !== storeEmail) || (!documentStore && documentUid !== activeUser.uid)) {
+          throw new Error("This invoice does not belong to the active store.");
+        }
+        const liveItems = Array.isArray(liveInvoice.items) && liveInvoice.items.length ? liveInvoice.items : localTx.items;
+        const returnHistory = Array.isArray(liveInvoice.return_history) ? liveInvoice.return_history : (liveInvoice.returnHistory || []);
+        if (returnHistory.some((entry: any) => entry.id === returnId)) throw new Error("This return has already been recorded.");
+
+        const requested = request.items.map(line => {
+          const index = liveItems.findIndex((item: any, itemIndex: number) =>
+            String(item.firestoreId || item.id || `${localTx.id}_item_${itemIndex}`) === String(line.transactionItemId)
+          );
+          if (index < 0) throw new Error("A selected invoice line is missing. Refresh and try again.");
+          const item = liveItems[index];
+          const returnedBefore = returnHistory.flatMap((entry: any) => entry.items || [])
+            .filter((row: any) => String(row.transactionItemId) === String(line.transactionItemId))
+            .reduce((sum: number, row: any) => sum + (Number(row.quantity) || 0), 0);
+          const available = Math.max(0, (Number(item.quantity) || 0) - returnedBefore);
+          const quantity = Number(line.quantity) || 0;
+          if (quantity <= 0 || quantity > available + 0.000001) throw new Error(`Return quantity for ${item.name || "item"} exceeds the remaining quantity.`);
+          const productId = String(item.productId || item.product_id || line.productId || "");
+          if (!productId) throw new Error("Product identity is missing; stock cannot be safely restored.");
+          return { item, itemId: String(line.transactionItemId), productId, quantity, returnedBefore };
+        });
+
+        const productIds = Array.from(new Set(requested.map(row => row.productId)));
+        const snapshots = await Promise.all(productIds.map(id => cloudTransaction.get(doc(db, "products", id))));
+        const liveProducts = new Map<string, any>();
+        snapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists()) throw new Error("A returned product is missing from the store catalog. Restore its product record first.");
+          const productData = snapshot.data() || {};
+          const productStore = String(productData.store_id || productData.storeId || productData.email || productData.linked_email || productData.linkedEmail || "").trim().toLowerCase();
+          const productUid = String(productData.user_id || productData.userId || productData.owner_id || "");
+          if ((productStore && productStore !== storeEmail) || (!productStore && productUid && productUid !== activeUser.uid)) {
+            throw new Error("A returned product belongs to a different store. No return was saved.");
+          }
+          liveProducts.set(productIds[index], { ...productData, id: productIds[index] });
+        });
+
+        const nextProducts = new Map<string, any>();
+        const returnedLines: any[] = [];
+        let returnedSubtotal = 0;
+        let returnedCost = 0;
+        requested.forEach(({ item, itemId, productId, quantity, returnedBefore }) => {
+          const product = nextProducts.get(productId) || liveProducts.get(productId);
+          const savedAllocations = Array.isArray(item.costAllocations) ? item.costAllocations :
+            (Array.isArray(item.cost_allocations) ? item.cost_allocations : []);
+          const soldQuantity = Number(item.quantity);
+          const savedUnitCostRaw = item.buyPrice ?? item.cost_price ?? item.buy_price;
+          const savedUnitCost = savedUnitCostRaw === undefined || savedUnitCostRaw === null || savedUnitCostRaw === ""
+            ? null : Number(savedUnitCostRaw);
+          if (savedAllocations.length > 0) {
+            const allocatedQuantity = savedAllocations.reduce((sum: number, allocation: any) => sum + (Number(allocation?.quantity) || 0), 0);
+            const allocationsValid = savedAllocations.every((allocation: any) =>
+              Number.isFinite(Number(allocation?.quantity)) && Number(allocation.quantity) >= 0 &&
+              Number.isFinite(Number(allocation?.unitCost ?? allocation?.unit_cost)) &&
+              Number(allocation?.unitCost ?? allocation?.unit_cost) >= 0
+            );
+            if (!allocationsValid || !Number.isFinite(soldQuantity) || Math.abs(allocatedQuantity - soldQuantity) > 0.000001) {
+              throw new Error(`Historical FIFO cost is incomplete for ${item.name || "item"}; correct the original invoice cost before processing this return.`);
+            }
+          } else if (savedUnitCost === null || !Number.isFinite(savedUnitCost) || savedUnitCost < 0) {
+            throw new Error(`Historical sale cost is missing for ${item.name || "item"}; the current catalog price cannot be used for a return. Correct the original invoice cost first.`);
+          }
+          const fallbackCost = savedUnitCost ?? (
+            savedAllocations.length > 0
+              ? savedAllocations.reduce((sum: number, allocation: any) =>
+                  sum + (Number(allocation.quantity) || 0) * Number(allocation.unitCost ?? allocation.unit_cost), 0) / Math.max(soldQuantity, 0.000001)
+              : 0
+          );
+          const allocations = getCostAllocationsForItem({
+            id: itemId, quantity: soldQuantity, buyPrice: fallbackCost,
+            costAllocations: savedAllocations
+          }, fallbackCost);
+          let skip = returnedBefore;
+          let remaining = quantity;
+          const selectedAllocations: any[] = [];
+          allocations.forEach((allocation: any) => {
+            if (remaining <= 0.000001) return;
+            const allocationQty = Number(allocation.quantity) || 0;
+            if (skip >= allocationQty - 0.000001) { skip -= allocationQty; return; }
+            const take = Math.min(Math.max(0, allocationQty - skip), remaining);
+            if (take > 0.000001) {
+              selectedAllocations.push({ ...allocation, id: `${allocation.id}-return-${returnId}`, quantity: take });
+              remaining -= take;
+            }
+            skip = 0;
+          });
+          if (remaining > 0.000001) throw new Error(`FIFO cost history is incomplete for ${item.name || "item"}; return stopped to protect stock valuation.`);
+          const lineCost = selectedAllocations.reduce((sum: number, allocation: any) =>
+            sum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0);
+          nextProducts.set(productId, restoreFifoCost(product, {
+            ...item, id: `return-${returnId}-${itemId}`, quantity,
+            buyPrice: quantity > 0 ? lineCost / quantity : fallbackCost,
+            costAllocations: selectedAllocations
+          }));
+          returnedCost += lineCost;
+          returnedSubtotal += quantity * (Number(item.price ?? item.sell_price) || 0);
+          returnedLines.push({
+            transactionItemId: itemId, productId, productName: item.name || item.product_name || "Product",
+            quantity, unitSellPrice: Number(item.price ?? item.sell_price) || 0,
+            returnedCost: lineCost, costAllocations: selectedAllocations
+          });
+        });
+
+        const subtotal = Number(liveInvoice.subtotal ?? localTx.subtotal) || 0;
+        const tax = Number(liveInvoice.tax_amount ?? liveInvoice.tax ?? localTx.tax) || 0;
+        const discount = Number(liveInvoice.discount ?? localTx.discount) || 0;
+        const total = Number(liveInvoice.total_amount ?? liveInvoice.total ?? localTx.total) || 0;
+        const paid = Number(liveInvoice.paid_amount ?? liveInvoice.paidAmount ?? localTx.paidAmount) || 0;
+        const originalSubtotal = Number(liveInvoice.original_subtotal ?? liveInvoice.originalSubtotal) || subtotal;
+        const originalTotal = Number(liveInvoice.original_total ?? liveInvoice.originalTotal) || total;
+        const originalTax = Number(liveInvoice.original_tax ?? liveInvoice.originalTax) || tax;
+        const originalDiscount = Number(liveInvoice.original_discount ?? liveInvoice.originalDiscount) || discount;
+        if (originalSubtotal <= 0) throw new Error("Invoice subtotal is missing; a safe return amount cannot be calculated.");
+
+        const taxReturn = roundMoney(returnedSubtotal * originalTax / originalSubtotal);
+        const discountReturn = roundMoney(returnedSubtotal * originalDiscount / originalSubtotal);
+        const refundAmount = roundMoney(returnedSubtotal + taxReturn - discountReturn);
+        if (refundAmount <= 0 || refundAmount > total + 0.01) throw new Error("Return value exceeds the remaining invoice total.");
+        const cashRefund = roundMoney(Math.min(paid, refundAmount));
+        const nextSubtotal = Math.max(0, roundMoney(subtotal - returnedSubtotal));
+        const nextTax = Math.max(0, roundMoney(tax - taxReturn));
+        const nextDiscount = Math.max(0, roundMoney(discount - discountReturn));
+        const nextTotal = Math.max(0, roundMoney(total - refundAmount));
+        const nextPaid = Math.max(0, roundMoney(paid - cashRefund));
+        const nextDue = Math.max(0, roundMoney(nextTotal - nextPaid));
+        const nextStatus = nextDue <= 0.005 ? "paid" : nextPaid > 0 ? "partial" : "due";
+        const returnRecord = {
+          id: returnId, date: returnDate, reason: request.reason, note: request.note,
+          refundMethod: request.refundMethod, subtotalAmount: roundMoney(returnedSubtotal),
+          taxAmount: taxReturn, discountAmount: discountReturn, refundAmount, cashRefund,
+          dueReduction: roundMoney(refundAmount - cashRefund), items: returnedLines,
+          createdAt: new Date().toISOString(), createdBy: activeUser.email || "Unknown user"
+        };
+        const nextReturns = [...returnHistory, returnRecord];
+        const existingRefunds = Array.isArray(liveInvoice.refund_history) ? liveInvoice.refund_history : (liveInvoice.refundHistory || []);
+        const nextRefunds = cashRefund > 0
+          ? [...existingRefunds, { id: `refund-${returnId}`, returnId, amount: cashRefund, date: returnDate, method: request.refundMethod }]
+          : existingRefunds;
+        const originalCogs = liveItems.reduce((sum: number, item: any) => {
+          const qty = Number(item.quantity) || 0;
+          const unitCost = getAverageCostFromAllocations({
+            quantity: qty, buyPrice: Number(item.buyPrice ?? item.cost_price) || 0,
+            costAllocations: item.costAllocations || item.cost_allocations || []
+          }, Number(item.buyPrice ?? item.cost_price) || 0);
+          return sum + unitCost * qty;
+        }, 0);
+        const allReturnedCogs = nextReturns.reduce((sum: number, entry: any) =>
+          sum + (entry.items || []).reduce((lineSum: number, line: any) =>
+            lineSum + (line.costAllocations || []).reduce((costSum: number, allocation: any) =>
+              costSum + (Number(allocation.quantity) || 0) * (Number(allocation.unitCost) || 0), 0), 0), 0);
+        const nextProfit = Math.round((nextTotal - nextTax) - Math.max(0, originalCogs - allReturnedCogs));
+
+        cloudTransaction.update(transactionRef, {
+          original_subtotal: originalSubtotal, original_total: originalTotal, original_tax: originalTax, original_discount: originalDiscount,
+          originalSubtotal, originalTotal, originalTax, originalDiscount,
+          subtotal: nextSubtotal, tax: nextTax, tax_amount: nextTax, discount: nextDiscount,
+          total_amount: nextTotal, total: nextTotal, paid_amount: nextPaid, paidAmount: nextPaid,
+          due_balance: nextDue, dueBalance: nextDue, status: nextStatus,
+          return_history: nextReturns, returnHistory: nextReturns, refund_history: nextRefunds, refundHistory: nextRefunds,
+          vat_rate: Number((originalTax / originalSubtotal * 100).toFixed(2)), profit: nextProfit,
+          updated_at: new Date().toISOString()
+        });
+        nextProducts.forEach((product, productId) => {
+          const buyPrice = Number(product.buyPrice ?? product.buy_price) || 0;
+          const sellPrice = Number(product.sellPrice ?? product.sell_price) || 0;
+          cloudTransaction.update(doc(db, "products", productId), {
+            stock: Number(product.stock) || 0, costLots: product.costLots || [], cost_lots: product.costLots || [],
+            buyPrice, buy_price: buyPrice, sellPrice, sell_price: sellPrice, updated_at: new Date().toISOString()
+          });
+        });
+        return {
+          transaction: {
+            ...localTx, subtotal: nextSubtotal, tax: nextTax, discount: nextDiscount, total: nextTotal,
+            paidAmount: nextPaid, dueBalance: nextDue, status: nextStatus, returnHistory: nextReturns,
+            refundHistory: nextRefunds, originalSubtotal, originalTotal, originalTax, originalDiscount
+          },
+          products: Array.from(nextProducts.values())
+        };
+      });
+      setTransactions(prev => prev.map(tx => tx.id === request.transactionId ? result.transaction : tx));
+      setProducts(prev => prev.map(product => {
+        const updated = result.products.find((candidate: any) => candidate.id === product.id);
+        return updated ? {
+          ...product,
+          ...updated,
+          buyPrice: Number(updated.buyPrice ?? updated.buy_price ?? product.buyPrice) || 0,
+          sellPrice: Number(updated.sellPrice ?? updated.sell_price ?? product.sellPrice) || 0,
+          imageUrl: updated.imageUrl || updated.image_url || product.imageUrl,
+          costLots: updated.costLots || updated.cost_lots || product.costLots
+        } : product;
+      }));
+      triggerNotification(`Return recorded for invoice ${localTx.invoiceNo}. Stock, FIFO cost lots and customer balance were updated.`, "success");
+      return true;
+    } catch (error: any) {
+      triggerNotification(error?.message || "Sales return could not be saved. No cloud or stock changes were applied.", "error");
+      return false;
+    }
   };
 
   // -----------------------------------------------------------------
@@ -4447,73 +4915,121 @@ _${businessInfo.name}_`;
       date: expense.dashboard_date || expense.payment_date || expense.paid_at || expense.reviewed_at || expense.date
     })), [deliveryExpenseRecords]);
 
+  // Salary payments live in the existing staffList settings document. Derive
+  // paid payroll expenses in memory instead of creating another collection or
+  // adding Firestore listeners/writes. Existing manual Salary expenses are
+  // reconciled by date and amount to avoid counting the same payroll twice.
+  const paidSalaryExpenses = useMemo(() => {
+    const salaryRows = staffList.flatMap(staff =>
+      (Array.isArray(staff.salaryPayments) ? staff.salaryPayments : [])
+        .filter(payment => payment?.status === "paid" && Number(payment.amount) > 0 && payment.paymentDate)
+        .map(payment => ({
+          id: `salary_payment_${staff.id}_${payment.id}`,
+          category: "Salary",
+          amount: Number(payment.amount) || 0,
+          description: `Salary payment - ${staff.name}`,
+          date: String(payment.paymentDate).slice(0, 10)
+        }))
+    );
+    const manualSalaryRows = expenses.filter(expense =>
+      /salary|payroll/i.test(String(expense.category || ""))
+    );
+    const normalizeDay = (value: any) => {
+      const raw = String(value || "");
+      const parsed = new Date(raw);
+      return Number.isNaN(parsed.getTime()) ? raw.slice(0, 10) : parsed.toISOString().slice(0, 10);
+    };
+    const salaryByDay = new Map<string, typeof salaryRows>();
+    salaryRows.forEach(row => {
+      const day = normalizeDay(row.date);
+      salaryByDay.set(day, [...(salaryByDay.get(day) || []), row]);
+    });
+    const manualByDay = new Map<string, Expense[]>();
+    manualSalaryRows.forEach(row => {
+      const day = normalizeDay(row.date);
+      manualByDay.set(day, [...(manualByDay.get(day) || []), row]);
+    });
+
+    const result: Array<{ id: string; category: string; amount: number; description: string; date: string }> = [];
+    salaryByDay.forEach((daySalaryRows, day) => {
+      const manualRows = manualByDay.get(day) || [];
+      const salaryTotal = daySalaryRows.reduce((sum, row) => sum + row.amount, 0);
+      const manualTotal = manualRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+      // Manual Salary expenses are the canonical record when present. Add only
+      // a positive unpaid-to-ledger difference, never the full payroll twice.
+      const unrecordedAmount = Math.max(0, Math.round((salaryTotal - manualTotal) * 100) / 100);
+      if (unrecordedAmount > 0.009) {
+        result.push({
+          id: `salary_reconciliation_${day}`,
+          category: "Salary",
+          amount: unrecordedAmount,
+          description: "Paid staff salary not yet recorded in Expenses",
+          date: day
+        });
+      }
+    });
+    return result;
+  }, [staffList, expenses]);
+
   const dashboardMetrics = useMemo(() => {
     const filteredDashboardTx = transactions.filter(t => checkDateInFilter(t.date));
-    const allDashboardExpenses = [...expenses, ...paidDeliveryExpenses];
+    const allDashboardExpenses = [...expenses, ...paidDeliveryExpenses, ...paidSalaryExpenses];
     const filteredDashboardExpenses = allDashboardExpenses.filter(e => checkDateInFilter(e.date));
     const filteredDashboardPurchases = purchases.filter(p => checkDateInFilter(p.date));
 
     const totalSalesTk = filteredDashboardTx.reduce((sum, t) => sum + t.total, 0);
+    const totalSalesTaxTk = filteredDashboardTx.reduce((sum, t) => sum + (Number(t.tax) || 0), 0);
     const totalOutstandingDueTk = filteredDashboardTx.reduce((sum, t) => sum + t.dueBalance, 0);
     const totalExpensesTk = filteredDashboardExpenses.reduce((sum, e) => sum + e.amount, 0);
     const totalPurchasesTk = filteredDashboardPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
     const totalUnitsSold = filteredDashboardTx.reduce((sum, t) => {
-      const itemQty = t.items ? t.items.reduce((innerSum, item) => innerSum + Number(item.quantity ?? 0), 0) : 0;
-      return sum + itemQty;
+      const soldQty = (t.items || []).reduce((innerSum, item) => innerSum + Math.max(0, Number(item.quantity ?? 0)), 0);
+      const returnedQty = (Array.isArray(t.returnHistory) ? t.returnHistory : []).reduce((returnSum: number, entry: any) =>
+        returnSum + (Array.isArray(entry.items) ? entry.items.reduce((lineSum: number, line: any) => lineSum + (Number(line.quantity) || 0), 0) : 0), 0);
+      return sum + Math.max(0, soldQty - returnedQty);
     }, 0);
 
-    let totalCostOfGoodsSold = 0;
-    filteredDashboardTx.forEach(t => {
-      t.items.forEach(item => {
-        const dbProduct = products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
-        let buyCost = 0;
-        if (item.buyPrice && item.buyPrice > 0) {
-          buyCost = item.buyPrice;
-        } else if (dbProduct && dbProduct.buyPrice > 0) {
-          buyCost = dbProduct.buyPrice;
-        } else if (dbProduct) {
-          buyCost = dbProduct.buyPrice;
-        } else if (item.buyPrice !== undefined) {
-          buyCost = item.buyPrice;
-        } else {
-          buyCost = item.price * 0.70;
-        }
-        totalCostOfGoodsSold += buyCost * item.quantity;
-      });
-    });
+    const historicalCogs = calculateHistoricalCogs(filteredDashboardTx);
+    const totalCostOfGoodsSold = historicalCogs.totalCogs;
 
     return {
       filteredDashboardTx,
       filteredDashboardExpenses,
       filteredDashboardPurchases,
       totalSalesTk,
+      totalSalesTaxTk,
       totalOutstandingDueTk,
       totalExpensesTk,
       totalPurchasesTk,
       totalUnitsSold,
-      totalCostOfGoodsSold
+      totalCostOfGoodsSold,
+      profitComplete: historicalCogs.complete,
+      incompleteCostLines: historicalCogs.incompleteLines
     };
-  }, [transactions, expenses, paidDeliveryExpenses, purchases, products, dashboardFilter, customStart, customEnd]);
+  }, [transactions, expenses, paidDeliveryExpenses, paidSalaryExpenses, purchases, products, dashboardFilter, customStart, customEnd]);
 
   const {
     filteredDashboardTx,
     filteredDashboardExpenses,
     filteredDashboardPurchases,
     totalSalesTk,
+    totalSalesTaxTk,
     totalOutstandingDueTk,
     totalExpensesTk,
     totalPurchasesTk,
     totalUnitsSold,
-    totalCostOfGoodsSold
+    totalCostOfGoodsSold,
+    profitComplete,
+    incompleteCostLines
   } = dashboardMetrics;
 
   const totalDuesActiveState = totalOutstandingDueTk;
   const netEarningsReceived = totalSalesTk - totalOutstandingDueTk;
-  const netProfitAmt = Math.round(totalSalesTk - totalCostOfGoodsSold - totalExpensesTk);
+  const netProfitAmt = profitComplete ? Math.round(totalSalesTk - totalSalesTaxTk - totalCostOfGoodsSold - totalExpensesTk) : null;
   
   // Backward compatibility variables for render blocks
   const projectedProductSellTotal = totalSalesTk;
-  const projectedProductProfit = totalSalesTk - totalCostOfGoodsSold;
+  const projectedProductProfit = totalSalesTk - totalSalesTaxTk - totalCostOfGoodsSold;
   const projectedNetTerminalProfit = netProfitAmt;
 
   // Filter lists dynamically
@@ -4632,11 +5148,11 @@ _${businessInfo.name}_`;
   }), [transactions]);
 
   const expenseCategoryPlotData = useMemo(() => Object.entries(
-    [...expenses, ...paidDeliveryExpenses].reduce((acc, curr) => {
+    [...expenses, ...paidDeliveryExpenses, ...paidSalaryExpenses].reduce((acc, curr) => {
       acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount || 0);
       return acc;
     }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value })), [expenses, paidDeliveryExpenses]);
+  ).map(([name, value]) => ({ name, value })), [expenses, paidDeliveryExpenses, paidSalaryExpenses]);
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 
@@ -4968,6 +5484,7 @@ _${businessInfo.name}_`;
                   { id: "inventory", label: "All Stock", Icon: Bookmark },
                   { id: "duelist", label: "All Due List", Icon: History },
                   { id: "reports", label: "Reports", Icon: BarChart3 },
+                  { id: "returns", label: "Sales Returns", Icon: Undo2 },
                   { id: "staff", label: "Staff Hub", Icon: UserCheck },
                   { id: "delivery", label: "Delivery Management", Icon: Truck },
                   { id: "settings", label: "Settings", Icon: Settings },
@@ -4975,16 +5492,17 @@ _${businessInfo.name}_`;
                 .map((item) => {
                   const Icon = item.Icon;
                   const isActive = activeTab === item.id;
+                  const hasAlert = "alert" in item && Boolean((item as any).alert);
                   return (
                     <button
                       key={item.id}
                       id={`tab-${item.id}-btn`}
                       onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${item.alert
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${hasAlert
                         ? (isActive ? 'bg-[#FF5252]/10 text-[#FF5252] border border-[#FF5252]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent')
                         : (isActive ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 font-bold' : 'text-[#A0A0A5] hover:text-white hover:bg-white/5 border border-transparent')}`}
                     >
-                      <Icon className={`w-4 h-4 shrink-0 ${item.alert ? 'text-[#FF5252]' : ''}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${hasAlert ? 'text-[#FF5252]' : ''}`} />
                       <span className="text-xs font-semibold leading-none">{item.label}</span>
                     </button>
                   );
@@ -5219,9 +5737,21 @@ _${businessInfo.name}_`;
               totalOutstandingDueTk={totalOutstandingDueTk}
               totalPurchasesTk={totalPurchasesTk}
               totalUnitsSold={totalUnitsSold}
+              totalSalesTaxTk={totalSalesTaxTk}
+              totalCostOfGoodsSold={totalCostOfGoodsSold}
+              profitComplete={profitComplete}
               netProfitAmt={netProfitAmt}
+              incompleteCostLines={incompleteCostLines}
               ledgerTrendsPlotData={ledgerTrendsPlotData}
               expenseCategoryPlotData={expenseCategoryPlotData}
+            />
+          )}
+
+          {activeTab === "returns" && (
+            <SalesReturnsView
+              transactions={transactions}
+              onProcessReturn={handleProcessSalesReturn}
+              currencySymbol={businessInfo?.currencySymbol || "৳"}
             />
           )}
 
@@ -5231,10 +5761,14 @@ _${businessInfo.name}_`;
               products={products}
               transactions={transactions}
               expenses={expenses}
+              additionalExpenses={[...paidDeliveryExpenses, ...paidSalaryExpenses]}
               purchases={purchases}
               contacts={contacts}
+              staffList={staffList}
               businessInfo={businessInfo}
               currencySymbol={businessInfo?.currencySymbol || "৳"}
+              onNavigateToInvoice={handleNavigateToInvoice}
+              onReviewDuplicateInvoice={handleReviewDuplicateInvoice}
             />
           )}
 

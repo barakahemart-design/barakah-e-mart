@@ -593,6 +593,57 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   }
 
+  // Persist one compact event document for an atomic multi-record operation,
+  // while still emitting one logical change per record to realtime clients.
+  // This keeps the durable sync log from doubling every checkout/delete write.
+  async function broadcastSyncBatchChange(changes: SyncChangeRecord[]) {
+    const validChanges = changes.filter(change => change && change.storeEmail);
+    if (validChanges.length === 0) return;
+    const storeEmail = validChanges[0].storeEmail.trim().toLowerCase();
+    const timestamp = Math.max(...validChanges.map(change => Number(change.timestamp) || Date.now()));
+    if (validChanges.some(change => change.storeEmail.trim().toLowerCase() !== storeEmail)) {
+      throw new Error("A sync batch cannot contain changes from multiple stores.");
+    }
+
+    if (adminDb) {
+      const storeKey = createHash("sha256").update(storeEmail).digest("hex");
+      await adminDb.collection("sync_events").doc(storeKey).collection("events").add({
+        batch: true,
+        changes: validChanges.map(change => ({
+          id: change.id,
+          table: change.table,
+          docId: change.docId,
+          data: change.data ?? null,
+          isDelete: change.isDelete,
+          timestamp: change.timestamp
+        })),
+        storeEmail,
+        timestamp
+      });
+    }
+
+    validChanges.forEach(change => {
+      syncChangeHistory.push(change);
+      const payload = `data: ${JSON.stringify({
+        type: change.isDelete ? "delete" : "upsert",
+        table: change.table,
+        id: change.docId,
+        data: change.data,
+        storeEmail,
+        timestamp: change.timestamp
+      })}\\n\\n`;
+      for (const client of sseClients) {
+        try {
+          const clientEmail = (client.email || "").trim().toLowerCase();
+          if (clientEmail && clientEmail === storeEmail) client.res.write(payload);
+        } catch (_) {
+          sseClients.delete(client);
+        }
+      }
+    });
+    while (syncChangeHistory.length > 1000) syncChangeHistory.shift();
+  }
+
   // Cache account identity lookups: polling must not re-read profiles and passcode
   // vault documents on every reconciliation request.
   const resolvedUserIdsCache = new Map<string, { ids: string[]; expiresAt: number }>();
@@ -912,6 +963,438 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
     }
   });
 
+  // Narrow existence check used by the Flutter legacy purchase-delete guard.
+  // It reads only line items for the requested product, not the whole store ledger.
+  app.get("/api/db/has-product-sales", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Access Denied: Unauthenticated user request." });
+      const productId = String(req.query.product_id || "").trim();
+      const ownerEmail = String(req.query.owner_email || "").trim().toLowerCase();
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      if (!productId || productId.length > 128) return res.status(400).json({ error: "A valid product_id is required." });
+      if (ownerEmail && ownerEmail !== cleanEmail) return res.status(403).json({ error: "Access Forbidden: Store account mismatch." });
+      if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is not configured." });
+
+      const allowedIds = await resolveAllUserIdsForEmail(verified.email, verified.uid);
+      const matchingLines = await adminDb.collection("transaction_items")
+        .where("product_id", "==", productId)
+        .get();
+      const hasSales = matchingLines.docs.some(snapshot => {
+        const data = snapshot.data() || {};
+        const hasStoreIdentity = [data.store_id, data.storeId, data.email, data.linked_email, data.linkedEmail]
+          .some(value => typeof value === "string" && value.trim() !== "");
+        const docUid = String(data.user_id || data.userId || data.owner_id || "");
+        const owned = isOwnedByVerifiedAccount(data, verified) || (!hasStoreIdentity && allowedIds.includes(docUid));
+        return owned && (Number(data.quantity) || 0) > 0;
+      });
+      return res.json({ hasSales });
+    } catch (error: any) {
+      console.error("[server.ts] /api/db/has-product-sales error:", error instanceof Error ? error.message : "unknown");
+      return res.status(503).json({ error: "Could not verify product sales history. Purchase deletion was not performed." });
+    }
+  });
+
+  // Atomic Flutter POS checkout: one transaction for invoice, lines and
+  // stock decrements. It reads only the distinct products in the cart.
+  app.post("/api/db/checkout", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Unauthenticated checkout request." });
+      if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is unavailable." });
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      if (!cleanEmail) return res.status(403).json({ error: "A verified account email is required." });
+
+      const transactionData = req.body?.transaction;
+      const lineItems = Array.isArray(req.body?.items) ? req.body.items : [];
+      const transactionId = String(transactionData?.id || "").trim();
+      if (!transactionId || transactionId.length > 128 || lineItems.length < 1 || lineItems.length > 300) {
+        return res.status(400).json({ error: "Invalid invoice or cart line items." });
+      }
+      const normalizedItems = lineItems.map((entry: any) => ({
+        id: String(entry?.id || "").trim(),
+        data: entry?.data && typeof entry.data === "object" ? entry.data : {}
+      }));
+      if (normalizedItems.some((entry: any) => !entry.id || entry.id.length > 128)) {
+        return res.status(400).json({ error: "Every checkout line must have a valid unique ID." });
+      }
+      if (new Set(normalizedItems.map((entry: any) => entry.id)).size !== normalizedItems.length) {
+        return res.status(400).json({ error: "Duplicate checkout line IDs were detected." });
+      }
+
+      const quantityByProduct = new Map<string, number>();
+      normalizedItems.forEach((entry: any) => {
+        const productId = String(entry.data.product_id || "").trim();
+        const quantity = Number(entry.data.quantity) || 0;
+        if (!productId || productId.length > 128 || !Number.isFinite(quantity) || quantity <= 0) {
+          throw Object.assign(new Error("Invalid product or quantity in checkout."), { status: 400 });
+        }
+        quantityByProduct.set(productId, (quantityByProduct.get(productId) || 0) + quantity);
+      });
+      if (1 + normalizedItems.length + quantityByProduct.size > 500) {
+        return res.status(400).json({ error: "Checkout exceeds the atomic Firestore write limit." });
+      }
+
+      const transactionRef = adminDb.collection("transactions").doc(transactionId);
+      const productRefs = Array.from(quantityByProduct.keys()).map(id => adminDb!.collection("products").doc(id));
+      const identity = {
+        user_id: verified.uid, userId: verified.uid, owner_id: verified.uid,
+        store_id: cleanEmail, storeId: cleanEmail, email: cleanEmail,
+        linked_email: cleanEmail, linkedEmail: cleanEmail
+      };
+
+      const committed = await adminDb.runTransaction(async cloudTx => {
+        const invoiceSnapshot = await cloudTx.get(transactionRef);
+        if (invoiceSnapshot.exists) throw Object.assign(new Error("Invoice ID already exists."), { status: 409 });
+        const productSnapshots = await Promise.all(productRefs.map(ref => cloudTx.get(ref)));
+        const productDataById = new Map<string, any>();
+        productSnapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) throw Object.assign(new Error("A cart product no longer exists."), { status: 409 });
+          const productData = snapshot.data() || {};
+          if (!isOwnedByVerifiedAccount(productData, verified)) {
+            throw Object.assign(new Error("A cart product belongs to another store."), { status: 403 });
+          }
+          productDataById.set(Array.from(quantityByProduct.keys())[index], productData);
+        });
+
+        const stockRemaining = new Map<string, number>();
+        const lotsByProduct = new Map<string, any[]>();
+        const negativeProductIds = new Set<string>();
+        const productIds = Array.from(quantityByProduct.keys());
+
+        productIds.forEach(productId => {
+          const productData = productDataById.get(productId) || {};
+          const stock = Math.max(0, Number(productData.stock) || 0);
+          const rawLots = Array.isArray(productData.costLots) ? productData.costLots : (Array.isArray(productData.cost_lots) ? productData.cost_lots : []);
+          const lots = rawLots.map((lot: any, index: number) => ({
+            id: String(lot?.id || `legacy-lot-${index}`),
+            ...(lot?.purchaseId ? { purchaseId: String(lot.purchaseId) } : {}),
+            source: String(lot?.source || "purchase"),
+            receivedAt: String(lot?.receivedAt || "1970-01-01T00:00:00.000Z"),
+            receivedQuantity: Math.max(0, Number(lot?.receivedQuantity ?? lot?.remainingQuantity) || 0),
+            remainingQuantity: Math.max(0, Number(lot?.remainingQuantity) || 0),
+            unitCost: Math.max(0, Number(lot?.unitCost) || 0)
+          }));
+          if (lots.length === 0 && stock > 0) {
+            lots.push({
+              id: `opening-${productId}`, source: "opening",
+              receivedAt: "1970-01-01T00:00:00.000Z",
+              receivedQuantity: stock, remainingQuantity: stock,
+              unitCost: Math.max(0, Number(productData.buyPrice ?? productData.buy_price) || 0)
+            });
+          }
+          const lotQuantity = lots.reduce((sum: number, lot: any) => sum + lot.remainingQuantity, 0);
+          if (lotQuantity + 0.000001 < stock) {
+            const gap = stock - lotQuantity;
+            lots.push({
+              id: `reconciliation-${productId}`, source: "reconciliation",
+              receivedAt: new Date().toISOString(), receivedQuantity: gap,
+              remainingQuantity: gap,
+              unitCost: Math.max(0, Number(productData.buyPrice ?? productData.buy_price) || 0)
+            });
+          } else if (lotQuantity > stock + 0.000001) {
+            let excess = lotQuantity - stock;
+            [...lots].sort((a: any, b: any) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
+              .forEach((lot: any) => {
+                if (excess <= 0.000001) return;
+                const trim = Math.min(lot.remainingQuantity, excess);
+                lot.remainingQuantity -= trim;
+                excess -= trim;
+              });
+          }
+          lotsByProduct.set(productId, lots);
+          stockRemaining.set(productId, Number(productData.stock) || 0);
+        });
+
+        const enrichedItems = normalizedItems.map((entry: any) => {
+          const item = entry.data || {};
+          const productId = String(item.product_id || "");
+          const productData = productDataById.get(productId) || {};
+          const currentStock = Number(stockRemaining.get(productId)) || 0;
+          const quantity = Number(item.quantity) || 0;
+          const isNegativeSale = currentStock < quantity;
+          if (isNegativeSale) negativeProductIds.add(productId);
+          stockRemaining.set(productId, currentStock - quantity);
+
+          const lots = lotsByProduct.get(productId) || [];
+          let remainingToAllocate = Math.min(quantity, Math.max(0, currentStock));
+          const allocations: any[] = [];
+          [...lots].sort((a: any, b: any) => {
+            const dateDiff = new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime();
+            return dateDiff || a.id.localeCompare(b.id);
+          }).forEach((lot: any) => {
+            if (remainingToAllocate <= 0.000001 || lot.remainingQuantity <= 0.000001) return;
+            const take = Math.min(lot.remainingQuantity, remainingToAllocate);
+            lot.remainingQuantity -= take;
+            remainingToAllocate -= take;
+            allocations.push({
+              id: `alloc-${entry.id}-${allocations.length + 1}`,
+              lotId: lot.id,
+              ...(lot.purchaseId ? { purchaseId: lot.purchaseId } : {}),
+              source: lot.source,
+              quantity: take,
+              unitCost: lot.unitCost
+            });
+          });
+          const allocatedQuantity = allocations.reduce((sum: number, allocation: any) => sum + allocation.quantity, 0);
+          const unallocatedQuantity = Math.max(0, quantity - allocatedQuantity);
+          if (unallocatedQuantity > 0.000001) {
+            allocations.push({
+              id: `unallocated-${entry.id}`, source: "unallocated",
+              quantity: unallocatedQuantity,
+              unitCost: Math.max(0, Number(productData.buyPrice ?? productData.buy_price) || 0)
+            });
+          }
+          const totalCost = allocations.reduce((sum: number, allocation: any) => sum + allocation.quantity * allocation.unitCost, 0);
+          return {
+            ...entry,
+            data: {
+              ...item,
+              cost_price: quantity > 0 ? totalCost / quantity : 0,
+              cost_allocations: allocations,
+              is_negative_sale: isNegativeSale,
+              is_negative_sale_approved: false
+            }
+          };
+        });
+        const productResults: Array<{ id: string; data: any }> = Array.from(stockRemaining.entries()).map(([productId, nextStock]) => {
+          const productData = productDataById.get(productId) || {};
+          const costLots = lotsByProduct.get(productId) || [];
+          return {
+            id: productId,
+            data: {
+              ...productData,
+              stock: nextStock,
+              costLots,
+              cost_lots: costLots,
+              hasNegativeSale: Boolean(productData.hasNegativeSale || negativeProductIds.has(productId)),
+              negativeSaleUpdated: negativeProductIds.has(productId) ? false : Boolean(productData.negativeSaleUpdated),
+              updated_at: new Date().toISOString()
+            }
+          };
+        });
+
+        const invoice = {
+          ...transactionData,
+          id: transactionId,
+          items: enrichedItems.map((entry: any) => ({ ...entry.data, id: entry.id })),
+          ...identity,
+          updated_at: new Date().toISOString()
+        };
+        cloudTx.create(transactionRef, invoice);
+        enrichedItems.forEach((entry: any) => {
+          const itemRef = adminDb!.collection("transaction_items").doc(entry.id);
+          const item = { ...entry.data, id: entry.id, ...identity, updated_at: new Date().toISOString() };
+          cloudTx.create(itemRef, item);
+        });
+        productResults.forEach(product => {
+          cloudTx.update(adminDb!.collection("products").doc(product.id), {
+            stock: product.data.stock,
+            costLots: product.data.costLots || [],
+            cost_lots: product.data.cost_lots || [],
+            hasNegativeSale: product.data.hasNegativeSale === true,
+            negativeSaleUpdated: product.data.negativeSaleUpdated === true,
+            updated_at: product.data.updated_at
+          });
+        });
+        return { invoice, items: enrichedItems, products: productResults };
+      });
+
+      const syncTimestamp = Date.now();
+      const syncChanges: SyncChangeRecord[] = [
+        { id: `transactions_${transactionId}_${syncTimestamp}`, table: "transactions", docId: transactionId, data: committed.invoice, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp },
+        ...committed.items.map((entry: any) => ({ id: `transaction_items_${entry.id}_${syncTimestamp}`, table: "transaction_items", docId: entry.id, data: { ...entry.data, id: entry.id, ...identity }, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp })),
+        ...committed.products.map((product: any) => ({ id: `products_${product.id}_${syncTimestamp}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp }))
+      ];
+      await broadcastSyncBatchChange(syncChanges).catch(error => console.warn("[db/checkout] Batched sync event failed after commit:", error instanceof Error ? error.message : "unknown"));
+      return res.json({ success: true, persisted: true, transaction_id: transactionId });
+    } catch (error: any) {
+      console.error("[server.ts] /api/db/checkout error:", error instanceof Error ? error.message : "unknown");
+      return res.status(Number(error?.status) || 503).json({ error: error?.message || "Atomic checkout failed. No invoice or stock changes were saved." });
+    }
+  });
+
+  // Atomic sale deletion for the legacy Flutter client. The server derives
+  // stock restoration from the saved line items; clients never fetch the
+  // entire products collection to restore one invoice.
+  app.post("/api/db/sale-delete", async (req: Request, res: Response) => {
+    try {
+      const verified = await verifyFirebaseToken(req);
+      if (!verified) return res.status(401).json({ error: "Unauthenticated sale deletion request." });
+      if (!adminDb) return res.status(503).json({ error: "Secure Firebase data service is unavailable." });
+      const cleanEmail = (verified.email || "").trim().toLowerCase();
+      const transactionId = String(req.body?.transaction_id || "").trim();
+      const itemIds: string[] = Array.isArray(req.body?.item_ids) ? Array.from(new Set<string>(req.body.item_ids.map((id: any) => String(id || "").trim()).filter((id: string) => Boolean(id)))) : [];
+      if (!transactionId || transactionId.length > 128 || itemIds.length < 1 || itemIds.length > 300 || itemIds.some((id: string) => id.length > 128)) {
+        return res.status(400).json({ error: "Invalid sale or line-item IDs." });
+      }
+      const transactionRef = adminDb.collection("transactions").doc(transactionId);
+      const itemRefs = itemIds.map((id: string) => adminDb!.collection("transaction_items").doc(id));
+
+      const deleted = await adminDb.runTransaction(async cloudTx => {
+        const invoiceSnapshot = await cloudTx.get(transactionRef);
+        if (!invoiceSnapshot.exists) throw Object.assign(new Error("Sale invoice was not found."), { status: 404 });
+        const invoiceData = invoiceSnapshot.data() || {};
+        if (!isOwnedByVerifiedAccount(invoiceData, verified)) throw Object.assign(new Error("Sale invoice belongs to another store."), { status: 403 });
+
+        const invoiceLines = Array.isArray(invoiceData.items) ? invoiceData.items : [];
+        const invoiceLineIds = invoiceLines.map((line: any, index: number) => String(line?.firestoreId || line?.id || `${transactionId}_item_${index}`));
+        if (invoiceLineIds.length > 0 && (invoiceLineIds.length !== itemIds.length || invoiceLineIds.some((id: string) => !itemIds.includes(id)))) {
+          throw Object.assign(new Error("The supplied sale lines do not match the original invoice. Refresh before deleting."), { status: 409 });
+        }
+
+        const returnedByLine = new Map<string, number>();
+        const returnHistory = Array.isArray(invoiceData.return_history) ? invoiceData.return_history : (Array.isArray(invoiceData.returnHistory) ? invoiceData.returnHistory : []);
+        returnHistory.forEach((entry: any) => (Array.isArray(entry?.items) ? entry.items : []).forEach((line: any) => {
+          const lineId = String(line?.transactionItemId || line?.transaction_item_id || "");
+          if (lineId) returnedByLine.set(lineId, (returnedByLine.get(lineId) || 0) + (Number(line?.quantity) || 0));
+        }));
+
+        const itemSnapshots = await Promise.all(itemRefs.map(ref => cloudTx.get(ref)));
+        const productQty = new Map<string, number>();
+        const restoreAllocations = new Map<string, Array<{ itemId: string; itemNegative: boolean; allocation: any }>>();
+        itemSnapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) throw Object.assign(new Error("A sale line is missing. No stock was restored."), { status: 409 });
+          const item = snapshot.data() || {};
+          if (!isOwnedByVerifiedAccount(item, verified) || String(item.transaction_id || "") !== transactionId) {
+            throw Object.assign(new Error("A sale line does not belong to this invoice or store."), { status: 403 });
+          }
+          const productId = String(item.product_id || "").trim();
+          const soldQuantity = Number(item.quantity) || 0;
+          if (!productId || soldQuantity <= 0) throw Object.assign(new Error("A sale line has invalid stock information."), { status: 409 });
+          const itemId = itemIds[index];
+          const returnedQuantity = returnedByLine.get(itemId) || 0;
+          if (returnedQuantity > soldQuantity + 0.000001) {
+            throw Object.assign(new Error("Return history exceeds the sold quantity. Sale deletion was stopped to protect stock."), { status: 409 });
+          }
+          const quantityToRestore = Math.max(0, soldQuantity - returnedQuantity);
+          if (quantityToRestore <= 0.000001) return;
+          productQty.set(productId, (productQty.get(productId) || 0) + quantityToRestore);
+
+          const allocations = Array.isArray(item.cost_allocations) ? item.cost_allocations : (Array.isArray(item.costAllocations) ? item.costAllocations : []);
+          let skipReturned = returnedQuantity;
+          let remaining = quantityToRestore;
+          const selected: any[] = [];
+          allocations.forEach((allocation: any) => {
+            if (remaining <= 0.000001) return;
+            const allocationQuantity = Math.max(0, Number(allocation?.quantity) || 0);
+            if (skipReturned >= allocationQuantity - 0.000001) {
+              skipReturned -= allocationQuantity;
+              return;
+            }
+            const take = Math.min(Math.max(0, allocationQuantity - skipReturned), remaining);
+            if (take > 0.000001) {
+              selected.push({ ...allocation, quantity: take });
+              remaining -= take;
+            }
+            skipReturned = 0;
+          });
+          if (remaining > 0.000001 && item.is_negative_sale !== true) {
+            selected.push({
+              id: `legacy-delete-recovery-${itemId}`,
+              source: "recovered",
+              quantity: remaining,
+              unitCost: Math.max(0, Number(item.cost_price ?? item.buyPrice) || 0)
+            });
+          }
+          if (!restoreAllocations.has(productId)) restoreAllocations.set(productId, []);
+          selected.forEach(allocation => restoreAllocations.get(productId)!.push({
+            itemId, itemNegative: item.is_negative_sale === true, allocation
+          }));
+        });
+
+        const productIds = Array.from(productQty.keys());
+        if (2 + itemIds.length * 2 + productIds.length > 500) {
+          throw Object.assign(new Error("Sale deletion exceeds the atomic Firestore write limit."), { status: 400 });
+        }
+        const productRefs = productIds.map(id => adminDb!.collection("products").doc(id));
+        const productSnapshots = await Promise.all(productRefs.map(ref => cloudTx.get(ref)));
+        const productResults: Array<{ id: string; data: any }> = [];
+        productSnapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) throw Object.assign(new Error("A product needed for stock restoration is missing."), { status: 409 });
+          const productData = snapshot.data() || {};
+          if (!isOwnedByVerifiedAccount(productData, verified)) throw Object.assign(new Error("A stock record belongs to another store."), { status: 403 });
+          const productId = productIds[index];
+          const stock = Number(productData.stock) || 0;
+          const rawLots = Array.isArray(productData.costLots) ? productData.costLots : (Array.isArray(productData.cost_lots) ? productData.cost_lots : []);
+          const lots: any[] = rawLots.map((lot: any, lotIndex: number) => ({
+            id: String(lot?.id || `legacy-lot-${lotIndex}`),
+            purchaseId: lot?.purchaseId ? String(lot.purchaseId) : undefined,
+            source: String(lot?.source || "purchase"),
+            receivedAt: String(lot?.receivedAt || "1970-01-01T00:00:00.000Z"),
+            receivedQuantity: Math.max(0, Number(lot?.receivedQuantity ?? lot?.remainingQuantity) || 0),
+            remainingQuantity: Math.max(0, Number(lot?.remainingQuantity) || 0),
+            unitCost: Math.max(0, Number(lot?.unitCost) || 0)
+          }));
+          const restoredEntries = restoreAllocations.get(productId) || [];
+          restoredEntries.forEach(({ itemId, itemNegative, allocation }) => {
+            const quantity = Math.max(0, Number(allocation.quantity) || 0);
+            if (quantity <= 0.000001) return;
+            const lotId = allocation.lotId ? String(allocation.lotId) : "";
+            const targetLot = lotId ? lots.find((lot: any) => lot.id === lotId) : undefined;
+            if (targetLot) {
+              targetLot.remainingQuantity = Math.min(targetLot.receivedQuantity, targetLot.remainingQuantity + quantity);
+            } else if (String(allocation.source || "") !== "unallocated" && !itemNegative) {
+              lots.push({
+                id: `recovered-${itemId}-${String(allocation.id || lots.length)}`,
+                source: "recovered",
+                receivedAt: new Date().toISOString(),
+                receivedQuantity: quantity,
+                remainingQuantity: quantity,
+                unitCost: Math.max(0, Number(allocation.unitCost) || 0)
+              });
+            }
+          });
+          const nextProduct = {
+            ...productData,
+            stock: stock + (productQty.get(productId) || 0),
+            costLots: lots,
+            cost_lots: lots,
+            updated_at: new Date().toISOString()
+          };
+          productResults.push({ id: productId, data: nextProduct });
+        });
+
+        const identity = {
+          user_id: verified.uid, userId: verified.uid, owner_id: verified.uid,
+          store_id: cleanEmail, storeId: cleanEmail, email: cleanEmail,
+          linked_email: cleanEmail, linkedEmail: cleanEmail
+        };
+        cloudTx.set(adminDb!.collection("deleted_records").doc(`transactions__${transactionId}`), {
+          id: transactionId, collection: "transactions", record_id: transactionId, ...identity, deleted_at: new Date().toISOString()
+        }, { merge: true });
+        cloudTx.delete(transactionRef);
+        itemIds.forEach((id: string, index: number) => {
+          cloudTx.set(adminDb!.collection("deleted_records").doc(`transaction_items__${id}`), {
+            id, collection: "transaction_items", record_id: id, ...identity, deleted_at: new Date().toISOString()
+          }, { merge: true });
+          cloudTx.delete(itemRefs[index]);
+        });
+        productResults.forEach(product => {
+          cloudTx.update(adminDb!.collection("products").doc(product.id), {
+            stock: product.data.stock,
+            costLots: product.data.costLots,
+            cost_lots: product.data.cost_lots,
+            updated_at: product.data.updated_at
+          });
+        });
+        return { productResults, itemIds };
+      });
+
+      const syncTimestamp = Date.now();
+      const syncChanges: SyncChangeRecord[] = [
+        { id: `transactions_${transactionId}_${syncTimestamp}`, table: "transactions", docId: transactionId, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp },
+        ...deleted.itemIds.map((id: string) => ({ id: `transaction_items_${id}_${syncTimestamp}`, table: "transaction_items", docId: id, data: null, isDelete: true, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp })),
+        ...deleted.productResults.map((product: any) => ({ id: `products_${product.id}_${syncTimestamp}`, table: "products", docId: product.id, data: product.data, isDelete: false, storeEmail: cleanEmail, userIds: [verified.uid, cleanEmail], timestamp: syncTimestamp }))
+      ];
+      await broadcastSyncBatchChange(syncChanges).catch(error => console.warn("[db/sale-delete] Batched sync event failed after commit:", error instanceof Error ? error.message : "unknown"));
+      return res.json({ success: true, persisted: true });
+    } catch (error: any) {
+      console.error("[server.ts] /api/db/sale-delete error:", error instanceof Error ? error.message : "unknown");
+      return res.status(Number(error?.status) || 503).json({ error: error?.message || "Atomic sale deletion failed. No stock or invoice changes were made." });
+    }
+  });
+
   app.post("/api/db/upsert", async (req: Request, res: Response) => {
     const { table, id, data } = req.body || {};
     try {
@@ -1101,11 +1584,23 @@ async function createApp(options: { serveFrontend?: boolean } = {}) {
         const storeKey = createHash("sha256").update(email).digest("hex");
         const eventsSnap = await adminDb.collection("sync_events").doc(storeKey).collection("events")
           .where("timestamp", ">", since).orderBy("timestamp", "asc").limit(500).get();
-        changes = eventsSnap.docs.map((eventDoc) => ({
-          id: eventDoc.id,
-          ...(eventDoc.data() as Omit<SyncChangeRecord, "id" | "userIds">),
-          userIds: [verified.uid, email]
-        }));
+        changes = eventsSnap.docs.flatMap((eventDoc) => {
+          const eventData = eventDoc.data() || {};
+          if (Array.isArray(eventData.changes)) {
+            return eventData.changes.map((change: any, index: number) => ({
+              ...change,
+              id: String(change.id || `${eventDoc.id}_${index}`),
+              storeEmail: eventData.storeEmail || email,
+              userIds: [verified.uid, email],
+              timestamp: Number(change.timestamp) || Number(eventData.timestamp) || 0
+            }));
+          }
+          return [{
+            id: eventDoc.id,
+            ...(eventData as Omit<SyncChangeRecord, "id" | "userIds">),
+            userIds: [verified.uid, email]
+          }];
+        });
       } catch (eventError) {
         console.error("[sync/poll] Durable event read failed:", eventError instanceof Error ? eventError.message : "unknown");
         return res.status(503).json({ error: "Sync temporarily unavailable. Please retry." });
