@@ -187,9 +187,9 @@ export async function handleSave(collName: string, arg1: any, arg2?: any): Promi
 }
 
 /**
- * A hard delete is paired with a tiny permanent tombstone. The original
- * business document is physically deleted, while the tombstone prevents old
- * vault/local recovery copies from resurrecting it later.
+ * Physically delete the selected business record. A recovery tombstone is
+ * written best-effort after deletion; it must not block a valid primary
+ * collection delete when older Firestore Rules do not cover deleted_records.
  */
 async function handleDelete(collName: string, id: string): Promise<void> {
   const currentUser = auth.currentUser;
@@ -385,7 +385,7 @@ export async function commitInvoiceEditBatch(input: InvoiceBatchInput): Promise<
   });
 }
 
-/** Atomically tombstones/deletes an invoice and restores only its validated stock snapshot. */
+/** Atomically deletes one selected invoice and restores only its validated stock snapshot. */
 export async function deleteInvoiceAndRestoreBatch(input: {
   transactionId: string;
   transactionDocId: string;
