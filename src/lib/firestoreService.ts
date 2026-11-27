@@ -11,7 +11,7 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { allocateFifoCost } from './fifoCosting';
+import { allocateFifoCost, normalizeCostLots, removePurchaseCostLot } from './fifoCosting';
 
 /** Firebase Auth is the authoritative account identity on every device. */
 export function getActiveStoreEmail(): string {
@@ -276,6 +276,118 @@ export async function deleteCustomer(customerId: string): Promise<void> { return
 export async function deleteTransaction(transactionId: string): Promise<void> { return handleDelete('transactions', transactionId); }
 export async function deleteExpense(expenseId: string): Promise<void> { return handleDelete('expenses', expenseId); }
 export async function deletePurchase(purchaseId: string): Promise<void> { return handleDelete('purchases', purchaseId); }
+
+/**
+ * Deletes one purchase and reconciles its product stock in the same Firestore
+ * transaction. If units from that FIFO batch were already sold, the lot is
+ * retained (with its purchase link detached) so historical and future sale
+ * costs remain valid. Legacy purchases without a lot never reduce stock when
+ * the product has sales, because their stock provenance cannot be proven.
+ */
+export async function deletePurchaseAndReconcileStock(input: {
+  purchaseId: string;
+  purchaseDocId: string;
+  productDocId?: string;
+  purchaseQuantity: number;
+  expectedProduct?: Record<string, any>;
+  productHasSales: boolean;
+}): Promise<{ product: Record<string, any> | null; stockPreserved: boolean }> {
+  const identity = currentStoreWriteIdentity();
+  const purchaseRef = doc(db, 'purchases', input.purchaseDocId || input.purchaseId);
+  const productRef = input.productDocId ? doc(db, 'products', input.productDocId) : null;
+  let updatedProduct: Record<string, any> | null = null;
+  let stockPreserved = false;
+
+  await runTransaction(db, async cloudTransaction => {
+    const purchaseSnapshot = await cloudTransaction.get(purchaseRef);
+    if (!purchaseSnapshot.exists()) {
+      throw new Error('Purchase record was not found in the cloud. Refresh the Purchases list and try again.');
+    }
+    const purchaseData = purchaseSnapshot.data() || {};
+    assertCurrentStoreOwnership(purchaseData, identity);
+    if (String(purchaseData.id || purchaseSnapshot.id) !== String(input.purchaseId)) {
+      throw new Error('The selected purchase ID does not match the cloud record. Refresh and retry.');
+    }
+
+    const productSnapshot = productRef ? await cloudTransaction.get(productRef) : null;
+    if (productSnapshot?.exists()) {
+      const currentProduct = productSnapshot.data() || {};
+      assertCurrentStoreOwnership(currentProduct, identity);
+      assertProductVersion(currentProduct, input.expectedProduct);
+
+      const lots = normalizeCostLots(currentProduct);
+      const lotIndex = lots.findIndex(lot =>
+        lot.id === String(input.purchaseId) || lot.purchaseId === String(input.purchaseId)
+      );
+
+      if (lotIndex >= 0) {
+        const lot = lots[lotIndex];
+        const soldQuantity = Math.max(0, Number(lot.receivedQuantity || 0) - Number(lot.remainingQuantity || 0));
+        if (soldQuantity > 0.000001) {
+          // Keep the lot and its remaining stock. Only detach the deleted
+          // purchase record; sale allocations still point to the stable lot ID.
+          lots[lotIndex] = { ...lot, purchaseId: undefined, source: 'recovered' };
+          updatedProduct = { ...currentProduct, costLots: lots };
+          stockPreserved = true;
+        } else {
+          updatedProduct = removePurchaseCostLot(currentProduct, input.purchaseId) || currentProduct;
+        }
+      } else if (input.productHasSales) {
+        // No FIFO provenance exists for this legacy purchase. Preserve stock
+        // and catalog costs rather than guessing which sold units came from it.
+        updatedProduct = currentProduct;
+        stockPreserved = true;
+      } else {
+        const targetStock = Math.max(0, (Number(currentProduct.stock) || 0) - Math.max(0, Number(input.purchaseQuantity) || 0));
+        let excess = Math.max(0, lots.reduce((sum, lot) => sum + (Number(lot.remainingQuantity) || 0), 0) - targetStock);
+        const newestFirst = [...lots].sort((a, b) =>
+          new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+        );
+        for (const lot of newestFirst) {
+          if (excess <= 0.000001) break;
+          const trim = Math.min(Number(lot.remainingQuantity) || 0, excess);
+          lot.remainingQuantity = Math.max(0, lot.remainingQuantity - trim);
+          lot.receivedQuantity = Math.max(lot.remainingQuantity, (Number(lot.receivedQuantity) || 0) - trim);
+          excess -= trim;
+        }
+        updatedProduct = { ...currentProduct, stock: targetStock, costLots: lots };
+      }
+
+      const buyPrice = Number(updatedProduct.buyPrice ?? updatedProduct.buy_price) || 0;
+      const sellPrice = Number(updatedProduct.sellPrice ?? updatedProduct.sell_price) || 0;
+      updatedProduct = {
+        ...updatedProduct,
+        id: updatedProduct.id || productSnapshot.id,
+        ...identity,
+        buyPrice,
+        buy_price: buyPrice,
+        sellPrice,
+        sell_price: sellPrice,
+        imageUrl: updatedProduct.imageUrl || updatedProduct.image_url || '',
+        image_url: updatedProduct.imageUrl || updatedProduct.image_url || ''
+      };
+      cloudTransaction.set(productRef!, updatedProduct, { merge: true });
+    }
+
+    cloudTransaction.delete(purchaseRef);
+  });
+
+  try {
+    await setDoc(doc(db, 'deleted_records', `purchases__${String(input.purchaseId)}`), {
+      id: String(input.purchaseId),
+      collection: 'purchases',
+      record_id: String(input.purchaseId),
+      ...identity,
+      deleted: true,
+      isDeleted: true,
+      deleted_at: new Date().toISOString()
+    }, { merge: true });
+  } catch (tombstoneError) {
+    console.warn('[Purchase Delete] Optional tombstone write failed after purchase deletion:', tombstoneError);
+  }
+
+  return { product: updatedProduct, stockPreserved };
+}
 
 
 type InvoiceBatchInput = {
