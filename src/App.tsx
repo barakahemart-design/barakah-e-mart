@@ -2409,7 +2409,7 @@ export default function App() {
     if (!p) return;
     try {
       if (activeUser && !activeUser.isGuest) {
-        await deleteProduct(id);
+        await deleteProduct((p as any).firestoreId || id);
       }
       // Product catalog removal does not erase historical invoice line items,
       // sale-time cost snapshots or purchase records.
@@ -10256,7 +10256,7 @@ _${businessInfo.name}_`;
               {currentPanel === "admin" && (
                 deleteTxId === editingTx.id ? (
                   <div className="flex items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-2">
-                    <span className="min-w-0 flex-1 text-[10px] font-semibold text-rose-200">Delete this complete customer ledger memo?</span>
+                    <span className="min-w-0 flex-1 text-[10px] font-semibold text-rose-200">{transactions.filter(item => String(item.invoiceNo || (item as any).invoice_no || "").trim().toLowerCase() === String(editingTx.invoiceNo || (editingTx as any).invoice_no || "").trim().toLowerCase()).length > 1 ? "Delete only this duplicate invoice? Its sale items and stock will be adjusted; the other invoice will remain." : "Delete this complete customer ledger memo?"}</span>
                     <button
                       type="button"
                       onClick={async () => {
