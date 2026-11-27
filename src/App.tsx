@@ -2936,6 +2936,32 @@ export default function App() {
     triggerNotification(`Displaying account transaction details of invoice: ${invoiceNo}`, "info");
   };
 
+  const handleReviewDuplicateInvoice = (transactionId: string) => {
+    if (currentPanel !== "admin") {
+      triggerNotification("Only administrators can review or delete duplicate invoices.", "error");
+      return;
+    }
+    const target = transactions.find(item => String(item.id) === String(transactionId));
+    if (!target) {
+      triggerNotification("This invoice record is no longer available. Refresh Accounting Issues and try again.", "error");
+      return;
+    }
+    const invoiceKey = String(target.invoiceNo || target.invoice_no || "").trim().toLowerCase();
+    const duplicateCount = transactions.filter(item =>
+      String(item.invoiceNo || item.invoice_no || "").trim().toLowerCase() === invoiceKey
+    ).length;
+    if (!invoiceKey || duplicateCount < 2) {
+      triggerNotification("This invoice is no longer a duplicate. Accounting Review will refresh automatically.", "info");
+      return;
+    }
+    setLedgerSearch(String(target.invoiceNo || target.invoice_no || ""));
+    setLedgerStatusFilter("all");
+    setEditingTx(target);
+    setDeleteTxId(target.id);
+    setActiveTab("ledger");
+    triggerNotification("Duplicate invoice selected. Review the invoice, then confirm deletion in the ledger panel.", "info");
+  };
+
   const handleAddPurchase = (pur: any) => {
     const cleanEmail = (activeUser?.email || "barakahemart@gmail.com").trim().toLowerCase();
     const prodObj = products.find(p => p.id === pur.productId);
@@ -5739,6 +5765,7 @@ _${businessInfo.name}_`;
               businessInfo={businessInfo}
               currencySymbol={businessInfo?.currencySymbol || "৳"}
               onNavigateToInvoice={handleNavigateToInvoice}
+              onReviewDuplicateInvoice={handleReviewDuplicateInvoice}
             />
           )}
 
