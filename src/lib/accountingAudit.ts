@@ -5,6 +5,7 @@ export type AccountingAuditIssue = {
   invoiceNo: string;
   message: string;
   transactionId?: string;
+  productId?: string;
 };
 
 const asFiniteNumber = (value: any): number | null => {
@@ -167,17 +168,39 @@ export function auditAccountingRecords(transactions: any[] = [], products: any[]
     });
   });
 
+  const seenProductKeys = new Map<string, string>();
   (Array.isArray(products) ? products : []).forEach((product: any, index: number) => {
-    const productName = String(product?.name || product?.id || `Product ${index + 1}`);
+    const productId = String(product?.id || product?.firestoreId || "");
+    const productName = String(product?.name || productId || `Product ${index + 1}`);
+    const normalizedName = productName.trim().toLowerCase().replace(/\\s+/g, " ");
+    const normalizedCategory = String(product?.category || "").trim().toLowerCase();
+    const normalizedSku = String(product?.sku || product?.SKU || product?.barcode || "").trim().toLowerCase();
+    const duplicateKeys = [
+      normalizedSku ? `sku:${normalizedSku}` : "",
+      normalizedName ? `name:${normalizedName}|category:${normalizedCategory}` : ""
+    ].filter(Boolean);
+    const duplicateOf = duplicateKeys.map(key => seenProductKeys.get(key)).find(Boolean);
+    if (duplicateOf && productId) {
+      issues.push({
+        id: `duplicate-product-${productId}`,
+        invoiceNo: productName,
+        productId,
+        message: "Potential duplicate product entry (same SKU or product name/category). Verify this catalog record before deleting."
+      });
+    }
+    duplicateKeys.forEach(key => {
+      if (!seenProductKeys.has(key)) seenProductKeys.set(key, productId || String(index));
+    });
+
     const stock = asFiniteNumber(product?.stock);
     if (stock !== null && stock < -0.000001) {
-      issues.push({ id: `negative-stock-${product.id || index}`, invoiceNo: productName, message: "Product currently has negative stock; reconcile outstanding Minus Sale quantities." });
+      issues.push({ id: `negative-stock-${productId || index}`, invoiceNo: productName, productId, message: "Product currently has negative stock; reconcile outstanding Minus Sale quantities." });
     }
     const lots = Array.isArray(product?.costLots) ? product.costLots : (Array.isArray(product?.cost_lots) ? product.cost_lots : []);
     if (lots.length > 0 && stock !== null && stock >= 0 && product?.hasNegativeSale !== true) {
       const lotQuantity = lots.reduce((sum: number, lot: any) => sum + Math.max(0, Number(lot?.remainingQuantity) || 0), 0);
       if (Math.abs(lotQuantity - stock) > 0.02) {
-        issues.push({ id: `fifo-stock-${product.id || index}`, invoiceNo: productName, message: `FIFO remaining lots (${roundMoney(lotQuantity)}) do not match product stock (${roundMoney(stock)}). Check manual stock adjustments and purchase lots.` });
+        issues.push({ id: `fifo-stock-${productId || index}`, invoiceNo: productName, productId, message: `FIFO remaining lots (${roundMoney(lotQuantity)}) do not match product stock (${roundMoney(stock)}). Check manual stock adjustments and purchase lots.` });
       }
     }
   });
