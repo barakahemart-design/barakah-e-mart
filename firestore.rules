@@ -18,12 +18,16 @@ service cloud.firestore {
       let hasUidIdentity = data.keys().hasAny([
         'user_id', 'userId', 'owner_id'
       ]);
+      // Empty legacy email aliases are treated as unset. Non-empty aliases
+      // must all match the authenticated Firebase email (case-insensitive).
+      // This keeps UID-owned legacy records usable without allowing a stale,
+      // conflicting store email to fall back to UID ownership.
       let storeMatches = signedInEmail() != ""
-        && (!data.keys().hasAny(['store_id']) || data.store_id == signedInEmail())
-        && (!data.keys().hasAny(['storeId']) || data.storeId == signedInEmail())
-        && (!data.keys().hasAny(['email']) || data.email == signedInEmail())
-        && (!data.keys().hasAny(['linked_email']) || data.linked_email == signedInEmail())
-        && (!data.keys().hasAny(['linkedEmail']) || data.linkedEmail == signedInEmail());
+        && (!data.keys().hasAny(['store_id']) || (data.store_id is string && (data.store_id == "" || data.store_id.lower() == signedInEmail())))
+        && (!data.keys().hasAny(['storeId']) || (data.storeId is string && (data.storeId == "" || data.storeId.lower() == signedInEmail())))
+        && (!data.keys().hasAny(['email']) || (data.email is string && (data.email == "" || data.email.lower() == signedInEmail())))
+        && (!data.keys().hasAny(['linked_email']) || (data.linked_email is string && (data.linked_email == "" || data.linked_email.lower() == signedInEmail())))
+        && (!data.keys().hasAny(['linkedEmail']) || (data.linkedEmail is string && (data.linkedEmail == "" || data.linkedEmail.lower() == signedInEmail())));
       let uidMatches = (!data.keys().hasAny(['user_id']) || data.user_id == request.auth.uid)
         && (!data.keys().hasAny(['userId']) || data.userId == request.auth.uid)
         && (!data.keys().hasAny(['owner_id']) || data.owner_id == request.auth.uid);
