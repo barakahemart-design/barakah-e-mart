@@ -383,34 +383,6 @@ export async function commitInvoiceEditBatch(input: InvoiceBatchInput): Promise<
       cloudTransaction.set(doc(db, 'products', product.id), data, { merge: true });
     });
   });
-
-  // Save recovery tombstones after the atomic accounting operation. If the
-  // auxiliary collection is denied by older deployed rules, the invoice,
-  // line-items and stock changes remain committed and the UI can still finish.
-  const tombstoneIds = Array.from(new Set([
-    input.transactionId,
-    input.transactionDocId,
-    ...itemIds.map(itemId => `transaction_items__${itemId}`)
-  ]));
-  await Promise.all(tombstoneIds.map(async value => {
-    const isItemTombstone = value.startsWith('transaction_items__');
-    const recordId = isItemTombstone ? value.slice('transaction_items__'.length) : value;
-    const collectionName = isItemTombstone ? 'transaction_items' : 'transactions';
-    const tombstoneId = `${collectionName}__${recordId}`;
-    try {
-      await setDoc(doc(db, 'deleted_records', tombstoneId), {
-        id: recordId,
-        collection: collectionName,
-        record_id: recordId,
-        ...identity,
-        deleted: true,
-        isDeleted: true,
-        deleted_at: new Date().toISOString()
-      }, { merge: true });
-    } catch (tombstoneError) {
-      console.warn('[Invoice Delete] Optional tombstone write failed after the accounting delete completed:', tombstoneError);
-    }
-  }));
 }
 
 /** Atomically tombstones/deletes an invoice and restores only its validated stock snapshot. */
@@ -455,6 +427,34 @@ export async function deleteInvoiceAndRestoreBatch(input: {
       cloudTransaction.set(doc(db, 'products', product.id), data, { merge: true });
     });
   });
+
+  // Save recovery tombstones after the atomic accounting operation. If the
+  // auxiliary collection is denied by older deployed rules, the invoice,
+  // line-items and stock changes remain committed and the UI can still finish.
+  const tombstoneIds = Array.from(new Set([
+    input.transactionId,
+    input.transactionDocId,
+    ...itemIds.map(itemId => `transaction_items__${itemId}`)
+  ]));
+  await Promise.all(tombstoneIds.map(async value => {
+    const isItemTombstone = value.startsWith('transaction_items__');
+    const recordId = isItemTombstone ? value.slice('transaction_items__'.length) : value;
+    const collectionName = isItemTombstone ? 'transaction_items' : 'transactions';
+    const tombstoneId = `${collectionName}__${recordId}`;
+    try {
+      await setDoc(doc(db, 'deleted_records', tombstoneId), {
+        id: recordId,
+        collection: collectionName,
+        record_id: recordId,
+        ...identity,
+        deleted: true,
+        isDeleted: true,
+        deleted_at: new Date().toISOString()
+      }, { merge: true });
+    } catch (tombstoneError) {
+      console.warn('[Invoice Delete] Optional tombstone write failed after the accounting delete completed:', tombstoneError);
+    }
+  }));
 }
 
 type SaleCreationInput = {
