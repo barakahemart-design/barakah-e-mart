@@ -3451,9 +3451,12 @@ export default function App() {
             paidAmount: Number(t.paidAmount) || 0,
             dueBalance: Number(t.dueBalance) || 0
           },
+          // Only delete transaction_items documents whose real Firestore
+          // document ID was supplied by the subscription. Nested legacy invoice
+          // snapshots may have an item.id/product ID that is NOT a document ID.
           itemIds: (Array.isArray(t.items) ? t.items : [])
-            .map(item => item.firestoreId || item.id)
-            .filter(Boolean),
+            .map(item => item.firestoreId || item.firestore_id)
+            .filter((itemId): itemId is string => typeof itemId === "string" && itemId.trim().length > 0),
           products: productsToPersist.map(product => ({
             ...product,
             expectedData: products.find(original => original.id === product.id)
