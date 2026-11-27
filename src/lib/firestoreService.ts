@@ -640,21 +640,26 @@ export async function commitSaleCreationTransaction(input: SaleCreationInput): P
     where("invoiceNo", "==", String(input.invoiceNo).trim()),
     ...storeScope
   );
+  // Firestore Web SDK transactions support document-reference reads, not query reads.
+  // Running Transaction.get(query) attempts to access a document path that does not
+  // exist on a Query and can throw: "Cannot read properties of undefined (reading 'path')".
+  // Run the scoped duplicate checks with getDocs before starting the atomic write transaction.
+  const [normalizedMatches, legacyMatches, camelMatches] = await Promise.all([
+    getDocs(invoiceNoQuery),
+    getDocs(legacyInvoiceNoQuery),
+    getDocs(camelInvoiceNoQuery)
+  ]);
+  const invoiceMatches = [...normalizedMatches.docs, ...legacyMatches.docs, ...camelMatches.docs];
+  const duplicateForThisStore = invoiceMatches.some(snapshot => {
+    const data = snapshot.data() || {};
+    return snapshot.id !== input.transactionId && isDocMatchingStore(data, identity.store_id, identity.user_id);
+  });
+  if (duplicateForThisStore) throw new Error("This invoice number already exists in this store. Please generate a new invoice number.");
+
   const productIds = Array.from(new Set(input.items.map(item => item.productDocId)));
   return runTransaction(db, async cloudTransaction => {
     const existingInvoice = await cloudTransaction.get(transactionRef);
     if (existingInvoice.exists()) throw new Error("This invoice ID already exists. Please generate the invoice again.");
-    const [normalizedMatches, legacyMatches, camelMatches] = await Promise.all([
-      cloudTransaction.get(invoiceNoQuery),
-      cloudTransaction.get(legacyInvoiceNoQuery),
-      cloudTransaction.get(camelInvoiceNoQuery)
-    ]);
-    const invoiceMatches = [...normalizedMatches.docs, ...legacyMatches.docs, ...camelMatches.docs];
-    const duplicateForThisStore = invoiceMatches.some(snapshot => {
-      const data = snapshot.data() || {};
-      return snapshot.id !== input.transactionId && isDocMatchingStore(data, identity.store_id, identity.user_id);
-    });
-    if (duplicateForThisStore) throw new Error("This invoice number already exists in this store. Please generate a new invoice number.");
     const productRefs = productIds.map(productId => doc(db, "products", productId));
     const snapshots = await Promise.all(productRefs.map(ref => cloudTransaction.get(ref)));
     const liveProducts = new Map<string, any>();
