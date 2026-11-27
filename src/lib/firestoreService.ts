@@ -332,25 +332,30 @@ export async function deletePurchaseAndReconcileStock(input: {
         } else {
           updatedProduct = removePurchaseCostLot(currentProduct, input.purchaseId) || currentProduct;
         }
-      } else if (input.productHasSales) {
-        // No FIFO provenance exists for this legacy purchase. Preserve stock
-        // and catalog costs rather than guessing which sold units came from it.
-        updatedProduct = currentProduct;
-        stockPreserved = true;
       } else {
-        const targetStock = Math.max(0, (Number(currentProduct.stock) || 0) - Math.max(0, Number(input.purchaseQuantity) || 0));
-        let excess = Math.max(0, lots.reduce((sum, lot) => sum + (Number(lot.remainingQuantity) || 0), 0) - targetStock);
-        const newestFirst = [...lots].sort((a, b) =>
-          new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-        );
-        for (const lot of newestFirst) {
-          if (excess <= 0.000001) break;
-          const trim = Math.min(Number(lot.remainingQuantity) || 0, excess);
-          lot.remainingQuantity = Math.max(0, lot.remainingQuantity - trim);
-          lot.receivedQuantity = Math.max(lot.remainingQuantity, (Number(lot.receivedQuantity) || 0) - trim);
-          excess -= trim;
+        const rawLots = Array.isArray(currentProduct.costLots)
+          ? currentProduct.costLots
+          : (Array.isArray(currentProduct.cost_lots) ? currentProduct.cost_lots : []);
+        if (input.productHasSales || rawLots.length > 0) {
+          // Without this purchase's own FIFO lot, stock provenance is unknown.
+          // Preserve inventory instead of accidentally removing another batch.
+          updatedProduct = currentProduct;
+          stockPreserved = true;
+        } else {
+          // Legacy product with no FIFO history and no sales: retain the
+          // original quantity reversal, represented as a resized opening lot.
+          const targetStock = Math.max(0, (Number(currentProduct.stock) || 0) - Math.max(0, Number(input.purchaseQuantity) || 0));
+          const openingLots = normalizeCostLots(currentProduct);
+          let excess = Math.max(0, openingLots.reduce((sum, lot) => sum + (Number(lot.remainingQuantity) || 0), 0) - targetStock);
+          for (const lot of openingLots) {
+            if (excess <= 0.000001) break;
+            const trim = Math.min(Number(lot.remainingQuantity) || 0, excess);
+            lot.remainingQuantity = Math.max(0, lot.remainingQuantity - trim);
+            lot.receivedQuantity = Math.max(lot.remainingQuantity, (Number(lot.receivedQuantity) || 0) - trim);
+            excess -= trim;
+          }
+          updatedProduct = { ...currentProduct, stock: targetStock, costLots: openingLots };
         }
-        updatedProduct = { ...currentProduct, stock: targetStock, costLots: lots };
       }
 
       const buyPrice = Number(updatedProduct.buyPrice ?? updatedProduct.buy_price) || 0;
