@@ -2407,12 +2407,18 @@ export default function App() {
     }
     const p = products.find(prod => prod.id === id);
     if (!p) return;
-    await deleteCloudDocument("products", id);
-    if (activeUser && !activeUser.isGuest) {
-      deleteProduct(id).catch(err => {});
+    try {
+      if (activeUser && !activeUser.isGuest) {
+        await deleteProduct(id);
+      }
+      // Product catalog removal does not erase historical invoice line items,
+      // sale-time cost snapshots or purchase records.
+      setProducts(products.filter(item => item.id !== id));
+      triggerNotification(`Product '${name}' has been removed from the catalog. Historical sales and purchase records were preserved.`, "success");
+    } catch (error: any) {
+      console.error("[Product Delete] Cloud deletion failed:", error);
+      triggerNotification(error?.message || "Product could not be deleted from the cloud. No local records were removed.", "error");
     }
-    setProducts(products.filter(item => item.id !== id));
-    triggerNotification(`Product '${name}' has been successfully deleted.`, "success");
   };
 
   const persistBusinessInfoState = (updatedInfo: BusinessInfo) => {
@@ -5769,6 +5775,7 @@ _${businessInfo.name}_`;
               currencySymbol={businessInfo?.currencySymbol || "৳"}
               onNavigateToInvoice={handleNavigateToInvoice}
               onReviewDuplicateInvoice={handleReviewDuplicateInvoice}
+              onDeleteProblemProduct={handleDeleteProduct}
             />
           )}
 
