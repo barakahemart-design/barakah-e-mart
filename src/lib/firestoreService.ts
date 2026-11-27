@@ -614,9 +614,32 @@ export async function commitSaleCreationTransaction(input: SaleCreationInput): P
   const transactionRef = doc(db, "transactions", input.transactionId);
   const normalizedInvoiceNo = String(input.invoiceNo || "").trim().toLowerCase();
   if (!normalizedInvoiceNo) throw new Error("An invoice number is required before checkout.");
-  const invoiceNoQuery = query(collection(db, "transactions"), where("invoice_no_normalized", "==", normalizedInvoiceNo));
-  const legacyInvoiceNoQuery = query(collection(db, "transactions"), where("invoice_no", "==", String(input.invoiceNo).trim()));
-  const camelInvoiceNoQuery = query(collection(db, "transactions"), where("invoiceNo", "==", String(input.invoiceNo).trim()));
+  // Firestore Security Rules require every query to prove store ownership.
+  // The previous invoice-number-only queries were unscoped, so checkout could
+  // fail with permission-denied before the sale transaction even began.
+  // All POS-created invoices carry these five matching store identity fields.
+  const storeScope = [
+    where("store_id", "==", identity.store_id),
+    where("storeId", "==", identity.store_id),
+    where("email", "==", identity.store_id),
+    where("linked_email", "==", identity.store_id),
+    where("linkedEmail", "==", identity.store_id)
+  ];
+  const invoiceNoQuery = query(
+    collection(db, "transactions"),
+    where("invoice_no_normalized", "==", normalizedInvoiceNo),
+    ...storeScope
+  );
+  const legacyInvoiceNoQuery = query(
+    collection(db, "transactions"),
+    where("invoice_no", "==", String(input.invoiceNo).trim()),
+    ...storeScope
+  );
+  const camelInvoiceNoQuery = query(
+    collection(db, "transactions"),
+    where("invoiceNo", "==", String(input.invoiceNo).trim()),
+    ...storeScope
+  );
   const productIds = Array.from(new Set(input.items.map(item => item.productDocId)));
   return runTransaction(db, async cloudTransaction => {
     const existingInvoice = await cloudTransaction.get(transactionRef);
