@@ -126,7 +126,7 @@ import {
   deleteCustomer,
   deleteTransaction,
   deleteExpense,
-  deletePurchase,
+  deletePurchaseAndReconcileStock,
   handleSave,
   commitInvoiceEditBatch,
   deleteInvoiceAndRestoreBatch,
@@ -3023,53 +3023,62 @@ export default function App() {
       triggerNotification("Security block: Only administrators are authorized to delete purchases! 🛑", "error");
       return;
     }
-    const matchingPur = purchases.find(p => p.id === id);
-    if (!matchingPur) return;
+
+    const matchingPur = purchases.find(p => p.id === id || (p as any).firestoreId === id);
+    if (!matchingPur) {
+      triggerNotification("This purchase is no longer in the current list. Refresh and try again.", "error");
+      return;
+    }
 
     const purchaseProduct = products.find(p => p.id === matchingPur.productId);
-    const trackedLot = purchaseProduct?.costLots?.find((lot: any) =>
-      lot.id === id || lot.purchaseId === id
+    const productHasSales = transactions.some(tx =>
+      Array.isArray(tx.items) && tx.items.some(item =>
+        item.productId === matchingPur.productId && Number(item.quantity) > 0
+      )
     );
-    if (trackedLot) {
-      const soldFromLot = Math.max(0, Number(trackedLot.receivedQuantity || 0) - Number(trackedLot.remainingQuantity || 0));
-      if (soldFromLot > 0.000001) {
-        triggerNotification("This purchase batch has already supplied sold units. It cannot be deleted because that would break the sales cost history.", "error");
-        return;
+
+    try {
+      const result = await deletePurchaseAndReconcileStock({
+        purchaseId: matchingPur.id,
+        purchaseDocId: String((matchingPur as any).firestoreId || matchingPur.id),
+        productDocId: purchaseProduct
+          ? String((purchaseProduct as any).firestoreId || purchaseProduct.id)
+          : undefined,
+        purchaseQuantity: Number(matchingPur.quantity) || 0,
+        expectedProduct: purchaseProduct || undefined,
+        productHasSales
+      });
+
+      // Update local UI only after the Firestore transaction confirms success.
+      setPurchases(prev => prev.filter(p =>
+        p.id !== matchingPur.id && (p as any).firestoreId !== (matchingPur as any).firestoreId
+      ));
+      if (result.product && purchaseProduct) {
+        setProducts(prev => prev.map(product =>
+          product.id === purchaseProduct.id
+            ? { ...product, ...result.product, id: product.id }
+            : product
+        ));
       }
-    } else {
-      const productHasSales = transactions.some(tx =>
-        Array.isArray(tx.items) && tx.items.some(item =>
-          item.productId === matchingPur.productId && Number(item.quantity) > 0
-        )
+
+      if (result.stockPreserved) {
+        triggerNotification(
+          "Purchase record deleted. Existing stock and historical sales cost records were preserved safely.",
+          "success"
+        );
+      } else {
+        triggerNotification(
+          "Purchase record deleted successfully and the unused purchase stock was removed.",
+          "success"
+        );
+      }
+    } catch (error: any) {
+      console.error("[Purchase Delete] Cloud transaction failed:", error);
+      triggerNotification(
+        error?.message || "Purchase could not be deleted. No local purchase or stock changes were applied.",
+        "error"
       );
-      if (productHasSales) {
-        triggerNotification("This product has historical sales but this purchase has no FIFO lot history. Deletion is blocked to protect stock and past cost records.", "error");
-        return;
-      }
     }
-
-    const targetUid = firebaseAuth.currentUser?.uid || activeUser?.uid;
-    await deleteCloudDocument("purchases", id);
-    if (activeUser && !activeUser.isGuest) {
-      deletePurchase(id).catch(err => {});
-    }
-    setPurchases(purchases.filter(p => p.id !== id));
-
-    const updatedProds = products.map(p => {
-      if (p.id !== matchingPur.productId) return p;
-      const hadTrackedLot = Array.isArray(p.costLots) && p.costLots.some((lot: any) => lot.id === id || lot.purchaseId === id);
-      const removedLotProduct = removePurchaseCostLot(p, id);
-      if (!removedLotProduct) return p;
-      const nextP = hadTrackedLot
-        ? removedLotProduct
-        : { ...removedLotProduct, stock: Math.max(0, Number(p.stock || 0) - Number(matchingPur.quantity || 0)) };
-      if (activeUser && !activeUser.isGuest && targetUid) {
-        saveProduct(targetUid, nextP).catch(err => {});
-      }
-      return nextP;
-    });
-    setProducts(updatedProds);
-    triggerNotification("Purchase record has been successfully deleted and inventory adjusted.", "success");
   };
 
   const handleEditPurchase = (id: string, updatedFields: any) => {
